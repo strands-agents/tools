@@ -15,6 +15,13 @@ repos:
         pass_filenames: false
         types: [python]
         stages: [pre-commit]
+      - id: hatch-test-lint
+        name: Type linting
+        entry: hatch run test-lint
+        language: system
+        pass_filenames: false
+        types: [ python ]
+        stages: [ pre-commit ]
       - id: hatch-test
         name: Unit tests
         entry: hatch test --cover
