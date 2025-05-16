@@ -2,9 +2,9 @@
 Tests for the memory tool using the Agent interface.
 """
 
+import json
 import os
 from unittest.mock import MagicMock, patch
-import json
 
 import pytest
 from strands import Agent
