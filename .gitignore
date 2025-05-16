@@ -8,3 +8,4 @@ build
 .mypy_cache
 errors/
 repl_state/
+venv/
