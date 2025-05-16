@@ -22,6 +22,7 @@ Agents Tools is an open-source Python library that provides a unified toolkit fo
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
+- 🧠 **Mem0 Memory** - Store user and agent memories across agent runs to provide personalized experience
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
 - 🧮 **Mathematical Tools** - Perform advanced calculations with symbolic math capabilities
@@ -233,6 +234,12 @@ These variables affect multiple tools:
 | Environment Variable | Description | Default | 
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
+
+#### Mem0 Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| OPENSEARCH_HOST | OpenSearch Host URL | None |
 
 #### Memory Tool
 

@@ -38,6 +38,8 @@ dependencies = [
     "tenacity>=9.1.2,<10.0.0",
     "watchdog>=6.0.0,<7.0.0",
     "slack_bolt>=1.23.0,<2.0.0",
+    "mem0ai>=0.1.99,<1.0.0",
+    "opensearch-py>=2.8.0,<3.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
