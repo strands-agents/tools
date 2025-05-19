@@ -55,8 +55,18 @@ def extract_result_text(result):
 
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
 @patch("strands_tools.mem0_memory.Mem0Memory")
-def test_store_memory(mock_mem0_memory, mock_tool):
+@patch("strands_tools.mem0_memory.boto3.Session")
+def test_store_memory(mock_boto3_session, mock_mem0_memory, mock_tool):
     """Test store memory functionality."""
+    # Setup mock AWS credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test_access_key"
+    mock_credentials.secret_key = "test_secret_key"
+    mock_credentials.token = "test_token"
+    mock_session = MagicMock()
+    mock_session.get_credentials.return_value = mock_credentials
+    mock_boto3_session.return_value = mock_session
+
     # Setup mock client
     mock_client = MagicMock()
     mock_client.add.return_value = [
@@ -85,7 +95,17 @@ def test_store_memory(mock_mem0_memory, mock_tool):
 
     # Assertions
     assert result["status"] == "success"
-    assert "Test memory content" in str(result["content"][0]["text"])
+    assert result["content"][0]["text"] == json.dumps(
+        [
+            {
+                "event": "store",
+                "memory": "Test memory content",
+                "id": "mem123",
+                "created_at": "2024-03-20T10:00:00Z",
+            }
+        ],
+        indent=2,
+    )
 
 
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
