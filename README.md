@@ -10,7 +10,7 @@
   <a href="https://github.com/strands-agents/tools/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/tools"/></a>
   <a href="https://github.com/strands-agents/tools/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/tools"/></a>
   <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
-  <a href="https://pypi.org/project/strands-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-tools"/></a>
+  <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
   <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
 </div>
 
@@ -22,6 +22,7 @@ Agents Tools is an open-source Python library that provides a unified toolkit fo
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
+- 🧠 **Mem0 Memory** - Store user and agent memories across agent runs to provide personalized experience 
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
 - 🧮 **Mathematical Tools** - Perform advanced calculations with symbolic math capabilities
@@ -74,6 +75,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
+| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
@@ -233,6 +235,12 @@ These variables affect multiple tools:
 | Environment Variable | Description | Default | 
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
+
+#### Mem0 Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| OPENSEARCH_HOST | OpenSearch Host URL | None |
 
 #### Memory Tool
 
