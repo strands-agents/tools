@@ -5,12 +5,17 @@ Tests for the shell tool including execution, formatting, and various modes.
 import os
 import signal
 import sys
-import termios
 from unittest.mock import MagicMock, patch
 
 import pytest
 from rich.panel import Panel
 from strands import Agent
+
+if os.name == "nt":
+    pytest.skip("skipping on windows until issue #17 is resolved", allow_module_level=True)
+
+import termios
+
 from strands_tools import shell
 
 

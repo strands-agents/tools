@@ -141,19 +141,10 @@ TOOL_SPEC = {
             "required": ["action"],
             "allOf": [
                 {
-                    "if": {
-                        "properties": {
-                            "action": {"enum": ["store", "list", "retrieve"]}
-                        }
-                    },
-                    "then": {
-                        "oneOf": [
-                            {"required": ["user_id"]},
-                            {"required": ["agent_id"]}
-                        ]
-                    }
+                    "if": {"properties": {"action": {"enum": ["store", "list", "retrieve"]}}},
+                    "then": {"oneOf": [{"required": ["user_id"]}, {"required": ["agent_id"]}]},
                 }
-            ]
+            ],
         }
     },
 }
@@ -536,7 +527,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=f"Successfully stored {len(results.get('results', []))} memories")]
+                content=[ToolResultContent(text=f"Successfully stored {len(results.get('results', []))} memories")],
             )
 
         elif action == "get":
@@ -547,9 +538,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             panel = format_get_response(memory)
             console.print(panel)
             return ToolResult(
-                toolUseId=tool_use_id,
-                status="success",
-                content=[ToolResultContent(text=json.dumps(memory, indent=2))]
+                toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=json.dumps(memory, indent=2))]
             )
 
         elif action == "list":
@@ -559,7 +548,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))]
+                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))],
             )
 
         elif action == "retrieve":
@@ -576,7 +565,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))]
+                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))],
             )
 
         elif action == "delete":
@@ -589,7 +578,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=f"Memory {tool_input['memory_id']} deleted successfully")]
+                content=[ToolResultContent(text=f"Memory {tool_input['memory_id']} deleted successfully")],
             )
 
         elif action == "history":
@@ -600,9 +589,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             panel = format_history_response(history)
             console.print(panel)
             return ToolResult(
-                toolUseId=tool_use_id,
-                status="success",
-                content=[ToolResultContent(text=json.dumps(history, indent=2))]
+                toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=json.dumps(history, indent=2))]
             )
 
         else:
@@ -615,8 +602,4 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             border_style="red",
         )
         console.print(error_panel)
-        return ToolResult(
-            toolUseId=tool_use_id,
-            status="error",
-            content=[ToolResultContent(text=f"Error: {str(e)}")]
-        )
+        return ToolResult(toolUseId=tool_use_id, status="error", content=[ToolResultContent(text=f"Error: {str(e)}")])

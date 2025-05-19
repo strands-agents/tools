@@ -79,6 +79,7 @@ def test_direct_set_protected_var(agent, monkeypatch):
     assert os.environ["PATH"] != "/bad/path"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Need to mock console output for Windows (see #17)")
 def test_direct_set_var_cancelled(agent, monkeypatch):
     """Test cancelling setting an environment variable."""
     # Mock get_user_input to return 'n' to cancel
@@ -137,6 +138,7 @@ def test_direct_delete_protected_var(agent, monkeypatch):
             os.environ["PATH"] = original_path
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Need to mock console output for Windows (see #17)")
 def test_direct_delete_var_cancelled(agent, monkeypatch):
     """Test cancelling deletion of an environment variable."""
     # Mock get_user_input to return 'n' to cancel

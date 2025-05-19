@@ -8,10 +8,13 @@ import asyncio
 from prompt_toolkit import HTML, PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-session: PromptSession = PromptSession()
+# Lazy initialize to avoid import errors for tests on windows without a terminal
+session: PromptSession | None = None
 
 
 async def get_user_input_async(prompt: str, default: str = "n") -> str:
+    global session
+
     """
     Asynchronously get user input with prompt_toolkit's features (history, arrow keys, styling, etc).
 
@@ -25,6 +28,9 @@ async def get_user_input_async(prompt: str, default: str = "n") -> str:
 
     try:
         with patch_stdout(raw=True):
+            if session is None:
+                session = PromptSession()
+
             response = await session.prompt_async(HTML(f"{prompt} "))
 
         if not response:
