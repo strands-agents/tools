@@ -55,7 +55,7 @@ git clone https://github.com/strands-agents/tools.git
 cd tools
 
 # Create and activate virtual environment
-python3 -m venv venv
+python3 -m venv .venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
@@ -244,9 +244,31 @@ These variables affect multiple tools:
 
 #### Mem0 Memory Tool
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| OPENSEARCH_HOST | OpenSearch Host URL | None |
+The Mem0 Memory Tool supports three different backend configurations:
+
+1. **Mem0 Platform** (Recommended for production):
+   - Uses the Mem0 Platform API for memory management
+   - Requires a Mem0 API key
+
+2. **OpenSearch** (Recommended for AWS environments):
+   - Uses OpenSearch as the vector store backend
+   - Requires AWS credentials and OpenSearch configuration
+
+3. **FAISS** (Default for local development):
+   - Uses FAISS as the local vector store backend
+   - Requires faiss-cpu package for local vector storage
+
+| Environment Variable | Description | Default | Required For |
+|----------------------|-------------|---------|--------------|
+| MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
+| OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
+| AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| DEV | Enable development mode (bypasses confirmations) | false | All modes |
+
+**Note**:
+- If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
+- If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
+- If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 
 #### Memory Tool
 

@@ -26,6 +26,7 @@ Key Features:
    • Semantic search with relevance filtering
    • Rich output formatting
    • Support for both user and agent memories
+   • Multiple vector database backends (OpenSearch, Mem0 Platform, FAISS)
 
 4. Error Handling:
    • Memory ID validation
@@ -67,10 +68,12 @@ agent.tool.mem0_memory(
 import json
 import logging
 import os
+import traceback
 from typing import Any, Dict, List, Optional
 
 import boto3
 from mem0 import Memory as Mem0Memory
+from mem0 import MemoryClient
 from opensearchpy import AWSV4SignerAuth, RequestsHttpConnection
 from rich.console import Console
 from rich.panel import Panel
@@ -185,45 +188,107 @@ class Mem0ServiceClient:
             config: Optional configuration dictionary to override defaults.
                    If provided, it will be merged with DEFAULT_CONFIG.
 
-        Raises:
-            ValueError: If OPENSEARCH_HOST environment variable is not set.
+        The client will use one of three backends based on environment variables:
+        1. Mem0 Platform if MEM0_API_KEY is set
+        2. OpenSearch if OPENSEARCH_HOST is set
+        3. FAISS (default) if neither MEM0_API_KEY nor OPENSEARCH_HOST is set
         """
-        # Check if region is set in environment variables, default to us-west-2 if not
-        self.region = os.environ.get("AWS_REGION")
-        if not self.region:
-            os.environ["AWS_REGION"] = "us-west-2"
-            self.region = "us-west-2"
+        self.mem0 = self._initialize_client(config)
 
-        # Check for required OPENSEARCH_HOST
-        opensearch_host = os.environ.get("OPENSEARCH_HOST")
-        if not opensearch_host:
-            raise ValueError(
-                "OPENSEARCH_HOST environment variable is required but not set. "
-                "Please set it to your OpenSearch endpoint "
-                "(e.g., 'your-domain.us-west-2.aoss.amazonaws.com')"
-            )
+    def _initialize_client(self, config: Optional[Dict] = None) -> Any:
+        """Initialize the appropriate Mem0 client based on environment variables.
 
-        # Set up session
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An initialized Mem0 client (MemoryClient or Mem0Memory instance).
+        """
+        if os.environ.get("MEM0_API_KEY"):
+            return MemoryClient()
+
+        if os.environ.get("OPENSEARCH_HOST"):
+            return self._initialize_opensearch_client(config)
+
+        return self._initialize_faiss_client(config)
+
+    def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Mem0Memory:
+        """Initialize a Mem0 client with OpenSearch backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An initialized Mem0Memory instance configured for OpenSearch.
+        """
+        # Set up AWS region
+        self.region = os.environ.get("AWS_REGION", "us-west-2")
+        if not os.environ.get("AWS_REGION"):
+            os.environ["AWS_REGION"] = self.region
+
+        # Set up AWS credentials
         session = boto3.Session()
         credentials = session.get_credentials()
         auth = AWSV4SignerAuth(credentials, self.region, "aoss")
 
-        # Start with default config
+        # Prepare configuration
+        merged_config = self._merge_config(config)
+        merged_config["vector_store"]["config"].update({"http_auth": auth, "host": os.environ["OPENSEARCH_HOST"]})
+
+        return Mem0Memory.from_config(config_dict=merged_config)
+
+    def _initialize_faiss_client(self, config: Optional[Dict] = None) -> Mem0Memory:
+        """Initialize a Mem0 client with FAISS backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An initialized Mem0Memory instance configured for FAISS.
+
+        Raises:
+            ImportError: If faiss-cpu package is not installed.
+        """
+        try:
+            import faiss  # noqa: F401
+        except ImportError as err:
+            raise ImportError(
+                "The faiss-cpu package is required for using FAISS as the vector store backend for Mem0."
+                "Please install it using: pip install faiss-cpu"
+            ) from err
+
+        merged_config = self._merge_config(config)
+        merged_config["vector_store"] = {
+            "provider": "faiss",
+            "config": {
+                "embedding_model_dims": 1024,
+                "path": "/tmp/mem0_384_faiss",
+            },
+        }
+
+        return Mem0Memory.from_config(config_dict=merged_config)
+
+    def _merge_config(self, config: Optional[Dict] = None) -> Dict:
+        """Merge user-provided configuration with default configuration.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            A merged configuration dictionary.
+        """
         merged_config = self.DEFAULT_CONFIG.copy()
-        # If user provided config, merge it with defaults
-        if config:
-            # Deep merge the configs
-            for key, value in config.items():
-                if key in merged_config and isinstance(value, dict) and isinstance(merged_config[key], dict):
-                    merged_config[key].update(value)
-                else:
-                    merged_config[key] = value
+        if not config:
+            return merged_config
 
-        # Add auth and host to vector store config
-        merged_config["vector_store"]["config"]["http_auth"] = auth
-        merged_config["vector_store"]["config"]["host"] = opensearch_host
+        # Deep merge the configs
+        for key, value in config.items():
+            if key in merged_config and isinstance(value, dict) and isinstance(merged_config[key], dict):
+                merged_config[key].update(value)
+            else:
+                merged_config[key] = value
 
-        self.mem0 = Mem0Memory.from_config(config_dict=merged_config)
+        return merged_config
 
     def store_memory(
         self,
@@ -291,8 +356,16 @@ def format_get_response(memory: Dict) -> Panel:
 
 def format_list_response(memories: Dict) -> Panel:
     """Format list memories response."""
-    if not memories.get("results"):
-        return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
+    # Handle Mem0 Platform response format (list)
+    if isinstance(memories, list):
+        if not memories:
+            return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
+        results = memories
+    # Handle OpenSearch/FAISS response format (dict with results key)
+    else:
+        if not memories.get("results"):
+            return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
+        results = memories.get("results", [])
 
     table = Table(title="Memories", show_header=True, header_style="bold magenta")
     table.add_column("ID", style="cyan")
@@ -301,7 +374,7 @@ def format_list_response(memories: Dict) -> Panel:
     table.add_column("User ID", style="green")
     table.add_column("Metadata", style="magenta")
 
-    for memory in memories.get("results", []):
+    for memory in results:
         memory_id = memory.get("id", "unknown")
         content = memory.get("memory", "No content available")
         created_at = memory.get("created_at", "Unknown")
@@ -330,8 +403,20 @@ def format_delete_response(memory_id: str) -> Panel:
 
 def format_retrieve_response(memories: Dict) -> Panel:
     """Format retrieve response."""
-    if not memories.get("results"):
-        return Panel("No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow")
+    # Handle Mem0 Platform response format (list)
+    if isinstance(memories, list):
+        if not memories:
+            return Panel(
+                "No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
+            )
+        results = memories
+    # Handle OpenSearch/FAISS response format (dict with results key)
+    else:
+        if not memories.get("results"):
+            return Panel(
+                "No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
+            )
+        results = memories.get("results", [])
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
     table.add_column("ID", style="cyan")
@@ -341,7 +426,7 @@ def format_retrieve_response(memories: Dict) -> Panel:
     table.add_column("User ID", style="magenta")
     table.add_column("Metadata", style="white")
 
-    for memory in memories.get("results", []):
+    for memory in results:
         memory_id = memory.get("id", "unknown")
         content = memory.get("memory", "No content available")
         score = memory.get("score", 0)
@@ -402,12 +487,24 @@ def format_history_response(history: List[Dict]) -> Panel:
 
 def format_store_response(results: Dict) -> Panel:
     """Format store memory response."""
+    # Handle Mem0 Platform response format (list)
+    if isinstance(results, list):
+        if not results:
+            return Panel("No memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
+        memories = results
+    # Handle OpenSearch/FAISS response format (dict with results key)
+    else:
+        if not results.get("results"):
+            return Panel("No memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
+        memories = results.get("results", [])
+
     table = Table(title="Memory Stored", show_header=True, header_style="bold magenta")
     table.add_column("Operation", style="green")
     table.add_column("Content", style="yellow", width=50)
 
-    for memory in results.get("results", []):
-        event, text = memory.get("event"), memory.get("memory")
+    for memory in memories:
+        event = memory.get("event")
+        text = memory.get("memory")
         # Truncate content if too long
         content_preview = text[:100] + "..." if len(text) > 100 else text
         table.add_row(event, content_preview)
@@ -521,7 +618,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 tool_input.get("metadata"),
             )
 
-            if results.get("results"):
+            if results:
                 panel = format_store_response(results)
                 console.print(panel)
             return ToolResult(
@@ -596,6 +693,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             raise ValueError(f"Invalid action: {action}")
 
     except Exception as e:
+        traceback.print_exc()
         error_panel = Panel(
             Text(str(e), style="red"),
             title="❌ Memory Operation Error",
