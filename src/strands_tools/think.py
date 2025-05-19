@@ -9,9 +9,9 @@ to generate progressively refined insights.
 Usage with Strands Agent:
 ```python
 from strands import Agent
-from strands_tools import think
+from strands_tools import think, stop
 
-agent = Agent(tools=[think])
+agent = Agent(tools=[think, stop])
 
 # Basic usage with default system prompt
 result = agent.tool.think(
@@ -32,13 +32,15 @@ result = agent.tool.think(
 See the think function docstring for more details on configuration options and parameters.
 """
 
+import logging
 import traceback
 import uuid
 from typing import Any, Dict
 
-from strands import tool
+from strands import Agent, tool
+from strands.telemetry.metrics import metrics_to_string
 
-from strands_tools.use_llm import use_llm
+logger = logging.getLogger(__name__)
 
 
 class ThoughtProcessor:
@@ -77,36 +79,46 @@ Please provide your analysis directly:
     ) -> str:
         """Process a single thinking cycle."""
 
+        logger.debug(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
         print(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
 
         # Create cycle-specific prompt
         prompt = self.create_thinking_prompt(thought, cycle, total_cycles)
 
-        # Use LLM for processing
-        result = use_llm(
-            {
-                "name": "use_llm",
-                "toolUseId": self.tool_use_id,
-                "input": {
-                    "system_prompt": custom_system_prompt,
-                    "prompt": prompt,
-                },
-            },
-            **kwargs,
-        )
+        # Display input prompt
+        logger.debug(f"\n--- Input Prompt ---\n{prompt}\n")
 
-        # Extract and return response
-        cycle_response = ""
-        if result.get("status") == "success":
-            for content in result.get("content", []):
-                if content.get("text"):
-                    cycle_response += content["text"] + "\n"
+        # Get tools from parent agent if available
+        tools = []
+        trace_attributes = {}
+        parent_agent = kwargs.get("agent")
+        if parent_agent:
+            tools = list(parent_agent.tool_registry.registry.values())
+            trace_attributes = parent_agent.trace_attributes
 
-        return cycle_response.strip()
+        # Initialize the new Agent with provided parameters
+        agent = Agent(messages=[], tools=tools, system_prompt=custom_system_prompt, trace_attributes=trace_attributes)
+
+        # Run the agent with the provided prompt
+        result = agent(prompt)
+
+        # Extract response
+        assistant_response = str(result)
+
+        # Display assistant response
+        logger.debug(f"\n--- Assistant Response ---\n{assistant_response.strip()}\n")
+
+        # Print metrics if available
+        if result.metrics:
+            metrics = result.metrics
+            metrics_text = metrics_to_string(metrics)
+            logger.debug(metrics_text)
+
+        return assistant_response.strip()
 
 
 @tool
-def think(thought: str, cycle_count: int, system_prompt: str, **kwargs: Any) -> Dict[str, Any]:
+def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dict[str, Any]:
     """
     Recursive thinking tool for sophisticated thought generation, learning, and self-reflection.
 
@@ -172,7 +184,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, **kwargs: Any) -> 
             custom_system_prompt = (
                 "You are an expert analytical thinker. Process the thought deeply and provide clear insights."
             )
-
+        kwargs = {"agent": agent}
         # Create thought processor instance with the available context
         processor = ThoughtProcessor(kwargs)
 
