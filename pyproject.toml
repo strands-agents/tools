@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "strands-agents-tools"
-version = "0.1.0"
+version = "0.1.1"
 description = "A collection of specialized tools for Strands Agents"
 readme = "README.md"
 requires-python = ">=3.10"
