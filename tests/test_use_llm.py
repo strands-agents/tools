@@ -59,7 +59,9 @@ def test_use_llm_tool_direct(mock_agent_response):
         assert "This is a test response from the LLM" in str(result)
 
         # Verify the Agent was created with the correct parameters
-        MockAgent.assert_called_once_with(messages=[], tools=[], system_prompt="You are a helpful test assistant")
+        MockAgent.assert_called_once_with(
+            messages=[], tools=[], system_prompt="You are a helpful test assistant", trace_attributes={}
+        )
 
 
 def test_use_llm_with_custom_system_prompt(mock_agent_response):
@@ -82,7 +84,9 @@ def test_use_llm_with_custom_system_prompt(mock_agent_response):
             result = use_llm.use_llm(tool=tool_use)
 
         # Verify agent was created with correct system prompt
-        MockAgent.assert_called_once_with(messages=[], tools=[], system_prompt="You are a specialized test assistant")
+        MockAgent.assert_called_once_with(
+            messages=[], tools=[], system_prompt="You are a specialized test assistant", trace_attributes={}
+        )
 
         assert result["status"] == "success"
         assert "Custom response" in result["content"][0]["text"]
