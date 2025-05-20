@@ -76,6 +76,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
@@ -241,6 +242,12 @@ These variables affect multiple tools:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | OPENSEARCH_HOST | OpenSearch Host URL | None |
+
+#### Bright Data Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| BRIGHTDATA_API_KEY | Bright Data API Key | None |
 
 #### Memory Tool
 
