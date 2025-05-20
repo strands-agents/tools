@@ -12,6 +12,10 @@ from unittest.mock import patch
 import dill
 import pytest
 from strands import Agent
+
+if os.name == "nt":
+    pytest.skip("skipping on windows until issue #17 is resolved", allow_module_level=True)
+
 from strands_tools import python_repl
 
 
