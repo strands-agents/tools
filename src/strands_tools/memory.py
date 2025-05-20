@@ -42,7 +42,7 @@ from strands_tools.memory import memory
 agent = Agent(tools=[memory])
 
 # Store content in Knowledge Base
-agent.memory(
+agent.tool.memory(
     action="store",
     content="Important information to remember",
     title="Meeting Notes",
@@ -50,7 +50,7 @@ agent.memory(
 )
 
 # Retrieve content using semantic search
-agent.memory(
+agent.tool.memory(
     action="retrieve",
     query="meeting information",
     min_score=0.7,
@@ -58,7 +58,7 @@ agent.memory(
 )
 
 # List all documents
-agent.memory(
+agent.tool.memory(
     action="list",
     max_results=50,
     STRANDS_KNOWLEDGE_BASE_ID="my1234kb"
