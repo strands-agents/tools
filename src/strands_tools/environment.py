@@ -71,8 +71,7 @@ from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolResultContent, ToolUse
 
-from strands_tools.utils import console_util
-from strands_tools.utils.user_input import get_user_input
+from strands_tools.utils import console_util, user_input
 
 TOOL_SPEC = {
     "name": "environment",
@@ -584,7 +583,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
 
             # Ask for confirmation
-            confirm = get_user_input(
+            confirm = user_input.get_user_input(
                 "\n<yellow><bold>Do you want to proceed with setting this environment variable?</bold> [y/*]</yellow>"
             )
             # For tests, 'y' should be recognized even with extra spaces or newlines
@@ -706,7 +705,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
 
                 # Ask for confirmation
-                confirm = get_user_input(
+                confirm = user_input.get_user_input(
                     "\n<red><bold>Do you want to proceed with deleting this environment variable?</bold> [y/*]</red>"
                 )
                 # For tests, 'y' should be recognized even with extra spaces or newlines
