@@ -32,6 +32,9 @@ Agents Tools is an open-source Python library that provides a unified toolkit fo
 - 📝 **Journaling** - Create and manage structured logs and journals
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔔 **Notification System** - Send notifications with different priority levels and maintain notification history
+- 🧵 **Background Tasks** - Run long-running tasks in parallel threads with persistence across sessions
+- 🌐 **TCP Networking** - Create TCP servers and clients for network communication between agents and systems
 
 ## 📦 Installation
 
@@ -92,6 +95,9 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| notify | `agent.tool.notify(message="Analysis complete!", title="Task Status", priority="normal")` | Send notifications with different priority levels, display system alerts, and maintain notification history |
+| tasks | `agent.tool.tasks(action="create", task_id="research_task", prompt="Research query", system_prompt="You are a researcher")` | Create and manage background tasks that run in parallel threads with persistence across sessions |
+| tcp | `agent.tool.tcp(action="start_server", host="127.0.0.1", port=8000, system_prompt="You are a TCP server")` | Create TCP servers and clients for network communication between agents and external systems |
 
 ## 💻 Usage Examples
 
