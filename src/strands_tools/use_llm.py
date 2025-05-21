@@ -117,9 +117,12 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_system_prompt = tool_input.get("system_prompt")
 
     tools = []
+    trace_attributes = {}
+
     parent_agent = kwargs.get("agent")
     if parent_agent:
         tools = list(parent_agent.tool_registry.registry.values())
+        trace_attributes = parent_agent.trace_attributes
 
     # Display input prompt
     logger.debug(f"\n--- Input Prompt ---\n{prompt}\n")
@@ -128,11 +131,7 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     logger.debug("🔄 Creating new LLM instance...")
 
     # Initialize the new Agent with provided parameters
-    agent = Agent(
-        messages=[],
-        tools=tools,
-        system_prompt=tool_system_prompt,
-    )
+    agent = Agent(messages=[], tools=tools, system_prompt=tool_system_prompt, trace_attributes=trace_attributes)
     # Run the agent with the provided prompt
     result = agent(prompt)
 

@@ -351,12 +351,14 @@ class SocketModeHandler:
             return
 
         tools = list(self.agent.tool_registry.registry.values())
+        trace_attributes = self.agent.trace_attributes
 
         agent = Agent(
             messages=[],
             system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
             tools=tools,
             callback_handler=None,
+            trace_attributes=trace_attributes,
         )
 
         channel_id = event.get("channel")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "strands-agents-tools"
-version = "0.1.1"
+version = "0.1.2"
 description = "A collection of specialized tools for Strands Agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,6 +40,8 @@ dependencies = [
     "slack_bolt>=1.23.0,<2.0.0",
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
+    # Note: Always want the latest tzdata
+    "tzdata ; platform_system == 'Windows'",
 ]
 
 [tool.hatch.build.targets.wheel]
