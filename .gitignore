@@ -8,4 +8,7 @@ build
 .mypy_cache
 errors/
 repl_state/
+tasks/
+notifications/
+slack_events/
 venv/

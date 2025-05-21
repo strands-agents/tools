@@ -28,9 +28,9 @@ def cron(
     and best practices for Strands agent scheduling.
 
     # Strands Agent Job Best Practices:
-    - Use 'DEV=true peccy "<your_prompt>"' to run Strands agent tasks
+    - Use 'DEV=true strands "<your_prompt>"' to run Strands agent tasks
     - Always add output redirection to log files: '>> /path/to/log.file 2>&1'
-    - Example: 'DEV=true peccy "Generate a report" >> /tmp/report.log 2>&1'
+    - Example: 'DEV=true strands "Generate a report" >> /tmp/report.log 2>&1'
     - Consider creating organized log directories like '/tmp/strands_logs/'
 
     # Cron Schedule Examples:
