@@ -250,6 +250,7 @@ def run_task(task_state: TaskState, parent_agent: Optional[Agent] = None):
             tools=tools,
             system_prompt=task_state.system_prompt,
             trace_attributes=trace_attributes,
+            callback_handler=None,
         )
 
         # Store agent in global dict for later interaction
