@@ -41,6 +41,12 @@ Agents Tools is an open-source Python library that provides a unified toolkit fo
 pip install strands-agents-tools
 ```
 
+To install the dependencies for optional tools:
+
+```bash
+pip install strands-agents-tools[mem0_memory]
+```
+
 ### Development Install
 
 ```bash
