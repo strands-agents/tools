@@ -38,8 +38,6 @@ dependencies = [
     "tenacity>=9.1.2,<10.0.0",
     "watchdog>=6.0.0,<7.0.0",
     "slack_bolt>=1.23.0,<2.0.0",
-    "mem0ai>=0.1.99,<1.0.0",
-    "opensearch-py>=2.8.0,<3.0.0",
     # Note: Always want the latest tzdata
     "tzdata ; platform_system == 'Windows'",
 ]
@@ -63,15 +61,23 @@ dev = [
     "pre-commit>=3.2.0,<4.2.0",
     "pytest>=8.0.0,<9.0.0",
     "ruff>=0.4.4,<0.5.0",
-    "responses>=0.6.1,<1.0.0"
+    "responses>=0.6.1,<1.0.0",
+    "mem0ai>=0.1.99,<1.0.0",
+    "opensearch-py>=2.8.0,<3.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
     "sphinx-rtd-theme>=1.0.0,<2.0.0",
     "sphinx-autodoc-typehints>=1.12.0,<2.0.0",
 ]
+mem0_memory = [
+    # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
+    "mem0ai>=0.1.99,<1.0.0",
+    "opensearch-py>=2.8.0,<3.0.0",
+]
 
 [tool.hatch.envs.hatch-static-analysis]
+features = ["mem0_memory"]
 dependencies = [
   "strands-agents>=0.1.0,<1.0.0",
   "mypy>=0.981,<1.0.0",
@@ -96,6 +102,7 @@ lint-fix = [
 ]
 
 [tool.hatch.envs.hatch-test]
+features = ["mem0_memory"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",

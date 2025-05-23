@@ -37,17 +37,21 @@ import traceback
 import uuid
 from typing import Any, Dict
 
+from rich.console import Console
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
+
+from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
 
 
 class ThoughtProcessor:
-    def __init__(self, tool_context: Dict[str, Any]):
+    def __init__(self, tool_context: Dict[str, Any], console: Console):
         self.system_prompt = tool_context.get("system_prompt", "")
         self.messages = tool_context.get("messages", [])
         self.tool_use_id = str(uuid.uuid4())
+        self.console = console
 
     def create_thinking_prompt(self, thought: str, cycle: int, total_cycles: int) -> str:
         """Create a focused prompt for the thinking process."""
@@ -80,7 +84,7 @@ Please provide your analysis directly:
         """Process a single thinking cycle."""
 
         logger.debug(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
-        print(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
+        self.console.print(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
 
         # Create cycle-specific prompt
         prompt = self.create_thinking_prompt(thought, cycle, total_cycles)
@@ -177,6 +181,8 @@ def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dic
         - The tool is designed to avoid recursive self-calls that could cause infinite loops
         - Each cycle has visibility into previous cycle outputs to enable building upon insights
     """
+    console = console_util.create()
+
     try:
         # Use provided system prompt or fall back to a default
         custom_system_prompt = system_prompt
@@ -186,7 +192,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dic
             )
         kwargs = {"agent": agent}
         # Create thought processor instance with the available context
-        processor = ThoughtProcessor(kwargs)
+        processor = ThoughtProcessor(kwargs, console)
 
         # Initialize variables for cycle processing
         current_thought = thought
@@ -224,7 +230,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dic
 
     except Exception as e:
         error_msg = f"Error in think tool: {str(e)}\n{traceback.format_exc()}"
-        print(f"Error in think tool: {str(e)}")
+        console.print(f"Error in think tool: {str(e)}")
         return {
             "status": "error",
             "content": [{"text": error_msg}],
