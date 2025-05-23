@@ -107,6 +107,31 @@ jobs:
         run: hatch test tests --cover
         continue-on-error: false
 
+  test-install:
+    name: Dependency Check - Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+      # If we ever need to be more frugal, we can run this 1x1   
+      # max-parallel: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies for different targets
+        run: |
+          pip install -e . --python-version ${{ matrix.python-version }} --target ./manylinux2014_x86_64  --platform manylinux2014_x86_64 --only-binary=:all:
+          pip install -e . --python-version ${{ matrix.python-version }} --target ./manylinux2014_aarch64 --platform manylinux2014_aarch64 --only-binary=:all:
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

@@ -124,7 +124,8 @@ def test_think_error_handling():
 
 def test_thought_processor():
     """Test the ThoughtProcessor class."""
-    processor = ThoughtProcessor({"system_prompt": "System prompt", "messages": []})
+    mock_console = MagicMock()
+    processor = ThoughtProcessor({"system_prompt": "System prompt", "messages": []}, mock_console)
 
     # Test creating thinking prompt
     prompt = processor.create_thinking_prompt("Test thought", 1, 3)
