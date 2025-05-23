@@ -74,6 +74,8 @@ from typing import Any, Dict, Optional
 import boto3
 from strands import tool
 
+from strands_tools.utils import console_util
+
 # Environment variables for configurable default parameters
 
 
@@ -188,18 +190,20 @@ def nova_reels(
         - S3 buckets must be accessible to the AWS credentials used for Bedrock
         - Set AWS_REGION environment variable to change the default region
     """
+    console = console_util.create()
+
     seed = int(os.getenv("NOVA_REEL_DEFAULT_SEED", "0")) if seed is None else seed
     fps = int(os.getenv("NOVA_REEL_DEFAULT_FPS", "24")) if fps is None else fps
     dimension = os.getenv("NOVA_REEL_DEFAULT_DIMENSION", "1280x720") if dimension is None else dimension
     max_results = int(os.getenv("NOVA_REEL_DEFAULT_MAX_RESULTS", "10")) if max_results is None else max_results
     region = os.getenv("AWS_REGION", "us-east-1") if region is None else region
     try:
-        print("\n🚀 Nova Reels Tool - Starting Execution")
-        print(f"Action requested: {action}")
+        console.print("\n🚀 Nova Reels Tool - Starting Execution")
+        console.print(f"Action requested: {action}")
 
         # Get region from parameter, environment variable, or default to us-east-1
         aws_region = region
-        print(f"📡 Connecting to Bedrock Runtime in {aws_region}")
+        console.print(f"📡 Connecting to Bedrock Runtime in {aws_region}")
 
         # Create Bedrock Runtime client with configurable region
         bedrock_runtime = boto3.client("bedrock-runtime", region_name=aws_region)
@@ -247,12 +251,12 @@ def nova_reels(
                     raise ValueError(f"Failed to process input image: {str(e)}") from e
 
             # Start async video generation
-            print("\n📼 Starting video generation:")
-            print(f"🎯 Target S3 bucket: s3://{s3_bucket}")
-            print(f"📝 Text prompt: {text}")
+            console.print("\n📼 Starting video generation:")
+            console.print(f"🎯 Target S3 bucket: s3://{s3_bucket}")
+            console.print(f"📝 Text prompt: {text}")
             if image_path:
-                print(f"🖼️ Using input image: {image_path}")
-            print(
+                console.print(f"🖼️ Using input image: {image_path}")
+            console.print(
                 "⚙️ Model configuration:",
                 json.dumps(model_input["videoGenerationConfig"], indent=2),
             )
@@ -262,7 +266,7 @@ def nova_reels(
                 modelInput=model_input,
                 outputDataConfig={"s3OutputDataConfig": {"s3Uri": f"s3://{s3_bucket}"}},
             )
-            print(f"✨ Job started with ARN: {invocation['invocationArn']}")
+            console.print(f"✨ Job started with ARN: {invocation['invocationArn']}")
 
             return {
                 "status": "success",
@@ -282,11 +286,11 @@ def nova_reels(
             if not invocation_arn:
                 raise ValueError("invocation_arn is required to check status")
 
-            print(f"\n🔍 Checking status for job: {invocation_arn}")
+            console.print(f"\n🔍 Checking status for job: {invocation_arn}")
             invocation = bedrock_runtime.get_async_invoke(invocationArn=invocation_arn)
 
             status = invocation["status"]
-            print(f"📊 Current status: {status}")
+            console.print(f"📊 Current status: {status}")
             messages = []
 
             if status == "Completed":
@@ -312,9 +316,9 @@ def nova_reels(
             return {"status": "success", "content": messages}
 
         elif action == "list":
-            print(f"\n📋 Listing jobs (max: {max_results})")
+            console.print(f"\n📋 Listing jobs (max: {max_results})")
             if status_filter:
-                print(f"🔍 Filtering by status: {status_filter}")
+                console.print(f"🔍 Filtering by status: {status_filter}")
 
             list_args = {"maxResults": max_results}
             if status_filter:
