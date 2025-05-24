@@ -106,6 +106,22 @@ def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service
     mock_memory_formatter.format_store_response.assert_called_once()
 
 
+@patch("strands_tools.memory.get_memory_service_client")
+def test_store_document_different_region(mock_memory_service_client):
+    """Test store document functionality with a different region than default."""
+
+    # Mock data
+    doc_title = "Test Title"
+
+    # Call the memory function
+    memory.memory(action="store", content="Test content", title=doc_title, region_name="eu-west-1")
+
+    # Verify correct functions were called and that the specified region was used
+    # memory_service_client uses region as the parameter name,
+    # hile the memory tool uses region_name to maintain the standard of public AWS APIs
+    mock_memory_service_client.assert_called_once_with(region="eu-west-1")
+
+
 @patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
