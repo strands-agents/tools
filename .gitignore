@@ -6,6 +6,10 @@ build
 *.bak
 *.egg-info
 .mypy_cache
+venv/
+
 errors/
 repl_state/
-venv/
+tasks/
+slack_events/
+workflows/
