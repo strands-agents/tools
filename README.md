@@ -227,6 +227,42 @@ result = agent.tool.swarm(
 )
 ```
 
+### Use AWS
+
+```python
+from strands import Agent
+from strands_tools import use_aws
+
+agent = Agent(tools=[use_aws])
+
+# List S3 buckets
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_buckets",
+    parameters={},
+    region="us-east-1",
+    label="List all S3 buckets"
+)
+
+# Get the contents of a specific S3 bucket
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_objects_v2",
+    parameters={"Bucket": "example-bucket"},  # Replace with your actual bucket name
+    region="us-east-1",
+    label="List objects in a specific S3 bucket"
+)
+
+# Get the list of EC2 subnets
+result = agent.tool.use_aws(
+    service_name="ec2",
+    operation_name="describe_subnets",
+    parameters={},
+    region="us-east-1",
+    label="List all subnets"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
