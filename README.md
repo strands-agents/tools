@@ -246,7 +246,7 @@ These variables affect multiple tools:
 
 The Mem0 Memory Tool supports three different backend configurations:
 
-1. **Mem0 Platform** (Recommended for production):
+1. **Mem0 Platform**:
    - Uses the Mem0 Platform API for memory management
    - Requires a Mem0 API key
 

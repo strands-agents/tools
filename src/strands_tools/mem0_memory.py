@@ -68,7 +68,6 @@ agent.tool.mem0_memory(
 import json
 import logging
 import os
-import traceback
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -205,11 +204,14 @@ class Mem0ServiceClient:
             An initialized Mem0 client (MemoryClient or Mem0Memory instance).
         """
         if os.environ.get("MEM0_API_KEY"):
+            logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
         if os.environ.get("OPENSEARCH_HOST"):
+            logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
             return self._initialize_opensearch_client(config)
 
+        logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
         return self._initialize_faiss_client(config)
 
     def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Mem0Memory:
@@ -354,18 +356,10 @@ def format_get_response(memory: Dict) -> Panel:
     return Panel("\n".join(result), title="[bold green]Memory Retrieved", border_style="green")
 
 
-def format_list_response(memories: Dict) -> Panel:
+def format_list_response(memories: List[Dict]) -> Panel:
     """Format list memories response."""
-    # Handle Mem0 Platform response format (list)
-    if isinstance(memories, list):
-        if not memories:
-            return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
-        results = memories
-    # Handle OpenSearch/FAISS response format (dict with results key)
-    else:
-        if not memories.get("results"):
-            return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
-        results = memories.get("results", [])
+    if not memories:
+        return Panel("No memories found.", title="[bold yellow]No Memories", border_style="yellow")
 
     table = Table(title="Memories", show_header=True, header_style="bold magenta")
     table.add_column("ID", style="cyan")
@@ -374,7 +368,7 @@ def format_list_response(memories: Dict) -> Panel:
     table.add_column("User ID", style="green")
     table.add_column("Metadata", style="magenta")
 
-    for memory in results:
+    for memory in memories:
         memory_id = memory.get("id", "unknown")
         content = memory.get("memory", "No content available")
         created_at = memory.get("created_at", "Unknown")
@@ -401,22 +395,10 @@ def format_delete_response(memory_id: str) -> Panel:
     return Panel("\n".join(content), title="[bold green]Memory Deleted", border_style="green")
 
 
-def format_retrieve_response(memories: Dict) -> Panel:
+def format_retrieve_response(memories: List[Dict]) -> Panel:
     """Format retrieve response."""
-    # Handle Mem0 Platform response format (list)
-    if isinstance(memories, list):
-        if not memories:
-            return Panel(
-                "No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
-            )
-        results = memories
-    # Handle OpenSearch/FAISS response format (dict with results key)
-    else:
-        if not memories.get("results"):
-            return Panel(
-                "No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
-            )
-        results = memories.get("results", [])
+    if not memories:
+        return Panel("No memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow")
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
     table.add_column("ID", style="cyan")
@@ -426,7 +408,7 @@ def format_retrieve_response(memories: Dict) -> Panel:
     table.add_column("User ID", style="magenta")
     table.add_column("Metadata", style="white")
 
-    for memory in results:
+    for memory in memories:
         memory_id = memory.get("id", "unknown")
         content = memory.get("memory", "No content available")
         score = memory.get("score", 0)
@@ -485,24 +467,16 @@ def format_history_response(history: List[Dict]) -> Panel:
     return Panel(table, title="[bold green]Memory History", border_style="green")
 
 
-def format_store_response(results: Dict) -> Panel:
+def format_store_response(results: List[Dict]) -> Panel:
     """Format store memory response."""
-    # Handle Mem0 Platform response format (list)
-    if isinstance(results, list):
-        if not results:
-            return Panel("No memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
-        memories = results
-    # Handle OpenSearch/FAISS response format (dict with results key)
-    else:
-        if not results.get("results"):
-            return Panel("No memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
-        memories = results.get("results", [])
+    if not results:
+        return Panel("No memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
 
     table = Table(title="Memory Stored", show_header=True, header_style="bold magenta")
     table.add_column("Operation", style="green")
     table.add_column("Content", style="yellow", width=50)
 
-    for memory in memories:
+    for memory in results:
         event = memory.get("event")
         text = memory.get("memory")
         # Truncate content if too long
@@ -618,13 +592,15 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 tool_input.get("metadata"),
             )
 
-            if results:
-                panel = format_store_response(results)
+            # Normalize to list
+            results_list = results if isinstance(results, list) else results.get("results", [])
+            if results_list:
+                panel = format_store_response(results_list)
                 console.print(panel)
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=f"Successfully stored {len(results.get('results', []))} memories")],
+                content=[ToolResultContent(text=json.dumps(results_list, indent=2))],
             )
 
         elif action == "get":
@@ -640,12 +616,14 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         elif action == "list":
             memories = client.list_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
-            panel = format_list_response(memories)
+            # Normalize to list
+            results_list = memories if isinstance(memories, list) else memories.get("results", [])
+            panel = format_list_response(results_list)
             console.print(panel)
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))],
+                content=[ToolResultContent(text=json.dumps(results_list, indent=2))],
             )
 
         elif action == "retrieve":
@@ -657,12 +635,14 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 tool_input.get("user_id"),
                 tool_input.get("agent_id"),
             )
-            panel = format_retrieve_response(memories)
+            # Normalize to list
+            results_list = memories if isinstance(memories, list) else memories.get("results", [])
+            panel = format_retrieve_response(results_list)
             console.print(panel)
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=json.dumps(memories.get("results", []), indent=2))],
+                content=[ToolResultContent(text=json.dumps(results_list, indent=2))],
             )
 
         elif action == "delete":
@@ -693,7 +673,6 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             raise ValueError(f"Invalid action: {action}")
 
     except Exception as e:
-        traceback.print_exc()
         error_panel = Panel(
             Text(str(e), style="red"),
             title="❌ Memory Operation Error",
