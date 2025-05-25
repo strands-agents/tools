@@ -43,7 +43,7 @@ Example usage:
 
     anthropic_model_config = anthropic_model.get_config()
 
-    # Example usage of the batch_tool with think and stop tools
+    # Example usage of the batch_tool with http_request and use_aws tools
     agent = Agent(model=anthropic_model, tools=[batch_tool, http_request, use_aws])
     result = agent.tool.batch_tool(
         invocations=[
