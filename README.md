@@ -38,7 +38,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experience both Mem0 and Amazon Bedrock Knowldge Bases
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
