@@ -1,0 +1,148 @@
+"""
+Batch Tool for Parallel Tool Invocation
+
+This tool enables invoking multiple other tools in parallel from a single LLM message response.
+It is designed for use with agents that support tool registration and invocation by name.
+
+Example usage:
+    import logging
+    import os
+    import sys
+
+    from strands import Agent
+    from strands.models.anthropic import AnthropicModel
+
+    from strands_tools import batch_tool, http_request, use_aws
+
+    # Enables Strands debug log level
+    logging.getLogger("strands").setLevel(logging.WARNING)
+
+    # Sets the logging format and streams logs to stderr
+    logging.basicConfig(
+        format="%(levelname)s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler()]
+    )
+
+    os.environ["ANTHROPIC_API_KEY"] = (
+        "<type your actual API key here>"
+    )
+
+    anthropic_model = AnthropicModel(
+        model_id="claude-3-5-haiku-20241022",  # Example model ID, replace with your actual model
+        temperature=0.7,
+        max_tokens=2000,
+        top_p=0.9,
+        top_k=40,
+        stop=["\n\n"],
+        stream=True,
+        anthropic_api_key=(
+            "<type your actual API key here>"
+        ),  # Replace with your actual API key. IMPORTANT: Do not hardcode sensitive keys in production code.
+        anthropic_base_url="https://api.anthropic.com/v1",  # Replace with your actual base URL if needed
+    )
+
+    anthropic_model_config = anthropic_model.get_config()
+
+    # Example usage of the batch_tool with think and stop tools
+    agent = Agent(model=anthropic_model, tools=[batch_tool, http_request, use_aws])
+    result = agent.tool.batch_tool(
+        invocations=[
+            {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
+            {
+                "name": "use_aws",
+                "arguments": {
+                    "service_name": "s3",
+                    "operation_name": "list_buckets",
+                    "parameters": {},
+                    "region": "us-east-1",
+                    "label": "List S3 Buckets"
+                }
+            },
+        ]
+    )
+    print(result)
+"""
+
+import traceback
+from typing import Any, Dict
+
+from strands.types.tools import ToolUse
+
+TOOL_SPEC = {
+    "name": "batch_tool",
+    "description": "Invoke multiple other tool calls simultaneously",
+    "inputSchema": {
+        "json": {
+            "type": "object",
+            "properties": {
+                "invocations": {
+                    "type": "array",
+                    "description": "The tool calls to invoke",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "The name of the tool to invoke"},
+                            "arguments": {"type": "object", "description": "The arguments to the tool"},
+                        },
+                        "required": ["name", "arguments"],
+                    },
+                }
+            },
+            "required": ["invocations"],
+        }
+    },
+}
+
+
+def batch_tool(tool: ToolUse, **kwargs) -> Dict[str, Any]:
+    """
+    Batch tool for invoking multiple tools in parallel.
+
+    Args:
+        tool: The tool object passed by the framework.
+        **kwargs: Additional arguments passed by the framework, including 'agent' and 'invocations'.
+
+    Returns:
+        Dict with status and a list of results for each invocation.
+
+    Notes:
+        - Each invocation should specify the tool name and its arguments.
+        - The tool will attempt to call each specified tool function with the provided arguments.
+        - If a tool function is not found or an error occurs, it will be captured in the results.
+        - This tool is designed to work with agents that support dynamic tool invocation.
+
+    Sammple output:
+        {
+            "status": "success",
+            "results": [
+                {"name": "http_request", "status": "success", "result": {...}},
+                {"name": "use_aws", "status": "error", "error": "...", "traceback": "..."},
+                ...
+            ]
+        }
+    """
+    # Retrieve 'agent' and 'invocations' from kwargs
+    agent = kwargs.get("agent")
+    invocations = kwargs.get("invocations", [])
+    results = []
+    try:
+        for invocation in invocations:
+            tool_name = invocation.get("name")
+            arguments = invocation.get("arguments", {})
+            tool_fn = getattr(agent.tool, tool_name, None)
+            if callable(tool_fn):
+                try:
+                    # Only pass JSON-serializable arguments to the tool
+                    result = tool_fn(**arguments)
+                    results.append({"name": tool_name, "status": "success", "result": result})
+                except Exception as e:
+                    results.append(
+                        {"name": tool_name, "status": "error", "error": str(e), "traceback": traceback.format_exc()}
+                    )
+            else:
+                results.append(
+                    {"name": tool_name, "status": "error", "error": f"Tool '{tool_name}' not found in agent."}
+                )
+        return {"status": "success", "results": results}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
