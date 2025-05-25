@@ -32,6 +32,7 @@ Agents Tools is an open-source Python library that provides a unified toolkit fo
 - 📝 **Journaling** - Create and manage structured logs and journals
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔌 **MCP Client** - Connect to any Model Context Protocol server and access remote tools
 
 ## 📦 Installation
 
@@ -98,6 +99,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | Connect to any MCP server, list tools, and call remote tools with simplified configuration |
 
 ## 💻 Usage Examples
 
@@ -112,6 +114,54 @@ agent = Agent(tools=[file_read, file_write, editor])
 agent.tool.file_read(path="config.json")
 agent.tool.file_write(path="output.txt", content="Hello, world!")
 agent.tool.editor(command="view", path="script.py")
+```
+
+### MCP Client Integration
+
+```python
+from strands import Agent
+from strands_tools import mcp_client
+
+agent = Agent(tools=[mcp_client])
+
+# Connect to a custom MCP server via stdio
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="my_tools",
+    transport="stdio",
+    command="python",
+    args=["my_mcp_server.py"]
+)
+
+# List available tools on the server
+tools = agent.tool.mcp_client(
+    action="list_tools",
+    connection_id="my_tools"
+)
+
+# Call a tool from the MCP server
+result = agent.tool.mcp_client(
+    action="call_tool",
+    connection_id="my_tools",
+    tool_name="calculate",
+    x=10,
+    y=20
+)
+
+# Connect to a SSE-based server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="web_server",
+    transport="sse",
+    server_url="http://localhost:8080/sse"
+)
+
+# Load MCP tools into agent's registry for direct access
+agent.tool.mcp_client(
+    action="load_tools",
+    connection_id="my_tools"
+)
+# Now you can call MCP tools directly as: agent.tool.mcp_my_tools_calculate(x=10, y=20)
 ```
 
 ### Shell Commands
