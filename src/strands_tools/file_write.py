@@ -21,7 +21,7 @@ Key Features:
 
 3. Safety Features:
    • Directory creation if parent directories don't exist
-   • Development mode toggle (DEV environment variable)
+   • Development mode toggle (BYPASS_TOOL_CONSENT environment variable)
    • Write operation confirmation dialog
    • Detailed error reporting
 
@@ -179,7 +179,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         }
 
     Notes:
-        - The DEV environment variable can be set to "true" to bypass the confirmation step
+        - The BYPASS_TOOL_CONSENT environment variable can be set to "true" to bypass the confirmation step
         - Parent directories are automatically created if they don't exist
         - File content is previewed with syntax highlighting based on file extension
         - User can cancel the write operation and provide a reason for cancellation
@@ -192,7 +192,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
     path = expanduser(tool_input["path"])
     content = tool_input["content"]
 
-    strands_dev = os.environ.get("DEV", "").lower() == "true"
+    strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Create a panel with file information
     info_panel = Panel(
