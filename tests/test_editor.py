@@ -192,10 +192,10 @@ class TestEditorDirectCalls:
         # Mock user cancelling the write
         mock_user_input.side_effect = ["n", "Changed my mind"]  # Cancel with reason
 
-        # Ensure DEV mode is disabled to force confirmation
-        current_dev = os.environ.get("DEV", None)
+        # Ensure BYPASS_TOOL_CONSENT mode is disabled to force confirmation
+        current_dev = os.environ.get("BYPASS_TOOL_CONSENT", None)
         if current_dev:
-            os.environ.pop("DEV")
+            os.environ.pop("BYPASS_TOOL_CONSENT")
 
         test_file = str(tmp_path / "should_not_exist.txt")
         tool_use = {
@@ -388,7 +388,7 @@ class TestEditorErrors:
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
 
-    @patch.dict(os.environ, {"DEV": "true"})
+    @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_missing_path(self):
         """Test error when path is missing."""
         tool_use = {"toolUseId": "test-id", "input": {"command": "view"}}
@@ -398,7 +398,7 @@ class TestEditorErrors:
         assert "Error:" in result["content"][0]["text"]
 
     @patch("strands_tools.editor.get_user_input")
-    @patch.dict(os.environ, {"DEV": "true"})
+    @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_create_without_file_text(self, mock_user_input):
         """Test error when file_text is missing for create command."""
         tool_use = {
@@ -411,7 +411,7 @@ class TestEditorErrors:
         assert "Error:" in result["content"][0]["text"]
 
     @patch("strands_tools.editor.get_user_input")
-    @patch.dict(os.environ, {"DEV": "true"})
+    @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_str_replace_without_required_params(self, mock_user_input):
         """Test error when required params are missing for str_replace."""
         tool_use = {
@@ -428,7 +428,7 @@ class TestEditorErrors:
         assert "Error:" in result["content"][0]["text"]
 
     @patch("strands_tools.editor.get_user_input")
-    @patch.dict(os.environ, {"DEV": "true"})
+    @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_pattern_replace_invalid_pattern(self, mock_user_input):
         """Test error with invalid regex pattern."""
         tool_use = {
@@ -462,18 +462,18 @@ class TestEditorViaAgent:
     """Test editor tool via the Agent interface."""
 
     @patch("strands_tools.editor.get_user_input")
-    @patch.dict("os.environ", {"DEV": "true"})
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
     def test_editor_via_agent_view(self, mock_user_input, agent, temp_file, clean_content_history):
-        """Test viewing a file via agent in DEV mode."""
+        """Test viewing a file via agent in BYPASS_TOOL_CONSENT mode."""
         result = agent.tool.editor(command="view", path=temp_file)
 
         result_text = extract_result_text(result)
         assert "File content displayed in console" in result_text
 
     @patch("strands_tools.editor.get_user_input")
-    @patch.dict("os.environ", {"DEV": "true"})
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
     def test_editor_via_agent_create(self, mock_user_input, agent, tmp_path, clean_content_history):
-        """Test creating a file via agent in DEV mode."""
+        """Test creating a file via agent in BYPASS_TOOL_CONSENT mode."""
         test_file = str(tmp_path / "agent_created.txt")
 
         result = agent.tool.editor(command="create", path=test_file, file_text="Created via agent")

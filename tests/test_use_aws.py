@@ -236,7 +236,7 @@ def test_use_aws_mutative_operation_confirm(
     mock_user_input.return_value = "y"
 
     # Configure environment variable
-    with patch.dict("os.environ", {"DEV": "false"}):
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
         tool_use = {
             "toolUseId": "test-tool-use-id",
             "input": {
@@ -267,7 +267,7 @@ def test_use_aws_mutative_operation_cancel(
     mock_user_input.return_value = "n"
 
     # Configure environment variable
-    with patch.dict("os.environ", {"DEV": "false"}):
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
         tool_use = {
             "toolUseId": "test-tool-use-id",
             "input": {
