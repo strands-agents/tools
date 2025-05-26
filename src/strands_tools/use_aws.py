@@ -270,7 +270,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     Notes:
         - Mutative operations (create, delete, etc.) require user confirmation in non-dev environments
-        - You can disable confirmation by setting the environment variable DEV=true
+        - You can disable confirmation by setting the environment variable BYPASS_TOOL_CONSENT=true
         - The tool automatically handles special response types like streaming bodies
         - For validation errors, the tool attempts to generate the correct input schema
         - All datetime objects are automatically converted to strings for proper JSON serialization
@@ -287,7 +287,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     region = tool_input.get("region", aws_region)
     label = tool_input.get("label", "AWS Operation Details")
 
-    STRANDS_DEV = os.environ.get("DEV", "").lower() == "true"
+    STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Create a panel for AWS Operation Details
     operation_details = f"{Fore.CYAN}Service:{Style.RESET_ALL} {service_name}\n"
@@ -305,7 +305,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check if the operation is potentially mutative
     is_mutative = any(op in operation_name.lower() for op in MUTATIVE_OPERATIONS)
 
-    if is_mutative and not STRANDS_DEV:
+    if is_mutative and not STRANDS_BYPASS_TOOL_CONSENT:
         # Prompt for confirmation before executing the operation
         confirm = get_user_input(
             f"<yellow><bold>The operation '{operation_name}' is potentially mutative. "

@@ -72,11 +72,11 @@ def test_list_documents(mock_get_formatter, mock_get_client, mock_memory_service
     mock_memory_formatter.format_list_response.assert_called_once_with(list_response)
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
+@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
 def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
-    """Test store document functionality with DEV mode enabled."""
+    """Test store document functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
     mock_get_formatter.return_value = mock_memory_formatter
@@ -106,11 +106,11 @@ def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service
     mock_memory_formatter.format_store_response.assert_called_once()
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
+@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
 def test_delete_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
-    """Test delete document functionality with DEV mode enabled."""
+    """Test delete document functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
     mock_get_formatter.return_value = mock_memory_formatter
