@@ -247,7 +247,7 @@ class MemoryServiceClient:
         doc_id = f"memory_{timestamp}_{str(uuid.uuid4())[:8]}"
 
         # Create a document title if not provided
-        doc_title = title or f"Peccy Memory {timestamp}"
+        doc_title = title or f"Strands Memory {timestamp}"
 
         # Package content with metadata for better organization
         content_with_metadata = {
