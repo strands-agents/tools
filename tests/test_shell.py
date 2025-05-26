@@ -443,7 +443,7 @@ def test_command_executor_execute_with_pty_timeout(
         # Create the executor with a very short timeout
         executor = shell.CommandExecutor(timeout=5)
 
-        # Execute command - should timeout
+        # Execute command - should time out
         with pytest.raises(TimeoutError):
             executor.execute_with_pty("sleep 10", "/tmp")
 

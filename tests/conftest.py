@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def pytest_addoption(parser):
+def pytest_adoption(parser):
     """Add custom command line options."""
     parser.addoption(
         "--integration", action="store_true", default=False, help="Run integration tests that require Slack API access"
