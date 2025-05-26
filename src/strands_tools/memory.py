@@ -18,7 +18,7 @@ Key Features:
    • User confirmation for mutative operations
    • Content previews before storage
    • Warning messages before deletion
-   • DEV mode for bypassing confirmations in tests
+   • BYPASS_TOOL_CONSENT mode for bypassing confirmations in tests
 
 3. Advanced Capabilities:
    • Automatic document ID generation
@@ -247,7 +247,7 @@ class MemoryServiceClient:
         doc_id = f"memory_{timestamp}_{str(uuid.uuid4())[:8]}"
 
         # Create a document title if not provided
-        doc_title = title or f"Peccy Memory {timestamp}"
+        doc_title = title or f"Strands Memory {timestamp}"
 
         # Package content with metadata for better organization
         content_with_metadata = {
@@ -568,7 +568,7 @@ def memory(
     This tool provides a user-friendly interface for managing knowledge base content
     with built-in safety measures for mutative operations. For operations that modify
     data (store, delete), users will be shown a preview and asked for explicit confirmation
-    before changes are made, unless the DEV environment variable is set to "true".
+    before changes are made, unless the BYPASS_TOOL_CONSENT environment variable is set to "true".
 
     Args:
         action: The action to perform ('store', 'delete', 'list', 'get', or 'retrieve').
@@ -587,7 +587,7 @@ def memory(
         A dictionary containing the result of the operation.
 
     Notes:
-        - Store and delete operations require user confirmation (unless in DEV mode)
+        - Store and delete operations require user confirmation (unless in BYPASS_TOOL_CONSENT mode)
         - Content previews are shown before storage to verify accuracy
         - Warning messages are provided before document deletion
         - Operation can be cancelled by the user during confirmation
@@ -648,7 +648,7 @@ def memory(
 
     # Define mutative actions that need confirmation
     mutative_actions = {"store", "delete"}
-    strands_dev = os.environ.get("DEV", "").lower() == "true"
+    strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
     needs_confirmation = action in mutative_actions and not strands_dev
 
     # Show confirmation dialog for mutative operations

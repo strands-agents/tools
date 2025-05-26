@@ -286,15 +286,15 @@ class TestPythonRepl:
         assert "test_var" not in python_repl.repl_state.get_namespace()
 
     def test_dev_mode_bypass_confirmation(self, mock_console):
-        """Test that DEV mode bypasses the confirmation dialog."""
+        """Test that BYPASS_TOOL_CONSENT mode bypasses the confirmation dialog."""
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "dev_mode_test = 42", "interactive": False},
         }
 
-        # Set DEV environment variable to true
-        with patch.dict(os.environ, {"DEV": "true"}):
-            # We shouldn't need to mock get_user_input here since DEV mode should bypass it
+        # Set BYPASS_TOOL_CONSENT environment variable to true
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            # We shouldn't need to mock get_user_input here since BYPASS_TOOL_CONSENT mode should bypass it
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "success"
