@@ -202,11 +202,11 @@ def test_direct_missing_parameters(agent):
 
 
 def test_environment_dev_mode_delete(agent, os_environment):
-    """Test the environment tool in DEV mode with delete action."""
-    # Set DEV mode
-    os_environment["DEV"] = "true"
+    """Test the environment tool in BYPASS_TOOL_CONSENT mode with delete action."""
+    # Set BYPASS_TOOL_CONSENT mode
+    os_environment["BYPASS_TOOL_CONSENT"] = "true"
 
-    var_name = "DEV_MODE_DELETE_VAR"
+    var_name = "BYPASS_TOOL_CONSENT_MODE_DELETE_VAR"
     var_value = "dev_mode_delete_value"
 
     # Set up the variable
@@ -218,9 +218,9 @@ def test_environment_dev_mode_delete(agent, os_environment):
 
 
 def test_environment_dev_mode_protected_var(agent, os_environment):
-    """Test that protected variables are still protected in DEV mode."""
-    # Set DEV mode
-    os_environment["DEV"] = True
+    """Test that protected variables are still protected in BYPASS_TOOL_CONSENT mode."""
+    # Set BYPASS_TOOL_CONSENT mode
+    os_environment["BYPASS_TOOL_CONSENT"] = True
 
     unchanging_value = "/original/path"
     os_environment["PATH"] = unchanging_value

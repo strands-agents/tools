@@ -18,7 +18,7 @@ Key Features:
    • User confirmation for mutative operations
    • Content previews before storage
    • Warning messages before deletion
-   • DEV mode for bypassing confirmations in tests
+   • BYPASS_TOOL_CONSENT mode for bypassing confirmations in tests
 
 3. Advanced Capabilities:
    • Automatic memory ID generation
@@ -450,12 +450,12 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
         client = Mem0ServiceClient()
 
         # Check if we're in development mode
-        strands_dev = os.environ.get("DEV", "").lower() == "true"
+        strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
         # Handle different actions
         action = tool_input["action"]
 
-        # For mutative operations, show confirmation dialog unless in DEV mode
+        # For mutative operations, show confirmation dialog unless in BYPASS_TOOL_CONSENT mode
         mutative_actions = {"store", "delete"}
         needs_confirmation = action in mutative_actions and not strands_dev
 
