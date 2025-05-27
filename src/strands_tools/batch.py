@@ -5,46 +5,14 @@ This tool enables invoking multiple other tools in parallel from a single LLM me
 It is designed for use with agents that support tool registration and invocation by name.
 
 Example usage:
-    import logging
     import os
     import sys
 
     from strands import Agent
-    from strands.models.anthropic import AnthropicModel
-
     from strands_tools import batch, http_request, use_aws
 
-    # Enables Strands debug log level
-    logging.getLogger("strands").setLevel(logging.WARNING)
-
-    # Sets the logging format and streams logs to stderr
-    logging.basicConfig(
-        format="%(levelname)s | %(name)s | %(message)s",
-        handlers=[logging.StreamHandler()]
-    )
-
-    os.environ["ANTHROPIC_API_KEY"] = (
-        "<type your actual API key here>"
-    )
-
-    anthropic_model = AnthropicModel(
-        model_id="claude-3-5-haiku-20241022",  # Example model ID, replace with your actual model
-        temperature=0.7,
-        max_tokens=2000,
-        top_p=0.9,
-        top_k=40,
-        stop=["\n\n"],
-        stream=True,
-        anthropic_api_key=(
-            "<type your actual API key here>"
-        ),  # Replace with your actual API key. IMPORTANT: Do not hardcode sensitive keys in production code.
-        anthropic_base_url="https://api.anthropic.com/v1",  # Replace with your actual base URL if needed
-    )
-
-    anthropic_model_config = anthropic_model.get_config()
-
     # Example usage of the batch with http_request and use_aws tools
-    agent = Agent(model=anthropic_model, tools=[batch, http_request, use_aws])
+    agent = Agent(tools=[batch, http_request, use_aws])
     result = agent.tool.batch(
         invocations=[
             {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
@@ -60,7 +28,6 @@ Example usage:
             },
         ]
     )
-    print(result)
 """
 
 import traceback
