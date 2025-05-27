@@ -398,23 +398,22 @@ class TestMCPClientCallTool:
         assert result["tool_result"]["content"][0]["text"] == "Tool executed successfully"
 
     def test_call_tool_with_direct_params(self, mock_mcp_client, mock_stdio_client):
-        """Test calling a tool with parameters passed directly."""
+        """Test calling a tool with parameters passed directly - they should be explicitly provided in tool_args."""
         # Connect first
         mcp_client(
             action="connect", connection_id="test_server", transport="stdio", command="python", args=["server.py"]
         )
 
-        # Call tool with direct parameters
+        # Call tool with direct parameters - should now use tool_args explicitly
         result = mcp_client(
             action="call_tool",
             connection_id="test_server",
             tool_name="test_tool",
-            param="direct_value",
-            another_param=123,
+            tool_args={"param": "direct_value", "another_param": 123},
         )
 
         assert result["status"] == "success"
-        # The tool_arguments will include agent: None along with the other params
+        # Tool arguments should contain the explicitly provided values
         assert result["tool_arguments"]["param"] == "direct_value"
         assert result["tool_arguments"]["another_param"] == 123
 

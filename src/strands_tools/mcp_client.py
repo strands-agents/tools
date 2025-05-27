@@ -355,8 +355,7 @@ def mcp_client(
             action="call_tool",
             connection_id="my_server",
             tool_name="calculator",
-            x=10,
-            y=20
+            tool_args={"x": 10, "y": 20}
         )
     """
 
@@ -692,10 +691,7 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get tool arguments - support both 'arguments' dict and direct parameters
     tool_args = params.get("tool_args", {})
-    if not tool_args:
-        # Extract any additional parameters as tool arguments
-        excluded_keys = {"action", "connection_id", "tool_name", "arguments", "tool_args"}
-        tool_args = {k: v for k, v in params.items() if k not in excluded_keys}
+    # If no explicit arguments provided, use empty dict instead of collecting extra params
 
     try:
         # Use the stored client
