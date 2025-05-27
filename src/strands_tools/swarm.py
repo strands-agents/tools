@@ -593,6 +593,8 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "messages": messages,
             "tool_config": tool_config,
         }
+        if "callback_handler" in kwargs:
+            tool_context["callback_handler"] = kwargs["callback_handler"]
 
         # Extract parameters
         task = tool_input["task"]
