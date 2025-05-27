@@ -12,7 +12,7 @@ Example usage:
     from strands import Agent
     from strands.models.anthropic import AnthropicModel
 
-    from strands_tools import batch_tool, http_request, use_aws
+    from strands_tools import batch, http_request, use_aws
 
     # Enables Strands debug log level
     logging.getLogger("strands").setLevel(logging.WARNING)
@@ -43,9 +43,9 @@ Example usage:
 
     anthropic_model_config = anthropic_model.get_config()
 
-    # Example usage of the batch_tool with http_request and use_aws tools
-    agent = Agent(model=anthropic_model, tools=[batch_tool, http_request, use_aws])
-    result = agent.tool.batch_tool(
+    # Example usage of the batch with http_request and use_aws tools
+    agent = Agent(model=anthropic_model, tools=[batch, http_request, use_aws])
+    result = agent.tool.batch(
         invocations=[
             {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
             {
@@ -69,7 +69,7 @@ from typing import Any, Dict
 from strands.types.tools import ToolUse
 
 TOOL_SPEC = {
-    "name": "batch_tool",
+    "name": "batch",
     "description": "Invoke multiple other tool calls simultaneously",
     "inputSchema": {
         "json": {
@@ -94,7 +94,7 @@ TOOL_SPEC = {
 }
 
 
-def batch_tool(tool: ToolUse, **kwargs) -> Dict[str, Any]:
+def batch(tool: ToolUse, **kwargs) -> Dict[str, Any]:
     """
     Batch tool for invoking multiple tools in parallel.
 
