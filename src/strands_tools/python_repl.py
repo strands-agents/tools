@@ -419,8 +419,8 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
 
     code = tool_input["code"]
-    interactive = tool_input.get("interactive", True)
-    reset_state = tool_input.get("reset_state", False)
+    interactive = os.environ.get("PYTHON_REPL_INTERACTIVE", str(tool_input.get("interactive", True))).lower() == "true"
+    reset_state = os.environ.get("PYTHON_REPL_RESET_STATE", str(tool_input.get("reset_state", False))).lower() == "true"
 
     # Check for development mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
