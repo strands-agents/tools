@@ -106,7 +106,6 @@ def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service
     mock_memory_formatter.format_store_response.assert_called_once()
 
 
-<<<<<<< HEAD
 @patch("strands_tools.memory.get_memory_service_client")
 def test_store_document_different_region(mock_memory_service_client):
     """Test store document functionality with a different region than default."""
@@ -123,10 +122,7 @@ def test_store_document_different_region(mock_memory_service_client):
     mock_memory_service_client.assert_called_once_with(region="eu-west-1")
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
-=======
 @patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
->>>>>>> origin/main
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
 def test_delete_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
