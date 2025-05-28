@@ -67,11 +67,11 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
     Batch tool for invoking multiple tools in parallel.
 
     Args:
-        tool: The tool object passed by the framework.
+        tool: Tool use object.
         **kwargs: Additional arguments passed by the framework, including 'agent' and 'invocations'.
 
     Returns:
-        Dict with status and a list of results for each invocation.
+        ToolResult with toolUseId, status and a list of results for each invocation.
 
     Notes:
         - Each invocation should specify the tool name and its arguments.
