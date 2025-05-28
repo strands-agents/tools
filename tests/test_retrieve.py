@@ -62,12 +62,11 @@ def mock_boto3_client():
 
 
 @pytest.fixture(autouse=True)
-def clear_aws_region_env():
-    """Ensure AWS_REGION is not set for any test, and restore it after test is run."""
-    aws_region_env_var = os.environ.pop("AWS_REGION", None)
-    yield
-    if aws_region_env_var is not None:
-        os.environ["AWS_REGION"] = aws_region_env_var
+def mock_env():
+    # Use a mock environment to remove dependency on actual environment variables
+    env = {}
+    with mock.patch.object(os, "environ", env):
+        yield env
 
 
 def extract_result_text(result):
