@@ -14,7 +14,7 @@ session: PromptSession | None = None
 
 async def get_user_input_async(prompt: str, default: str = "n", keyboard_interrupt_return_default: bool = True) -> str:
     """
-    Asynchronously get user input with prompt_toolkit's features (history, arrow keys, styling, etc).
+    Asynchronously get user input with prompt_toolkit's features (history, arrow keys, styling, etc.).
 
     Args:
         prompt: The prompt to show

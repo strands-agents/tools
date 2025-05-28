@@ -40,7 +40,7 @@ This project uses [hatchling](https://hatch.pypa.io/latest/build/#hatchling) as 
    ```bash
    pre-commit install -t pre-commit -t commit-msg
    ```
-   This will automatically run formatters and convention commit checks on your code before each commit.
+   This will automatically run formatters and conventional commit checks on your code before each commit.
 
 3. Run code formatters manually:
    ```bash
@@ -111,7 +111,7 @@ To send us a pull request, please:
 
 
 ## Finding contributions to work on
-Looking at the existing issues is a great way to find something to contribute on.
+Looking at the existing issues is a great way to find something to contribute to.
 
 You can check:
 - Our known bugs list in [Bug Reports](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug) for issues that need fixing
