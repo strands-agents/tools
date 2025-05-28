@@ -61,6 +61,15 @@ def mock_boto3_client():
         yield mock_client
 
 
+@pytest.fixture(autouse=True)
+def clear_aws_region_env():
+    """Ensure AWS_REGION is not set for any test, and restore it after test is run."""
+    aws_region_env_var = os.environ.pop("AWS_REGION", None)
+    yield
+    if aws_region_env_var is not None:
+        os.environ["AWS_REGION"] = aws_region_env_var
+
+
 def extract_result_text(result):
     """Extract the result text from the agent response."""
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
