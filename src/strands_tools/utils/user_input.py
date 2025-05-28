@@ -12,7 +12,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 session: PromptSession | None = None
 
 
-async def get_user_input_async(prompt: str, default: str = "n", keyboard_interrupt_return_default: bool = True) -> str:
+async def get_user_input_async(prompt: str, default: str = "", keyboard_interrupt_return_default: bool = True) -> str:
     """
     Asynchronously get user input with prompt_toolkit's features (history, arrow keys, styling, etc.).
 
@@ -48,7 +48,7 @@ async def get_user_input_async(prompt: str, default: str = "n", keyboard_interru
     return await _get_input()
 
 
-def get_user_input(prompt: str, default: str = "n", keyboard_interrupt_return_default: bool = True) -> str:
+def get_user_input(prompt: str, default: str = "", keyboard_interrupt_return_default: bool = True) -> str:
     """
     Synchronous wrapper for get_user_input_async.
 
