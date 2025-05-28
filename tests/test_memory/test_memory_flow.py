@@ -55,7 +55,9 @@ def test_store_with_user_confirmation(
     ]
 
     # Call memory function with store action (which should trigger confirmation flow)
-    with patch.dict(os.environ, {"DEV": "false"}):  # Ensure DEV mode is off to trigger confirmation
+    with patch.dict(
+        os.environ, {"BYPASS_TOOL_CONSENT": "false"}
+    ):  # Ensure BYPASS_TOOL_CONSENT mode is off to trigger confirmation
         result = memory.memory(action="store", content="Test content", title=doc_title)
 
     # Assertions
@@ -79,7 +81,9 @@ def test_store_with_user_cancellation(
     mock_get_user_input.side_effect = ["n", "Changed my mind"]  # User cancels and provides reason
 
     # Call memory function with store action
-    with patch.dict(os.environ, {"DEV": "false"}):  # Ensure DEV mode is off to trigger confirmation
+    with patch.dict(
+        os.environ, {"BYPASS_TOOL_CONSENT": "false"}
+    ):  # Ensure BYPASS_TOOL_CONSENT mode is off to trigger confirmation
         result = memory.memory(action="store", content="Test content", title="Test Title")
 
     # Assertions
@@ -131,7 +135,7 @@ def test_delete_with_document_preview(
     ]
 
     # Call memory function with delete action
-    with patch.dict(os.environ, {"DEV": "false"}):  # Ensure DEV mode is off
+    with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false"}):  # Ensure BYPASS_TOOL_CONSENT mode is off
         result = memory.memory(action="delete", document_id=doc_id)
 
     # Assertions
@@ -172,7 +176,7 @@ def test_delete_with_error_in_preview(
     ]
 
     # Call memory function with delete action
-    with patch.dict(os.environ, {"DEV": "false"}):  # Ensure DEV mode is off
+    with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false"}):  # Ensure BYPASS_TOOL_CONSENT mode is off
         result = memory.memory(action="delete", document_id=doc_id)
 
     # Assertions

@@ -127,7 +127,7 @@ def test_list_invalid_max_results(mock_get_client):
     assert "max_results must be between 1 and 1000" in result["content"][0]["text"]
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
+@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.memory.get_memory_service_client")
 def test_store_api_error(mock_get_client):
     """Test error handling when store operation fails."""
@@ -143,7 +143,7 @@ def test_store_api_error(mock_get_client):
     assert "Error during store operation" in result["content"][0]["text"]
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "DEV": "true"})
+@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.memory.get_memory_service_client")
 def test_delete_api_error(mock_get_client):
     """Test error handling when delete operation fails."""

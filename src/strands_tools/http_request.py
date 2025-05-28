@@ -600,9 +600,9 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         console.print(preview_panel)
 
         # Check if we're in development mode
-        strands_dev = os.environ.get("DEV", "").lower() == "true"
+        strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-        # For modifying operations (non-GET requests), show confirmation dialog unless in DEV mode
+        # For modifying operations (non-GET requests), show confirmation dialog unless in BYPASS_TOOL_CONSENT mode
         modifying_methods = {"POST", "PUT", "PATCH", "DELETE"}
         needs_confirmation = method.upper() in modifying_methods and not strands_dev
 

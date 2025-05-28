@@ -106,10 +106,10 @@ def test_shell_cancel_execution(mock_get_user_input, mock_execute_commands):
     # Mock the user input to 'n' (no)
     mock_get_user_input.return_value = "n"
 
-    # Ensure DEV mode is disabled to force confirmation
-    current_dev = os.environ.get("DEV", None)
+    # Ensure BYPASS_TOOL_CONSENT mode is disabled to force confirmation
+    current_dev = os.environ.get("BYPASS_TOOL_CONSENT", None)
     if current_dev:
-        os.environ.pop("DEV")
+        os.environ.pop("BYPASS_TOOL_CONSENT")
 
     # Create a tool use dictionary
     tool_use = {
@@ -120,9 +120,9 @@ def test_shell_cancel_execution(mock_get_user_input, mock_execute_commands):
     # Call the shell function
     result = shell.shell(tool=tool_use)
 
-    # Restore DEV mode if it was set
+    # Restore BYPASS_TOOL_CONSENT mode if it was set
     if current_dev:
-        os.environ["DEV"] = current_dev
+        os.environ["BYPASS_TOOL_CONSENT"] = current_dev
 
     # Verify the result shows cancellation
     assert result["status"] == "error"
@@ -819,8 +819,8 @@ def test_shell_with_work_dir(mock_get_user_input, mock_execute_commands):
 @patch("strands_tools.shell.execute_commands")
 @patch("strands_tools.shell.get_user_input")
 def test_shell_dev_mode(mock_get_user_input, mock_execute_commands, mock_environ):
-    """Test shell tool in DEV mode (skips confirmation)."""
-    # Set DEV mode
+    """Test shell tool in BYPASS_TOOL_CONSENT mode (skips confirmation)."""
+    # Set BYPASS_TOOL_CONSENT mode
     mock_environ.get.return_value = "true"
 
     # Mock setup
@@ -843,7 +843,7 @@ def test_shell_dev_mode(mock_get_user_input, mock_execute_commands, mock_environ
     # Verify the result
     assert result["status"] == "success"
 
-    # Verify get_user_input was not called (no confirmation in DEV mode)
+    # Verify get_user_input was not called (no confirmation in BYPASS_TOOL_CONSENT mode)
     mock_get_user_input.assert_not_called()
 
 
