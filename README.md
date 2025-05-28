@@ -272,7 +272,7 @@ import sys
 from strands import Agent
 from strands_tools import batch, http_request, use_aws
 
-# Example usage of the batch_tool with http_request and use_aws tools
+# Example usage of the batch with http_request and use_aws tools
 agent = Agent(tools=[batch, http_request, use_aws])
 
 result = agent.tool.batch(

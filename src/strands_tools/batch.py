@@ -31,9 +31,10 @@ Example usage:
 """
 
 import traceback
-from typing import Any, Dict
 
-from strands.types.tools import ToolUse
+from strands.types.tools import ToolResult, ToolUse
+
+from strands_tools.utils import console_util
 
 TOOL_SPEC = {
     "name": "batch",
@@ -61,7 +62,7 @@ TOOL_SPEC = {
 }
 
 
-def batch(tool: ToolUse, **kwargs) -> Dict[str, Any]:
+def batch(tool: ToolUse, **kwargs) -> ToolResult:
     """
     Batch tool for invoking multiple tools in parallel.
 
@@ -88,11 +89,16 @@ def batch(tool: ToolUse, **kwargs) -> Dict[str, Any]:
             ]
         }
     """
+    console = console_util.create()
+    tool_use_id = tool["toolUseId"]
+
     # Retrieve 'agent' and 'invocations' from kwargs
     agent = kwargs.get("agent")
     invocations = kwargs.get("invocations", [])
     results = []
     try:
+        if not hasattr(agent, "tool") or agent.tool is None:
+            raise AttributeError("Agent does not have a valid 'tool' attribute.")
         for invocation in invocations:
             tool_name = invocation.get("name")
             arguments = invocation.get("arguments", {})
@@ -101,15 +107,35 @@ def batch(tool: ToolUse, **kwargs) -> Dict[str, Any]:
                 try:
                     # Only pass JSON-serializable arguments to the tool
                     result = tool_fn(**arguments)
-                    results.append({"name": tool_name, "status": "success", "result": result})
+
+                    if result["status"] == "success":
+                        results.append({"name": tool_name, "status": "success", "result": result})
+                    else:
+                        results.append(
+                            {"toolUseId": tool_use_id, "status": "error", "content": [{"text": "Tool missing"}]}
+                        )
                 except Exception as e:
-                    results.append(
-                        {"name": tool_name, "status": "error", "error": str(e), "traceback": traceback.format_exc()}
-                    )
+                    error_msg = f"Error in batch tool: {str(e)}\n{traceback.format_exc()}"
+                    console.print(f"Error in batch tool: {str(e)}")
+                    results.append({"toolUseId": tool_use_id, "status": "error", "content": [{"text": error_msg}]})
             else:
                 results.append(
-                    {"name": tool_name, "status": "error", "error": f"Tool '{tool_name}' not found in agent."}
+                    {
+                        "toolUseId": tool_use_id,
+                        "status": "error",
+                        "content": [{"text": f"Tool '{tool_name}' not found in agent or tool call failed."}],
+                    }
                 )
-        return {"status": "success", "results": results}
+        return {
+            "toolUseId": tool_use_id,
+            "status": "success",
+            "content": results,
+        }
     except Exception as e:
-        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+        error_msg = f"Error in batch tool: {str(e)}\n{traceback.format_exc()}"
+        console.print(f"Error in batch tool: {str(e)}")
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": error_msg}],
+        }
