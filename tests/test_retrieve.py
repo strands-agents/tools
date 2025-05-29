@@ -139,6 +139,64 @@ def test_retrieve_tool_direct(mock_boto3_client):
     )
 
 
+def test_retrieve_tool_direct_with_filtering(mock_boto3_client):
+    """Test direct invocation of the retrieve tool with metadata filtering."""
+
+    # Mock response with only results that would match the filter
+    filtered_mock_response = {
+        "retrievalResults": [
+            {
+                "content": {"text": "Test content 2", "type": "TEXT"},
+                "location": {
+                    "customDocumentLocation": {"id": "doc-002"},
+                    "type": "CUSTOM",
+                },
+                "metadata": {"source": "test-source-2"},
+                "score": 0.7,
+            }
+            # Only include the result that matches source="test-source-2"
+            # Exclude doc-001 and doc-003 as they don't match the filter
+        ]
+    }
+
+    # Configure the mock to return filtered results
+    mock_boto3_client.return_value.retrieve.return_value = filtered_mock_response
+
+    """Test direct invocation of the retrieve tool."""
+    # Create a tool use dictionary similar to how the agent would call it
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "numberOfResults": 3,
+            "filter": {"equals": {"key": "source", "value": "test-source-2"}},
+        },
+    }
+
+    # Call the retrieve function directly
+    with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "default-kb-id"}):
+        result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result has the expected structure
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+    assert "Retrieved 1 results with score >= 0.4" in result["content"][0]["text"]
+
+    # Verify that boto3 client was called with correct parameters
+    mock_boto3_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 3,
+                "filter": {"equals": {"key": "source", "value": "test-source-2"}},
+            }
+        },
+    )
+
+
 def test_retrieve_with_default_kb_id(mock_boto3_client):
     """Test retrieve tool using default knowledge base ID from environment."""
     tool_use = {"toolUseId": "test-tool-use-id", "input": {"text": "test query"}}
@@ -315,3 +373,59 @@ def test_format_results_non_string_content():
     assert "Document ID: test-doc-1" in formatted
     # Content should not be included since text is not a string
     assert "Content:" not in formatted
+
+
+def test_create_filtered_retrieve_with_default_filter(mock_boto3_client):
+    """Test creating a filtered retrieve tool with default filter."""
+    # Create a filtered retrieve tool with default filter
+
+    # IMPORTANT: Update the mock to return filtered results
+    filtered_mock_response = {
+        "retrievalResults": [
+            {
+                "content": {"text": "HR Policy content", "type": "TEXT"},
+                "location": {
+                    "customDocumentLocation": {"id": "hr-doc-001"},
+                    "type": "CUSTOM",
+                },
+                "metadata": {"department": "hr"},
+                "score": 0.9,
+            }
+        ]
+    }
+    mock_boto3_client.return_value.retrieve.return_value = filtered_mock_response
+
+    from strands_tools.retrieve import create_filtered_retrieve
+
+    hr_retrieve = create_filtered_retrieve(
+        default_filter={"equals": {"key": "department", "value": "hr"}}, tool_name="hr_retrieve"
+    )
+
+    # Verify the tool has the expected name
+    assert hr_retrieve.__name__ == "hr_retrieve"
+
+    # Create tool use object
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"text": "HR policies", "knowledgeBaseId": "test-kb-id"},
+    }
+
+    # Call the filtered retrieve tool
+    result = hr_retrieve(tool=tool_use)
+
+    # Verify the result
+    assert result["status"] == "success"
+    # assert "with metadata filtering" in result["content"][0]["text"]
+
+    # Verify boto3 was called with the default filter
+    expected_call = mock.call(
+        retrievalQuery={"text": "HR policies"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10,
+                "filter": {"equals": {"key": "department", "value": "hr"}},
+            }
+        },
+    )
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(**expected_call.kwargs)
