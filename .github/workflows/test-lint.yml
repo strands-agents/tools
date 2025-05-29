@@ -1,11 +1,15 @@
 name: Test and Lint
 
 on:
-  pull_request:  # Safer than pull_request_target for untrusted code
-    branches: [ main ]
-    types: [opened, synchronize, reopened, ready_for_review, review_requested, review_request_removed]
-  push:
-    branches: [ main ]  # Also run on direct pushes to main
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      skip_approval_check:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   check-approval:
@@ -13,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
-    # Skip this check for direct pushes to main
-    if: github.event_name == 'pull_request'
+    # Skip this check if explicitly requested or if this is a release workflow
+    if: inputs.skip_approval_check != true && github.event_name == 'pull_request'
     outputs:
       approved: ${{ steps.check-approval.outputs.approved }}
     steps:
@@ -49,51 +53,53 @@ jobs:
 
   unit-test:
     name: Unit Tests - Python ${{ matrix.python-version }} - ${{ matrix.os-name }}
-    needs: check-approval
+    needs: [check-approval]
     permissions:
       contents: read
-    # Only run if PR is approved or this is a direct push to main
-    if: github.event_name == 'push' || needs.check-approval.outputs.approved == 'true'
+    # Only run if PR is approved, or if approval check is skipped, or if this is a direct push to main
+    if: always() && (needs.check-approval.result == 'skipped' || needs.check-approval.outputs.approved == 'true' || inputs.skip_approval_check == true)
     strategy:
       matrix:
-        include:
-          # Linux
-          - os: ubuntu-latest
-            os-name: linux
-            python-version: "3.10"
-          - os: ubuntu-latest
-            os-name: linux
-            python-version: "3.11"
-          - os: ubuntu-latest
-            os-name: linux
-            python-version: "3.12"
-          - os: ubuntu-latest
-            os-name: linux
-            python-version: "3.13"
-          # Windows
-          - os: windows-latest
-            os-name: windows
-            python-version: "3.10"
-          - os: windows-latest
-            os-name: windows
-            python-version: "3.11"
-          - os: windows-latest
-            os-name: windows
-            python-version: "3.12"
-          - os: windows-latest
-            os-name: windows
-            python-version: "3.13"
-          # MacOS - latest only; not enough runners for MacOS
-          - os: macos-latest
-            os-name: macos
-            python-version: "3.13"
-      fail-fast: false
+       include:
+        # Linux
+        - os: ubuntu-latest
+          os-name: 'linux'
+          python-version: "3.10"
+        - os: ubuntu-latest
+          os-name: 'linux'
+          python-version: "3.11"
+        - os: ubuntu-latest
+          os-name: 'linux'
+          python-version: "3.12"
+        - os: ubuntu-latest
+          os-name: 'linux'
+          python-version: "3.13"
+        # Windows
+        - os: windows-latest
+          os-name: 'windows'
+          python-version: "3.10"
+        - os: windows-latest
+          os-name: 'windows'
+          python-version: "3.11"
+        - os: windows-latest
+          os-name: 'windows'
+          python-version: "3.12"
+        - os: windows-latest
+          os-name: 'windows'
+          python-version: "3.13"
+        # MacOS - latest only; not enough runners for macOS
+        - os: macos-latest
+          os-name: 'macOS'
+          python-version: "3.13"
+      fail-fast: true
     runs-on: ${{ matrix.os }}
+    env:
+      LOG_LEVEL: DEBUG
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}  # Explicitly define which commit to checkout
+          ref: ${{ inputs.ref }}  # Explicitly define which commit to check out
           persist-credentials: false  # Don't persist credentials for subsequent actions
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -109,7 +115,10 @@ jobs:
 
   test-install:
     name: Dependency Check - Python ${{ matrix.python-version }}
+    needs: [check-approval]
     runs-on: ubuntu-latest
+    # Only run if PR is approved, or if approval check is skipped, or if this is a direct push to main
+    if: always() && (needs.check-approval.result == 'skipped' || needs.check-approval.outputs.approved == 'true' || inputs.skip_approval_check == true)
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -119,7 +128,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Python
@@ -135,15 +144,16 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: check-approval
+    needs: [check-approval]
     permissions:
       contents: read
-    if: github.event_name == 'push' || needs.check-approval.outputs.approved == 'true'
+    # Only run if PR is approved, or if approval check is skipped, or if this is a direct push to main
+    if: always() && (needs.check-approval.result == 'skipped' || needs.check-approval.outputs.approved == 'true' || inputs.skip_approval_check == true)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Python
