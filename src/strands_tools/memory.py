@@ -583,7 +583,8 @@ def memory(
         next_token: Token for pagination in 'list' or 'retrieve' action (optional).
         query: The search query for semantic search (required for 'retrieve' action).
         min_score: Minimum relevance score threshold (0.0-1.0) for 'retrieve' action. Default is 0.4.
-        region_name: Optional AWS region name. If not provided, will use the AWS_REGION env variable.
+        region_name: Optional AWS region name. If not provided, will use the AWS_REGION env variable. 
+            If AWS_REGION is not specified, it will default to us-west-2.
 
     Returns:
         A dictionary containing the result of the operation.

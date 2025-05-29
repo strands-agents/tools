@@ -118,7 +118,7 @@ def test_store_document_different_region(mock_memory_service_client):
 
     # Verify correct functions were called and that the specified region was used
     # memory_service_client uses region as the parameter name,
-    # hile the memory tool uses region_name to maintain the standard of public AWS APIs
+    # while the memory tool uses region_name to maintain the standard of public AWS APIs
     mock_memory_service_client.assert_called_once_with(region="eu-west-1")
 
 
