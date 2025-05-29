@@ -62,11 +62,10 @@ def mock_boto3_client():
 
 
 @pytest.fixture(autouse=True)
-def mock_env():
-    # Use a mock environment to remove dependency on actual environment variables
-    env = {}
-    with mock.patch.object(os, "environ", env):
-        yield env
+def os_environment():
+    mock_env = {}
+    with mock.patch.object(os, "environ", mock_env):
+        yield mock_env
 
 
 def extract_result_text(result):
