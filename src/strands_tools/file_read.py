@@ -96,7 +96,6 @@ agent.tool.file_read(
 See the file_read function docstring for more details on modes and parameters.
 """
 
-import base64
 import glob
 import json
 import os
@@ -188,13 +187,12 @@ def create_document_block(
             name_uuid = str(uuid.uuid4())[:8]
             neutral_name = f"{os.path.splitext(base_name)[0]}-{name_uuid}"
 
-        # Read and encode file content
+        # Read file content
         with open(file_path, "rb") as f:
             content = f.read()
-            encoded = base64.b64encode(content).decode("utf-8")
 
         # Create document block
-        return {"name": neutral_name, "format": format, "source": {"bytes": encoded}}
+        return {"name": neutral_name, "format": format, "source": {"bytes": content}}
 
     except Exception as e:
         raise Exception(f"Error creating document block for {file_path}: {str(e)}") from e
