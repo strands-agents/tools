@@ -175,6 +175,13 @@ response = agent.tool.http_request(
     auth_type="Bearer",
     auth_token="your_token_here"
 )
+
+# Convert HTML webpages to markdown for better readability
+response = agent.tool.http_request(
+    method="GET",
+    url="https://example.com/article",
+    convert_to_markdown=True
+)
 ```
 
 ### Python Code Execution

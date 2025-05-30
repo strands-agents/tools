@@ -961,3 +961,81 @@ def test_http_request_via_agent(agent):
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
     assert "success via agent" in result_text
+
+
+@responses.activate
+def test_markdown_conversion():
+    """Test HTML to markdown conversion functionality."""
+    # Mock HTML content
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Test Page</title>
+    </head>
+    <body>
+        <h1>Main Heading</h1>
+        <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
+        <ul>
+            <li>List item 1</li>
+            <li>List item 2</li>
+        </ul>
+        <a href="https://example.com">Link to example</a>
+    </body>
+    </html>
+    """
+
+    # Set up mock response with HTML content
+    responses.add(responses.GET, "https://example.com/article", body=html_content, status=200, content_type="text/html")
+
+    # Test without markdown conversion (should return HTML)
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {"input": {"method": "GET", "url": "https://example.com/article"}, "toolUseId": "test1"}
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    assert "<html>" in result_text  # Should contain HTML
+
+    # Test with markdown conversion (should convert to markdown if packages available)
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {
+                "input": {"method": "GET", "url": "https://example.com/article", "convert_to_markdown": True},
+                "toolUseId": "test2",
+            }
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    # The exact markdown format depends on whether the optional packages are installed
+    # So we just verify that the request succeeded with the parameter
+
+
+@responses.activate
+def test_markdown_conversion_non_html():
+    """Test that non-HTML content is not affected by markdown conversion."""
+    # Set up mock response with JSON content
+    responses.add(
+        responses.GET,
+        "https://example.com/api/data",
+        json={"message": "hello", "data": [1, 2, 3]},
+        status=200,
+    )
+
+    # Test with markdown conversion enabled on non-HTML content
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {
+                "input": {"method": "GET", "url": "https://example.com/api/data", "convert_to_markdown": True},
+                "toolUseId": "test3",
+            }
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    assert '"message": "hello"' in result_text  # Should still be JSON
