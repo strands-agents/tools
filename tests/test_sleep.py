@@ -3,6 +3,7 @@ Tests for the sleep tool using the Agent interface.
 """
 
 import time
+from unittest import mock
 
 import pytest
 from strands import Agent
@@ -31,18 +32,20 @@ def test_sleep_direct(agent):
     result_text = extract_result_text(result)
 
     # Verify the result message
-    assert "Slept for 0.5 seconds" in result_text
+    assert "Started sleep at" in result_text
+    assert "slept for 0.5 seconds" in result_text
 
     # Verify actual sleep time (with some tolerance)
     assert 0.4 <= elapsed_time <= 0.7
 
 
 def test_sleep_zero_seconds(agent):
-    """Test sleeping for zero seconds."""
+    """Test error handling with zero sleep duration."""
     result = agent.tool.sleep(seconds=0)
     result_text = extract_result_text(result)
 
-    assert "Slept for 0.0 seconds" in result_text
+    # Verify the error message
+    assert "must be greater than 0" in result_text
 
 
 def test_sleep_negative_seconds(agent):
@@ -51,7 +54,7 @@ def test_sleep_negative_seconds(agent):
     result_text = extract_result_text(result)
 
     # Verify the error message
-    assert "cannot be negative" in result_text
+    assert "must be greater than 0" in result_text
 
 
 def test_sleep_invalid_input(agent):
@@ -62,3 +65,15 @@ def test_sleep_invalid_input(agent):
     # Verify the error message contains validation error information
     assert "Validation failed for input parameters" in result_text
     assert "seconds" in result_text
+
+
+def test_sleep_keyboard_interrupt(agent):
+    """Test that sleep stops when KeyboardInterrupt is raised."""
+    # Create a mock function that raises KeyboardInterrupt
+    with mock.patch("time.sleep", side_effect=KeyboardInterrupt):
+        # Call the sleep function through agent
+        result = agent.tool.sleep(seconds=5)
+        result_text = extract_result_text(result)
+
+        # Verify the result message
+        assert "Sleep interrupted by user" in result_text
