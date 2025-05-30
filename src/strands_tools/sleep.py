@@ -1,8 +1,12 @@
+import os
 import time
 from datetime import datetime
 from typing import Union
 
 from strands import tool
+
+# Default maximum sleep time (5 minutes)
+MAX_SLEEP_SECONDS = int(os.environ.get("SLEEP_MAX_SECONDS", "300"))
 
 
 @tool
@@ -15,13 +19,16 @@ def sleep(seconds: Union[int, float]) -> str:
 
     Args:
         seconds (Union[int, float]): Number of seconds to sleep.
-            Must be a positive number greater than 0.
+            Must be a positive number greater than 0 and less than or equal to
+            the maximum allowed value (default: 300 seconds, configurable via
+            SLEEP_MAX_SECONDS environment variable).
 
     Returns:
         str: A message indicating the sleep completed or was interrupted.
 
     Raises:
-        ValueError: If seconds is not positive or not a number.
+        ValueError: If seconds is not positive, exceeds the maximum allowed value,
+                   or is not a number.
 
     Examples:
         >>> sleep(5)  # Sleeps for 5 seconds
@@ -36,6 +43,9 @@ def sleep(seconds: Union[int, float]) -> str:
 
     if seconds <= 0:
         raise ValueError("Sleep duration must be greater than 0")
+
+    if seconds > MAX_SLEEP_SECONDS:
+        raise ValueError(f"Sleep duration cannot exceed {MAX_SLEEP_SECONDS} seconds")
 
     try:
         start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

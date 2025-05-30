@@ -237,6 +237,12 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
 
+#### Sleep Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| SLEEP_MAX_SECONDS | Maximum allowed sleep duration in seconds | 300 |
+
 #### Mem0 Memory Tool
 
 | Environment Variable | Description | Default |

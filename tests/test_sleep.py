@@ -2,6 +2,7 @@
 Tests for the sleep tool using the Agent interface.
 """
 
+import os
 import time
 from unittest import mock
 
@@ -77,3 +78,20 @@ def test_sleep_keyboard_interrupt(agent):
 
         # Verify the result message
         assert "Sleep interrupted by user" in result_text
+
+
+def test_sleep_exceeds_max(agent):
+    """Test error handling when sleep duration exceeds maximum allowed value."""
+    # Temporarily set a smaller max sleep time for testing
+    with mock.patch.dict(os.environ, {"SLEEP_MAX_SECONDS": "10"}):
+        # This will reload the module with the new environment variable
+        import importlib
+
+        importlib.reload(sleep)
+
+        # Test with a value exceeding the maximum
+        result = agent.tool.sleep(seconds=11)
+        result_text = extract_result_text(result)
+
+        # Verify the error message
+        assert "cannot exceed 10 seconds" in result_text
