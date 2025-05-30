@@ -178,3 +178,89 @@ def test_use_llm_complex_response_handling():
 
         assert result["status"] == "success"
         assert "First part of response\nSecond part of response" in result["content"][0]["text"]
+
+
+def test_use_llm_with_parent_agent_callback():
+    """Test that the parent agent's callback handler is properly passed to the new agent."""
+    tool_use = {
+        "toolUseId": "test-parent-callback",
+        "input": {
+            "prompt": "Test with parent callback",
+            "system_prompt": "Test system prompt",
+        },
+    }
+
+    # Create a mock parent agent with a callback handler
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry.values.return_value = []
+    mock_parent_agent.trace_attributes = {"test_attribute": "test_value"}
+    mock_parent_agent.callback_handler = MagicMock(name="parent_callback_handler")
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with parent callback"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm with the parent agent
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
+
+        # Verify the Agent was created with the parent's callback handler
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+        assert call_kwargs["callback_handler"] == mock_parent_agent.callback_handler
+        assert call_kwargs["trace_attributes"] == {"test_attribute": "test_value"}
+
+        # Verify the result
+        assert result["status"] == "success"
+        assert "Test response with parent callback" in result["content"][0]["text"]
+
+
+def test_use_llm_with_explicit_callback():
+    """Test that an explicitly provided callback handler takes precedence over the parent agent's callback."""
+    tool_use = {
+        "toolUseId": "test-explicit-callback",
+        "input": {
+            "prompt": "Test with explicit callback",
+            "system_prompt": "Test system prompt",
+        },
+    }
+
+    # Create a mock parent agent with a callback handler
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry.values.return_value = []
+    mock_parent_agent.trace_attributes = {"test_attribute": "test_value"}
+    mock_parent_agent.callback_handler = MagicMock(name="parent_callback_handler")
+
+    # Create an explicit callback handler that should take precedence
+    explicit_callback_handler = MagicMock(name="explicit_callback_handler")
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with explicit callback"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm with both parent agent and explicit callback handler
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent, callback_handler=explicit_callback_handler)
+
+        # Verify the Agent was created with the explicit callback handler, not the parent's
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+        assert call_kwargs["callback_handler"] == explicit_callback_handler
+        assert call_kwargs["callback_handler"] != mock_parent_agent.callback_handler
+
+        # Verify other parameters were still passed correctly
+        assert call_kwargs["trace_attributes"] == {"test_attribute": "test_value"}
+
+        # Verify the result
+        assert result["status"] == "success"
+        assert "Test response with explicit callback" in result["content"][0]["text"]

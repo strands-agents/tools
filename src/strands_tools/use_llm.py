@@ -80,6 +80,7 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     - The provided system prompt configures the agent's behavior and capabilities
     - The agent processes the prompt in its own isolated context
     - Response and metrics are captured for return to the caller
+    - The parent agent's callback_handler is used if one is not specified
 
     Common Use Cases:
     ---------------
@@ -119,10 +120,14 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tools = []
     trace_attributes = {}
 
+    extra_kwargs = {}
     parent_agent = kwargs.get("agent")
     if parent_agent:
         tools = list(parent_agent.tool_registry.registry.values())
         trace_attributes = parent_agent.trace_attributes
+        extra_kwargs["callback_handler"] = parent_agent.callback_handler
+    if "callback_handler" in kwargs:
+        extra_kwargs["callback_handler"] = kwargs["callback_handler"]
 
     # Display input prompt
     logger.debug(f"\n--- Input Prompt ---\n{prompt}\n")
@@ -131,7 +136,13 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     logger.debug("🔄 Creating new LLM instance...")
 
     # Initialize the new Agent with provided parameters
-    agent = Agent(messages=[], tools=tools, system_prompt=tool_system_prompt, trace_attributes=trace_attributes)
+    agent = Agent(
+        messages=[],
+        tools=tools,
+        system_prompt=tool_system_prompt,
+        trace_attributes=trace_attributes,
+        **extra_kwargs,
+    )
     # Run the agent with the provided prompt
     result = agent(prompt)
 
