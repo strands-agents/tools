@@ -40,18 +40,22 @@ results = agent.tool.retrieve(
     numberOfResults=5,
     score=0.7,
     knowledgeBaseId="custom-kb-id",
-    region="us-east-1"
+    region="us-east-1",
 )
 ```
 
 See the retrieve function docstring for more details on available parameters and options.
 """
 
+import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import boto3
 from strands.types.tools import ToolResult, ToolUse
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 TOOL_SPEC = {
     "name": "retrieve",
@@ -118,6 +122,24 @@ Usage Examples:
                 "numberOfResults": {
                     "type": "integer",
                     "description": "The maximum number of results to return. Default is 5.",
+                },
+                "filter": {
+                    "type": "object",
+                    "description": "Optional metadata filter to narrow search based on document metadata attributes.",
+                    "properties": {
+                        "equals": {
+                            "type": "object",
+                            "description": "Filter for exact matches on metadata field values.",
+                            "properties": {
+                                "key": {"type": "string", "description": "The metadata field name to filter on."},
+                                "value": {
+                                    "type": ["string", "number", "boolean"],
+                                    "description": "The exact value to match against the metadata field.",
+                                },
+                            },
+                            "required": ["key", "value"],
+                        }
+                    },
                 },
                 "knowledgeBaseId": {
                     "type": "string",
@@ -211,10 +233,11 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     How It Works:
     ------------
     1. The provided query text is sent to Amazon Bedrock Knowledge Base
-    2. The service performs vector-based semantic search against indexed documents
-    3. Results are returned with relevance scores (0.0-1.0) indicating match quality
-    4. Results below the minimum score threshold are filtered out
-    5. Remaining results are formatted for readability and returned
+    2. The optional filters will be used as Amazon Bedrock Knowledge Base metadata filtering
+    3. The service performs vector-based semantic search against indexed documents
+    4. Results are returned with relevance scores (0.0-1.0) indicating match quality
+    5. Results below the minimum score threshold are filtered out
+    6. Remaining results are formatted for readability and returned
 
     Common Usage Scenarios:
     ---------------------
@@ -227,6 +250,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Args:
         tool: Tool use information containing input parameters:
             text: The query text to search for in the knowledge base
+            filter: Optional filters to apply when searching in the knowledge base
             numberOfResults: Maximum number of results to return (default: 10)
             knowledgeBaseId: The ID of the knowledge base to query (default: from environment)
             region: AWS region where the knowledge base is located (default: us-west-2)
@@ -264,6 +288,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        metadata_filter = tool_input.get("filter")
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
@@ -273,12 +298,20 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         else:
             bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name)
 
+        # Build retrieval configuration
+        vector_search_config = {"numberOfResults": number_of_results}
+
+        # Add metadata filter if provided
+        if metadata_filter:
+            vector_search_config["filter"] = metadata_filter
+            logger.debug(f"using vector search filter: {vector_search_config}")
+
         # Perform retrieval
         response = bedrock_agent_runtime_client.retrieve(
             retrievalQuery={"text": query},
             knowledgeBaseId=kb_id,
             retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": number_of_results},
+                "vectorSearchConfiguration": vector_search_config,
             },
         )
 
@@ -305,3 +338,62 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": f"Error during retrieval: {str(e)}"}],
         }
+
+
+# NEW: Factory method for creating pre-configured retrieve tools
+def create_filtered_retrieve(default_filter: Optional[Dict[str, Any]] = None, tool_name: Optional[str] = None):
+    """
+    Factory method to create a retrieve tool with pre-configured defaults.
+
+    This is useful for creating a domain-specific retrieve tool which automatically
+    and consistently applies specified filters without requiring users to specify them
+    each time or allowing agents to elide filters erroneously.
+
+    Args:
+        default_filter: Default metadata filter to apply to all queries
+        tool_name: Optional name for the created tool (for debugging/logging)
+
+    Returns:
+        A retrieve tool function with the specified defaults baked in
+
+    Example:
+        ```python
+        # Create an HR-specific retrieve tool
+        hr_retrieve = create_filtered_retrieve(
+            default_filter={"equals": {"key": "department", "value": "hr"}},
+            tool_name="hr_retrieve"
+        )
+
+        # Create agent with the pre-configured tool
+        hr_agent = Agent(tools=[hr_retrieve])
+
+        # Use normally - filter is automatically and consistently applied
+        result = hr_agent.tool.hr_retrieve(text="What are the vacation policies?")
+        ```
+    """
+
+    def filtered_retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
+        """Pre-configured retrieve tool with baked-in defaults."""
+        tool_input = tool["input"].copy()
+
+        # Apply default filter (merge with any user-provided filter)
+        if default_filter:
+            user_filter = tool_input.get("filter")
+            if user_filter:
+                # Combine default filter with user filter using AND logic
+                combined_filter = {"andAll": [default_filter, user_filter]}
+                tool_input["filter"] = combined_filter
+            else:
+                # Use just the default filter
+                tool_input["filter"] = default_filter
+
+        # Call the original retrieve function with modified input
+        modified_tool = {**tool, "input": tool_input}
+        return retrieve(modified_tool, **kwargs)
+
+    final_name = tool_name or "filtered_retrieve"
+    tool_spec = {**TOOL_SPEC, "name": final_name}  # No .copy() needed!
+    filtered_retrieve.TOOL_SPEC = tool_spec
+    filtered_retrieve.__name__ = final_name
+
+    return filtered_retrieve
