@@ -505,7 +505,7 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
     work_dir = tool_input.get("work_dir", os.getcwd())
 
     # Development mode check
-    STRANDS_DEV = os.environ.get("DEV", "").lower() == "true"
+    STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Only show UI elements in interactive mode
     if not non_interactive_mode:
@@ -520,7 +520,7 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if i < len(commands) - 1:
                 console.print()
 
-    if not STRANDS_DEV and not non_interactive_mode:
+    if not STRANDS_BYPASS_TOOL_CONSENT and not non_interactive_mode:
         console.print()  # Empty line for spacing
         confirm = get_user_input("<yellow><bold>Do you want to proceed with execution?</bold> [y/*]</yellow>")
         if confirm.lower() != "y":

@@ -1,35 +1,55 @@
-<p align="center">
-  <h1>Agents Tools</h1>
-</p>
-
-<h4 align="center">
-  Agents Tools: A comprehensive toolkit for building, extending, and deploying AI agents.
-</h4>
-
 <div align="center">
-  <a href="https://github.com/strands-agents/tools/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/tools"/></a>
-  <a href="https://github.com/strands-agents/tools/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/tools"/></a>
-  <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
-  <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
-  <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
+  <div>
+    <a href="https://strandsagents.com">
+      <img src="https://strandsagents.com/latest/assets/logo-auto.svg" alt="Strands Agents" width="55px" height="105px">
+    </a>
+  </div>
+
+  <h1>
+    Strands Agents Tools
+  </h1>
+
+  <h2>
+    A model-driven approach to building AI agents in just a few lines of code.
+  </h2>
+
+  <div align="center">
+    <a href="https://github.com/strands-agents/tools/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/pulls"><img alt="GitHub open pull requests" src="https://img.shields.io/github/issues-pr/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
+    <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
+    <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
+  </div>
+  
+  <p>
+    <a href="https://strandsagents.com/">Documentation</a>
+    ◆ <a href="https://github.com/strands-agents/samples">Samples</a>
+    ◆ <a href="https://github.com/strands-agents/sdk-python">Python SDK</a>
+    ◆ <a href="https://github.com/strands-agents/tools">Tools</a>
+    ◆ <a href="https://github.com/strands-agents/agent-builder">Agent Builder</a>
+    ◆ <a href="https://github.com/strands-agents/mcp-server">MCP Server</a>
+  </p>
 </div>
 
-## 🚀 What is Agents Tools?
-
-Agents Tools is an open-source Python library that provides a unified toolkit for developing autonomous AI agents. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
+Strands Agents Tools provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Mem0 Memory** - Store user and agent memories across agent runs to provide personalized experience 
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
+- 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
 - 🧮 **Mathematical Tools** - Perform advanced calculations with symbolic math capabilities
 - ☁️ **AWS Integration** - Seamless access to AWS services
 - 🖼️ **Image Processing** - Generate and process images for AI applications
+- 🎥 **Video Processing** - Use models and agents to generate dynamic videos
+- 🎙️ **Audio Output** - Enable models to generate audio and speak
 - 🔄 **Environment Management** - Handle environment variables safely
 - 📝 **Journaling** - Create and manage structured logs and journals
+- ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔌 **MCP Client** - Connect to any Model Context Protocol server and access remote tools
@@ -257,6 +277,42 @@ result = agent.tool.swarm(
 )
 ```
 
+### Use AWS
+
+```python
+from strands import Agent
+from strands_tools import use_aws
+
+agent = Agent(tools=[use_aws])
+
+# List S3 buckets
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_buckets",
+    parameters={},
+    region="us-east-1",
+    label="List all S3 buckets"
+)
+
+# Get the contents of a specific S3 bucket
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_objects_v2",
+    parameters={"Bucket": "example-bucket"},  # Replace with your actual bucket name
+    region="us-east-1",
+    label="List objects in a specific S3 bucket"
+)
+
+# Get the list of EC2 subnets
+result = agent.tool.use_aws(
+    service_name="ec2",
+    operation_name="describe_subnets",
+    parameters={},
+    region="us-east-1",
+    label="List all subnets"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -267,6 +323,8 @@ These variables affect multiple tools:
 
 | Environment Variable | Description | Default | Affected Tools |
 |----------------------|-------------|---------|---------------|
+| BYPASS_TOOL_CONSENT | Bypass consent for tool invocation, set to "true" to enable | false | All tools that require consent (e.g. shell, file_write, python_repl) |
+| STRANDS_TOOL_CONSOLE_MODE | Enable rich UI for tools, set to "enabled" to enable | disabled | All tools that have optional rich UI |
 | AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
 | LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
@@ -369,58 +427,25 @@ These variables affect multiple tools:
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
 
-## 🛠️ Development
+## Contributing ❤️
 
-### Prerequisites
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Reporting bugs & features
+- Development setup
+- Contributing via Pull Requests
+- Code of Conduct
+- Reporting of security issues
 
-- Python 3.10+
-- pip
-- git
-- gh
+## License
 
-### Testing
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-```bash
-# Run all tests
-hatch run test
+## Security
 
-# Run specific test file
-hatch run test -- tests/test_specific.py
-```
+See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
-### Linting
+## ⚠️ Preview Status
 
-```bash
-# Run all linters
-hatch run lint
-```
-## 📚 Project Structure
-
-- `src/strands_tools/` - Core tools implementation
-- `tests/` - Test suite
-- `examples/` - Example scripts and notebooks
-- `docs/` - Documentation
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for more details on how to get involved.
-
-### Code of Conduct
-
-This project adheres to the [Python Community Code of Conduct](https://www.python.org/psf/conduct/). By participating, you are expected to uphold this code.
-
-## 📄 License
-
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Support
-
-- **Documentation**: [Strands Agents Docs](https://github.com/strands-agents/docs)
-- **Issues**: [GitHub Issues](https://github.com/strands-agents/tools/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/strands-agents/tools/discussions)
-
----
-
-<p align="center">
-  Made with ❤️ by the Strands Team
-</p>
+Strands Agents is currently in public preview. During this period:
+- APIs may change as we refine the SDK
+- We welcome feedback and contributions

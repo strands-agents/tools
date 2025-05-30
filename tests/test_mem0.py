@@ -235,11 +235,11 @@ def test_retrieve_memories(mock_opensearch, mock_mem0_client, mock_mem0_service_
     assert memories[0]["id"] == "mem123"
 
 
-@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "DEV": "true"})
+@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.mem0_memory.Mem0ServiceClient")
 @patch("opensearchpy.OpenSearch")
 def test_delete_memory(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
-    """Test delete memory functionality with DEV mode enabled."""
+    """Test delete memory functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_mem0_client.return_value = mock_mem0_service_client
 

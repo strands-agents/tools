@@ -444,9 +444,9 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
         result = ""
 
         # Check if we're in development mode
-        strands_dev = os.environ.get("DEV", "").lower() == "true"
+        strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-        # For modifying operations, show confirmation dialog unless in DEV mode
+        # For modifying operations, show confirmation dialog unless in BYPASS_TOOL_CONSENT mode
         modifying_commands = {"create", "str_replace", "pattern_replace", "insert"}
         needs_confirmation = command in modifying_commands and not strands_dev
 

@@ -309,7 +309,7 @@ def test_store_document_no_title(mock_session):
     response, doc_id, doc_title = client.store_document("kb123", None, "test content")
 
     # Verify title format
-    assert "Peccy Memory" in doc_title
+    assert "Strands Memory" in doc_title
 
     # Verify API call structure
     call_args = agent_client.ingest_knowledge_base_documents.call_args[1]
