@@ -59,6 +59,14 @@ def mock_sse_client():
         yield mock_sse
 
 
+@pytest.fixture
+def mock_streamablehttp_client():
+    """Mock streamablehttp_client for testing."""
+    with patch("strands_tools.mcp_client.streamablehttp_client") as mock_streamable:
+        mock_streamable.return_value = MagicMock()
+        yield mock_streamable
+
+
 @pytest.fixture(autouse=True)
 def reset_connections():
     """Reset the connections dictionary between tests."""
@@ -89,6 +97,85 @@ class TestMCPClientConnect:
         mock_client_class.assert_called_once()
         mock_instance.list_tools_sync.assert_called_once()
 
+    def test_connect_streamable_http_transport(self, mock_mcp_client, mock_streamablehttp_client):
+        """Test connecting to an MCP server via streamable HTTP transport."""
+        result = mcp_client(
+            action="connect",
+            connection_id="http_server",
+            transport="streamable_http",
+            server_url="https://example.com/mcp",
+            headers={"Authorization": "Bearer token123"},
+            timeout=60,
+            sse_read_timeout=180,
+        )
+
+        assert result["status"] == "success"
+        assert "Connected to MCP server 'http_server'" in result["message"]
+        assert result["connection_id"] == "http_server"
+        assert result["transport"] == "streamable_http"
+        assert result["tools_count"] == 1
+        assert result["available_tools"] == ["test_tool"]
+
+        # Verify MCPClient was created correctly
+        mock_client_class, mock_instance = mock_mcp_client
+        mock_client_class.assert_called_once()
+        mock_instance.list_tools_sync.assert_called_once()
+
+    def test_connect_streamable_http_minimal_params(self, mock_mcp_client, mock_streamablehttp_client):
+        """Test connecting to streamable HTTP server with minimal parameters."""
+        result = mcp_client(
+            action="connect",
+            connection_id="simple_http",
+            transport="streamable_http",
+            server_url="https://api.example.com/mcp",
+        )
+
+        assert result["status"] == "success"
+        assert result["transport"] == "streamable_http"
+
+    def test_connect_streamable_http_missing_url(self):
+        """Test connecting to streamable HTTP without server_url."""
+        result = mcp_client(action="connect", connection_id="test", transport="streamable_http")
+        assert result["status"] == "error"
+        assert "server_url is required for streamable HTTP transport" in result["content"][0]["text"]
+
+    def test_connect_streamable_http_with_auth(self, mock_mcp_client, mock_streamablehttp_client):
+        """Test connecting to streamable HTTP server with authentication."""
+        from unittest.mock import MagicMock
+
+        # Mock httpx auth object
+        mock_auth = MagicMock()
+
+        result = mcp_client(
+            action="connect",
+            connection_id="auth_http_server",
+            transport="streamable_http",
+            server_url="https://secure.example.com/mcp",
+            auth=mock_auth,
+            headers={"User-Agent": "Test-Client/1.0"},
+        )
+
+        assert result["status"] == "success"
+        assert result["connection_id"] == "auth_http_server"
+
+    def test_connect_streamable_http_server_config(self, mock_mcp_client, mock_streamablehttp_client):
+        """Test connecting using server_config with streamable HTTP parameters."""
+        result = mcp_client(
+            action="connect",
+            connection_id="config_http_server",
+            server_config={
+                "transport": "streamable_http",
+                "server_url": "https://config.example.com/mcp",
+                "headers": {"X-API-Key": "secret123"},
+                "timeout": 45,
+                "sse_read_timeout": 240,
+                "terminate_on_close": False,
+            },
+        )
+
+        assert result["status"] == "success"
+        assert result["connection_id"] == "config_http_server"
+
     def test_connect_sse_transport(self, mock_mcp_client, mock_sse_client):
         """Test connecting to an MCP server via SSE transport."""
         result = mcp_client(
@@ -99,6 +186,13 @@ class TestMCPClientConnect:
         assert "Connected to MCP server 'sse_server'" in result["message"]
         assert result["connection_id"] == "sse_server"
         assert result["transport"] == "sse"
+
+    def test_connect_unsupported_transport(self):
+        """Test connecting with an unsupported transport type."""
+        result = mcp_client(action="connect", connection_id="test", transport="unsupported_transport")
+        assert result["status"] == "error"
+        assert "Connection test failed" in result["content"][0]["text"]
+        assert "Unsupported transport: unsupported_transport" in result["content"][0]["text"]
 
     def test_connect_missing_required_params(self):
         """Test connecting with missing required parameters."""
@@ -116,6 +210,11 @@ class TestMCPClientConnect:
         result = mcp_client(action="connect", connection_id="test", transport="sse")
         assert result["status"] == "error"
         assert "server_url is required for SSE transport" in result["content"][0]["text"]
+
+        # Missing server_url for streamable HTTP
+        result = mcp_client(action="connect", connection_id="test", transport="streamable_http")
+        assert result["status"] == "error"
+        assert "server_url is required for streamable HTTP transport" in result["content"][0]["text"]
 
     def test_connect_duplicate_connection(self, mock_mcp_client, mock_stdio_client):
         """Test connecting with an existing connection ID."""
@@ -287,7 +386,9 @@ class TestMCPClientListConnections:
         assert result["total_connections"] == 0
         assert result["connections"] == []
 
-    def test_list_multiple_connections(self, mock_mcp_client, mock_stdio_client, mock_sse_client):
+    def test_list_multiple_connections(
+        self, mock_mcp_client, mock_stdio_client, mock_sse_client, mock_streamablehttp_client
+    ):
         """Test listing multiple connections."""
         # Create multiple connections
         mcp_client(
@@ -298,17 +399,25 @@ class TestMCPClientListConnections:
             action="connect", connection_id="sse_server", transport="sse", server_url="http://localhost:8080/mcp"
         )
 
+        mcp_client(
+            action="connect",
+            connection_id="http_server",
+            transport="streamable_http",
+            server_url="https://example.com/mcp",
+        )
+
         # List connections
         result = mcp_client(action="list_connections")
 
         assert result["status"] == "success"
-        assert result["total_connections"] == 2
-        assert len(result["connections"]) == 2
+        assert result["total_connections"] == 3
+        assert len(result["connections"]) == 3
 
         # Verify connection details
         conn_ids = [conn["connection_id"] for conn in result["connections"]]
         assert "stdio_server" in conn_ids
         assert "sse_server" in conn_ids
+        assert "http_server" in conn_ids
 
         # Check stdio connection
         stdio_conn = next(c for c in result["connections"] if c["connection_id"] == "stdio_server")
@@ -320,6 +429,11 @@ class TestMCPClientListConnections:
         sse_conn = next(c for c in result["connections"] if c["connection_id"] == "sse_server")
         assert sse_conn["transport"] == "sse"
         assert sse_conn["url"] == "http://localhost:8080/mcp"
+
+        # Check streamable HTTP connection
+        http_conn = next(c for c in result["connections"] if c["connection_id"] == "http_server")
+        assert http_conn["transport"] == "streamable_http"
+        assert http_conn["url"] == "https://example.com/mcp"
 
 
 class TestMCPClientListTools:

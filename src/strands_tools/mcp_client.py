@@ -11,16 +11,23 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
 from mcp import StdioServerParameters, stdio_client
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from strands import tool
 from strands.tools.mcp import MCPClient, MCPTransport
 from strands.types.tools import AgentTool, ToolResult, ToolSpec, ToolUse
 
 logger = logging.getLogger(__name__)
+
+# Suppress warnings from MCP SDK about unknown notification types
+# This is particularly useful for test servers that send non-standard notifications
+# Users can override this by setting their own logging configuration
+logging.getLogger("mcp.shared.session").setLevel(logging.ERROR)
 
 # Default timeout for MCP operations
 DEFAULT_MCP_TIMEOUT = 30.0
@@ -43,6 +50,11 @@ class ConnectionInfo:
     loaded_tool_names: List[str] = None
     mcp_client: Optional[MCPClient] = None
     timeout: float = DEFAULT_MCP_TIMEOUT
+    # New streamable HTTP specific fields
+    headers: Optional[Dict[str, Any]] = None
+    auth: Optional[Any] = None
+    sse_read_timeout: float = 300.0  # 5 minutes default
+    terminate_on_close: bool = True
 
     def __post_init__(self):
         """Initialize mutable defaults."""
@@ -309,8 +321,13 @@ def mcp_client(
     env: Optional[Dict[str, str]] = None,
     server_url: Optional[str] = None,
     arguments: Optional[Dict[str, Any]] = None,
+    # New streamable HTTP parameters
+    headers: Optional[Dict[str, Any]] = None,
+    timeout: Optional[float] = None,
+    sse_read_timeout: Optional[float] = None,
+    terminate_on_close: Optional[bool] = None,
+    auth: Optional[Any] = None,
     agent: Optional[Any] = None,  # Agent instance passed by SDK
-    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Enhanced MCP client tool for connecting to any MCP server with simplified configuration.
@@ -329,13 +346,17 @@ def mcp_client(
         connection_id: Identifier for the MCP connection
         tool_name: Name of tool to call (for call_tool action)
         tool_args: Arguments to pass to tool (for call_tool action)
-        transport: Transport type (stdio or sse) - can be passed directly instead of in server_config
+        transport: Transport type (stdio, sse, or streamable_http) - can be passed directly instead of in server_config
         command: Command for stdio transport - can be passed directly
         args: Arguments for stdio command - can be passed directly
         env: Environment variables for stdio command - can be passed directly
-        server_url: URL for SSE transport - can be passed directly
+        server_url: URL for SSE or streamable_http transport - can be passed directly
         arguments: Alternative to tool_args for tool arguments
-        **kwargs: Additional parameters passed to actions
+        headers: HTTP headers for streamable_http transport (optional)
+        timeout: Timeout in seconds for HTTP operations in streamable_http transport (default: 30)
+        sse_read_timeout: SSE read timeout in seconds for streamable_http transport (default: 300)
+        terminate_on_close: Whether to terminate connection on close for streamable_http transport (default: True)
+        auth: Authentication object for streamable_http transport (httpx.Auth compatible)
 
     Returns:
         Dict with the result of the operation
@@ -348,6 +369,16 @@ def mcp_client(
             transport="stdio",
             command="python",
             args=["my_server.py"]
+        )
+
+        # Connect to streamable HTTP server
+        mcp_client(
+            action="connect",
+            connection_id="http_server",
+            transport="streamable_http",
+            server_url="https://example.com/mcp",
+            headers={"Authorization": "Bearer token"},
+            timeout=60
         )
 
         # Call a tool directly with parameters
@@ -367,7 +398,6 @@ def mcp_client(
             "tool_name": tool_name,
             "tool_args": tool_args or arguments,  # Support both parameter names
             "agent": agent,  # Pass agent instance to handlers
-            **kwargs,  # Include any additional parameters
         }
 
         # Handle server configuration - merge direct parameters with server_config
@@ -400,6 +430,32 @@ def mcp_client(
                 params["env"] = env
             elif "env" in server_config:
                 params["env"] = server_config["env"]
+
+            # Streamable HTTP specific parameters
+            if headers is not None:
+                params["headers"] = headers
+            elif "headers" in server_config:
+                params["headers"] = server_config["headers"]
+
+            if timeout is not None:
+                params["timeout"] = timeout
+            elif "timeout" in server_config:
+                params["timeout"] = server_config["timeout"]
+
+            if sse_read_timeout is not None:
+                params["sse_read_timeout"] = sse_read_timeout
+            elif "sse_read_timeout" in server_config:
+                params["sse_read_timeout"] = server_config["sse_read_timeout"]
+
+            if terminate_on_close is not None:
+                params["terminate_on_close"] = terminate_on_close
+            elif "terminate_on_close" in server_config:
+                params["terminate_on_close"] = server_config["terminate_on_close"]
+
+            if auth is not None:
+                params["auth"] = auth
+            elif "auth" in server_config:
+                params["auth"] = server_config["auth"]
 
         # Process the action
         if action == "connect":
@@ -448,13 +504,27 @@ def _create_transport_callable(config: ConnectionInfo) -> MCPTransport:
         params = {"command": config.command, "args": config.args or []}
         if config.env:
             params["env"] = config.env
+
         return lambda: stdio_client(StdioServerParameters(**params))
     elif config.transport == "sse":
         if not config.server_url:
             raise ValueError("server_url is required for SSE transport")
         return lambda: sse_client(config.server_url)
+    elif config.transport == "streamable_http":
+        if not config.server_url:
+            raise ValueError("server_url is required for streamable HTTP transport")
+
+        # Create streamable HTTP client with all parameters
+        return lambda: streamablehttp_client(
+            url=config.server_url,
+            headers=config.headers,
+            timeout=timedelta(seconds=config.timeout),
+            sse_read_timeout=timedelta(seconds=config.sse_read_timeout),
+            terminate_on_close=config.terminate_on_close,
+            auth=config.auth,
+        )
     else:
-        raise ValueError(f"Unsupported transport: {config.transport}")
+        raise ValueError(f"Unsupported transport: {config.transport}. Supported: stdio, sse, streamable_http")
 
 
 def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -506,6 +576,21 @@ def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
 
             config.server_url = server_url
             config.url = server_url
+
+        elif transport == "streamable_http":
+            server_url = params.get("server_url")
+            if not server_url:
+                raise ValueError("server_url is required for streamable HTTP transport")
+
+            config.server_url = server_url
+            config.url = server_url
+            config.headers = params.get("headers")
+            config.auth = params.get("auth")
+
+            # Set timeout parameters with defaults
+            config.timeout = params.get("timeout", DEFAULT_MCP_TIMEOUT)
+            config.sse_read_timeout = params.get("sse_read_timeout", 300.0)
+            config.terminate_on_close = params.get("terminate_on_close", True)
 
         else:
             raise ValueError(f"Unsupported transport: {transport}")

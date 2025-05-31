@@ -119,7 +119,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
-| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | Connect to any MCP server, list tools, and call remote tools with simplified configuration |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | Connect to any MCP server via stdio, sse, or streamable_http, list tools, and call remote tools with simplified configuration |
 
 ## 💻 Usage Examples
 
@@ -174,6 +174,16 @@ agent.tool.mcp_client(
     connection_id="web_server",
     transport="sse",
     server_url="http://localhost:8080/sse"
+)
+
+# Connect to a streamable HTTP server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="http_server",
+    transport="streamable_http",
+    server_url="https://api.example.com/mcp",
+    headers={"Authorization": "Bearer token"},
+    timeout=60
 )
 
 # Load MCP tools into agent's registry for direct access
