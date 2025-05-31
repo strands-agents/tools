@@ -561,6 +561,7 @@ def memory(
     max_results: int = None,
     next_token: Optional[str] = None,
     min_score: float = None,
+    region_name: str = None,
 ) -> Dict[str, Any]:
     """
     Manage content in a Bedrock Knowledge Base (store, delete, list, get, or retrieve).
@@ -582,6 +583,8 @@ def memory(
         next_token: Token for pagination in 'list' or 'retrieve' action (optional).
         query: The search query for semantic search (required for 'retrieve' action).
         min_score: Minimum relevance score threshold (0.0-1.0) for 'retrieve' action. Default is 0.4.
+        region_name: Optional AWS region name. If not provided, will use the AWS_REGION env variable. 
+            If AWS_REGION is not specified, it will default to us-west-2.
 
     Returns:
         A dictionary containing the result of the operation.
@@ -597,7 +600,7 @@ def memory(
     console = console_util.create()
 
     # Initialize the client and formatter using factory functions
-    client = get_memory_service_client()
+    client = get_memory_service_client(region=region_name)
     formatter = get_memory_formatter()
 
     # Get environment variables at runtime
