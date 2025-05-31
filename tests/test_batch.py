@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from strands_tools.batch import batch
+from strands_tools import batch
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def test_batch_success(mock_agent):
         {"name": "use_aws", "arguments": {"service_name": "s3", "operation_name": "list_buckets"}},
     ]
 
-    result = batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -42,7 +42,7 @@ def test_batch_missing_tool(mock_agent):
         {"name": "non_existent_tool", "arguments": {}},
     ]
 
-    result = batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -59,7 +59,7 @@ def test_batch_tool_error(mock_agent):
         {"name": "error_tool", "arguments": {}},
     ]
 
-    result = batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -74,7 +74,7 @@ def test_batch_no_invocations(mock_agent):
     mock_tool = {"toolUseId": "mock_tool_id"}
     invocations = []
 
-    result = batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -88,7 +88,7 @@ def test_batch_top_level_error(mock_agent):
     # Simulate an error in the agent
     mock_agent.tool = None  # This will cause an AttributeError when accessing tools
 
-    result = batch(tool=mock_tool, agent=mock_agent, invocations=[])
+    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=[])
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "error"  # Expect 'error' status
