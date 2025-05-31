@@ -164,8 +164,7 @@ result = agent.tool.mcp_client(
     action="call_tool",
     connection_id="my_tools",
     tool_name="calculate",
-    x=10,
-    y=20
+    tool_args={"x": 10, "y": 20}
 )
 
 # Connect to a SSE-based server
