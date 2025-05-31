@@ -83,7 +83,7 @@ def test_sleep_keyboard_interrupt(agent):
 def test_sleep_exceeds_max(agent):
     """Test error handling when sleep duration exceeds maximum allowed value."""
     # Temporarily set a smaller max sleep time for testing
-    with mock.patch.dict(os.environ, {"SLEEP_MAX_SECONDS": "10"}):
+    with mock.patch.dict(os.environ, {"MAX_SLEEP_SECONDS": "10"}):
         # This will reload the module with the new environment variable
         import importlib
 

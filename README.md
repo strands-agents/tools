@@ -241,7 +241,7 @@ These variables affect multiple tools:
 
 | Environment Variable | Description | Default | 
 |----------------------|-------------|---------|
-| SLEEP_MAX_SECONDS | Maximum allowed sleep duration in seconds | 300 |
+| MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
 
 #### Mem0 Memory Tool
 
