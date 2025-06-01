@@ -330,7 +330,7 @@ class Mem0ServiceClient:
 
     def get_memory_history(self, memory_id: str):
         """Get the history of a memory by ID."""
-        return self.mem0.get_history(memory_id)
+        return self.mem0.history(memory_id)
 
 
 def format_get_response(memory: Dict) -> Panel:
