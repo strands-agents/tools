@@ -52,7 +52,8 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
-
+- 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
+  
 ## 📦 Installation
 
 ### Quick Install
@@ -119,6 +120,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 
 ## 💻 Usage Examples
 
@@ -261,6 +263,35 @@ result = agent.tool.use_aws(
     parameters={},
     region="us-east-1",
     label="List all subnets"
+)
+```
+
+### Batch Tool
+
+```python
+import os
+import sys
+
+from strands import Agent
+from strands_tools import batch, http_request, use_aws
+
+# Example usage of the batch with http_request and use_aws tools
+agent = Agent(tools=[batch, http_request, use_aws])
+
+result = agent.tool.batch(
+    invocations=[
+        {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
+        {
+            "name": "use_aws",
+            "arguments": {
+                "service_name": "s3",
+                "operation_name": "list_buckets",
+                "parameters": {},
+                "region": "us-east-1",
+                "label": "List S3 Buckets"
+            }
+        },
+    ]
 )
 ```
 
