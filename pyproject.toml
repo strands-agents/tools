@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "strands-agents-tools"
-version = "0.1.4"
+dynamic = ["version"]
 description = "A collection of specialized tools for Strands Agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,6 +47,10 @@ packages = ["src/strands_tools"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.version]
+# Tells Hatch to use your version control system (git) to determine the version.
+source = "vcs"
 
 [project.urls]
 Homepage = "https://github.com/strands-agents/tools"
