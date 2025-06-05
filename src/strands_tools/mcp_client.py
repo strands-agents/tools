@@ -268,7 +268,7 @@ class MCPToolWrapper(AgentTool):
                 # Handle binary data
                 try:
                     # Try to decode as UTF-8 text
-                    text_content = result.decode('utf-8')
+                    text_content = result.decode("utf-8")
                     content.append({"text": text_content})
                 except UnicodeDecodeError:
                     # If it's not text, indicate it's binary data
