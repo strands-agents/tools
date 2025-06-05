@@ -5,6 +5,9 @@ These tests directly call the mcp_client function rather than going through
 the Agent interface for simpler and more focused testing.
 """
 
+import importlib
+import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -141,8 +144,6 @@ class TestMCPClientConnect:
 
     def test_connect_streamable_http_with_auth(self, mock_mcp_client, mock_streamablehttp_client):
         """Test connecting to streamable HTTP server with authentication."""
-        from unittest.mock import MagicMock
-
         # Mock httpx auth object
         mock_auth = MagicMock()
 
@@ -270,8 +271,6 @@ class TestMCPClientConnect:
             assert config.env == {"API_KEY": "test-key-123", "DEBUG": "true"}
 
             # Check that the connection info includes environment variables
-            from strands_tools.mcp_client import _connections
-
             conn_info = _connections.get("test_server_with_env")
             assert conn_info is not None
             assert conn_info.env == {"API_KEY": "test-key-123", "DEBUG": "true"}
@@ -568,8 +567,6 @@ class TestMCPClientLoadTools:
     def test_load_tools_success(self, mock_mcp_client, mock_stdio_client):
         """Test successfully loading tools into agent."""
         # Mock agent's tool_registry
-        from unittest.mock import MagicMock
-
         mock_agent = MagicMock()
         mock_registry = MagicMock()
         mock_registry.register_tool = MagicMock()
@@ -609,8 +606,6 @@ class TestMCPClientLoadTools:
     def test_load_tools_no_registry(self, mock_mcp_client, mock_stdio_client):
         """Test loading tools with agent that has no tool registry."""
         # Create a mock agent without tool_registry
-        from unittest.mock import MagicMock
-
         mock_agent = MagicMock(spec=[])  # No attributes
 
         # Connect first
@@ -638,8 +633,6 @@ class TestMCPClientLoadTools:
         _connections["inactive_server"] = config
 
         # Mock agent
-        from unittest.mock import MagicMock
-
         mock_agent = MagicMock()
 
         # Try to load tools
@@ -871,3 +864,269 @@ class TestMCPToolWrapper:
         assert props["original_name"] == "test_tool"
         assert props["wrapped_name"] == "mcp_test_conn_test_tool"
         assert props["type"] == "mcp"
+
+
+class TestMCPClientConfiguration:
+    """Test MCP client configuration features."""
+
+    def test_environment_variable_timeout(self):
+        """Test that STRANDS_MCP_TIMEOUT environment variable is respected."""
+        with patch.dict(os.environ, {'STRANDS_MCP_TIMEOUT': '120.0'}):
+            # Need to reload the module to pick up env var
+            import strands_tools.mcp_client
+            importlib.reload(strands_tools.mcp_client)
+            
+            assert strands_tools.mcp_client.DEFAULT_MCP_TIMEOUT == 120.0
+            
+        # Test with invalid value (should fall back to default)
+        with patch.dict(os.environ, {'STRANDS_MCP_TIMEOUT': 'invalid'}):
+            with pytest.raises(ValueError):
+                importlib.reload(strands_tools.mcp_client)
+
+    def test_tool_use_id_format_verification(self):
+        """Verify tool use ID uses mcp_ prefix format."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success", 
+            "content": [{"text": "success"}]
+        }
+        
+        tool_info = {"name": "test-tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test-conn", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        wrapper.invoke(tool_use)
+        
+        # Check the tool_use_id passed to the client
+        args = mock_client.call_tool_sync.call_args
+        tool_use_id = args[1]["tool_use_id"]
+        
+        # Should start with mcp_ and contain the connection and tool info
+        assert tool_use_id.startswith("mcp_test-conn_test-tool_")
+        # Should contain a UUID at the end (8 hex characters)
+        parts = tool_use_id.split('_')
+        assert len(parts) == 4  # mcp, conn, tool, uuid
+        assert parts[0] == "mcp"
+        assert parts[1] == "test-conn"
+        assert parts[2] == "test-tool"
+        assert len(parts[3]) == 8  # UUID hex portion
+
+
+class TestMCPToolWrapperResultHandling:
+    """Test result processing in MCPToolWrapper."""
+
+    def test_wrapper_result_handling_list_content(self):
+        """Test wrapper handling list results with mixed content types."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [
+                {"text": "Item 1"},
+                {"text": "Item 2"},
+                {"image": {"url": "http://example.com/image.png"}}
+            ]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should preserve the list structure when it's already content format
+        assert len(result["content"]) == 3
+        assert result["content"][0]["text"] == "Item 1"
+        assert result["content"][1]["text"] == "Item 2"
+        assert "image" in result["content"][2]
+
+    def test_wrapper_result_handling_dict_with_content(self):
+        """Test wrapper handling dict results with 'content' key."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": {"content": [{"text": "nested content"}]}}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should extract the nested content
+        assert len(result["content"]) == 1
+        assert result["content"][0]["text"] == "nested content"
+
+    def test_wrapper_result_handling_dict_json_serializable(self):
+        """Test wrapper handling dict results that can be JSON serialized."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": {"key": "value", "number": 42, "nested": {"bool": True}}}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should JSON serialize the dict
+        content_text = result["content"][0]["text"]
+        parsed = json.loads(content_text)
+        assert parsed["key"] == "value"
+        assert parsed["number"] == 42
+        assert parsed["nested"]["bool"] is True
+
+    def test_wrapper_result_handling_dict_json_error(self):
+        """Test wrapper handling dict results that can't be JSON serialized."""
+        mock_client = MagicMock()
+        
+        # Create a non-serializable object
+        class NonSerializable:
+            def __repr__(self):
+                return "NonSerializable()"
+        
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": {"obj": NonSerializable(), "key": "value"}}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should handle serialization error gracefully
+        content_text = result["content"][0]["text"]
+        assert "serialization failed" in content_text
+
+    def test_wrapper_result_handling_bytes_utf8(self):
+        """Test wrapper handling bytes results that can be decoded as UTF-8."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": "Hello, 世界!".encode('utf-8')}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should decode UTF-8 bytes to text
+        assert result["content"][0]["text"] == "Hello, 世界!"
+
+    def test_wrapper_result_handling_bytes_binary(self):
+        """Test wrapper handling binary bytes that can't be decoded as UTF-8."""
+        mock_client = MagicMock()
+        binary_data = bytes([0xFF, 0xFE, 0xFD, 0x00, 0x01, 0x02])  # Invalid UTF-8
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": binary_data}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should indicate binary data with size
+        content_text = result["content"][0]["text"]
+        assert "Binary data:" in content_text
+        assert "6 bytes" in content_text
+
+    def test_wrapper_result_handling_none_result(self):
+        """Test wrapper handling None results."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": None}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should convert None to "null"
+        assert result["content"][0]["text"] == "null"
+
+    def test_wrapper_result_handling_other_types(self):
+        """Test wrapper handling other data types (int, float, bool, etc.)."""
+        test_cases = [
+            (12345, "12345"),
+            (3.14159, "3.14159"),
+            (True, "True"),
+            (False, "False"),
+        ]
+        
+        for input_value, expected_output in test_cases:
+            mock_client = MagicMock()
+            mock_client.call_tool_sync.return_value = {
+                "status": "success",
+                "content": [{"text": input_value}]
+            }
+            
+            tool_info = {"name": "test_tool", "description": "Test"}
+            wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+            
+            tool_use = {"toolUseId": "test", "input": {}}
+            result = wrapper.invoke(tool_use)
+            
+            assert result["status"] == "success"
+            assert result["content"][0]["text"] == expected_output
+
+    def test_wrapper_result_handling_list_non_content(self):
+        """Test wrapper handling list results that aren't in content format."""
+        mock_client = MagicMock()
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": ["item1", "item2", {"key": "value"}]}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should JSON serialize the list
+        content_text = result["content"][0]["text"]
+        parsed = json.loads(content_text)
+        assert parsed == ["item1", "item2", {"key": "value"}]
+
+    def test_wrapper_result_handling_list_serialization_error(self):
+        """Test wrapper handling list results that can't be JSON serialized."""
+        mock_client = MagicMock()
+        
+        class NonSerializable:
+            pass
+        
+        mock_client.call_tool_sync.return_value = {
+            "status": "success",
+            "content": [{"text": ["item1", NonSerializable()]}]
+        }
+        
+        tool_info = {"name": "test_tool", "description": "Test"}
+        wrapper = create_mcp_tool_wrapper("test", tool_info, mock_client)
+        
+        tool_use = {"toolUseId": "test", "input": {}}
+        result = wrapper.invoke(tool_use)
+        
+        assert result["status"] == "success"
+        # Should handle serialization error gracefully
+        content_text = result["content"][0]["text"]
+        assert "List with 2 items - serialization failed" in content_text

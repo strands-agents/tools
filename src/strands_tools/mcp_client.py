@@ -1,13 +1,14 @@
 """MCP Client Tool for Strands Agents.
 
-This tool provides a high-level interface for connecting to any MCP server
-with simplified configuration and enhanced functionality.
+This tool provides a high-level interface for connecting to any MCP server.
 
 It leverages the Strands SDK's MCPClient for robust connection management
 and implements a per-operation connection pattern for stability.
 """
 
+import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass
@@ -29,8 +30,8 @@ logger = logging.getLogger(__name__)
 # Users can override this by setting their own logging configuration
 logging.getLogger("mcp.shared.session").setLevel(logging.ERROR)
 
-# Default timeout for MCP operations
-DEFAULT_MCP_TIMEOUT = 30.0
+# Default timeout for MCP operations - can be overridden via environment variable
+DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
 
 
 @dataclass
@@ -208,7 +209,7 @@ class MCPToolWrapper(AgentTool):
 
             # Call the tool using direct client
             result = self.mcp_client.call_tool_sync(
-                tool_use_id=f"wrapper_{self.connection_id}_{self.original_tool_name}_{uuid.uuid4().hex[:8]}",
+                tool_use_id=f"mcp_{self.connection_id}_{self.original_tool_name}_{uuid.uuid4().hex[:8]}",
                 name=self.original_tool_name,
                 arguments=tool_input,
             )
@@ -236,23 +237,46 @@ class MCPToolWrapper(AgentTool):
             if isinstance(result, str):
                 content.append({"text": result})
             elif isinstance(result, list):
-                # If it's already a list of content items, use it directly
-                content = result
+                # Handle list results - could be content items or other data
+                if all(isinstance(item, dict) and ("text" in item or "image" in item) for item in result):
+                    # Already in content format
+                    content = result
+                else:
+                    # Convert list to JSON representation with error handling
+                    try:
+                        content.append({"text": json.dumps(result, indent=2)})
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Failed to serialize list result: {e}")
+                        content.append({"text": f"[List with {len(result)} items - serialization failed]"})
             elif isinstance(result, dict):
                 # Handle structured results
                 if "content" in result:
                     # Already in expected format
                     content = result["content"]
                 else:
-                    # Convert dict to text representation
-                    import json
-
-                    content.append({"text": json.dumps(result, indent=2)})
+                    # Convert dict to text representation with error handling
+                    try:
+                        content.append({"text": json.dumps(result, indent=2)})
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Failed to serialize dict result: {e}")
+                        # Try to extract meaningful information from the dict
+                        if "error" in result:
+                            content.append({"text": f"Error: {result['error']}"})
+                        else:
+                            content.append({"text": f"[Dictionary result - serialization failed: {str(e)}]"})
+            elif isinstance(result, bytes):
+                # Handle binary data
+                try:
+                    # Try to decode as UTF-8 text
+                    text_content = result.decode('utf-8')
+                    content.append({"text": text_content})
+                except UnicodeDecodeError:
+                    # If it's not text, indicate it's binary data
+                    content.append({"text": f"[Binary data: {len(result)} bytes]"})
             elif result is None:
-                import json
-
-                content.append({"text": json.dumps(None)})  # Outputs "null"
+                content.append({"text": "null"})
             else:
+                # For other types, convert to string safely
                 content.append({"text": str(result)})
 
             return {"toolUseId": tool_use_id, "status": "success", "content": content}
@@ -330,7 +354,7 @@ def mcp_client(
     agent: Optional[Any] = None,  # Agent instance passed by SDK
 ) -> Dict[str, Any]:
     """
-    Enhanced MCP client tool for connecting to any MCP server with simplified configuration.
+    MCP client tool for connecting to any MCP server with simplified configuration.
 
     Supports multiple actions for comprehensive MCP server management:
     - connect: Establish connection to an MCP server
@@ -781,7 +805,7 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # Use the stored client
         result = config.mcp_client.call_tool_sync(
-            tool_use_id=f"call_{connection_id}_{tool_name}_{uuid.uuid4().hex[:8]}", name=tool_name, arguments=tool_args
+            tool_use_id=f"mcp_{connection_id}_{tool_name}_{uuid.uuid4().hex[:8]}", name=tool_name, arguments=tool_args
         )
 
         # Update connection status

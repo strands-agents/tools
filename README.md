@@ -424,6 +424,12 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
 
+#### MCP Client Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_MCP_TIMEOUT | Default timeout in seconds for MCP operations | 30.0 |
+
 #### File Read Tool
 
 | Environment Variable | Description | Default | 
