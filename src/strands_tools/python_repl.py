@@ -72,7 +72,7 @@ TOOL_SPEC = {
     "2. Code Preview: Shows syntax-highlighted code before execution\n"
     "3. State Management: Maintains variables between executions\n"
     "4. Error Handling: Captures and formats errors with suggestions\n"
-    "5. Development Mode: Can bypass confirmation in DEV environments\n\n"
+    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n\n"
     "Key Features:\n"
     "- Persistent state between executions\n"
     "- Interactive PTY support for real-time feedback\n"
@@ -423,7 +423,7 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     reset_state = tool_input.get("reset_state", False)
 
     # Check for development mode
-    strands_dev = os.environ.get("DEV", "").lower() == "true"
+    strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Check for non_interactive_mode parameter
     non_interactive_mode = kwargs.get("non_interactive_mode", False)
@@ -443,7 +443,8 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
         )
 
-        # Add permissions check - only show confirmation dialog if not in DEV mode and not in non_interactive mode
+        # Add permissions check - only show confirmation dialog if not
+        # in BYPASS_TOOL_CONSENT mode and not in non_interactive mode
         if not strands_dev and not non_interactive_mode:
             # Create a table with code details for better visualization
             details_table = Table(show_header=False, box=box.SIMPLE)

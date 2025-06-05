@@ -4,6 +4,7 @@ Tests for the memory tool using the Agent interface.
 
 import json
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,12 +54,30 @@ def extract_result_text(result):
 
 
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
-@patch("strands_tools.mem0_memory.Mem0ServiceClient")
-@patch("opensearchpy.OpenSearch")
-def test_store_memory(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+@patch("strands_tools.mem0_memory.Mem0Memory")
+@patch("strands_tools.mem0_memory.boto3.Session")
+def test_store_memory(mock_boto3_session, mock_mem0_memory, mock_tool):
     """Test store memory functionality."""
-    # Setup mocks
-    mock_mem0_client.return_value = mock_mem0_service_client
+    # Setup mock AWS credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test_access_key"
+    mock_credentials.secret_key = "test_secret_key"
+    mock_credentials.token = "test_token"
+    mock_session = MagicMock()
+    mock_session.get_credentials.return_value = mock_credentials
+    mock_boto3_session.return_value = mock_session
+
+    # Setup mock client
+    mock_client = MagicMock()
+    mock_client.add.return_value = [
+        {
+            "event": "store",
+            "memory": "Test memory content",
+            "id": "mem123",
+            "created_at": "2024-03-20T10:00:00Z",
+        }
+    ]
+    mock_mem0_memory.from_config.return_value = mock_client
 
     # Configure the mock_tool
     mock_tool.get.side_effect = lambda key, default=None: {
@@ -71,34 +90,22 @@ def test_store_memory(mock_opensearch, mock_mem0_client, mock_mem0_service_clien
         },
     }.get(key, default)
 
-    # Mock data
-    store_response = {
-        "results": [
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert result["content"][0]["text"] == json.dumps(
+        [
             {
                 "event": "store",
                 "memory": "Test memory content",
                 "id": "mem123",
                 "created_at": "2024-03-20T10:00:00Z",
             }
-        ]
-    }
-
-    # Configure mocks
-    mock_mem0_service_client.store_memory.return_value = store_response
-
-    # Call the memory function
-    result = mem0_memory.mem0_memory(tool=mock_tool)
-
-    # Assertions
-    assert result["status"] == "success"
-    assert "Successfully stored" in str(result["content"][0]["text"])
-
-    # Verify correct functions were called - check just that it was called with the right values
-    mock_mem0_service_client.store_memory.assert_called_once()
-    call_args, call_kwargs = mock_mem0_service_client.store_memory.call_args
-    assert call_args[0] == "Test memory content"
-    assert call_args[1] == "test_user" or call_kwargs.get("user_id") == "test_user"
-    assert call_args[3] == {"category": "test"} or call_kwargs.get("metadata") == {"category": "test"}
+        ],
+        indent=2,
+    )
 
 
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
@@ -235,11 +242,11 @@ def test_retrieve_memories(mock_opensearch, mock_mem0_client, mock_mem0_service_
     assert memories[0]["id"] == "mem123"
 
 
-@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "DEV": "true"})
+@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"})
 @patch("strands_tools.mem0_memory.Mem0ServiceClient")
 @patch("opensearchpy.OpenSearch")
 def test_delete_memory(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
-    """Test delete memory functionality with DEV mode enabled."""
+    """Test delete memory functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_mem0_client.return_value = mock_mem0_service_client
 
@@ -328,16 +335,17 @@ def test_invalid_action(mock_opensearch, mock_mem0_client, mock_tool):
 
 @patch.dict(os.environ, {})
 def test_missing_opensearch_host(mock_tool):
-    """Test missing OpenSearch host."""
+    """Test missing OpenSearch host defaults to FAISS."""
     # Configure the mock_tool
     mock_tool.get.side_effect = lambda key, default=None: {"toolUseId": "test-id", "input": {"action": "list"}}.get(
         key, default
     )
 
-    result = mem0_memory.mem0_memory(tool=mock_tool)
-
-    assert result["status"] == "error"
-    assert "OPENSEARCH_HOST environment variable is required" in str(result["content"][0]["text"])
+    # Mock faiss import
+    with patch("strands_tools.mem0_memory.faiss", create=True):
+        result = mem0_memory.mem0_memory(tool=mock_tool)
+        assert result["status"] == "error"
+        assert "The faiss-cpu package is required" in str(result["content"][0]["text"])
 
 
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
@@ -393,12 +401,12 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
     mock_credentials.secret_key = "test-secret-key"
     mock_session.return_value.get_credentials.return_value = mock_credentials
 
-    # Test with default parameters
+    # Test with default parameters (OpenSearch)
     with patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"}):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
 
-    # Test with custom config
+    # Test with custom config (OpenSearch)
     custom_config = {
         "embedder": {"provider": "custom", "config": {"model": "custom-model"}},
         "llm": {"provider": "custom", "config": {"model": "custom-model"}},
@@ -406,3 +414,85 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
     with patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"}):
         custom_client = Mem0ServiceClient(config=custom_config)
         assert custom_client.mem0 is not None
+
+    # Test with Mem0 Platform
+    with patch.dict(os.environ, {"MEM0_API_KEY": "test-api-key"}):
+        with patch("strands_tools.mem0_memory.MemoryClient") as mock_memory_client:
+            mock_client = MagicMock()
+            mock_client._validate_api_key.return_value = "test@example.com"
+            mock_memory_client.return_value = mock_client
+            platform_client = Mem0ServiceClient()
+            assert platform_client.mem0 is not None
+
+
+@patch.dict(os.environ, {"MEM0_API_KEY": "test-api-key"})
+@patch("strands_tools.mem0_memory.MemoryClient")
+def test_mem0_platform_client(mock_memory_client, mock_tool):
+    """Test Mem0 Platform client functionality."""
+    # Setup mock client
+    mock_client = MagicMock()
+    mock_client.add.return_value = [
+        {
+            "event": "store",
+            "memory": "Test memory content",
+            "id": "mem123",
+            "created_at": "2024-03-20T10:00:00Z",
+        }
+    ]
+    mock_memory_client.return_value = mock_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {
+            "action": "store",
+            "content": "Test memory content",
+            "user_id": "test_user",
+            "metadata": {"category": "test"},
+        },
+    }.get(key, default)
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert "Test memory content" in str(result["content"][0]["text"])
+
+
+@patch.dict(os.environ, {})
+@patch("strands_tools.mem0_memory.Mem0Memory")
+def test_faiss_client(mock_mem0_memory, mock_tool):
+    """Test FAISS client functionality."""
+    # Inject a mock faiss module into sys.modules
+    sys.modules["faiss"] = MagicMock()
+    # Setup mock client
+    mock_client = MagicMock()
+    # Return a real list of dicts, not MagicMock objects
+    mock_client.add.return_value = [
+        {
+            "event": "store",
+            "memory": "Test memory content",
+            "id": "mem123",
+            "created_at": "2024-03-20T10:00:00Z",
+        }
+    ]
+    mock_mem0_memory.from_config.return_value = mock_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {
+            "action": "store",
+            "content": "Test memory content",
+            "user_id": "test_user",
+            "metadata": {"category": "test"},
+        },
+    }.get(key, default)
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert "Test memory content" in str(result["content"][0]["text"])

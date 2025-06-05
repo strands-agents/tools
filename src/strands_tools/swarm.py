@@ -519,7 +519,7 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     5. Result Aggregation and Synthesis:
        • Collects contributions from all agents across all phases
-       • Combines insights into a comprehensive collective knowledge
+       • Combines insights into comprehensive collective knowledge
        • Presents results with agent-specific attributions and synthesis
 
     Common Error Scenarios:
@@ -593,6 +593,8 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "messages": messages,
             "tool_config": tool_config,
         }
+        if "callback_handler" in kwargs:
+            tool_context["callback_handler"] = kwargs["callback_handler"]
 
         # Extract parameters
         task = tool_input["task"]

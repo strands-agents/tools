@@ -1,44 +1,71 @@
-<p align="center">
-  <h1>Agents Tools</h1>
-</p>
-
-<h4 align="center">
-  Agents Tools: A comprehensive toolkit for building, extending, and deploying AI agents.
-</h4>
-
 <div align="center">
-  <a href="https://github.com/strands-agents/tools/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/tools"/></a>
-  <a href="https://github.com/strands-agents/tools/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/tools"/></a>
-  <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
-  <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
-  <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
+  <div>
+    <a href="https://strandsagents.com">
+      <img src="https://strandsagents.com/latest/assets/logo-auto.svg" alt="Strands Agents" width="55px" height="105px">
+    </a>
+  </div>
+
+  <h1>
+    Strands Agents Tools
+  </h1>
+
+  <h2>
+    A model-driven approach to building AI agents in just a few lines of code.
+  </h2>
+
+  <div align="center">
+    <a href="https://github.com/strands-agents/tools/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/pulls"><img alt="GitHub open pull requests" src="https://img.shields.io/github/issues-pr/strands-agents/tools"/></a>
+    <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
+    <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
+    <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
+  </div>
+  
+  <p>
+    <a href="https://strandsagents.com/">Documentation</a>
+    ◆ <a href="https://github.com/strands-agents/samples">Samples</a>
+    ◆ <a href="https://github.com/strands-agents/sdk-python">Python SDK</a>
+    ◆ <a href="https://github.com/strands-agents/tools">Tools</a>
+    ◆ <a href="https://github.com/strands-agents/agent-builder">Agent Builder</a>
+    ◆ <a href="https://github.com/strands-agents/mcp-server">MCP Server</a>
+  </p>
 </div>
 
-## 🚀 What is Agents Tools?
-
-Agents Tools is an open-source Python library that provides a unified toolkit for developing autonomous AI agents. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
+Strands Agents Tools provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Mem0 Memory** - Store user and agent memories across agent runs to provide personalized experience 
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
+- 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
 - 🧮 **Mathematical Tools** - Perform advanced calculations with symbolic math capabilities
 - ☁️ **AWS Integration** - Seamless access to AWS services
 - 🖼️ **Image Processing** - Generate and process images for AI applications
+- 🎥 **Video Processing** - Use models and agents to generate dynamic videos
+- 🎙️ **Audio Output** - Enable models to generate audio and speak
 - 🔄 **Environment Management** - Handle environment variables safely
 - 📝 **Journaling** - Create and manage structured logs and journals
+- ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
-
+- 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
+  
 ## 📦 Installation
 
 ### Quick Install
 
 ```bash
 pip install strands-agents-tools
+```
+
+To install the dependencies for optional tools:
+
+```bash
+pip install strands-agents-tools[mem0_memory]
 ```
 
 ### Development Install
@@ -49,7 +76,7 @@ git clone https://github.com/strands-agents/tools.git
 cd tools
 
 # Create and activate virtual environment
-python3 -m venv venv
+python3 -m venv .venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
@@ -85,6 +112,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
+| sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | cron | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
@@ -92,6 +120,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 
 ## 💻 Usage Examples
 
@@ -201,6 +230,71 @@ result = agent.tool.swarm(
 )
 ```
 
+### Use AWS
+
+```python
+from strands import Agent
+from strands_tools import use_aws
+
+agent = Agent(tools=[use_aws])
+
+# List S3 buckets
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_buckets",
+    parameters={},
+    region="us-east-1",
+    label="List all S3 buckets"
+)
+
+# Get the contents of a specific S3 bucket
+result = agent.tool.use_aws(
+    service_name="s3",
+    operation_name="list_objects_v2",
+    parameters={"Bucket": "example-bucket"},  # Replace with your actual bucket name
+    region="us-east-1",
+    label="List objects in a specific S3 bucket"
+)
+
+# Get the list of EC2 subnets
+result = agent.tool.use_aws(
+    service_name="ec2",
+    operation_name="describe_subnets",
+    parameters={},
+    region="us-east-1",
+    label="List all subnets"
+)
+```
+
+### Batch Tool
+
+```python
+import os
+import sys
+
+from strands import Agent
+from strands_tools import batch, http_request, use_aws
+
+# Example usage of the batch with http_request and use_aws tools
+agent = Agent(tools=[batch, http_request, use_aws])
+
+result = agent.tool.batch(
+    invocations=[
+        {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
+        {
+            "name": "use_aws",
+            "arguments": {
+                "service_name": "s3",
+                "operation_name": "list_buckets",
+                "parameters": {},
+                "region": "us-east-1",
+                "label": "List S3 Buckets"
+            }
+        },
+    ]
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -211,6 +305,8 @@ These variables affect multiple tools:
 
 | Environment Variable | Description | Default | Affected Tools |
 |----------------------|-------------|---------|---------------|
+| BYPASS_TOOL_CONSENT | Bypass consent for tool invocation, set to "true" to enable | false | All tools that require consent (e.g. shell, file_write, python_repl) |
+| STRANDS_TOOL_CONSOLE_MODE | Enable rich UI for tools, set to "enabled" to enable | disabled | All tools that have optional rich UI |
 | AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
 | LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
@@ -236,11 +332,39 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
 
+#### Sleep Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
+
 #### Mem0 Memory Tool
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| OPENSEARCH_HOST | OpenSearch Host URL | None |
+The Mem0 Memory Tool supports three different backend configurations:
+
+1. **Mem0 Platform**:
+   - Uses the Mem0 Platform API for memory management
+   - Requires a Mem0 API key
+
+2. **OpenSearch** (Recommended for AWS environments):
+   - Uses OpenSearch as the vector store backend
+   - Requires AWS credentials and OpenSearch configuration
+
+3. **FAISS** (Default for local development):
+   - Uses FAISS as the local vector store backend
+   - Requires faiss-cpu package for local vector storage
+
+| Environment Variable | Description | Default | Required For |
+|----------------------|-------------|---------|--------------|
+| MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
+| OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
+| AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| DEV | Enable development mode (bypasses confirmations) | false | All modes |
+
+**Note**:
+- If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
+- If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
+- If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 
 #### Memory Tool
 
@@ -313,58 +437,25 @@ These variables affect multiple tools:
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
 
-## 🛠️ Development
+## Contributing ❤️
 
-### Prerequisites
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Reporting bugs & features
+- Development setup
+- Contributing via Pull Requests
+- Code of Conduct
+- Reporting of security issues
 
-- Python 3.10+
-- pip
-- git
-- gh
+## License
 
-### Testing
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-```bash
-# Run all tests
-hatch run test
+## Security
 
-# Run specific test file
-hatch run test -- tests/test_specific.py
-```
+See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
-### Linting
+## ⚠️ Preview Status
 
-```bash
-# Run all linters
-hatch run lint
-```
-## 📚 Project Structure
-
-- `src/strands_tools/` - Core tools implementation
-- `tests/` - Test suite
-- `examples/` - Example scripts and notebooks
-- `docs/` - Documentation
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for more details on how to get involved.
-
-### Code of Conduct
-
-This project adheres to the [Python Community Code of Conduct](https://www.python.org/psf/conduct/). By participating, you are expected to uphold this code.
-
-## 📄 License
-
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Support
-
-- **Documentation**: [Strands Agents Docs](https://github.com/strands-agents/docs)
-- **Issues**: [GitHub Issues](https://github.com/strands-agents/tools/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/strands-agents/tools/discussions)
-
----
-
-<p align="center">
-  Made with ❤️ by the Strands Team
-</p>
+Strands Agents is currently in public preview. During this period:
+- APIs may change as we refine the SDK
+- We welcome feedback and contributions
