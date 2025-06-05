@@ -15,10 +15,24 @@ from strands_tools import use_llm
 
 agent = Agent(tools=[use_llm])
 
-# Basic usage with just a prompt and system prompt
+# Basic usage with just a prompt and system prompt (inherits all parent tools)
 result = agent.tool.use_llm(
     prompt="Tell me about the advantages of tool-building in AI agents",
     system_prompt="You are a helpful AI assistant specializing in AI development concepts."
+)
+
+# Usage with specific tools filtered from parent agent
+result = agent.tool.use_llm(
+    prompt="Calculate 2 + 2 and retrieve some information",
+    system_prompt="You are a helpful assistant.",
+    tools=["calculator", "retrieve"]
+)
+
+# Usage with mixed tool filtering from parent agent
+result = agent.tool.use_llm(
+    prompt="Analyze this data file",
+    system_prompt="You are a data analyst.",
+    tools=["file_read", "calculator", "python_repl"]
 )
 
 # The response is available in the returned object
@@ -51,6 +65,13 @@ TOOL_SPEC = {
                 "system_prompt": {
                     "type": "string",
                     "description": "System prompt for the new event loop",
+                },
+                "tools": {
+                    "type": "array",
+                    "description": "List of tool names to make available to the nested agent"
+                    + "Tool names must exist in the parent agent's tool registry."
+                    + "If not provided, inherits all tools from parent agent.",
+                    "items": {"type": "string"},
                 },
             },
             "required": ["prompt", "system_prompt"],
@@ -92,7 +113,11 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Args:
         tool (ToolUse): Tool use object containing the following:
             - prompt (str): The prompt to process with the new agent instance
-            - system_prompt (str, optional): Custom system prompt for the agent
+            - system_prompt (str): Custom system prompt for the agent
+            - tools (List[str], optional): List of tool names to make available to the nested agent.
+                Tool names must exist in the parent agent's tool registry.
+                Examples: ["calculator", "file_read", "retrieve"]
+                If not provided, inherits all tools from the parent agent.
         **kwargs (Any): Additional keyword arguments
 
     Returns:
@@ -116,6 +141,7 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     prompt = tool_input["prompt"]
     tool_system_prompt = tool_input.get("system_prompt")
+    specified_tools = tool_input.get("tools")
 
     tools = []
     trace_attributes = {}
@@ -123,9 +149,22 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     extra_kwargs = {}
     parent_agent = kwargs.get("agent")
     if parent_agent:
-        tools = list(parent_agent.tool_registry.registry.values())
         trace_attributes = parent_agent.trace_attributes
         extra_kwargs["callback_handler"] = parent_agent.callback_handler
+
+        # If specific tools are provided, filter parent tools; otherwise inherit all tools from parent
+        if specified_tools is not None:
+            # Filter parent agent tools to only include specified tool names
+            filtered_tools = []
+            for tool_name in specified_tools:
+                if tool_name in parent_agent.tool_registry.registry:
+                    filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
+                else:
+                    logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
+            tools = filtered_tools
+        else:
+            tools = list(parent_agent.tool_registry.registry.values())
+
     if "callback_handler" in kwargs:
         extra_kwargs["callback_handler"] = kwargs["callback_handler"]
 
