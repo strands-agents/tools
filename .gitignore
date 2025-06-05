@@ -13,3 +13,4 @@ errors/
 repl_state/
 venv/
 *.egg-info
+.idea

@@ -586,12 +586,14 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
         inference_config = kwargs.get("inference_config")
         messages = kwargs.get("messages")
         tool_config = kwargs.get("tool_config")
+        agent = kwargs.get("agent")
         # Create tool context
         tool_context = {
             "system_prompt": system_prompt,
             "inference_config": inference_config,
             "messages": messages,
             "tool_config": tool_config,
+            "agent": agent,
         }
         if "callback_handler" in kwargs:
             tool_context["callback_handler"] = kwargs["callback_handler"]

@@ -126,6 +126,7 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
         tools = list(parent_agent.tool_registry.registry.values())
         trace_attributes = parent_agent.trace_attributes
         extra_kwargs["callback_handler"] = parent_agent.callback_handler
+        extra_kwargs["model"] = parent_agent.model
     if "callback_handler" in kwargs:
         extra_kwargs["callback_handler"] = kwargs["callback_handler"]
 
