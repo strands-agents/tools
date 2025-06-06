@@ -212,6 +212,13 @@ class WorkflowManager:
     def __init__(self, tool_context: Dict[str, Any]):
         if not hasattr(self, "initialized"):
             # Initialize core attributes
+            extra_kwargs = {}
+            parent_agent = tool_context.get("agent", None)
+            if parent_agent:
+                extra_kwargs["tools"] = list(parent_agent.tool_registry.registry.values())
+                extra_kwargs["trace_attributes"] = parent_agent.trace_attributes
+                extra_kwargs["callback_handler"] = parent_agent.callback_handler
+                extra_kwargs["model"] = parent_agent.model
             self.system_prompt = tool_context["system_prompt"]
             self.inference_config = tool_context["inference_config"]
             self.messages = tool_context["messages"]
@@ -221,7 +228,7 @@ class WorkflowManager:
             self.task_executor = TaskExecutor()
 
             # Initialize base agent for task execution
-            self.base_agent = Agent(system_prompt=self.system_prompt)
+            self.base_agent = Agent(system_prompt=self.system_prompt, **extra_kwargs)
 
             # Start file watching if not already started
             if not self._observer:
@@ -748,6 +755,7 @@ def workflow(tool: ToolUse, **kwargs: Any) -> ToolResult:
     inference_config = kwargs.get("inference_config")
     messages = kwargs.get("messages")
     tool_config = kwargs.get("tool_config")
+    agent = kwargs.get("agent")
 
     try:
         tool_use_id = tool.get("toolUseId", str(uuid.uuid4()))
@@ -761,6 +769,7 @@ def workflow(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "inference_config": inference_config,
                 "messages": messages,
                 "tool_config": tool_config,
+                "agent": agent,
             }
         )
 

@@ -513,6 +513,7 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     inference_config = kwargs.get("inference_config")
     messages = kwargs.get("messages")
     tool_config = kwargs.get("tool_config")
+    agent = kwargs.get("agent")
 
     try:
         # Create tool context
@@ -522,6 +523,7 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "inference_config": inference_config,
             "messages": messages,
             "tool_config": tool_config,
+            "agent": agent,
         }
 
         # Get manager instance thread-safely

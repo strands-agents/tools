@@ -95,13 +95,21 @@ Please provide your analysis directly:
         # Get tools from parent agent if available
         tools = []
         trace_attributes = {}
+        extra_kwargs = {}
         parent_agent = kwargs.get("agent")
         if parent_agent:
             tools = list(parent_agent.tool_registry.registry.values())
             trace_attributes = parent_agent.trace_attributes
+            extra_kwargs["model"] = parent_agent.model
 
         # Initialize the new Agent with provided parameters
-        agent = Agent(messages=[], tools=tools, system_prompt=custom_system_prompt, trace_attributes=trace_attributes)
+        agent = Agent(
+            messages=[],
+            tools=tools,
+            system_prompt=custom_system_prompt,
+            trace_attributes=trace_attributes,
+            **extra_kwargs,
+        )
 
         # Run the agent with the provided prompt
         result = agent(prompt)
