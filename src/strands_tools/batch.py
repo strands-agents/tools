@@ -109,7 +109,7 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
                     result = tool_fn(**arguments)
 
                     if result["status"] == "success":
-                        results.append({"name": tool_name, "status": "success", "result": result})
+                        results.append({"json": {"name": tool_name, "status": "success", "result": result}})
                     else:
                         results.append(
                             {"toolUseId": tool_use_id, "status": "error", "content": [{"text": "Tool missing"}]}
