@@ -52,7 +52,8 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
-
+- 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
+  
 ## 📦 Installation
 
 ### Quick Install
@@ -75,7 +76,7 @@ git clone https://github.com/strands-agents/tools.git
 cd tools
 
 # Create and activate virtual environment
-python3 -m venv venv
+python3 -m venv .venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
@@ -111,6 +112,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
+| sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | cron | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
@@ -118,6 +120,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 
 ## 💻 Usage Examples
 
@@ -270,6 +273,35 @@ result = agent.tool.use_aws(
 )
 ```
 
+### Batch Tool
+
+```python
+import os
+import sys
+
+from strands import Agent
+from strands_tools import batch, http_request, use_aws
+
+# Example usage of the batch with http_request and use_aws tools
+agent = Agent(tools=[batch, http_request, use_aws])
+
+result = agent.tool.batch(
+    invocations=[
+        {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
+        {
+            "name": "use_aws",
+            "arguments": {
+                "service_name": "s3",
+                "operation_name": "list_buckets",
+                "parameters": {},
+                "region": "us-east-1",
+                "label": "List S3 Buckets"
+            }
+        },
+    ]
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -307,11 +339,39 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
 
+#### Sleep Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
+
 #### Mem0 Memory Tool
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| OPENSEARCH_HOST | OpenSearch Host URL | None |
+The Mem0 Memory Tool supports three different backend configurations:
+
+1. **Mem0 Platform**:
+   - Uses the Mem0 Platform API for memory management
+   - Requires a Mem0 API key
+
+2. **OpenSearch** (Recommended for AWS environments):
+   - Uses OpenSearch as the vector store backend
+   - Requires AWS credentials and OpenSearch configuration
+
+3. **FAISS** (Default for local development):
+   - Uses FAISS as the local vector store backend
+   - Requires faiss-cpu package for local vector storage
+
+| Environment Variable | Description | Default | Required For |
+|----------------------|-------------|---------|--------------|
+| MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
+| OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
+| AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| DEV | Enable development mode (bypasses confirmations) | false | All modes |
+
+**Note**:
+- If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
+- If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
+- If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 
 #### Memory Tool
 
