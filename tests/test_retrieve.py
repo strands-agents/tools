@@ -61,6 +61,13 @@ def mock_boto3_client():
         yield mock_client
 
 
+@pytest.fixture(autouse=True)
+def os_environment():
+    mock_env = {}
+    with mock.patch.object(os, "environ", mock_env):
+        yield mock_env
+
+
 def extract_result_text(result):
     """Extract the result text from the agent response."""
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
