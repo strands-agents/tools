@@ -587,7 +587,8 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             # Ask for confirmation
             if needs_confirmation:
                confirm = user_input.get_user_input(
-                   "\n<yellow><bold>Do you want to proceed with setting this environment variable?</bold> [y/*]</yellow>"
+                   "\n<yellow><bold>Do you want to proceed with setting this environment variable?</bold> "
+                   "[y/*]</yellow>"
                )
                # For tests, 'y' should be recognized even with extra spaces or newlines
                if confirm.strip().lower() != "y":
