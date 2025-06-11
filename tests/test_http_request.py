@@ -1011,8 +1011,15 @@ def test_markdown_conversion():
 
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
-    # The exact markdown format depends on whether the optional packages are installed
-    # So we just verify that the request succeeded with the parameter
+    # Verify markdown conversion worked - HTML tags should be removed and text content preserved
+    assert "<html>" not in result_text  # HTML tags should be gone
+    assert "<h1>" not in result_text
+    assert "<p>" not in result_text
+    assert "Main Heading" in result_text  # Text content should remain
+    assert "bold text" in result_text
+    assert "italic text" in result_text
+    assert "List item 1" in result_text
+    assert "List item 2" in result_text
 
 
 @responses.activate
@@ -1038,4 +1045,4 @@ def test_markdown_conversion_non_html():
 
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
-    assert '"message": "hello"' in result_text  # Should still be JSON
+    assert '"message": "hello"' in result_text  # Should still be JSON (no conversion for non-HTML)
