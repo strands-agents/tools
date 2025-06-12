@@ -1,7 +1,6 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from strands_tools import internet_search
 
 
 @pytest.fixture
@@ -50,7 +49,9 @@ def test_serpapi_search_with_mock_agent(mock_agent):
         "status": "success",
         "content": [{"json": {"results": mock_results}}],
     }
-    result = mock_agent.tool.internet_search(query="AI news", max_results=2, backend="serpapi", serpapi_api_key="dummy-key")
+    result = mock_agent.tool.internet_search(
+        query="AI news", max_results=2, backend="serpapi", serpapi_api_key="dummy-key"
+    )
     assert result["status"] == "success"
     results = extract_results(result)
     assert len(results) == 2
@@ -68,7 +69,9 @@ def test_tavily_search_with_mock_agent(mock_agent):
         "status": "success",
         "content": [{"json": {"results": mock_results}}],
     }
-    result = mock_agent.tool.internet_search(query="AI news", max_results=2, backend="tavily", tavily_api_key="dummy-key")
+    result = mock_agent.tool.internet_search(
+        query="AI news", max_results=2, backend="tavily", tavily_api_key="dummy-key"
+    )
     assert result["status"] == "success"
     results = extract_results(result)
     assert len(results) == 2
