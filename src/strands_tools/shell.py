@@ -202,7 +202,6 @@ class CommandExecutor:
 
             if pid == 0:  # Child process
                 try:
-                    os.setsid()
                     os.chdir(cwd)
                     os.execvp("/bin/sh", ["/bin/sh", "-c", command])
                 except Exception as e:
