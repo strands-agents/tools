@@ -53,6 +53,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
+- 🌐 **Internet Search** - Internet search tool supporting multiple backends (DuckDuckGo, SerpAPI, Tavily, etc.)
   
 ## 📦 Installation
 
@@ -121,6 +122,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
+| internet_search| `agent.tool.internet_search(query="latest AI news", max_results=10, backend="serpapi", serpapi_api_key="<api_key>")` | Make search queries via search engine APIs. E.g. DuckDuckGo, SerpAPI, Tavily, etc. |
 
 ## 💻 Usage Examples
 
@@ -293,6 +295,21 @@ result = agent.tool.batch(
         },
     ]
 )
+```
+
+
+### Internet Search Tool
+
+```python
+from strands import Agent
+
+from strands import Agent
+from strands_tools import internet_search
+
+# Example usage of internet search tool
+agent = Agent(tools=[internet_search])
+
+result = agent.tool.internet_search(query="latest AI news", max_results=10, backend="duckduckgo")
 ```
 
 ## 🌍 Environment Variables Configuration
