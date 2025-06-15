@@ -10,10 +10,9 @@ from strands import Agent
 
 # Module level import for the Agent fixture
 from strands_tools import calculator as calculator_module
-from sympy import Integer, Symbol, exp, log
 
 # Function level imports from calculator module
-from src.strands_tools.calculator import (
+from strands_tools.calculator import (
     apply_symbolic_simplifications,
     calculate_derivative,
     calculate_integral,
@@ -31,7 +30,8 @@ from src.strands_tools.calculator import (
     preprocess_expression,
     solve_equation,
 )
-from src.strands_tools.calculator import calculator as calculator_func
+from strands_tools.calculator import calculator as calculator_func
+from sympy import Integer, Symbol, exp, log
 
 
 @pytest.fixture
@@ -361,7 +361,7 @@ def test_numeric_evaluation():
 
     # Test with complex number - using mock for format_number
     complex_num = sp.sympify("1 + 2*I")
-    with mock.patch("src.strands_tools.calculator.format_number", return_value="1+2j"):
+    with mock.patch("strands_tools.calculator.format_number", return_value="1+2j"):
         result = numeric_evaluation(complex_num, 10, False)
         assert "1+2j" == result
 
@@ -423,7 +423,7 @@ def test_evaluate_expression_comprehensive():
     assert "1.414" in result
 
     # Test with scientific notation
-    with mock.patch("src.strands_tools.calculator.numeric_evaluation", return_value="1.0e7"):
+    with mock.patch("strands_tools.calculator.numeric_evaluation", return_value="1.0e7"):
         result = evaluate_expression(sp.sympify("10000000"), scientific=True)
         assert "1.0e7" == result
 
@@ -473,15 +473,15 @@ def test_direct_tool_call():
     }
 
     # Test basic calculation
-    with mock.patch("src.strands_tools.calculator.Console"):
+    with mock.patch("strands_tools.calculator.Console"):
         result = calculator_func(tool_use)
         assert result["status"] == "success"
         assert "Result: 4" in result["content"][0]["text"]
 
     # Test with error - division by zero may not raise an error in SymPy
     tool_use["input"]["expression"] = "x +* 2"  # Invalid syntax
-    with mock.patch("src.strands_tools.calculator.Console"):
-        with mock.patch("src.strands_tools.calculator.create_error_panel"):
+    with mock.patch("strands_tools.calculator.Console"):
+        with mock.patch("strands_tools.calculator.create_error_panel"):
             result = calculator_func(tool_use)
             assert result["status"] == "error"
             assert "Error" in result["content"][0]["text"]
@@ -609,7 +609,7 @@ def test_error_handling_in_calculation_functions():
 def test_calculator_tool_with_system_of_equations():
     """Test the calculator tool with a system of equations."""
     # Create a tool use with a system of equations
-    from src.strands_tools.calculator import calculator as calc_function
+    from strands_tools.calculator import calculator as calc_function
 
     tool_use = {
         "toolUseId": "test_id",
@@ -621,7 +621,7 @@ def test_calculator_tool_with_system_of_equations():
 
     # Mock parse_expression to return a list of expressions
     with mock.patch(
-        "src.strands_tools.calculator.parse_expression",
+        "strands_tools.calculator.parse_expression",
         side_effect=lambda expr: (
             [sp.Symbol("x") + sp.Symbol("y") - 10, sp.Symbol("x") - sp.Symbol("y") - 2]
             if expr.startswith("[")
