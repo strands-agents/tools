@@ -375,7 +375,7 @@ def test_command_executor_execute_with_pty(
         executor = shell.CommandExecutor(timeout=10)
 
         # Execute a command
-        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp")
+        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp", non_interactive_mode=False)
 
         # Verify the results
         assert exit_code == 0
@@ -404,6 +404,7 @@ def test_command_executor_execute_with_pty(
 
 @patch("os.execvp")
 @patch("os.chdir")
+@patch("os.getpgid")
 @patch("pty.fork")
 @patch("termios.tcgetattr")
 @patch("tty.setraw")
@@ -421,6 +422,7 @@ def test_command_executor_execute_with_pty_timeout(
     mock_setraw,
     mock_tcgetattr,
     mock_fork,
+    mock_getpgid,
     mock_chdir,
     mock_execvp,
 ):
@@ -428,6 +430,7 @@ def test_command_executor_execute_with_pty_timeout(
     # Mock setup
     mock_tcgetattr.return_value = "old_tty_settings"
     mock_fork.return_value = (123, 5)  # pid, fd
+    mock_getpgid.return_value = 123
 
     # Set up time mock to simulate passing the timeout
     mock_time.side_effect = [
@@ -437,7 +440,7 @@ def test_command_executor_execute_with_pty_timeout(
     ]  # Start time, check time (which exceeds timeout)
 
     # Mock sys.stdin
-    with patch("sys.stdin") as mock_stdin, patch("os.kill") as mock_kill:
+    with patch("sys.stdin") as mock_stdin, patch("os.killpg") as mock_killpg:
         mock_stdin.fileno.return_value = 0
 
         # Create the executor with a very short timeout
@@ -445,10 +448,10 @@ def test_command_executor_execute_with_pty_timeout(
 
         # Execute command - should time out
         with pytest.raises(TimeoutError):
-            executor.execute_with_pty("sleep 10", "/tmp")
+            executor.execute_with_pty("sleep 10", "/tmp", non_interactive_mode=False)
 
         # Verify kill was called with SIGTERM
-        mock_kill.assert_called_once_with(123, signal.SIGTERM)
+        mock_killpg.assert_called_once_with(123, signal.SIGTERM)
 
 
 @patch("os.execvp")
@@ -456,8 +459,9 @@ def test_command_executor_execute_with_pty_timeout(
 @patch("pty.fork")
 @patch("termios.tcgetattr")
 @patch("termios.tcsetattr")
+@patch("tty.setraw")
 def test_command_executor_execute_with_pty_tcsetattr_exception(
-    mock_tcsetattr, mock_tcgetattr, mock_fork, mock_chdir, mock_execvp
+    mock_setraw, mock_tcsetattr, mock_tcgetattr, mock_fork, mock_chdir, mock_execvp
 ):
     """Test the CommandExecutor execute_with_pty method with tcsetattr exception."""
     # Mock setup
@@ -473,7 +477,6 @@ def test_command_executor_execute_with_pty_tcsetattr_exception(
         patch("select.select") as mock_select,
         patch("os.read") as mock_read,
         patch("os.waitpid") as mock_waitpid,
-        patch("os.system") as mock_system,
     ):
         mock_stdin.fileno.return_value = 0
         mock_select.return_value = ([5], [], [])
@@ -484,10 +487,13 @@ def test_command_executor_execute_with_pty_tcsetattr_exception(
         executor = shell.CommandExecutor(timeout=10)
 
         # Execute command - should catch tcsetattr exception and call stty sane
-        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp")
+        with pytest.raises(Exception, match="Test tcsetattr error"):
+            executor.execute_with_pty("echo test", "/tmp", non_interactive_mode=False)
 
-        # Verify stty sane was called to restore terminal
-        mock_system.assert_called_once_with("stty sane")
+        # Verify tty.setraw was attempted
+        mock_setraw.assert_called_once()
+        # Verify tcsetattr was called to restore (which then raised the error)
+        mock_tcsetattr.assert_called_once()
 
 
 @patch("strands_tools.shell.execute_single_command")
@@ -514,11 +520,7 @@ def test_execute_commands_parallel(mock_execute_single_command):
     # Execute commands in parallel
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify results
@@ -563,11 +565,7 @@ def test_execute_commands_parallel_with_error(mock_execute_single_command):
     # Execute commands in parallel with ignore_errors=False
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify only the first result is returned (second should be canceled)
@@ -599,11 +597,7 @@ def test_execute_commands_parallel_with_ignore_errors(mock_execute_single_comman
     # Execute commands in parallel with ignore_errors=True
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=True,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=True, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify both results are returned despite the first one failing
@@ -636,11 +630,7 @@ def test_execute_commands_sequential_with_cd(mock_execute_single_command):
     # Execute commands sequentially
     commands = ["cd /new/dir", "pwd"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=False,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=False, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify results
@@ -685,11 +675,7 @@ def test_execute_commands_sequential_with_error(mock_execute_single_command):
     # Execute commands sequentially with ignore_errors=False
     commands = ["cmd1", "cmd2", "cmd3"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=False,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=False, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify only the first two commands were executed (stopped after error)
@@ -947,7 +933,7 @@ def test_execute_single_command():
         mock_execute.return_value = (0, "command output", "")
 
         # Test with string command
-        result = shell.execute_single_command("echo test", "/tmp", 10)
+        result = shell.execute_single_command("echo test", "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "echo test"
         assert result["exit_code"] == 0
         assert result["output"] == "command output"
@@ -955,13 +941,13 @@ def test_execute_single_command():
 
         # Test with dictionary command
         cmd_dict = {"command": "git status", "timeout": 30}
-        result = shell.execute_single_command(cmd_dict, "/tmp", 10)
+        result = shell.execute_single_command(cmd_dict, "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "git status"
         assert result["options"] == cmd_dict
 
         # Test with exception
         mock_execute.side_effect = Exception("Test error")
-        result = shell.execute_single_command("failing command", "/tmp", 10)
+        result = shell.execute_single_command("failing command", "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "failing command"
         assert result["status"] == "error"
         assert "Test error" in result["error"]
