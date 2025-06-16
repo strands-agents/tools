@@ -264,3 +264,201 @@ def test_use_llm_with_explicit_callback():
         # Verify the result
         assert result["status"] == "success"
         assert "Test response with explicit callback" in result["content"][0]["text"]
+
+
+def test_use_llm_with_tool_filtering():
+    """Test use_llm with specific tools filtering from parent agent."""
+    tool_use = {
+        "toolUseId": "test-tool-filtering",
+        "input": {
+            "prompt": "Test with tool filtering",
+            "system_prompt": "Test system prompt",
+            "tools": ["calculator", "file_read"],
+        },
+    }
+
+    # Create mock tools for the parent agent
+    mock_calculator_tool = MagicMock(name="calculator_tool")
+    mock_file_read_tool = MagicMock(name="file_read_tool")
+    mock_other_tool = MagicMock(name="other_tool")
+
+    # Create a mock parent agent with multiple tools
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {
+        "calculator": mock_calculator_tool,
+        "file_read": mock_file_read_tool,
+        "other_tool": mock_other_tool,
+    }
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.callback_handler = MagicMock()
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with filtered tools"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm with tool filtering
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
+
+        # Verify the Agent was created with only the specified tools
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+
+        # Should only include calculator and file_read tools, not other_tool
+        passed_tools = call_kwargs["tools"]
+        assert len(passed_tools) == 2
+        assert mock_calculator_tool in passed_tools
+        assert mock_file_read_tool in passed_tools
+        assert mock_other_tool not in passed_tools
+
+        # Verify the result
+        assert result["status"] == "success"
+        assert "Test response with filtered tools" in result["content"][0]["text"]
+
+
+def test_use_llm_with_nonexistent_tool_filtering():
+    """Test use_llm with tool filtering that includes non-existent tools."""
+    tool_use = {
+        "toolUseId": "test-nonexistent-tool",
+        "input": {
+            "prompt": "Test with non-existent tool",
+            "system_prompt": "Test system prompt",
+            "tools": ["calculator", "nonexistent_tool", "file_read"],
+        },
+    }
+
+    # Create mock tools for the parent agent (missing nonexistent_tool)
+    mock_calculator_tool = MagicMock(name="calculator_tool")
+    mock_file_read_tool = MagicMock(name="file_read_tool")
+
+    # Create a mock parent agent with limited tools
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {"calculator": mock_calculator_tool, "file_read": mock_file_read_tool}
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.callback_handler = MagicMock()
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with missing tool"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent, patch("strands_tools.use_llm.logger") as mock_logger:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm with tool filtering including non-existent tool
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
+
+        # Verify warning was logged for non-existent tool
+        mock_logger.warning.assert_called_once_with("Tool 'nonexistent_tool' not found in parent agent's tool registry")
+
+        # Verify the Agent was created with only the existing tools
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+
+        # Should only include existing tools (calculator and file_read)
+        passed_tools = call_kwargs["tools"]
+        assert len(passed_tools) == 2
+        assert mock_calculator_tool in passed_tools
+        assert mock_file_read_tool in passed_tools
+
+        # Verify the result
+        assert result["status"] == "success"
+
+
+def test_use_llm_with_empty_tool_filtering():
+    """Test use_llm with empty tools list (should result in no tools)."""
+    tool_use = {
+        "toolUseId": "test-empty-tools",
+        "input": {"prompt": "Test with empty tools list", "system_prompt": "Test system prompt", "tools": []},
+    }
+
+    # Create a mock parent agent with tools
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {"calculator": MagicMock(), "file_read": MagicMock()}
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.callback_handler = MagicMock()
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with no tools"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm with empty tools list
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
+
+        # Verify the Agent was created with no tools
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+
+        # Should be empty tools list
+        passed_tools = call_kwargs["tools"]
+        assert len(passed_tools) == 0
+
+        # Verify the result
+        assert result["status"] == "success"
+
+
+def test_use_llm_without_tool_filtering_inherits_all():
+    """Test use_llm without tools parameter inherits all parent tools."""
+    tool_use = {
+        "toolUseId": "test-inherit-all-tools",
+        "input": {
+            "prompt": "Test inheriting all tools",
+            "system_prompt": "Test system prompt",
+            # No tools parameter - should inherit all
+        },
+    }
+
+    # Create mock tools for the parent agent
+    mock_calculator_tool = MagicMock(name="calculator_tool")
+    mock_file_read_tool = MagicMock(name="file_read_tool")
+    mock_other_tool = MagicMock(name="other_tool")
+
+    # Create a mock parent agent with multiple tools
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry.values.return_value = [
+        mock_calculator_tool,
+        mock_file_read_tool,
+        mock_other_tool,
+    ]
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.callback_handler = MagicMock()
+
+    # Create a mock response
+    mock_response = MagicMock()
+    mock_response.metrics = None
+    mock_response.__str__.return_value = "Test response with all tools"
+
+    with patch("strands_tools.use_llm.Agent") as MockAgent:
+        # Configure the mock agent
+        mock_instance = MockAgent.return_value
+        mock_instance.return_value = mock_response
+
+        # Call use_llm without tools parameter
+        result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
+
+        # Verify the Agent was created with all parent tools
+        MockAgent.assert_called_once()
+        call_kwargs = MockAgent.call_args.kwargs
+
+        # Should include all tools from parent
+        passed_tools = call_kwargs["tools"]
+        assert len(passed_tools) == 3
+        assert mock_calculator_tool in passed_tools
+        assert mock_file_read_tool in passed_tools
+        assert mock_other_tool in passed_tools
+
+        # Verify the result
+        assert result["status"] == "success"
