@@ -52,6 +52,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 
 ## 📦 Installation
 
@@ -118,6 +119,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
 
 ## 💻 Usage Examples
 
@@ -261,6 +263,32 @@ result = agent.tool.use_aws(
     region="us-east-1",
     label="List all subnets"
 )
+```
+
+### Use Browser
+```python
+from strands import Agent
+from strands_tools import use_browser
+
+agent = Agent(tools=[use_browser])
+
+# Simple navigation
+result = agent.tool.use_browser(action="navigate", url="https://example.com")
+
+# Sequential actions for form filling
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/login"}},
+    {"action": "type", "args": {"selector": "#username", "text": "user@example.com"}},
+    {"action": "click", "args": {"selector": "#submit"}}
+])
+
+# Web scraping with content extraction
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/data"}},
+    {"action": "get_text", "args": {"selector": ".content"}},
+    {"action": "click", "args": {"selector": ".next-page"}},
+    {"action": "get_html", "args": {"selector": "main"}}
+])
 ```
 
 ## 🌍 Environment Variables Configuration
