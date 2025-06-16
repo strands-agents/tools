@@ -125,6 +125,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
 
+\* *These tools do not work on windows*
+
 ## 💻 Usage Examples
 
 ### File Operations
