@@ -1,11 +1,12 @@
 import asyncio
+import inspect
 import json
 
 # Configure logging
 import logging
 import os
 import time  # Added for timestamp in screenshot filenames
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import nest_asyncio
 from playwright.async_api import (
@@ -14,9 +15,6 @@ from playwright.async_api import (
     Page,
     Playwright,
     async_playwright,
-)
-from playwright.async_api import (
-    Error as PlaywrightError,
 )
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
@@ -28,24 +26,211 @@ from strands import tool
 
 from strands_tools.utils.user_input import get_user_input
 
-# Only configure this module's logger, not the root logger
-enable_debug = os.getenv("ENABLE_DEBUG_BROWSER_LOGS", "false").lower() == "true"
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG if enable_debug else logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
-logger.propagate = False
 
 console = Console()
 
 # Global browser manager instance
 _playwright_manager = None
 
-# Apply nested event loop support
-nest_asyncio.apply()
+
+class BrowserApiMethods:
+    # Api Method Calls
+    async def navigate(page: Page, url: str):
+        try:
+            await page.goto(url)
+            await page.wait_for_load_state("networkidle")
+            return f"Navigated to {url}"
+        except Exception as e:
+            error_str = str(e)
+            if "ERR_NAME_NOT_RESOLVED" in error_str:
+                raise ValueError(
+                    f"Could not resolve domain '{url}'. The website might not exist or a network connectivity issue."
+                ) from e
+            elif "ERR_CONNECTION_REFUSED" in error_str:
+                raise ValueError(
+                    f"Connection refused for '{url}'. The server might be down or blocking requests."
+                ) from e
+            elif "ERR_CONNECTION_TIMED_OUT" in error_str:
+                raise ValueError(f"Connection timed out for '{url}'. The server might be slow or unreachable.") from e
+            elif "ERR_SSL_PROTOCOL_ERROR" in error_str:
+                raise ValueError(
+                    f"SSL/TLS error when connecting to '{url}'. The site might have an invalid or expired certificate."
+                ) from e
+            elif "ERR_CERT_" in error_str:
+                raise ValueError(
+                    f"Certificate error when connecting to '{url}'. The site's security certificate might be invalid."
+                ) from e
+            else:
+                raise
+
+    async def click(page: Page, selector: str):
+        await page.click(selector)
+        return f"Clicked element: {selector}"
+
+    async def type(page: Page, selector: str, text: str):
+        await page.fill(selector, text)
+        return f"Typed '{text}' into {selector}"
+
+    async def evaluate(page: Page, script: str):
+        result = await page.evaluate(script)
+        return f"Evaluation result: {result}"
+
+    async def press_key(page: Page, key: str):
+        await page.keyboard.press(key)
+        return f"Pressed key: {key}"
+
+    async def get_text(page: Page, selector: str):
+        text = await page.text_content(selector)
+        return f"Text content: {text}"
+
+    async def get_html(page: Page, selector: str = None):
+        if not selector:
+            result = await page.content()
+        else:
+            try:
+                await page.wait_for_selector(selector, timeout=5000)
+                result = await page.inner_html(selector)
+            except PlaywrightTimeoutError as e:
+                raise ValueError(
+                    f"Element with selector '{selector}' not found on the page. Please verify the selector is correct."
+                ) from e
+        return (result[:1000] + "..." if len(result) > 1000 else result,)
+
+    async def screenshot(page: Page, path: str = None):
+        """Take a screenshot with configurable path from environment variable"""
+        screenshots_dir = os.getenv("STRANDS_BROWSER_SCREENSHOTS_DIR", "screenshots")
+        os.makedirs(screenshots_dir, exist_ok=True)  # Ensure directory exists
+
+        if not path:
+            # Generate default filename with timestamp if no path provided
+            filename = f"screenshot_{int(time.time())}.png"
+            path = os.path.join(screenshots_dir, filename)
+        elif not os.path.isabs(path):
+            # If relative path provided, make it relative to screenshots directory
+            path = os.path.join(screenshots_dir, path)
+
+        await page.screenshot(path=path)
+        return f"Screenshot saved as {path}"
+
+    async def refresh(page: Page):
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        return "Page refreshed"
+
+    async def back(page: Page):
+        page.go_back()
+        page.wait_for_load_state("networkidle")
+        return "Navigated back"
+
+    async def forward(page: Page):
+        page.go_forward()
+        page.wait_for_load_state("networkidle")
+        return "Navigated forward"
+
+    async def new_tab(page: Page, browser_manager, tab_id: str = None):
+        if tab_id is None:
+            tab_id = f"tab_{len(browser_manager._tabs) + 1}"
+
+        if tab_id in browser_manager._tabs:
+            return f"Error: Tab with ID {tab_id} already exists"
+
+        new_page = await browser_manager._context.new_page()
+        browser_manager._tabs[tab_id] = new_page
+
+        # Switch to the new tab
+        await BrowserApiMethods.switch_tab(new_page, browser_manager, tab_id)
+
+        return f"Created new tab with ID: {tab_id}"
+
+    async def switch_tab(page: Page, browser_manager, tab_id: str):
+        if not tab_id:
+            tab_info = await BrowserApiMethods._get_tab_info_for_logs(browser_manager)
+            error_msg = f"tab_id is required for switch_tab action. {tab_info}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        if tab_id not in browser_manager._tabs:
+            tab_info = await BrowserApiMethods._get_tab_info_for_logs(browser_manager)
+            error_msg = f"Tab with ID '{tab_id}' not found. {tab_info}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        browser_manager._page = browser_manager._tabs[tab_id]
+        browser_manager._cdp_client = await browser_manager._page.context.new_cdp_session(browser_manager._page)
+        browser_manager._active_tab_id = tab_id
+
+        # Use CDP to bring the tab to the foreground
+        try:
+            await browser_manager._cdp_client.send("Page.bringToFront")
+            logger.info(f"Successfully switched to tab '{tab_id}' and brought it to the foreground")
+        except Exception as e:
+            logger.warning(f"Failed to bring tab '{tab_id}' to foreground: {str(e)}")
+
+        return f"Switched to tab: {tab_id}"
+
+    async def close_tab(page: Page, browser_manager, tab_id: str = None):
+        if not tab_id:
+            tab_id = browser_manager._active_tab_id
+
+        if tab_id not in browser_manager._tabs:
+            raise ValueError(f"Tab with ID '{tab_id}' not found. Available tabs: {list(browser_manager._tabs.keys())}")
+
+        # Close the tab
+        await browser_manager._tabs[tab_id].close()
+
+        # Remove from tracking
+        del browser_manager._tabs[tab_id]
+
+        # If we closed the active tab, switch to another tab if available
+        if tab_id == browser_manager._active_tab_id:
+            if browser_manager._tabs:
+                next_tab_id = next(iter(browser_manager._tabs.keys()))
+                await BrowserApiMethods.switch_tab(page, browser_manager, next_tab_id)
+            else:
+                browser_manager._page = None
+                browser_manager._cdp_client = None
+                browser_manager._active_tab_id = None
+
+        logger.info(f"Successfully closed tab '{tab_id}'")
+        return f"Closed tab: {tab_id}"
+
+    async def list_tabs(page: Page, browser_manager):
+        tabs = await BrowserApiMethods._get_tab_info_for_logs(browser_manager)
+        return json.dumps(tabs, indent=2)
+
+    async def get_cookies(page: Page):
+        cookies = await page.context.cookies()
+        return json.dumps(cookies, indent=2)
+
+    async def set_cookies(page: Page, cookies: List[Dict]):
+        await page.context.add_cookies(cookies)
+        return "Cookies set successfully"
+
+    async def network_intercept(page: Page, pattern: str):
+        await page.route(pattern, lambda route: route.continue_())
+        return f"Network interception set for {pattern}"
+
+    async def execute_cdp(page: Page, method: str, params: Dict = None):
+        cdp_client = await page.context.new_cdp_session(page)
+        result = await cdp_client.send(method, params or {})
+        return json.dumps(result, indent=2)
+
+    async def close(page: Page, browser_manager):
+        await browser_manager.cleanup()
+        return "Browser closed"
+
+    # Api Helper Functions
+    async def _get_tab_info_for_logs(self):
+        """Get a summary of current tabs for error messages"""
+        tabs = {}
+        for tab_id, page in self._tabs.items():
+            try:
+                is_active = tab_id == self._active_tab_id
+                tabs[tab_id] = {"url": page.url, "active": is_active}
+            except (AttributeError, ConnectionError, Exception) as e:
+                tabs[tab_id] = {"error": f"Could not retrieve tab info: {str(e)}"}
+        return tabs
 
 
 # Browser manager class for handling browser interactions
@@ -62,149 +247,33 @@ class BrowserManager:
         self._active_tab_id = None  # Currently active tab ID
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        self.action_configs = {
-            "navigate": {
-                "method": self._safe_navigation,
-                "required_args": ["page", "url"],
-                "required_params": [("url", str)],
-                "post_action": lambda page: page.wait_for_load_state("networkidle"),
-                "result_template": "Navigated to {url}",
-            },
-            "click": {
-                "method": lambda page, selector: page.click(selector),
-                "required_args": ["page", "selector"],
-                "required_params": [("selector", str)],
-                "result_template": "Clicked {selector}",
-            },
-            "type": {
-                "method": lambda page, selector, text: page.fill(selector, text),
-                "required_args": ["page", "selector", "text"],
-                "required_params": [("selector", str), ("text", str)],
-                "result_template": "Typed '{text}' into {selector}",
-            },
-            "evaluate": {
-                "method": lambda page, script: page.evaluate(script),
-                "required_args": ["page", "script"],
-                "required_params": [("script", str)],
-                "result_template": "Evaluation result: {result}",
-            },
-            "press_key": {
-                "method": lambda page, key: page.keyboard.press(key),
-                "required_args": ["page", "key"],
-                "required_params": [("key", str)],
-                "result_template": "Pressed key: {key}",
-            },
-            "get_text": {
-                "method": lambda page, selector: page.text_content(selector),
-                "required_args": ["page", "selector"],
-                "required_params": [("selector", str)],
-                "post_process": lambda result: result,
-                "result_template": "Text content: {result}",
-            },
-            "get_html": {
-                "method": self._get_html_content,
-                "required_args": ["page", "selector"],
-                "required_params": [],
-                "post_process": lambda result: result[:1000] + "..." if len(result) > 1000 else result,
-                "result_template": "HTML content: {result}",
-            },
-            "refresh": {
-                "method": lambda page: page.reload(),
-                "required_args": ["page"],
-                "required_params": [],
-                "post_action": lambda page: page.wait_for_load_state("networkidle"),
-                "result_template": "Page refreshed",
-            },
-            "back": {
-                "method": lambda page: page.go_back(),
-                "required_args": ["page"],
-                "required_params": [],
-                "post_action": lambda page: page.wait_for_load_state("networkidle"),
-                "result_template": "Navigated back",
-            },
-            "forward": {
-                "method": lambda page: page.go_forward(),
-                "required_args": ["page"],
-                "required_params": [],
-                "post_action": lambda page: page.wait_for_load_state("networkidle"),
-                "result_template": "Navigated forward",
-            },
-            "screenshot": {
-                "method": lambda page, args: self._take_screenshot(page, args),
-                "required_args": ["page", "args"],
-                "required_params": [],
-                "result_template": "Screenshot saved as {path}",
-            },
-            "new_tab": {
-                "method": lambda tab_id: self._create_new_tab(tab_id),
-                "required_args": ["tab_id"],
-                "required_params": [],
-                "result_template": "New tab created with ID: {result}",
-            },
-            "switch_tab": {
-                "method": lambda tab_id: self._switch_to_tab(tab_id),
-                "required_args": ["tab_id"],
-                "required_params": [("tab_id", str)],
-                "result_template": "Switched to tab: {tab_id}",
-            },
-            "close_tab": {
-                "method": lambda args: self._close_tab_by_id(args.get("tab_id", self._active_tab_id)),
-                "required_args": ["args"],
-                "required_params": [],
-                "result_template": "Tab closed successfully",
-            },
-            "list_tabs": {
-                "method": lambda: self._list_tabs(),
-                "required_args": [],
-                "required_params": [],
-                "post_process": lambda result: json.dumps(result, indent=2),
-                "result_template": "Tabs: {result}",
-            },
-            "get_cookies": {
-                "method": lambda: self._context.cookies(),
-                "required_args": [],
-                "required_params": [],
-                "post_process": lambda result: json.dumps(result, indent=2),
-                "result_template": "Cookies: {result}",
-            },
-            "set_cookies": {
-                "method": lambda args: self._context.add_cookies(args.get("cookies", [])),
-                "required_args": ["args"],
-                "required_params": [("cookies", list)],
-                "result_template": "Cookies set successfully",
-            },
-            "network_intercept": {
-                "method": lambda page, args: page.route(args.get("pattern", "*"), lambda route: route.continue_()),
-                "required_args": ["page", "args"],
-                "required_params": [],
-                "result_template": "Network interception set for {pattern}",
-            },
-            "execute_cdp": {
-                "method": lambda args: self._cdp_client.send(args["method"], args.get("params", {})),
-                "required_args": ["args"],
-                "required_params": [("method", str)],
-                "post_process": lambda result: json.dumps(result, indent=2),
-                "result_template": "CDP {method} result: {result}",
-            },
-            "close": {
-                "method": lambda: self.cleanup(),
-                "required_args": [],
-                "required_params": [],
-                "result_template": "Browser closed",
-            },
-        }
+        self._actions = self._load_actions()
+        self._nest_asyncio_applied = False  # Flag to track if nest_asyncio has been applied
+
+    def _load_actions(self) -> Dict[str, Callable]:
+        actions = {}
+        for name, method in inspect.getmembers(BrowserApiMethods, predicate=inspect.isfunction):
+            if not name.startswith("_"):  # Exclude private methods
+                actions[name] = method
+        return actions
 
     async def ensure_browser(self, launch_options=None, context_options=None):
         """Initialize browser if not already running."""
         logger.debug("Ensuring browser is running...")
 
+        # Apply nest_asyncio lazily, only when browser is actually needed and only once
+        if not self._nest_asyncio_applied:
+            nest_asyncio.apply()
+            self._nest_asyncio_applied = True
+            logger.debug("Applied nest_asyncio for nested event loop support")
+
         # Ensure required directories exist
-        user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation"))
-        screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
-        headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
-        width = int(os.getenv("BROWSER_WIDTH", "1280"))
-        height = int(os.getenv("BROWSER_HEIGHT", "800"))
-        os.makedirs(screenshots_dir, exist_ok=True)
+        user_data_dir = os.getenv(
+            "STRANDS_BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation")
+        )
+        headless = os.getenv("STRANDS_BROWSER_HEADLESS", "false").lower() == "true"
+        width = int(os.getenv("STRANDS_BROWSER_WIDTH", "1280"))
+        height = int(os.getenv("STRANDS_BROWSER_HEIGHT", "800"))
         os.makedirs(user_data_dir, exist_ok=True)
 
         try:
@@ -347,389 +416,85 @@ class BrowserManager:
         return fixed_script
 
     async def handle_action(self, action: str, **kwargs) -> List[Dict[str, str]]:
-        try:
-            # Extract args here at the top level so it's available for retry_action
-            args = kwargs.get("args", {})
-
-            async def action_operation():
-                result = []
-                launch_options = args.get("launchOptions")
-                page, cdp = await self.ensure_browser(
-                    launch_options=launch_options,
-                )
-
-                # Actions that are defined in BrowserManager actions config
-                if action in self.action_configs:
-                    result = await self._generic_action_handler(action, page, args)
-                    if not result:
-                        result = [{"text": f"{action} completed successfully"}]
-                    # Only log success if no exceptions were raised
-                    logger.debug(f"Action '{action}' completed successfully")
-                    return result
-                else:
-                    # Try to execute as CDP command directly
-                    try:
-                        logger.info(f"Trying direct CDP command: {action}")
-                        cdp_result = await cdp.send(action, args)
-                        result.append({"text": f"CDP command result: {json.dumps(cdp_result, indent=2)}"})
-                        logger.debug(f"Action '{action}' completed successfully")
-                    except Exception as e:
-                        return [{"text": f"Error: Unknown action or CDP command failed: {str(e)}"}]
-
-                # Handle wait_for if specified
-                if kwargs.get("wait_for"):
-                    await page.wait_for_timeout(kwargs["wait_for"])
-
-                return result
-
-            result = await self.retry_action(action_operation, action_name=action, args=args)
-
-            # Check if result is already a list of dictionaries with text entries
-            # (which happens when retry_action catches non-retryable errors)
-            if isinstance(result, list) and all(isinstance(item, dict) and "text" in item for item in result):
-                return result
-
-            return result
-        except Exception as e:
-            logger.error(f"Error executing action '{action}': {str(e)}")
-            if "ERR_SOCKET_NOT_CONNECTED" in str(e):  # Adding special case for when network connection issues
-                return [{"text": "Error: Connection issue detected. Please verify network connectivity and try again."}]
-            if "browser has been closed" in str(e) or "browser disconnected" in str(e):
-                await self.cleanup()
-            return [{"text": f"Error: {str(e)}"}]
-
-    async def retry_action(self, action_func, action_name=None, args=None):
-        """
-        Retry an async operation with exponential backoff.
-
-        Args:
-            action_func: Async function to execute
-            max_retries: Maximum number of retry attempts
-            delay: Initial delay between retries (doubles with each attempt)
-            action_name: Name of the action being retried
-            args: Arguments passed to the action (to allow fixing JavaScript for evaluate action)
-        """
-        last_exception = None
         max_retries = int(os.getenv("BROWSER_MAX_RETRIES", 3))
-        retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", "1"))
+        retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", 1))
+
+        async def execute_action():
+            if action not in self._actions:
+                return [{"text": f"Error: Unknown action {action}"}]
+
+            action_method = self._actions[action]
+
+            # Validate parameters
+            sig = inspect.signature(action_method)
+            required_params = [p for p in sig.parameters if sig.parameters[p].default == inspect.Parameter.empty]
+            for param in required_params:
+                if param not in args and param not in ["page", "browser_manager"]:
+                    return [{"text": f"Error: Missing required parameter: {param}"}]
+
+            # Execute action
+            page, _ = await self.ensure_browser(args.get("launchOptions"))
+
+            # Include self (BrowserManager instance) in the arguments
+            action_args = {k: v for k, v in args.items() if k in sig.parameters}
+            action_args["page"] = page
+            if "browser_manager" in sig.parameters:
+                action_args["browser_manager"] = self
+
+            result = await action_method(**action_args)
+
+            return [{"text": str(result)}]
+
+        args = kwargs.get("args", {})
 
         for attempt in range(max_retries):
             try:
-                return await action_func()
+                return await execute_action()
             except Exception as e:
-                last_exception = e
-                error_msg = str(e)
+                if attempt == max_retries - 1:  # Last attempt
+                    logger.error(f"Action '{action}' failed after {max_retries} attempts: {str(e)}")
+                    return [{"text": f"Error: {str(e)}"}]
 
-                # Check for non-retryable errors (DNS, connection refused, etc.)
-                non_retryable_errors = [
-                    "Could not resolve domain",
-                    "Connection refused",
-                    "Connection timed out",
-                    "SSL/TLS error",
-                    "Certificate error",
-                    "Protocol error (Page.navigate): Cannot navigate to invalid URL",
-                ]
+                logger.warning(f"Action '{action}' attempt {attempt + 1} failed: {str(e)}")
 
-                # If this is a non-retryable error, don't retry and return the error message
-                if any(msg in error_msg for msg in non_retryable_errors):
-                    return [{"text": f"Error: {error_msg}"}]
+                # Check for non-retryable errors
+                if any(
+                    err in str(e).lower()
+                    for err in [
+                        "could not resolve domain",
+                        "connection refused",
+                        "ssl/tls error",
+                        "certificate error",
+                        "protocol error (page.navigate): cannot navigate to invalid url",
+                    ]
+                ):
+                    logger.error(f"Non-retryable error encountered: {str(e)}")
+                    return [{"text": f"Error: {str(e)}"}]
 
-                # Log every failed attempt
-                logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {error_msg}")
+                # If it's the evaluate action and there's a JavaScript error, try to fix it
+                if action == "evaluate" and "script" in args:
+                    error_types = [
+                        "SyntaxError",
+                        "ReferenceError",
+                        "TypeError",
+                        "Illegal return",
+                        "Unexpected token",
+                        "Unexpected end",
+                        "is not defined",
+                    ]
+                    if any(err_type in str(e) for err_type in error_types):
+                        fixed_script = await self._fix_javascript_syntax(args["script"], str(e))
+                        if fixed_script:
+                            args["script"] = fixed_script
+                            logger.warning(f"Attempting retry with fixed JavaScript: {fixed_script}")
+                            continue
 
-                # Only process retry if this attempt wasn't the last
-                if attempt < max_retries - 1:
-                    wait_time = retry_delay * (2**attempt)
-
-                    # Handle JavaScript errors more broadly - not just syntax errors
-                    if action_name == "evaluate" and args and "script" in args:
-                        error_types = [
-                            "SyntaxError",
-                            "ReferenceError",
-                            "TypeError",
-                            "Illegal return",
-                            "Unexpected token",
-                            "Unexpected end",
-                            "is not defined",
-                        ]
-                        if any(err_type in error_msg for err_type in error_types):
-                            # Try to fix common JavaScript errors using our helper
-                            script = args["script"]
-                            fixed_script = await self._fix_javascript_syntax(script, error_msg)
-
-                            if fixed_script:
-                                logger.warning("Detected JavaScript error. Trying with modified script.")
-                                # Update args for next attempt
-                                args["script"] = fixed_script
-                                # No need for delay on retrying with fixed script
-                                logger.warning("Attempting retry with fixed JavaScript")
-                                continue
-
-                    logger.warning(f"Retrying in {wait_time}s")
-                    await asyncio.sleep(wait_time)
-
-        logger.error(f"Action failed after {max_retries} attempts: {str(last_exception)}")
-        raise last_exception
-
-    async def _generic_action_handler(self, action: str, page, args: dict) -> List[Dict[str, str]]:
-        """
-        Generic handler for actions defined in action_configs.
-
-        Args:
-            action: The action to perform
-            page: The Playwright page object
-            args: Dictionary of arguments for the action
-
-        Returns:
-            List of dictionaries with text results
-
-        Raises:
-            ValueError: If required parameters are missing
-        """
-
-        if args is None:
-            raise ValueError(f"Args dictionary is required for {action} action")
-
-        if action not in self.action_configs:
-            raise ValueError(f"Unknown action: {action}")
-
-        config = self.action_configs[action]
-
-        # Validate required parameters
-        for param_name, _ in config.get("required_params", []):
-            param_value = args.get(param_name)
-            if not param_value:
-                # Special handling for specific actions
-                if action == "switch_tab" and param_name == "tab_id":
-                    tab_info = await self._get_tab_info_for_logs()
-                    error_msg = f"Error: '{param_name}' is required for {action} action. {tab_info}"
-                else:
-                    error_msg = f"Error: '{param_name}' is required for {action} action"
-
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-
-        try:
-            # Prepare arguments for the action method
-            method_args = []
-            for arg_name in config.get("required_args", []):
-                if arg_name == "page":
-                    method_args.append(page)
-                elif arg_name == "selector" and action == "get_html":
-                    # For get_html, selector is optional - default to None for full page content
-                    method_args.append(args.get(arg_name))
-                elif arg_name not in args:
-                    raise ValueError(f"Required argument '{arg_name}' is missing for {action} action")
-                else:
-                    method_args.append(args[arg_name])
-
-            result = await config["method"](*method_args)
-
-            # Execute any post-action steps
-            if "post_action" in config:
-                await config["post_action"](page)
-
-            # Apply post-processing to the result if needed
-            if "post_process" in config and result is not None:
-                processed_result = config["post_process"](result)
-                args.update({"result": processed_result})
-            elif result is not None:
-                args.update({"result": result})
-
-            # Format the result message using the template
-            template = config.get("result_template", f"{action} completed")
-            formatted_message = template.format(**args)
-
-            # Always return a list containing a dict with text key
-            return [{"text": formatted_message}]
-        except PlaywrightTimeoutError as e:
-            logger.error(f"Timeout error in {action}: {str(e)}")
-            raise ValueError(
-                f"Action '{action}' timed out. The element might not be available or the page is still loading."
-            ) from e
-        except PlaywrightError as e:
-            logger.error(f"Playwright error in {action}: {str(e)}")
-            # Handle specific Playwright errors
-            error_msg = str(e).lower()
-            if "element not found" in error_msg or "no such element" in error_msg:
-                raise ValueError(
-                    f"Element not found for action '{action}'. Please verify the selector is correct."
-                ) from e
-            elif "element not visible" in error_msg or "not visible" in error_msg:
-                raise ValueError(
-                    f"Element is not visible for action '{action}'. "
-                    f"The element might be hidden or not yet rendered."
-                ) from e
-            elif "element not interactable" in error_msg or "not interactable" in error_msg:
-                raise ValueError(
-                    f"Element is not interactable for action '{action}'. "
-                    f"The element might be disabled or covered by another element."
-                ) from e
-            else:
-                raise ValueError(f"Playwright error in action '{action}': {str(e)}") from e
-        except Exception as e:
-            logger.error(f"Error in generic action handler for {action}: {str(e)}")
-            # Don't log action success here, and make sure to raise the exception
-            # so the retry mechanism works properly
-            raise
-
-    async def _create_new_tab(self, tab_id=None):
-        """Create a new tab and track it with the given ID"""
-        if tab_id is None:
-            tab_id = f"tab_{len(self._tabs) + 1}"
-
-        # Check if tab_id already exists
-        if tab_id in self._tabs:
-            return [{"text": f"Error: Tab with ID {tab_id} already exists"}]
-
-        new_page = await self._context.new_page()
-        self._tabs[tab_id] = new_page
-
-        # Switch to the new tab
-        await self._switch_to_tab(tab_id)
-
-        return tab_id
-
-    async def _switch_to_tab(self, tab_id):
-        """Switch to the tab with the given ID"""
-        if not tab_id:
-            tab_info = await self._get_tab_info_for_logs()
-            error_msg = f"tab_id is required for switch_tab action. {tab_info}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        if tab_id not in self._tabs:
-            tab_info = await self._get_tab_info_for_logs()
-            error_msg = f"Tab with ID '{tab_id}' not found. {tab_info}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        self._page = self._tabs[tab_id]
-        self._cdp_client = await self._page.context.new_cdp_session(self._page)
-        self._active_tab_id = tab_id
-
-        # Use CDP to bring the tab to the foreground
-        try:
-            await self._cdp_client.send("Page.bringToFront")
-            logger.info(f"Successfully switched to tab '{tab_id}' and brought it to the foreground")
-        except Exception as e:
-            logger.warning(f"Failed to bring tab '{tab_id}' to foreground: {str(e)}")
-
-        return tab_id
-
-    async def _close_tab_by_id(self, tab_id):
-        """Close the tab with the given ID"""
-        if not tab_id:
-            raise ValueError("tab_id is required for close_tab action")
-
-        if tab_id not in self._tabs:
-            raise ValueError(f"Tab with ID '{tab_id}' not found. Available tabs: {list(self._tabs.keys())}")
-
-        # Close the tab
-        await self._tabs[tab_id].close()
-
-        # Remove from tracking
-        del self._tabs[tab_id]
-
-        # If we closed the active tab, switch to another tab if available
-        if tab_id == self._active_tab_id:
-            if self._tabs:
-                next_tab_id = next(iter(self._tabs.keys()))
-                await self._switch_to_tab(next_tab_id)
-            else:
-                self._page = None
-                self._cdp_client = None
-                self._active_tab_id = None
-
-        logger.info(f"Successfully closed tab '{tab_id}'")
-        return True
-
-    async def _get_tab_info_for_logs(self):
-        """Get a summary of current tabs for error messages"""
-        tabs = {}
-        for tab_id, page in self._tabs.items():
-            try:
-                is_active = tab_id == self._active_tab_id
-                tabs[tab_id] = {"url": page.url, "active": is_active}
-            except (AttributeError, ConnectionError, Exception) as e:
-                tabs[tab_id] = {"error": f"Could not retrieve tab info: {str(e)}"}
-
-        return f"Available tabs: {json.dumps(tabs)}"
-
-    async def _safe_navigation(self, page, url):
-        try:
-            return await page.goto(url)
-        except Exception as e:
-            error_str = str(e)
-            if "ERR_NAME_NOT_RESOLVED" in error_str:
-                raise ValueError(
-                    f"Could not resolve domain '{url}'. The website might not exist or a network connectivity issue."
-                ) from e
-            elif "ERR_CONNECTION_REFUSED" in error_str:
-                raise ValueError(
-                    f"Connection refused for '{url}'. The server might be down or blocking requests."
-                ) from e
-            elif "ERR_CONNECTION_TIMED_OUT" in error_str:
-                raise ValueError(f"Connection timed out for '{url}'. The server might be slow or unreachable.") from e
-            elif "ERR_SSL_PROTOCOL_ERROR" in error_str:
-                raise ValueError(
-                    f"SSL/TLS error when connecting to '{url}'. The site might have an invalid or expired certificate."
-                ) from e
-            elif "ERR_CERT_" in error_str:
-                raise ValueError(
-                    f"Certificate error when connecting to '{url}'. The site's security certificate might be invalid."
-                ) from e
-            else:
-                raise
-
-    async def _list_tabs(self):
-        """Return a list of all tracked tabs"""
-        tab_info = {}
-        for tab_id, page in self._tabs.items():
-            try:
-                url = page.url
-                title = await page.title()
-                is_active = tab_id == self._active_tab_id
-                tab_info[tab_id] = {"url": url, "title": title, "active": is_active}
-            except (ConnectionError, RuntimeError, Exception) as e:
-                tab_info[tab_id] = {
-                    "url": "Error retrieving URL",
-                    "title": f"Error: {str(e)}",
-                    "active": tab_id == self._active_tab_id,
-                }
-        return tab_info
-
-    async def _get_html_content(self, page, selector):
-        """Get HTML content with proper selector handling"""
-        if not selector:
-            return await page.content()
-        else:
-            try:
-                await page.wait_for_selector(selector, timeout=5000)
-                return await page.inner_html(selector)
-            except PlaywrightTimeoutError as e:
-                raise ValueError(
-                    f"Element with selector '{selector}' not found on the page. Please verify the selector is correct."
-                ) from e
-
-    async def _take_screenshot(self, page, args):
-        """Take a screenshot and return the path for template formatting"""
-        screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
-        screenshot_path = args.get("path", os.path.join(screenshots_dir, f"screenshot_{int(time.time())}.png"))
-        await page.screenshot(path=screenshot_path)
-        args["path"] = screenshot_path
-        return screenshot_path
+                # Exponential backoff
+                await asyncio.sleep(retry_delay * (2**attempt))
 
 
 # Initialize global browser manager
 _playwright_manager = BrowserManager()
-
-
-def validate_required_param(param_value, param_name, action_name):
-    """Validate that a required parameter is provided"""
-    if not param_value:
-        return [{"text": f"Error: {param_name} required for {action_name}"}]
-    return None
 
 
 @tool
