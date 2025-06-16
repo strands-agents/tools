@@ -92,46 +92,18 @@ class BrowserManager:
         return self._page, self._cdp_client
 
     async def cleanup(self):
-        """Clean up all browser resources."""
-        logger.info("Starting browser cleanup...")
-
         cleanup_errors = []
 
-        if self._page:
-            try:
-                await self._page.close()
-                logger.debug("Page closed successfully")
-            except Exception as e:
-                error_msg = f"Error closing page: {str(e)}"
-                logger.warning(error_msg)
-                cleanup_errors.append(error_msg)
-
-        if self._context:
-            try:
-                await self._context.close()
-                logger.debug("Context closed successfully")
-            except Exception as e:
-                error_msg = f"Error closing context: {str(e)}"
-                logger.warning(error_msg)
-                cleanup_errors.append(error_msg)
-
-        if self._browser:
-            try:
-                await self._browser.close()
-                logger.debug("Browser closed successfully")
-            except Exception as e:
-                error_msg = f"Error closing browser: {str(e)}"
-                logger.warning(error_msg)
-                cleanup_errors.append(error_msg)
-
-        if self._playwright:
-            try:
-                await self._playwright.stop()
-                logger.debug("Playwright stopped successfully")
-            except Exception as e:
-                error_msg = f"Error stopping playwright: {str(e)}"
-                logger.warning(error_msg)
-                cleanup_errors.append(error_msg)
+        for resource in ["_page", "_context", "_browser", "_playwright"]:
+            attr = getattr(self, resource)
+            if attr:
+                try:
+                    if resource == "_playwright":
+                        await attr.stop()
+                    else:
+                        await attr.close()
+                except Exception as e:
+                    cleanup_errors.append(f"Error closing {resource}: {str(e)}")
 
         self._page = None
         self._context = None
@@ -140,7 +112,6 @@ class BrowserManager:
         self._cdp_client = None
 
         if cleanup_errors:
-            logger.warning(f"Cleanup completed with {len(cleanup_errors)} errors:")
             for error in cleanup_errors:
                 logger.warning(error)
         else:
@@ -248,7 +219,7 @@ class BrowserManager:
         """Handle browser connection and initialization."""
         logger.debug("Handling connect action")
 
-        await self.cleanup()  # cleanup existing browser
+        await self.cleanup()
         page, cdp = await self.ensure_browser(launch_options=launch_options)
 
         result = [{"text": "Successfully connected to browser"}]
@@ -398,8 +369,6 @@ class BrowserManager:
 # Initialize global browser manager
 _playwright_manager = BrowserManager()
 
-# Some helper functions used throughout the code
-
 
 def validate_required_param(param_value, param_name, action_name):
     """Validate that a required parameter is provided"""
@@ -410,7 +379,7 @@ def validate_required_param(param_value, param_name, action_name):
 
 @tool
 def use_browser(
-    url: str = None,  # set a default value
+    url: str = None,
     wait_time: int = 1,
     action: str = None,
     new_tab: bool = False,
@@ -421,24 +390,46 @@ def use_browser(
     cdp_params: dict = None,
     launch_options: dict = None,
     actions: list = None,
-    key: str = None,  # Add key parameter for press_key action
+    key: str = None,
 ) -> str:
     """
     Perform browser operations using Playwright.
 
     Important Usage Guidelines:
+    - For complex operations requiring multiple steps, use the 'actions' parameter to sequence multiple actions together
     - For clicking or typing into elements, first use get_html or get_text to find the correct selector
     - If initial selector search fails, use evaluate to parse the HTML contents
     - For web searches:
-    1. Start with Google (https://www.google.com)
-    2. Use get_html/get_text to find search box
-    3. If CAPTCHA appears, fallback to DuckDuckGo (https://duckduckgo.com)
+        1. Start with Google (https://www.google.com)
+        2. Use get_html/get_text to find search box
+        3. If CAPTCHA appears, fallback to DuckDuckGo (https://duckduckgo.com)
+
+    Common Multi-Action Patterns:
+    1. Form filling:
+        actions=[
+            {"action": "navigate", "args": {"url": "form_url"}},
+            {"action": "type", "args": {"selector": "#input1", "text": "value1"}},
+            {"action": "type", "args": {"selector": "#input2", "text": "value2"}},
+            {"action": "click", "args": {"selector": "submit_button"}}
+        ]
+    2. Web scraping:
+        actions=[
+            {"action": "navigate", "args": {"url": "target_url"}},
+            {"action": "get_html", "args": {"selector": "main_content"}},
+            {"action": "click", "args": {"selector": "next_page"}},
+            {"action": "get_html", "args": {"selector": "main_content"}}
+        ]
 
     Args:
-        action: The action to perform: 'back', 'forward', 'refresh', 'new_tab', 'close_tab',
+        action: Single action to perform (use 'actions' parameter for multiple steps):
+            'back', 'forward', 'refresh', 'new_tab', 'close_tab',
             'navigate', 'click', 'type', 'evaluate', 'get_text', 'get_html',
-            'get_cookies', 'set_cookies', 'network_intercept', 'execute_cdp', 'close', 'connect', 'screenshot',
-            'press_key'.
+            'get_cookies', 'set_cookies', 'network_intercept', 'execute_cdp',
+            'close', 'connect', 'screenshot', 'press_key'.
+        actions: List of sequential actions to perform. Each action is a dict with:
+            - action: The action name (same as above)
+            - args: Dict of arguments for the action
+            - wait_for: Optional wait time after action in milliseconds
         url: The URL to navigate to (required only when action is 'navigate')
         wait_time: Time to wait after action in seconds
         selector: Element selector for interactions
@@ -457,12 +448,23 @@ def use_browser(
             - userDataDir (str): Path to Chrome user data directory for persistent sessions
             - profileName (str): Name of the Chrome profile to use
             - persistentContext (bool): Whether to create a persistent browser context
-        actions: List of sequential actions to perform
         key: Key to press when using the press_key action
 
     Returns:
-    str: Message indicating the result of the operation and extracted content if requested.
+        str: Message indicating the result of the operation and extracted content if requested.
+
+    Examples:
+        # Single action
+        use_browser(action="navigate", url="https://example.com")
+
+        # Multiple actions
+        use_browser(actions=[
+            {"action": "navigate", "args": {"url": "https://example.com"}},
+            {"action": "type", "args": {"selector": "#search", "text": "query"}},
+            {"action": "click", "args": {"selector": "#submit"}}
+        ])
     """
+
     logger.info(f"use_browser tool called with action: {action}")
 
     if actions:
@@ -473,7 +475,6 @@ def use_browser(
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     if not strands_dev:
-        # Get user confirmation
         if actions:
             action_description = "multiple actions"
             action_list = [a.get("action") for a in actions if isinstance(a, dict) and "action" in a]
@@ -492,7 +493,6 @@ def use_browser(
                 user_input if user_input.strip() != "n" else get_user_input("Please provide a reason for cancellation:")
             )
             error_message = f"Python code execution cancelled by the user. Reason: {cancellation_reason}"
-
             return {
                 "status": "error",
                 "content": [{"text": error_message}],
@@ -500,40 +500,8 @@ def use_browser(
 
     logger.info(f"Tool parameters: {locals()}")
     try:
-        all_content = []
-
-        # Handle multiple actions case
-        if actions:
-            # Create a coroutine that runs all actions sequentially
-            async def run_all_actions():
-                results = []
-                for action_item in actions:
-                    action_name = action_item.get("action")
-                    action_args = action_item.get("args", {})
-                    action_selector = action_item.get("selector")
-                    action_wait_for = action_item.get("wait_for", wait_time * 1000 if wait_time else None)
-
-                    if launch_options:
-                        action_args["launchOptions"] = launch_options
-
-                    logger.info(f"Executing action: {action_name}")
-
-                    # Execute the action and collect results
-                    content = await _playwright_manager.handle_action(
-                        action=action_name,
-                        args=action_args,
-                        selector=action_selector,
-                        wait_for=action_wait_for,
-                    )
-                    results.extend(content)
-                return results
-
-            # Run all actions in a single event loop call
-            all_content = _playwright_manager._loop.run_until_complete(run_all_actions())
-            return "\n".join([item["text"] for item in all_content])
-
-        # Handle single action case
-        else:
+        # Convert single action to actions list format if not using actions parameter
+        if not actions and action:
             # Prepare args based on parameters
             args = {}
             if url:
@@ -553,19 +521,46 @@ def use_browser(
             if launch_options:
                 args["launchOptions"] = launch_options
 
-            # Execute the action
-            logger.info(f"calling action {action} to handle_action")
-            content = _playwright_manager._loop.run_until_complete(
-                _playwright_manager.handle_action(
-                    action=action, args=args, selector=selector, wait_for=wait_time * 1000 if wait_time else None
+            actions = [
+                {
+                    "action": action,
+                    "args": args,
+                    "selector": selector,
+                    "wait_for": wait_time * 1000 if wait_time else None,
+                }
+            ]
+
+        # Create a coroutine that runs all actions sequentially
+        async def run_all_actions():
+            results = []
+            for action_item in actions:
+                action_name = action_item.get("action")
+                action_args = action_item.get("args", {})
+                action_selector = action_item.get("selector")
+                action_wait_for = action_item.get("wait_for", wait_time * 1000 if wait_time else None)
+
+                if launch_options:
+                    action_args["launchOptions"] = launch_options
+
+                logger.info(f"Executing action: {action_name}")
+
+                # Execute the action and collect results
+                content = await _playwright_manager.handle_action(
+                    action=action_name,
+                    args=action_args,
+                    selector=action_selector,
+                    wait_for=action_wait_for,
                 )
-            )
-            all_content.extend(content)
-            return "\n".join([item["text"] for item in all_content])
+                results.extend(content)
+            return results
+
+        # Run all actions in a single event loop call
+        all_content = _playwright_manager._loop.run_until_complete(run_all_actions())
+        logger.debug(f"Results from run_until_complete: {all_content}")
+        return "\n".join([item["text"] for item in all_content])
 
     except Exception as e:
         logger.error(f"Error in use_browser: {str(e)}")
-        # Cleanup only if explicitly requested or non-persistent session
         logger.info("Cleaning up browser due to explicit request or error with non-persistent session")
         _playwright_manager._loop.run_until_complete(_playwright_manager.cleanup())
         return f"Error: {str(e)}"
