@@ -75,3 +75,22 @@ def test_shell_command_interactive_mode_cancel(mock_get_user_input):
     assert res["status"] == "error"
 
     assert "cancelled by user" in json.dumps(res.get("content", [])).lower(), "The cancellation message was not found."
+
+
+@patch("strands_tools.utils.user_input.get_user_input")
+def test_shell_interactive_with_bypass_consent(mock_get_user_input):
+    """Test that BYPASS_TOOL_CONSENT skips the prompt in interactive mode."""
+    # Ensure the session is interactive but consent is bypassed
+    with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false"}):
+        from strands_tools import shell
+
+        agent = Agent(tools=[shell])
+
+        res = agent.tool.shell(command="echo 'hello bypass'", non_interactive_mode=False)
+
+        # Assert that the user was NOT prompted
+        mock_get_user_input.assert_not_called()
+
+        # Assert that the command succeeded
+        assert res["status"] == "success"
+        assert "hello bypass" in str(res["content"])
