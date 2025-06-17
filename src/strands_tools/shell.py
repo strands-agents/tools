@@ -38,6 +38,13 @@ result = agent.tool.shell(
 # Execute commands in parallel
 result = agent.tool.shell(command=["task1", "task2"], parallel=True)
 ```
+
+Configuration:
+- STRANDS_NON_INTERACTIVE (environment variable): Set to "true" to run the tool
+  in a non-interactive mode, suppressing all user prompts for confirmation.
+- BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
+  user confirmation prompt, even in an otherwise interactive session.
+
 """
 
 import json
@@ -486,8 +493,9 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool.get("toolUseId", "default-id")
     tool_input = tool.get("input", {})
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
+    is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+    # Here we keep both doors open,but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
+    non_interactive_mode = is_strands_non_interactive or kwargs.get("non_interactive_mode", False)
 
     # Extract and validate parameters
     command_input = tool_input.get("command")

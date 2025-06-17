@@ -71,10 +71,22 @@ def test_shell_tool_direct(mock_get_user_input, mock_execute_commands):
     assert args[2] is False  # ignore_errors
 
 
+@patch("os.environ")
 @patch("strands_tools.shell.execute_commands")
 @patch("strands_tools.shell.get_user_input")
-def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands):
+def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands, mock_environ):
     """Test shell tool in non-interactive mode."""
+
+    # Mock execute_commands to return a successful result
+    def mock_env_get(key, default=""):
+        if key == "STRANDS_NON_INTERACTIVE":
+            return "true"
+        if key == "BYPASS_TOOL_CONSENT":
+            return "false"
+        return default
+
+    mock_environ.get.side_effect = mock_env_get
+
     # Mock execute_commands to return a successful result
     mock_execute_commands.return_value = [
         {
@@ -85,17 +97,14 @@ def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands):
             "status": "success",
         }
     ]
-
     # Create a tool use dictionary
     tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": "ls"}}
+    # Call the shell function
+    result = shell.shell(tool=tool_use)
 
-    # Call the shell function with non_interactive_mode=True
-    result = shell.shell(tool=tool_use, non_interactive_mode=True)
-
-    # Verify the result
     assert result["status"] == "success"
 
-    # Verify that get_user_input was not called (no confirmation needed)
+    # Verify that get_user_input was not called because the env var forces non-interactive mode
     mock_get_user_input.assert_not_called()
 
 
