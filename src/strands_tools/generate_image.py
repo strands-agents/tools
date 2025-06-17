@@ -170,7 +170,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         steps = tool_input.get("steps", 30)
 
         # Create a Bedrock Runtime client
-        client = boto3.client("bedrock-runtime", region_name="us-west-2")
+        client = boto3.client("bedrock-runtime", region_name="us-east-1")
 
         # Format the request payload
         native_request = {
