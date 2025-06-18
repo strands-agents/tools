@@ -140,13 +140,7 @@ TOOL_SPEC = {
                     "description": "Optional metadata to store with the memory",
                 },
             },
-            "required": ["action"],
-            "allOf": [
-                {
-                    "if": {"properties": {"action": {"enum": ["store", "list", "retrieve"]}}},
-                    "then": {"oneOf": [{"required": ["user_id"]}, {"required": ["agent_id"]}]},
-                }
-            ],
+            "required": ["action"]
         }
     },
 }
