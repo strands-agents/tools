@@ -102,8 +102,8 @@ TOOL_SPEC = {
         "- retrieve: Semantic search (requires user_id or agent_id or run_id)\n"
         "- delete: Delete memory\n"
         "- history: Get memory history\n\n"
-        "Note: Most operations require either user_id or agent_id or run_id to be specified. The tool will automatically "
-        "attempt to retrieve relevant memories when user_id or agent_id or run_id is available."
+        "Note: Most operations require either user_id or agent_id or run_id to be specified. The tool will "
+        "automatically attempt to retrieve relevant memories when user_id or agent_id or run_id is available."
     ),
     "inputSchema": {
         "json": {
@@ -136,14 +136,14 @@ TOOL_SPEC = {
                 },
                 "run_id": {
                     "type": "string",
-                    "description": "Run ID / Session ID for the memory operations (required for store, list, retrieve actions)",
+                    "description": "Run/Session ID for memory operations (required for store, list, retrieve actions)",
                 },
                 "metadata": {
                     "type": "object",
                     "description": "Optional metadata to store with the memory",
                 },
             },
-            "required": ["action"]
+            "required": ["action"],
         }
     },
 }
@@ -320,14 +320,18 @@ class Mem0ServiceClient:
         """Get a memory by ID."""
         return self.mem0.get(memory_id)
 
-    def list_memories(self, user_id: Optional[str] = None, agent_id: Optional[str] = None, run_id: Optional[str] = None):
+    def list_memories(
+        self, user_id: Optional[str] = None, agent_id: Optional[str] = None, run_id: Optional[str] = None
+    ):
         """List all memories for a user or agent."""
         if not user_id and not agent_id and not run_id:
             raise ValueError("Either user_id or agent_id or run_id must be provided")
 
         return self.mem0.get_all(user_id=user_id, agent_id=agent_id, run_id=run_id)
 
-    def search_memories(self, query: str, user_id: Optional[str] = None, agent_id: Optional[str] = None, run_id: Optional[str] = None):
+    def search_memories(
+        self, query: str, user_id: Optional[str] = None, agent_id: Optional[str] = None, run_id: Optional[str] = None
+    ):
         """Search memories using semantic search."""
         if not user_id and not agent_id and not run_id:
             raise ValueError("Either user_id or agent_id or run_id must be provided")
@@ -626,7 +630,9 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif action == "list":
-            memories = client.list_memories(tool_input.get("user_id"), tool_input.get("agent_id"), tool_input.get("run_id"))
+            memories = client.list_memories(
+                tool_input.get("user_id"), tool_input.get("agent_id"), tool_input.get("run_id")
+            )
             # Normalize to list
             results_list = memories if isinstance(memories, list) else memories.get("results", [])
             panel = format_list_response(results_list)
