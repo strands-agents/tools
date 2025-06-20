@@ -141,6 +141,8 @@ agent.tool.editor(command="view", path="script.py")
 
 ### Shell Commands
 
+*Note: `shell` does not work on Windows.*
+
 ```python
 from strands import Agent
 from strands_tools import shell
@@ -156,8 +158,6 @@ results = agent.tool.shell(command=["mkdir -p test_dir", "cd test_dir", "touch t
 # Execute commands with error handling
 agent.tool.shell(command="risky-command", ignore_errors=True)
 ```
-
-*Note: `shell` does not work on Windows.*
 
 ### HTTP Requests
 
@@ -186,6 +186,8 @@ response = agent.tool.http_request(
 
 ### Python Code Execution
 
+*Note: `python_repl` does not work on Windows.*
+
 ```python
 from strands import Agent
 from strands_tools import python_repl
@@ -203,8 +205,6 @@ processed = data.groupby('category').mean()
 processed.head()
 """)
 ```
-
-*Note: `python_repl` does not work on Windows.*
 
 ### Swarm Intelligence
 
