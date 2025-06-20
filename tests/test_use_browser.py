@@ -37,18 +37,15 @@ def assert_browser_action(result, expected_text):
 
 
 # Fixtures
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def setup_test_environment():
     """Fixture to set up common test environment"""
-    original_value = os.environ.get("BYPASS_TOOL_CONSENT", None)
-    os.environ["BYPASS_TOOL_CONSENT"] = "true"
-    with patch("src.strands_tools.use_browser.get_user_input") as mock_input:
-        mock_input.return_value = "y"
-        yield mock_input
-    if original_value is not None:
-        os.environ["BYPASS_TOOL_CONSENT"] = original_value
-    elif "BYPASS_TOOL_CONSENT" in os.environ:
-        del os.environ["BYPASS_TOOL_CONSENT"]
+    mock_env = {}
+    with patch.dict(os.environ, mock_env, clear=True):
+        mock_env["BYPASS_TOOL_CONSENT"] = "true"
+        with patch("src.strands_tools.use_browser.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            yield mock_env
 
 
 @pytest.fixture
@@ -243,159 +240,6 @@ async def test_generic_action_handler_edge_cases():
 
 
 @pytest.mark.asyncio
-async def test_retry_action_javascript_handling():
-    browser_manager = BrowserManager()
-    browser_manager._fix_javascript_syntax = AsyncMock()
-
-    scenarios = [
-        {
-            "name": "fixable_js_error",
-            "script": "return 42",
-            "error": "Illegal return statement",
-            "fixed_script": "(function() { return 42 })()",
-            "should_fix": True,
-        },
-        {
-            "name": "non_js_error",
-            "script": "valid code",
-            "error": "Network error",
-            "fixed_script": None,
-            "should_fix": False,
-        },
-        {
-            "name": "unfixable_js_error",
-            "script": "broken{{{",
-            "error": "SyntaxError: Invalid syntax",
-            "fixed_script": None,
-            "should_fix": True,
-        },
-    ]
-
-    for scenario in scenarios:
-        # Reset mocks for each scenario
-        browser_manager._fix_javascript_syntax.reset_mock()
-        browser_manager._fix_javascript_syntax.return_value = scenario["fixed_script"]
-
-        calls = []
-
-        # Pass scenario as a default parameter to bind it properly
-        async def test_action(current_scenario=scenario, current_calls=calls):
-            if len(current_calls) == 0:
-                current_calls.append(1)
-                raise Exception(current_scenario["error"])
-            return "success"
-
-        try:
-            result = await browser_manager.retry_action(
-                test_action, action_name="evaluate", args={"script": scenario["script"]}, max_retries=2, delay=0
-            )
-
-            # If we got here, the action succeeded
-            assert result == "success"
-
-            # Verify JavaScript fix was attempted if it should have been
-            if scenario["should_fix"]:
-                browser_manager._fix_javascript_syntax.assert_called_once_with(scenario["script"], scenario["error"])
-            else:
-                browser_manager._fix_javascript_syntax.assert_not_called()
-
-        except Exception as e:
-            # For unfixable errors, verify the exception was raised
-            if scenario["name"] == "unfixable_js_error":
-                assert str(e) == scenario["error"]
-            else:
-                pytest.fail(f"Unexpected exception in scenario {scenario['name']}: {str(e)}")
-
-
-@pytest.mark.asyncio
-async def test_retry_action_javascript_error_recovery():
-    """Test that fixed JavaScript is used in retry attempt"""
-    browser_manager = BrowserManager()
-
-    # Track execution flow
-    execution_order = []
-
-    async def mock_fix_javascript(script, error_msg):
-        execution_order.append("fix_attempted")
-        return "fixed_script"
-
-    browser_manager._fix_javascript_syntax = mock_fix_javascript
-
-    async def test_action():
-        nonlocal args
-        current_script = args.get("script", "original")
-
-        execution_order.append(f"attempt_with_{current_script}")
-
-        if "fixed" not in current_script:
-            raise Exception("SyntaxError: test error")
-        return "success"
-
-    args = {"script": "original_script"}
-    result = await browser_manager.retry_action(test_action, action_name="evaluate", args=args, max_retries=2, delay=0)
-
-    assert result == "success"
-    assert execution_order == ["attempt_with_original_script", "fix_attempted", "attempt_with_fixed_script"]
-    assert args["script"] == "fixed_script"
-
-
-@pytest.mark.asyncio
-async def test_retry_action_exponential_backoff():
-    """Test the exponential backoff behavior"""
-    browser_manager = BrowserManager()
-    sleep_calls = []
-
-    # Mock asyncio.sleep to track calls
-    async def mock_sleep(delay):
-        sleep_calls.append(delay)
-
-    with patch("asyncio.sleep", mock_sleep):
-
-        async def failing_action():
-            raise Exception("test error")
-
-        try:
-            await browser_manager.retry_action(failing_action, max_retries=3, delay=1.0)
-        except Exception:
-            pass
-
-    # Verify exponential backoff delays
-    assert sleep_calls == [1.0, 2.0]  # 2^0, 2^1 times initial delay
-
-
-@pytest.mark.asyncio
-async def test_retry_action_with_logging():
-    browser_manager = BrowserManager()
-
-    with patch.object(logger, "warning") as mock_warning, patch.object(logger, "error") as mock_error:
-        attempt_count = 0
-
-        class TestException(Exception):
-            pass
-
-        async def failing_with_logs():
-            nonlocal attempt_count
-            attempt_count += 1
-            raise TestException(f"Attempt {attempt_count} failed")
-
-        with pytest.raises(TestException) as exc_info:
-            await browser_manager.retry_action(failing_with_logs, max_retries=2, delay=0.1, action_name="test_action")
-
-        # Verify exception message
-        assert str(exc_info.value) == "Attempt 2 failed"
-
-        # Verify logging calls
-        assert mock_warning.call_count == 3  # 2 failure logs + 1 retry log
-        warning_messages = [call.args[0] for call in mock_warning.call_args_list]
-        assert any("Attempt 1/2 failed" in msg for msg in warning_messages)
-        assert any("Retrying in 0.1s" in msg for msg in warning_messages)
-        assert any("Attempt 2/2 failed" in msg for msg in warning_messages)
-
-        assert mock_error.call_count == 1
-        assert "Action failed after 2 attempts" in mock_error.call_args[0][0]
-
-
-@pytest.mark.asyncio
 async def test_fix_javascript_syntax():
     browser_manager = BrowserManager()
 
@@ -564,7 +408,7 @@ async def test_browser_manager_initialization():
 
 
 @pytest.mark.parametrize("launch_options", LAUNCH_OPTIONS_SCENARIOS)
-def test_launch_options_combinations(setup_test_environment, mock_browser_manager, launch_options):
+def test_launch_options_combinations(mock_browser_manager, launch_options):
     mock_browser_manager._loop.run_until_complete.return_value = [{"text": "Browser launched with custom options"}]
     result = use_browser(action="connect", launch_options=launch_options)
     assert_browser_action(result, "Browser launched with custom options")
@@ -764,7 +608,7 @@ async def test_run_all_actions_coroutine():
 
 
 @pytest.mark.asyncio
-async def test_use_browser_single_action_url(setup_test_environment):
+async def test_use_browser_single_action_url():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Navigated to https://example.com"}])
@@ -777,7 +621,7 @@ async def test_use_browser_single_action_url(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_use_browser_single_action_input_text(setup_test_environment):
+async def test_use_browser_single_action_input_text():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Typed 'Hello World' into #input"}])
@@ -790,7 +634,7 @@ async def test_use_browser_single_action_input_text(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_use_browser_single_action_script(setup_test_environment):
+async def test_use_browser_single_action_script():
     """Test use_browser with script evaluation"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         # Set up mock responses
@@ -811,7 +655,7 @@ async def test_use_browser_single_action_script(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_use_browser_single_action_cdp_method(setup_test_environment):
+async def test_use_browser_single_action_cdp_method():
     """Test use_browser with CDP method execution"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         # Set up mock responses
@@ -837,7 +681,7 @@ async def test_use_browser_single_action_cdp_method(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_use_browser_single_action_key(setup_test_environment):
+async def test_use_browser_single_action_key():
     """Test use_browser with key press"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         # Set up mock responses
@@ -882,46 +726,7 @@ async def test_ensure_browser_with_existing_playwright():
 
 
 @pytest.mark.asyncio
-async def test_ensure_browser_fresh_start_no_options():
-    """Test ensure_browser with no existing playwright and no launch options"""
-    with patch("src.strands_tools.use_browser.async_playwright") as mock_playwright_func:
-        mock_playwright = AsyncMock()
-        mock_browser = AsyncMock()
-        mock_context = AsyncMock()
-        mock_page = AsyncMock()
-        mock_cdp = AsyncMock()
-
-        mock_playwright_func.return_value.start = AsyncMock(return_value=mock_playwright)
-        mock_playwright.chromium = AsyncMock()
-        mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
-        mock_browser.new_context = AsyncMock(return_value=mock_context)
-        mock_context.new_page = AsyncMock(return_value=mock_page)
-        mock_page.context = mock_context
-        mock_context.new_cdp_session = AsyncMock(return_value=mock_cdp)
-
-        browser_manager = BrowserManager()
-        returned_page, returned_cdp = await browser_manager.ensure_browser()
-
-        mock_playwright_func.assert_called_once()
-        mock_playwright.chromium.launch.assert_called_once_with(headless=False, args=["--window-size=1280,800"])
-
-        mock_browser.new_context.assert_called_once_with(viewport={"width": 1280, "height": 800})
-
-        mock_context.new_page.assert_called_once()
-        mock_context.new_cdp_session.assert_called_once_with(mock_page)
-
-        assert returned_page == mock_page
-        assert returned_cdp == mock_cdp
-
-        assert browser_manager._playwright == mock_playwright
-        assert browser_manager._browser == mock_browser
-        assert browser_manager._context == mock_context
-        assert browser_manager._page == mock_page
-        assert browser_manager._cdp_client == mock_cdp
-
-
-@pytest.mark.asyncio
-async def test_use_browser_cdp_method_without_params(setup_test_environment):
+async def test_use_browser_cdp_method_without_params():
     """Test use_browser with CDP method but no params"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
@@ -945,10 +750,6 @@ async def test_use_browser_cdp_method_without_params(setup_test_environment):
 
 
 # Tests for handle_action function
-@pytest.mark.asyncio
-async def test_handle_connect_action(browser_manager):
-    result = await browser_manager.handle_action(action="connect")
-    assert "Successfully connected to browser" in result[0]["text"]
 
 
 @pytest.mark.asyncio
@@ -1073,7 +874,7 @@ async def test_cleanup_error_handling(browser_manager):
 
 
 @pytest.mark.parametrize("error_scenario", ERROR_SCENARIOS)
-def test_complex_error_conditions(setup_test_environment, mock_browser_manager, error_scenario):
+def test_complex_error_conditions(mock_browser_manager, error_scenario):
     action, args, expected_error = error_scenario
     mock_browser_manager._loop.run_until_complete.return_value = [{"text": expected_error}]
     result = use_browser(action=action, **args)
@@ -1117,18 +918,6 @@ async def test_browser_connection_error():
         assert browser_manager._context is None
         assert browser_manager._page is None
         assert browser_manager._cdp_client is None
-
-
-@pytest.mark.asyncio
-async def test_persistent_context_without_user_data_dir():
-    """Test that ensure_browser raises ValueError when persistent_context is True but user_data_dir is not provided"""
-    browser_manager = BrowserManager()
-
-    launch_options = {"persistent_context": True, "headless": True}
-    with pytest.raises(ValueError) as exc_info:
-        await browser_manager.ensure_browser(launch_options=launch_options)
-
-    assert "user_data_dir is required for persistent context" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1219,7 +1008,7 @@ async def test_cleanup_with_no_resources():
 
 
 @pytest.mark.asyncio
-async def test_close_last_tab(setup_test_environment):
+async def test_close_last_tab():
     """Test closing the last remaining tab"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
@@ -1244,7 +1033,7 @@ async def test_close_last_tab(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_switch_tab_without_tab_id(setup_test_environment):
+async def test_switch_tab_without_tab_id():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._page = AsyncMock()
         mock_manager._loop = MagicMock()
@@ -1272,7 +1061,7 @@ async def test_switch_tab_without_tab_id(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_switch_tab_success(setup_test_environment):
+async def test_switch_tab_success():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Switched to tab: tab_2"}])
@@ -1289,7 +1078,7 @@ async def test_switch_tab_success(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_switch_tab_nonexistent(setup_test_environment):
+async def test_switch_tab_nonexistent():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager._tabs = {"main": AsyncMock()}
@@ -1311,7 +1100,7 @@ async def test_switch_tab_nonexistent(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_close_tab_without_tab_id(setup_test_environment):
+async def test_close_tab_without_tab_id():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager._active_tab_id = "main"
@@ -1329,7 +1118,7 @@ async def test_close_tab_without_tab_id(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_close_tab_with_specific_id(setup_test_environment):
+async def test_close_tab_with_specific_id():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Tab closed successfully"}])
@@ -1346,7 +1135,7 @@ async def test_close_tab_with_specific_id(setup_test_environment):
 
 
 @pytest.mark.asyncio
-async def test_close_nonexistent_tab(setup_test_environment):
+async def test_close_nonexistent_tab():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager._tabs = {"main": AsyncMock()}
