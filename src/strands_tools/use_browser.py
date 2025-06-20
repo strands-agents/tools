@@ -4,6 +4,7 @@ import json
 # Configure logging
 import logging
 import os
+import time  # Added for timestamp in screenshot filenames
 from typing import Dict, List, Optional
 
 import nest_asyncio
@@ -44,6 +45,18 @@ nest_asyncio.apply()
 
 # Environment Variables
 default_wait_time = int(os.getenv("DEFAULT_WAIT_TIME", 1))
+max_retries = int(os.getenv("BROWSER_MAX_RETRIES", 3))
+screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
+user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation"))
+headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
+width = int(os.getenv("BROWSER_WIDTH", "1280"))
+height = int(os.getenv("BROWSER_HEIGHT", "800"))
+retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", "1"))
+
+
+os.makedirs(screenshots_dir, exist_ok=True)
+
+os.makedirs(user_data_dir, exist_ok=True)
 
 
 # Browser manager class for handling browser interactions
@@ -62,7 +75,7 @@ class BrowserManager:
         asyncio.set_event_loop(self._loop)
         self.action_configs = {
             "navigate": {
-                "method": lambda page, args: page.goto(args["url"]),
+                "method": lambda page, args: self._safe_navigation(page, args["url"]),
                 "required_params": [("url", str)],
                 "post_action": lambda page: page.wait_for_load_state("networkidle"),
                 "result_template": "Navigated to {url}",
@@ -120,15 +133,11 @@ class BrowserManager:
                 "result_template": "Navigated forward",
             },
             "screenshot": {
-                "method": lambda page, args: page.screenshot(path=args.get("path", "screenshot.png")),
+                "method": lambda page, args: page.screenshot(
+                    path=args.get("path", os.path.join(screenshots_dir, f"screenshot_{int(time.time())}.png"))
+                ),
                 "required_params": [],
                 "result_template": "Screenshot saved as {path}",
-            },
-            "connect": {
-                "method": lambda page, args: self._reconnect_browser(args.get("launchOptions", {})),
-                "required_params": [],
-                "post_action": lambda page: asyncio.sleep(1),
-                "result_template": "Successfully connected to browser",
             },
             "new_tab": {
                 "method": lambda page, args: self._create_new_tab(args.get("tab_id")),
@@ -188,17 +197,18 @@ class BrowserManager:
             if self._playwright is None:
                 self._playwright = await async_playwright().start()
 
-                default_launch_options = {"headless": False, "args": ["--window-size=1280,800"]}
+                default_launch_options = {"headless": headless, "args": ["--window-size={width},{height}"]}
 
                 if launch_options:
                     default_launch_options.update(launch_options)
 
                 # Handle persistent context
                 if launch_options and launch_options.get("persistent_context"):
-                    user_data_dir = launch_options.get("user_data_dir")
-                    if user_data_dir:
+                    if launch_options and launch_options.get("persistent_context"):
+                        # Use the environment variable by default, but allow override from launch_options
+                        persistent_user_data_dir = launch_options.get("user_data_dir", user_data_dir)
                         self._context = await self._playwright.chromium.launch_persistent_context(
-                            user_data_dir=user_data_dir,
+                            user_data_dir=persistent_user_data_dir,
                             **{
                                 k: v
                                 for k, v in default_launch_options.items()
@@ -215,7 +225,7 @@ class BrowserManager:
 
                     # Create context
                     context_options = context_options or {}
-                    default_context_options = {"viewport": {"width": 1280, "height": 800}}
+                    default_context_options = {"viewport": {"width": width, "height": height}}
                     default_context_options.update(context_options)
 
                     self._context = await self._browser.new_context(**default_context_options)
@@ -359,6 +369,12 @@ class BrowserManager:
                 return result
 
             result = await self.retry_action(action_operation, action_name=action, args=args)
+
+            # Check if result is already a list of dictionaries with text entries
+            # (which happens when retry_action catches non-retryable errors)
+            if isinstance(result, list) and all(isinstance(item, dict) and "text" in item for item in result):
+                return result
+
             return result
         except Exception as e:
             logger.error(f"Error executing action '{action}': {str(e)}")
@@ -368,7 +384,7 @@ class BrowserManager:
                 await self.cleanup()
             return [{"text": f"Error: {str(e)}"}]
 
-    async def retry_action(self, action_func, max_retries=3, delay=1.0, action_name=None, args=None):
+    async def retry_action(self, action_func, action_name=None, args=None):
         """
         Retry an async operation with exponential backoff.
 
@@ -388,12 +404,27 @@ class BrowserManager:
                 last_exception = e
                 error_msg = str(e)
 
+                # Check for non-retryable errors (DNS, connection refused, etc.)
+                non_retryable_errors = [
+                    "Could not resolve domain",
+                    "Connection refused",
+                    "Connection timed out",
+                    "SSL/TLS error",
+                    "Certificate error",
+                    "Protocol error (Page.navigate): Cannot navigate to invalid URL",
+                ]
+
+                # If this is a non-retryable error, don't retry and return the error message
+                if any(msg in error_msg for msg in non_retryable_errors):
+                    logger.warning(f"Non-retryable error detected: {error_msg}")
+                    return [{"text": f"Error: {error_msg}"}]
+
                 # Log every failed attempt
                 logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {error_msg}")
 
                 # Only process retry if this attempt wasn't the last
                 if attempt < max_retries - 1:
-                    wait_time = delay * (2**attempt)
+                    wait_time = retry_delay * (2**attempt)
 
                     # Handle JavaScript errors more broadly - not just syntax errors
                     if action_name == "evaluate" and args and "script" in args:
@@ -495,13 +526,6 @@ class BrowserManager:
             # so the retry mechanism works properly
             raise
 
-    async def _reconnect_browser(self, launch_options):
-        """Helper method for connect action"""
-        if self._playwright:
-            await self.cleanup()
-        page, cdp = await self.ensure_browser(launch_options=launch_options)
-        return True
-
     async def _create_new_tab(self, tab_id=None):
         """Create a new tab and track it with the given ID"""
         if tab_id is None:
@@ -584,6 +608,32 @@ class BrowserManager:
                 tabs[tab_id] = {"error": f"Could not retrieve tab info: {str(e)}"}
 
         return f"Available tabs: {json.dumps(tabs)}"
+
+    async def _safe_navigation(self, page, url):
+        try:
+            return await page.goto(url)
+        except Exception as e:
+            error_str = str(e)
+            if "ERR_NAME_NOT_RESOLVED" in error_str:
+                raise ValueError(
+                    f"Could not resolve domain '{url}'. The website might not exist or a network connectivity issue."
+                ) from e
+            elif "ERR_CONNECTION_REFUSED" in error_str:
+                raise ValueError(
+                    f"Connection refused for '{url}'. The server might be down or blocking requests."
+                ) from e
+            elif "ERR_CONNECTION_TIMED_OUT" in error_str:
+                raise ValueError(f"Connection timed out for '{url}'. The server might be slow or unreachable.") from e
+            elif "ERR_SSL_PROTOCOL_ERROR" in error_str:
+                raise ValueError(
+                    f"SSL/TLS error when connecting to '{url}'. The site might have an invalid or expired certificate."
+                ) from e
+            elif "ERR_CERT_" in error_str:
+                raise ValueError(
+                    f"Certificate error when connecting to '{url}'. The site's security certificate might be invalid."
+                ) from e
+            else:
+                raise
 
     async def _list_tabs(self):
         """Return a list of all tracked tabs"""
@@ -772,7 +822,6 @@ def use_browser(
             For multiple actions, returns all results concatenated with newlines.
             On error, returns an error message starting with "Error: ".
     """
-
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     if not strands_dev:
