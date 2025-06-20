@@ -796,7 +796,24 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         if tool_input.get("streaming", False):
             content = stream_response(response)
         else:
-            content = response.text
+            # Get encoding from Content-Type header or detect it
+            encoding = None
+            content_type = response.headers.get("Content-Type", "")
+
+            if "charset=" in content_type:
+                encoding = content_type.split("charset=")[-1].split(";")[0].strip()
+
+            # If encoding not specified in headers, let requests try to detect it
+            # or use 'utf-8' as a fallback for better handling of Chinese and other non-ASCII text
+            if not encoding:
+                # Try to use the encoding detected by requests
+                if hasattr(response, "encoding") and isinstance(response.encoding, str):
+                    encoding = response.encoding if response.encoding != "ISO-8859-1" else "utf-8"
+                else:
+                    encoding = "utf-8"  # Default fallback if encoding is not a string
+
+            # Decode the content with the determined encoding
+            content = response.content.decode(encoding, errors="replace")
 
         # Format and display the response
         response_panel = format_response_preview(response, content, metrics if metrics is not None else None)
