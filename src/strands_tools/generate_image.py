@@ -95,6 +95,10 @@ TOOL_SPEC = {
                     "description": "Model id for image model, stability.sd3-5-large-v1:0, \
                     stability.stable-image-core-v1:1,  stability.stable-image-ultra-v1:1, or amazon.nova-canvas-v1:0",
                 },
+                "region": {
+                    "type": "string",
+                    "description": "AWS region for the image generation model (default: us-west-2)",
+                },
                 "seed": {
                     "type": "integer",
                     "description": "Optional: Seed for random number generation (default: random)",
@@ -130,10 +134,6 @@ TOOL_SPEC = {
                 "cfg_scale": {
                     "type": "number",
                     "description": "Optional: CFG scale for Nova Canvas model (default: 8.0)",
-                },
-                "number_of_images": {
-                    "type": "integer",
-                    "description": "Optional: Number of images to generate for Nova Canvas model (default: 1)",
                 },
             },
             "required": ["prompt"],
