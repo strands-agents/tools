@@ -186,7 +186,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     - height: Height of the generated image (default: 1024)
     - quality: Quality setting ('standard' or 'premium')
     - cfg_scale: CFG scale value (default: 8.0)
-    - number_of_images: Number of images to generate (default: 1)
+    - number_of_images: Number of images to generate (always: 1)
     - seed: Controls randomness for reproducible results
     - negative_prompt: Keywords of what you do not wish to see in the output image
 
@@ -225,11 +225,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         # Extract common input parameters
         prompt = tool_input.get("prompt", "A stylized picture of a cute old steampunk robot.")
         model_id = tool_input.get("model_id", "stability.stable-image-core-v1:1")
-        region = (
-            tool_input.get("region", "us-east-1")
-            if model_id not in STABLE_DIFFUSION_MODEL_ID
-            else tool_input.get("region", "us-west-2")
-        )
+        region = tool_input.get("region", "us-west-2")
         seed = tool_input.get("seed", random.randint(0, 4294967295))
         negative_prompt = tool_input.get("negative_prompt", "bad lighting, harsh lighting")
 
@@ -274,7 +270,6 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
             height = tool_input.get("height", 1024)
             quality = tool_input.get("quality", "standard")
             cfg_scale = tool_input.get("cfg_scale", 8.0)
-            number_of_images = tool_input.get("number_of_images", 1)
 
             # Format the Nova Canvas request
             nova_request = {
@@ -286,7 +281,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "quality": quality,
                     "cfgScale": cfg_scale,
                     "seed": seed,
-                    "numberOfImages": number_of_images,
+                    "numberOfImages": 1,
                 },
             }
             request = json.dumps(nova_request)
