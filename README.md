@@ -487,6 +487,8 @@ The Mem0 Memory Tool supports three different backend configurations:
 | BROWSER_HEADLESS | Default headless setting for launching browsers | false |
 | BROWSER_WIDTH | Default width of the browser | 1280 |
 | BROWSER_HEIGHT | Default height of the browser | 800 |
+| ENABLE_DEBUG_BROWSER_LOGS | Default enable of the browser's debug logs | false |
+
 
 ## Contributing ❤️
 
