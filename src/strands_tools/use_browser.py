@@ -326,24 +326,20 @@ class BrowserManager:
 
         # Handle missing braces/parentheses
         elif "Unexpected end of input" in error_msg:
-            # Count opening and closing braces/parentheses to see if they're balanced
             open_chars = script.count("{") + script.count("(") + script.count("[")
             close_chars = script.count("}") + script.count(")") + script.count("]")
 
             if open_chars > close_chars:
-                # Add missing closing characters
                 missing = open_chars - close_chars
                 fixed_script = script + ("}" * missing)
                 logger.info(f"Added {missing} missing closing braces")
 
-        # Handle uncaught reference errors
         elif "is not defined" in error_msg:
             var_name = error_msg.split("'")[1] if "'" in error_msg else ""
             if var_name:
                 fixed_script = f"var {var_name} = undefined;\n{script}"
                 logger.info(f"Adding undefined variable declaration for '{var_name}'")
 
-        # Return the fixed script or None if no fix was applied
         return fixed_script
 
     async def handle_action(self, action: str, **kwargs) -> List[Dict[str, str]]:
@@ -459,8 +455,6 @@ class BrowserManager:
 
                             if fixed_script:
                                 logger.warning("Detected JavaScript error. Trying with modified script.")
-                                logger.warning(f"Original: {script}")
-                                logger.warning(f"Modified: {fixed_script}")
 
                                 # Update args for next attempt
                                 args["script"] = fixed_script
