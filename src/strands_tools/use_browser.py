@@ -29,16 +29,14 @@ from strands import tool
 from strands_tools.utils.user_input import get_user_input
 
 # Only configure this module's logger, not the root logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+enable_debug = os.getenv("ENABLE_DEBUG_BROWSER_LOGS", "false").lower() == "true"
 
-# Create a handler for this logger if it doesn't have one
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if enable_debug else logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
-
-# Prevent propagation to parent loggers to avoid duplicate logs
 logger.propagate = False
 
 console = Console()
@@ -48,10 +46,6 @@ _playwright_manager = None
 
 # Apply nested event loop support
 nest_asyncio.apply()
-
-# Environment Variables
-
-screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
 
 
 # Browser manager class for handling browser interactions
@@ -70,113 +64,131 @@ class BrowserManager:
         asyncio.set_event_loop(self._loop)
         self.action_configs = {
             "navigate": {
-                "method": lambda page, args: self._safe_navigation(page, args["url"]),
+                "method": self._safe_navigation,
+                "required_args": ["page", "url"],
                 "required_params": [("url", str)],
                 "post_action": lambda page: page.wait_for_load_state("networkidle"),
                 "result_template": "Navigated to {url}",
             },
             "click": {
-                "method": lambda page, args: page.click(args["selector"]),
+                "method": lambda page, selector: page.click(selector),
+                "required_args": ["page", "selector"],
                 "required_params": [("selector", str)],
                 "result_template": "Clicked {selector}",
             },
             "type": {
-                "method": lambda page, args: page.fill(args["selector"], args["text"]),
+                "method": lambda page, selector, text: page.fill(selector, text),
+                "required_args": ["page", "selector", "text"],
                 "required_params": [("selector", str), ("text", str)],
                 "result_template": "Typed '{text}' into {selector}",
             },
             "evaluate": {
-                "method": lambda page, args: page.evaluate(args["script"]),
+                "method": lambda page, script: page.evaluate(script),
+                "required_args": ["page", "script"],
                 "required_params": [("script", str)],
                 "result_template": "Evaluation result: {result}",
             },
             "press_key": {
-                "method": lambda page, args: page.keyboard.press(args["key"]),
+                "method": lambda page, key: page.keyboard.press(key),
+                "required_args": ["page", "key"],
                 "required_params": [("key", str)],
                 "result_template": "Pressed key: {key}",
             },
             "get_text": {
-                "method": lambda page, args: page.text_content(args["selector"]),
+                "method": lambda page, selector: page.text_content(selector),
+                "required_args": ["page", "selector"],
                 "required_params": [("selector", str)],
                 "post_process": lambda result: result,
                 "result_template": "Text content: {result}",
             },
             "get_html": {
-                "method": lambda page, args: page.content()
-                if not args.get("selector")
-                else page.inner_html(args.get("selector")),
+                "method": self._get_html_content,
+                "required_args": ["page", "selector"],
                 "required_params": [],
                 "post_process": lambda result: result[:1000] + "..." if len(result) > 1000 else result,
                 "result_template": "HTML content: {result}",
             },
             "refresh": {
-                "method": lambda page, args: page.reload(),
+                "method": lambda page: page.reload(),
+                "required_args": ["page"],
                 "required_params": [],
                 "post_action": lambda page: page.wait_for_load_state("networkidle"),
                 "result_template": "Page refreshed",
             },
             "back": {
-                "method": lambda page, args: page.go_back(),
+                "method": lambda page: page.go_back(),
+                "required_args": ["page"],
                 "required_params": [],
                 "post_action": lambda page: page.wait_for_load_state("networkidle"),
                 "result_template": "Navigated back",
             },
             "forward": {
-                "method": lambda page, args: page.go_forward(),
+                "method": lambda page: page.go_forward(),
+                "required_args": ["page"],
                 "required_params": [],
                 "post_action": lambda page: page.wait_for_load_state("networkidle"),
                 "result_template": "Navigated forward",
             },
             "screenshot": {
                 "method": lambda page, args: self._take_screenshot(page, args),
+                "required_args": ["page", "args"],
                 "required_params": [],
                 "result_template": "Screenshot saved as {path}",
             },
             "new_tab": {
-                "method": lambda page, args: self._create_new_tab(args.get("tab_id")),
+                "method": lambda tab_id: self._create_new_tab(tab_id),
+                "required_args": ["tab_id"],
                 "required_params": [],
                 "result_template": "New tab created with ID: {result}",
             },
             "switch_tab": {
-                "method": lambda page, args: self._switch_to_tab(args.get("tab_id")),
+                "method": lambda tab_id: self._switch_to_tab(tab_id),
+                "required_args": ["tab_id"],
                 "required_params": [("tab_id", str)],
                 "result_template": "Switched to tab: {tab_id}",
             },
             "close_tab": {
-                "method": lambda page, args: self._close_tab_by_id(args.get("tab_id", self._active_tab_id)),
+                "method": lambda args: self._close_tab_by_id(args.get("tab_id", self._active_tab_id)),
+                "required_args": ["args"],
                 "required_params": [],
                 "result_template": "Tab closed successfully",
             },
             "list_tabs": {
-                "method": lambda page, args: self._list_tabs(),
+                "method": lambda: self._list_tabs(),
+                "required_args": [],
                 "required_params": [],
                 "post_process": lambda result: json.dumps(result, indent=2),
                 "result_template": "Tabs: {result}",
             },
             "get_cookies": {
-                "method": lambda page, args: self._context.cookies(),
+                "method": lambda: self._context.cookies(),
+                "required_args": [],
                 "required_params": [],
                 "post_process": lambda result: json.dumps(result, indent=2),
                 "result_template": "Cookies: {result}",
             },
             "set_cookies": {
-                "method": lambda page, args: self._context.add_cookies(args.get("cookies", [])),
+                "method": lambda args: self._context.add_cookies(args.get("cookies", [])),
+                "required_args": ["args"],
                 "required_params": [("cookies", list)],
                 "result_template": "Cookies set successfully",
             },
             "network_intercept": {
                 "method": lambda page, args: page.route(args.get("pattern", "*"), lambda route: route.continue_()),
+                "required_args": ["page", "args"],
                 "required_params": [],
                 "result_template": "Network interception set for {pattern}",
             },
             "execute_cdp": {
-                "method": lambda page, args: self._cdp_client.send(args["method"], args.get("params", {})),
+                "method": lambda args: self._cdp_client.send(args["method"], args.get("params", {})),
+                "required_args": ["args"],
                 "required_params": [("method", str)],
                 "post_process": lambda result: json.dumps(result, indent=2),
                 "result_template": "CDP {method} result: {result}",
             },
             "close": {
-                "method": lambda page, args: self.cleanup(),
+                "method": lambda: self.cleanup(),
+                "required_args": [],
                 "required_params": [],
                 "result_template": "Browser closed",
             },
@@ -188,6 +200,7 @@ class BrowserManager:
 
         # Ensure required directories exist
         user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation"))
+        screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
         headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
         width = int(os.getenv("BROWSER_WIDTH", "1280"))
         height = int(os.getenv("BROWSER_HEIGHT", "800"))
@@ -419,7 +432,6 @@ class BrowserManager:
 
                 # If this is a non-retryable error, don't retry and return the error message
                 if any(msg in error_msg for msg in non_retryable_errors):
-                    logger.warning(f"Non-retryable error detected: {error_msg}")
                     return [{"text": f"Error: {error_msg}"}]
 
                 # Log every failed attempt
@@ -502,9 +514,20 @@ class BrowserManager:
                 raise ValueError(error_msg)
 
         try:
-            # Execute the action method
-            method = config["method"]
-            result = await method(page, args)
+            # Prepare arguments for the action method
+            method_args = []
+            for arg_name in config.get("required_args", []):
+                if arg_name == "page":
+                    method_args.append(page)
+                elif arg_name == "selector" and action == "get_html":
+                    # For get_html, selector is optional - default to None for full page content
+                    method_args.append(args.get(arg_name))
+                elif arg_name not in args:
+                    raise ValueError(f"Required argument '{arg_name}' is missing for {action} action")
+                else:
+                    method_args.append(args[arg_name])
+
+            result = await config["method"](*method_args)
 
             # Execute any post-action steps
             if "post_action" in config:
@@ -680,8 +703,22 @@ class BrowserManager:
                 }
         return tab_info
 
+    async def _get_html_content(self, page, selector):
+        """Get HTML content with proper selector handling"""
+        if not selector:
+            return await page.content()
+        else:
+            try:
+                await page.wait_for_selector(selector, timeout=5000)
+                return await page.inner_html(selector)
+            except PlaywrightTimeoutError as e:
+                raise ValueError(
+                    f"Element with selector '{selector}' not found on the page. Please verify the selector is correct."
+                ) from e
+
     async def _take_screenshot(self, page, args):
         """Take a screenshot and return the path for template formatting"""
+        screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
         screenshot_path = args.get("path", os.path.join(screenshots_dir, f"screenshot_{int(time.time())}.png"))
         await page.screenshot(path=screenshot_path)
         args["path"] = screenshot_path
@@ -883,7 +920,7 @@ def use_browser(
                 "content": [{"text": error_message}],
             }
 
-    logger.info(f"Tool parameters: {locals()}")
+    logger.debug(f"Tool parameters: {locals()}")
     try:
         # Convert single action to actions list format if not using actions parameter
         if not actions and action:
