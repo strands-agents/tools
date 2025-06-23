@@ -459,12 +459,8 @@ class BrowserManager:
 
                             if fixed_script:
                                 logger.warning("Detected JavaScript error. Trying with modified script.")
-                                logger.warning(f"Original: {script}")
-                                logger.warning(f"Modified: {fixed_script}")
-
                                 # Update args for next attempt
                                 args["script"] = fixed_script
-
                                 # No need for delay on retrying with fixed script
                                 logger.warning("Attempting retry with fixed JavaScript")
                                 continue
