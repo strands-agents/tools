@@ -77,8 +77,8 @@ git clone https://github.com/strands-agents/tools.git
 cd tools
 
 # Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -96,9 +96,9 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
-| shell | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
+| shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
-| python_repl | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
+| python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
@@ -113,10 +113,11 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
+| sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
-| cron | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax |
+| cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
-| speak | `agent.tool.speak(message="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
+| speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
@@ -141,6 +142,8 @@ agent.tool.editor(command="view", path="script.py")
 ```
 
 ### Shell Commands
+
+*Note: `shell` does not work on Windows.*
 
 ```python
 from strands import Agent
@@ -184,6 +187,8 @@ response = agent.tool.http_request(
 ```
 
 ### Python Code Execution
+
+*Note: `python_repl` does not work on Windows.*
 
 ```python
 from strands import Agent
@@ -361,11 +366,39 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
 
+#### Sleep Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
+
 #### Mem0 Memory Tool
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| OPENSEARCH_HOST | OpenSearch Host URL | None |
+The Mem0 Memory Tool supports three different backend configurations:
+
+1. **Mem0 Platform**:
+   - Uses the Mem0 Platform API for memory management
+   - Requires a Mem0 API key
+
+2. **OpenSearch** (Recommended for AWS environments):
+   - Uses OpenSearch as the vector store backend
+   - Requires AWS credentials and OpenSearch configuration
+
+3. **FAISS** (Default for local development):
+   - Uses FAISS as the local vector store backend
+   - Requires faiss-cpu package for local vector storage
+
+| Environment Variable | Description | Default | Required For |
+|----------------------|-------------|---------|--------------|
+| MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
+| OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
+| AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| DEV | Enable development mode (bypasses confirmations) | false | All modes |
+
+**Note**:
+- If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
+- If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
+- If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 
 #### Memory Tool
 
