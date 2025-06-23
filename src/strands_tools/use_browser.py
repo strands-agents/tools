@@ -15,6 +15,12 @@ from playwright.async_api import (
     Playwright,
     async_playwright,
 )
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -44,19 +50,8 @@ _playwright_manager = None
 nest_asyncio.apply()
 
 # Environment Variables
-default_wait_time = int(os.getenv("DEFAULT_WAIT_TIME", 1))
-max_retries = int(os.getenv("BROWSER_MAX_RETRIES", 3))
+
 screenshots_dir = os.getenv("BROWSER_SCREENSHOTS_DIR", "screenshots")
-user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation"))
-headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
-width = int(os.getenv("BROWSER_WIDTH", "1280"))
-height = int(os.getenv("BROWSER_HEIGHT", "800"))
-retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", "1"))
-
-
-os.makedirs(screenshots_dir, exist_ok=True)
-
-os.makedirs(user_data_dir, exist_ok=True)
 
 
 # Browser manager class for handling browser interactions
@@ -133,9 +128,7 @@ class BrowserManager:
                 "result_template": "Navigated forward",
             },
             "screenshot": {
-                "method": lambda page, args: page.screenshot(
-                    path=args.get("path", os.path.join(screenshots_dir, f"screenshot_{int(time.time())}.png"))
-                ),
+                "method": lambda page, args: self._take_screenshot(page, args),
                 "required_params": [],
                 "result_template": "Screenshot saved as {path}",
             },
@@ -193,11 +186,19 @@ class BrowserManager:
         """Initialize browser if not already running."""
         logger.debug("Ensuring browser is running...")
 
+        # Ensure required directories exist
+        user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", os.path.join(os.path.expanduser("~"), ".browser_automation"))
+        headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
+        width = int(os.getenv("BROWSER_WIDTH", "1280"))
+        height = int(os.getenv("BROWSER_HEIGHT", "800"))
+        os.makedirs(screenshots_dir, exist_ok=True)
+        os.makedirs(user_data_dir, exist_ok=True)
+
         try:
             if self._playwright is None:
                 self._playwright = await async_playwright().start()
 
-                default_launch_options = {"headless": headless, "args": ["--window-size={width},{height}"]}
+                default_launch_options = {"headless": headless, "args": [f"--window-size={width},{height}"]}
 
                 if launch_options:
                     default_launch_options.update(launch_options)
@@ -274,7 +275,7 @@ class BrowserManager:
 
         if cleanup_errors:
             for error in cleanup_errors:
-                logger.warning(error)
+                logger.error(error)
         else:
             logger.info("Cleanup completed successfully")
 
@@ -396,6 +397,8 @@ class BrowserManager:
             args: Arguments passed to the action (to allow fixing JavaScript for evaluate action)
         """
         last_exception = None
+        max_retries = int(os.getenv("BROWSER_MAX_RETRIES", 3))
+        retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", "1"))
 
         for attempt in range(max_retries):
             try:
@@ -520,6 +523,31 @@ class BrowserManager:
 
             # Always return a list containing a dict with text key
             return [{"text": formatted_message}]
+        except PlaywrightTimeoutError as e:
+            logger.error(f"Timeout error in {action}: {str(e)}")
+            raise ValueError(
+                f"Action '{action}' timed out. The element might not be available or the page is still loading."
+            ) from e
+        except PlaywrightError as e:
+            logger.error(f"Playwright error in {action}: {str(e)}")
+            # Handle specific Playwright errors
+            error_msg = str(e).lower()
+            if "element not found" in error_msg or "no such element" in error_msg:
+                raise ValueError(
+                    f"Element not found for action '{action}'. Please verify the selector is correct."
+                ) from e
+            elif "element not visible" in error_msg or "not visible" in error_msg:
+                raise ValueError(
+                    f"Element is not visible for action '{action}'. "
+                    f"The element might be hidden or not yet rendered."
+                ) from e
+            elif "element not interactable" in error_msg or "not interactable" in error_msg:
+                raise ValueError(
+                    f"Element is not interactable for action '{action}'. "
+                    f"The element might be disabled or covered by another element."
+                ) from e
+            else:
+                raise ValueError(f"Playwright error in action '{action}': {str(e)}") from e
         except Exception as e:
             logger.error(f"Error in generic action handler for {action}: {str(e)}")
             # Don't log action success here, and make sure to raise the exception
@@ -652,6 +680,13 @@ class BrowserManager:
                 }
         return tab_info
 
+    async def _take_screenshot(self, page, args):
+        """Take a screenshot and return the path for template formatting"""
+        screenshot_path = args.get("path", os.path.join(screenshots_dir, f"screenshot_{int(time.time())}.png"))
+        await page.screenshot(path=screenshot_path)
+        args["path"] = screenshot_path
+        return screenshot_path
+
 
 # Initialize global browser manager
 _playwright_manager = BrowserManager()
@@ -667,7 +702,7 @@ def validate_required_param(param_value, param_name, action_name):
 @tool
 def use_browser(
     url: str = None,
-    wait_time: int = default_wait_time,
+    wait_time: int = int(os.getenv("DEFAULT_WAIT_TIME", 1)),
     action: str = None,
     selector: str = None,
     input_text: str = None,
@@ -683,7 +718,7 @@ def use_browser(
     Interactive browser automation tool powered by Playwright.
 
     Important Usage Guidelines:
-    - Never guess selectors! Always find them first using these steps:
+    - Never guess selectors or locators! Always find them first using these steps:
         1. Use get_html to examine the page structure:
         {"action": "get_html"}  # Get full page HTML
         or

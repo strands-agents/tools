@@ -467,6 +467,18 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
 
+#### Use Browser Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
+| BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
+| BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
+| BROWSER_HEADLESS | Default headless setting for launching browsers | false |
+| BROWSER_WIDTH | Default width of the browser | 1280 |
+| BROWSER_HEIGHT | Default height of the browser | 800 |
+
 ## Contributing ❤️
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
