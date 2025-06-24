@@ -73,7 +73,7 @@ TOOL_SPEC = {
                 "model_id": {
                     "type": "string",
                     "description": "Model ID for image generation (e.g., amazon.titan-image-generator-v2:0, "
-                                 "stability.stable-image-core-v1:1)",
+                    "stability.stable-image-core-v1:1)",
                 },
                 "region": {
                     "type": "string",
@@ -275,7 +275,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         "content": [
                             {
                                 "text": f"No text-to-image models available in region '{region}'. "
-                                       f"Please try a different region."
+                                f"Please try a different region."
                             }
                         ],
                     }
@@ -290,7 +290,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [
                         {
                             "text": f"Error determining available models in region '{region}': {str(e)}. "
-                                   f"Please specify a model_id explicitly."
+                            f"Please specify a model_id explicitly."
                         }
                     ],
                 }
@@ -309,8 +309,8 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [
                         {
                             "text": f"Model '{model_id}' is not available in region '{region}'. "
-                                   f"Available text-to-image models in this region include: "
-                                   f"{', '.join(available_models)}"
+                            f"Available text-to-image models in this region include: "
+                            f"{', '.join(available_models)}"
                         }
                     ],
                 }
@@ -328,7 +328,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "content": [
                     {
                         "text": f"Could not validate model availability in region '{region}'. "
-                               f"Please check your AWS credentials and permissions."
+                        f"Please check your AWS credentials and permissions."
                     }
                 ],
             }
@@ -375,7 +375,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [
                         {
                             "text": f"Access denied for model '{model_id}' in region '{region}'. "
-                                   f"Please check your AWS credentials and permissions."
+                            f"Please check your AWS credentials and permissions."
                         }
                     ],
                 }
@@ -386,7 +386,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [
                         {
                             "text": f"Model '{model_id}' not found in region '{region}'. "
-                                   f"Please verify the model ID and region."
+                            f"Please verify the model ID and region."
                         }
                     ],
                 }
@@ -425,7 +425,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "content": [
                     {
                         "text": f"Failed to extract image data from model response: {str(e)}. "
-                               f"Response structure: {json.dumps(model_response, indent=2)[:500]}..."
+                        f"Response structure: {json.dumps(model_response, indent=2)[:500]}..."
                     }
                 ],
             }
