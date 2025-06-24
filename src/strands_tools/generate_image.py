@@ -1,20 +1,19 @@
 """
-Image generation tool for Strands Agent using Stable Diffusion and Nova Canvas models.
+Image generation tool for Strands Agent using Stable Diffusion.
 
 This module provides functionality to generate high-quality images using Amazon Bedrock's
-image generation models based on text prompts. It handles the entire image generation
+Stable Diffusion models based on text prompts. It handles the entire image generation
 process including API integration, parameter management, response processing, and
 local storage of results.
 
 Key Features:
 
 1. Image Generation:
-   • Text-to-image conversion using multiple model providers
+   • Text-to-image conversion using Stable Diffusion models
    • Support for the following models:
         • stability.sd3-5-large-v1:0
         • stability.stable-image-core-v1:1
         • stability.stable-image-ultra-v1:1
-        • amazon.nova-canvas-v1:0
    • Customizable generation parameters (seed, aspect_ratio, output_format, negative_prompt)
 
 2. Output Management:
@@ -48,13 +47,13 @@ agent.tool.generate_image(
     negative_prompt="bad lighting, harsh lighting, abstract, surreal, twisted, multiple levels",
 )
 
-# Using Nova Canvas
+# Using another Stable Diffusion model
 agent.tool.generate_image(
     prompt="A photograph of a cup of coffee from the side",
-    model_id="amazon.nova-canvas-v1:0",
-    width=1024,
-    height=1024,
-    quality="premium",
+    model_id="stability.stable-image-ultra-v1:1",
+    aspect_ratio="1:1",
+    output_format="png",
+    negative_prompt="blurry, distorted",
 )
 ```
 
@@ -76,12 +75,11 @@ STABLE_DIFFUSION_MODEL_ID = [
     "stability.stable-image-core-v1:1",
     "stability.stable-image-ultra-v1:1",
 ]
-NOVA_CANVAS_MODEL_ID = "amazon.nova-canvas-v1:0"
 
 
 TOOL_SPEC = {
     "name": "generate_image",
-    "description": "Generates an image using Stable Diffusion or Nova Canvas based on a given prompt",
+    "description": "Generates an image using Stable Diffusion models based on a given prompt",
     "inputSchema": {
         "json": {
             "type": "object",
@@ -93,7 +91,7 @@ TOOL_SPEC = {
                 "model_id": {
                     "type": "string",
                     "description": "Model id for image model, stability.sd3-5-large-v1:0, \
-                    stability.stable-image-core-v1:1,  stability.stable-image-ultra-v1:1, or amazon.nova-canvas-v1:0",
+                    stability.stable-image-core-v1:1, or stability.stable-image-ultra-v1:1",
                 },
                 "region": {
                     "type": "string",
@@ -118,23 +116,6 @@ TOOL_SPEC = {
                     "description": "Optional: Keywords of what you do not wish to see in the output image. \
                      Max: 10.000 characters.",
                 },
-                "width": {
-                    "type": "integer",
-                    "description": "Optional: Width of the generated image for Nova Canvas model (default: 1024)",
-                },
-                "height": {
-                    "type": "integer",
-                    "description": "Optional: Height of the generated image for Nova Canvas model (default: 1024)",
-                },
-                "quality": {
-                    "type": "string",
-                    "description": "Optional: Quality setting for Nova Canvas model. Options: 'standard' or 'premium' \
-                    (default: 'standard')",
-                },
-                "cfg_scale": {
-                    "type": "number",
-                    "description": "Optional: CFG scale for Nova Canvas model (default: 8.0)",
-                },
             },
             "required": ["prompt"],
         }
@@ -153,7 +134,7 @@ def create_filename(prompt: str) -> str:
 
 def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
-    Generate images from text prompts using Stable Diffusion or Nova Canvas via Amazon Bedrock.
+    Generate images from text prompts using Stable Diffusion models via Amazon Bedrock.
 
     This function transforms textual descriptions into high-quality images using
     image generation models available through Amazon Bedrock. It provides extensive
@@ -181,14 +162,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     - output_format: Specifies the format of the output image (e.g., png or jpeg)
     - negative_prompt: Keywords of what you do not wish to see in the output image
 
-    For Nova Canvas model:
-    - width: Width of the generated image (default: 1024)
-    - height: Height of the generated image (default: 1024)
-    - quality: Quality setting ('standard' or 'premium')
-    - cfg_scale: CFG scale value (default: 8.0)
-    - number_of_images: Number of images to generate (always: 1)
-    - seed: Controls randomness for reproducible results
-    - negative_prompt: Keywords of what you do not wish to see in the output image
+
 
     Common Usage Scenarios:
     ---------------------
@@ -237,11 +211,8 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         output_format = "jpeg"  # Default format
 
         # Format the request payload based on model type
-        if (
-            model_id == "stability.sd3-5-large-v1:0"
-            or model_id == "stability.stable-image-core-v1:1"
-            or model_id == "stability.stable-image-ultra-v1:1"
-        ):
+        # Validate model ID is a supported Stable Diffusion model
+        if model_id in STABLE_DIFFUSION_MODEL_ID:
             # Stable Diffusion specific parameters
             aspect_ratio = tool_input.get("aspect_ratio", "1:1")
             output_format = tool_input.get("output_format", "jpeg")
@@ -264,37 +235,6 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
             # Extract the image data
             base64_image_data = model_response["images"][0]
 
-        elif model_id == "amazon.nova-canvas-v1:0":
-            # Nova Canvas specific parameters
-            width = tool_input.get("width", 1024)
-            height = tool_input.get("height", 1024)
-            quality = tool_input.get("quality", "standard")
-            cfg_scale = tool_input.get("cfg_scale", 8.0)
-
-            # Format the Nova Canvas request
-            nova_request = {
-                "taskType": "TEXT_IMAGE",
-                "textToImageParams": {"text": prompt, "negativeText": negative_prompt},
-                "imageGenerationConfig": {
-                    "width": width,
-                    "height": height,
-                    "quality": quality,
-                    "cfgScale": cfg_scale,
-                    "seed": seed,
-                    "numberOfImages": 1,
-                },
-            }
-            request = json.dumps(nova_request)
-
-            # Invoke the model
-            response = client.invoke_model(modelId=model_id, body=request)
-
-            # Decode the response body
-            model_response = json.loads(response["body"].read().decode("utf-8"))
-
-            # Extract the image data
-            base64_image_data = model_response["images"][0]
-
         else:
             return {
                 "toolUseId": tool_use_id,
@@ -302,10 +242,9 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "content": [
                     {
                         "text": "Supported models for this tool are: \n \
-                              1.stability.sd3-5-large-v1:0 \n \
+                              1. stability.sd3-5-large-v1:0 \n \
                               2. stability.stable-image-core-v1:1 \n \
-                              3. stability.stable-image-ultra-v1:1 \n \
-                              4. amazon.nova-canvas-v1:0"
+                              3. stability.stable-image-ultra-v1:1"
                     }
                 ],
             }
