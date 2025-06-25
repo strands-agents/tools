@@ -52,6 +52,7 @@ See the generate_image function docstring for more details on parameters and opt
 import base64
 import json
 import os
+import random
 import re
 from typing import Any, List, Tuple
 
@@ -81,7 +82,7 @@ TOOL_SPEC = {
                 },
                 "seed": {
                     "type": "integer",
-                    "description": "Optional: Seed for deterministic generation (default: 2147483646)",
+                    "description": "Optional: Seed for deterministic generation (default: random)",
                 },
                 "cfg_scale": {
                     "type": "number",
@@ -233,7 +234,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - prompt: The text prompt describing the desired image.
             - model_id: Optional model identifier.
             - region: Optional AWS region (default: from AWS_REGION env variable or us-west-2).
-            - seed: Optional seed value (default: 2147483646).
+            - seed: Optional seed value (default: random integer b/w O and 2147483646).
             - cfg_scale: Optional CFG scale value (default: 10).
         **kwargs: Additional keyword arguments (unused).
 
@@ -296,7 +297,8 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 }
 
         # Get seed from input or use a default value that works for all models
-        seed = tool_input.get("seed", 2147483646)
+        # Keeping range's end to 2147483646 as this is the max seed value supported by Nova models
+        seed = tool_input.get("seed", random.randint(0, 2147483646))
         cfg_scale = tool_input.get("cfg_scale", 10)
 
         # Validate if the model is available in the specified region
