@@ -155,7 +155,6 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     --------------------
     - prompt: The textual description of the desired image
     - model_id: Specific model to use (defaults to stability.stable-image-core-v1:1)
-
     For Stable Diffusion models:
     - seed: Controls randomness for reproducible results
     - aspect_ratio: Controls the aspect ratio of the generated image
