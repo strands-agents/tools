@@ -114,7 +114,8 @@ TOOL_SPEC = {
                 "negative_prompt": {
                     "type": "string",
                     "description": "Optional: Keywords of what you do not wish to see in the output image. \
-                     Max: 10.000 characters.",
+                    Default: bad lighting, harsh lighting. \
+                    Max: 10.000 characters.",
                 },
             },
             "required": ["prompt"],
@@ -195,7 +196,9 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         tool_use_id = tool["toolUseId"]
         tool_input = tool["input"]
 
-        # Extract common input parameters
+        # Extract common and Stable Diffusion input parameters
+        aspect_ratio = tool_input.get("aspect_ratio", "1:1")
+        output_format = tool_input.get("output_format", "jpeg")
         prompt = tool_input.get("prompt", "A stylized picture of a cute old steampunk robot.")
         model_id = tool_input.get("model_id", "stability.stable-image-core-v1:1")
         region = tool_input.get("region", "us-west-2")
@@ -207,46 +210,25 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Initialize variables for later use
         base64_image_data = None
-        output_format = "jpeg"  # Default format
 
-        # Format the request payload based on model type
-        # Validate model ID is a supported Stable Diffusion model
-        if model_id in STABLE_DIFFUSION_MODEL_ID:
-            # Stable Diffusion specific parameters
-            aspect_ratio = tool_input.get("aspect_ratio", "1:1")
-            output_format = tool_input.get("output_format", "jpeg")
+        # create the request body
+        native_request = {
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "seed": seed,
+            "output_format": output_format,
+            "negative_prompt": negative_prompt,
+        }
+        request = json.dumps(native_request)
 
-            native_request = {
-                "prompt": prompt,
-                "aspect_ratio": aspect_ratio,
-                "seed": seed,
-                "output_format": output_format,
-                "negative_prompt": negative_prompt,
-            }
-            request = json.dumps(native_request)
+        # Invoke the model
+        response = client.invoke_model(modelId=model_id, body=request)
 
-            # Invoke the model
-            response = client.invoke_model(modelId=model_id, body=request)
+        # Decode the response body
+        model_response = json.loads(response["body"].read().decode("utf-8"))
 
-            # Decode the response body
-            model_response = json.loads(response["body"].read().decode("utf-8"))
-
-            # Extract the image data
-            base64_image_data = model_response["images"][0]
-
-        else:
-            return {
-                "toolUseId": tool_use_id,
-                "status": "error",
-                "content": [
-                    {
-                        "text": "Supported models for this tool are: \n \
-                              1. stability.sd3-5-large-v1:0 \n \
-                              2. stability.stable-image-core-v1:1 \n \
-                              3. stability.stable-image-ultra-v1:1"
-                    }
-                ],
-            }
+        # Extract the image data
+        base64_image_data = model_response["images"][0]
 
         # If we have image data, process and save it
         if base64_image_data:
@@ -280,10 +262,18 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     },
                 ],
             }
-
+        else:
+            raise Exception("No image data found in the response.")
     except Exception as e:
         return {
             "toolUseId": tool_use_id,
             "status": "error",
-            "content": [{"text": f"Error generating image: {str(e)}"}],
+            "content": [
+                {
+                    "text": f"Error generating image: {str(e)} \n Try other supported models for this tool are: \n \
+                              1. stability.sd3-5-large-v1:0 \n \
+                              2. stability.stable-image-core-v1:1 \n \
+                              3. stability.stable-image-ultra-v1:1"
+                }
+            ],
         }
