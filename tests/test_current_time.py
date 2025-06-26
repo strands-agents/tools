@@ -56,7 +56,7 @@ def test_current_time_direct_utc(agent):
 def test_current_time_direct_custom_timezone(agent):
     """Test direct invocation with a custom timezone."""
     # Test with US/Pacific timezone
-    result = agent.tool.current_time(timezone="US/Pacific")
+    result = agent.tool.current_time(timezone="America/Los_Angeles")
 
     result_text = extract_result_text(result)
 
@@ -71,7 +71,7 @@ def test_current_time_direct_custom_timezone(agent):
 
     # Verify the time is roughly correct by comparing to UTC with appropriate offset
     returned_time = datetime.fromisoformat(result_text)
-    pacific_tz = ZoneInfo("US/Pacific")
+    pacific_tz = ZoneInfo("America/Los_Angeles")
     now_pacific = datetime.now(pacific_tz)
 
     # Times should be within 5 seconds of each other
