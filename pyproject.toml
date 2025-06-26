@@ -83,9 +83,9 @@ mem0_memory = [
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0_memory"]
 dependencies = [
-  "strands-agents>=0.1.0,<1.0.0",
-  "mypy>=0.981,<1.0.0",
-  "ruff>=0.4.4,<0.5.0",
+    "strands-agents>=0.1.0,<1.0.0",
+    "mypy>=0.981,<1.0.0",
+    "ruff>=0.4.4,<0.5.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
@@ -140,7 +140,7 @@ list = [
     "echo 'Scripts commands available for default env:'; hatch env show --json | jq --raw-output '.default.scripts | keys[]'"
 ]
 format = [
-  "hatch fmt --formatter",
+    "hatch fmt --formatter",
 ]
 test-format = [
     "hatch fmt --formatter --check",
@@ -153,6 +153,9 @@ test-lint = [
 ]
 test = [
     "hatch test --cover --cov-report html --cov-report xml {args}"
+]
+test-integ = [
+    "hatch test tests-integ {args}"
 ]
 
 [tool.mypy]
@@ -173,14 +176,14 @@ ignore_missing_imports = false
 
 [tool.ruff]
 line-length = 120
-include = ["src/**/*.py", "tests/**/*.py"]
+include = ["src/**/*.py", "tests/**/*.py","tests-integ/**/*.py"]
 
 [tool.ruff.lint]
 select = [
-  "E", # pycodestyle
-  "F", # pyflakes
-  "I", # isort
-  "B", # flake8-bugbear
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
+    "B", # flake8-bugbear
 ]
 
 [tool.coverage.run]
@@ -195,6 +198,12 @@ directory = "build/coverage/html"
 
 [tool.coverage.xml]
 output = "build/coverage/coverage.xml"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
+]
+pythonpath = ["src"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
