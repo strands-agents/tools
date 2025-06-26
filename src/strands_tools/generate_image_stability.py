@@ -5,6 +5,8 @@ This module provides functionality to generate high-quality images using Stabili
 latest models including SD3.5, Stable Image Ultra, and Stable Image Core through the
 Stability Platform API.
 
+This means agents can create images in a cost effictive way, using state of the art models.
+
 Key Features:
 
 1. Image Generation:
@@ -21,32 +23,36 @@ Key Features:
 
 Usage with Strands Agent:
 ```python
+import os
 from strands import Agent
 from strands_tools import generate_image_stability
 
+
+# Set your API key and model as environment variables
+os.environ['STABILITY_API_KEY'] = 'sk-xxx'
+os.environ['STABILITY_MODEL_ID'] = 'stability.stable-image-ultra-v1:1'
+
+If no model is selected, the tool defaults to 'stability.stable-image-core-v1:1'.
+
+# Create agent with the tool
 agent = Agent(tools=[generate_image_stability])
 
-# Basic usage
-agent.tool.generate_image_stability(
-    prompt="A futuristic robot in a cyberpunk city",
-    model_id="stability.stable-image-ultra-v1:1",
-    stability_api_key="sk-xxx"
-)
+# Basic usage - agent only needs to provide the prompt
+agent("Generate an image of a futuristic robot in a cyberpunk city")
 
 # Advanced usage with custom parameters
 agent.tool.generate_image_stability(
     prompt="A serene mountain landscape",
-    model_id="stability.sd3-5-large-v1:0",
     aspect_ratio="16:9",
     style_preset="photographic",
     cfg_scale=7.0,
-    seed=42,
-    stability_api_key="sk-xxx"
+    seed=42
 )
 ```
 """
 
 import base64
+import os
 from typing import Any, Tuple, Union
 
 import requests
@@ -55,17 +61,14 @@ from strands.types.tools import ToolResult, ToolUse
 TOOL_SPEC = {
     "name": "generate_image_stability",
     "description": (
-        "Generates an image using Stability AI's latest models on the Stability Platform, "
-        "including SD3.5, Stable Image Ultra and Stable Image Core."
+        "Generates an image using Stability AI. " "Simply provide a text description of what you want to create."
     ),
     "inputSchema": {
         "type": "object",
         "properties": {
-            "stability_api_key": {
+            "prompt": {
                 "type": "string",
-                "description": (
-                    "Your Stability API key for authentication. " "Required for accessing the Stability AI API."
-                ),
+                "description": "The text prompt to generate the image from. Be descriptive for best results.",
             },
             "return_type": {
                 "type": "string",
@@ -77,25 +80,11 @@ TOOL_SPEC = {
                 "enum": ["json", "image"],
                 "default": "image",
             },
-            "prompt": {
-                "type": "string",
-                "description": "The text prompt to generate the image from",
-            },
-            "model_id": {
-                "type": "string",
-                "description": "The model to use for image generation.",
-                "enum": [
-                    "stability.stable-image-core-v1:1",
-                    "stability.stable-image-ultra-v1:1",
-                    "stability.sd3-5-large-v1:0",
-                ],
-            },
             "aspect_ratio": {
                 "type": "string",
                 "description": (
                     "Controls the aspect ratio of the generated image. "
-                    "This parameter is only valid for text-to-image requests. "
-                    "For image-to-image requests, the aspect ratio is determined by the input image."
+                    "This parameter is only valid for text-to-image requests."
                 ),
                 "enum": ["16:9", "1:1", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
                 "default": "1:1",
@@ -104,27 +93,18 @@ TOOL_SPEC = {
                 "type": "integer",
                 "description": (
                     "Optional: Seed for random number generation. "
-                    "Omit this parameter or pass 0 to use a random seed."
+                    "Use the same seed to reproduce similar results. "
+                    "Omit or use 0 for random generation."
                 ),
                 "minimum": 0,
                 "maximum": 4294967294,
                 "default": 0,
             },
-            "cfg_scale": {
-                "type": "number",
-                "description": (
-                    "CFG scale for image generation (only used for stability.sd3-5-large-v1:0). "
-                    "Controls how closely the image follows the prompt. "
-                    "Higher values mean stricter adherence."
-                ),
-                "minimum": 1.0,
-                "maximum": 10.0,
-                "default": 4.0,
-            },
             "output_format": {
                 "type": "string",
                 "description": "Output format for the generated image",
                 "enum": ["jpeg", "png", "webp"],
+                "default": "png",
             },
             "style_preset": {
                 "type": "string",
@@ -151,24 +131,15 @@ TOOL_SPEC = {
                     "tile-texture",
                 ],
             },
-            "image": {
-                "type": "string",
-                "description": (
-                    "Input image for image-to-image generation. "
-                    "Should be base64-encoded image data in jpeg, png or webp format."
-                ),
-            },
-            "mode": {"type": "string", "description": "Mode of operation", "enum": ["text-to-image", "image-to-image"]},
-            "strength": {
+            "cfg_scale": {
                 "type": "number",
                 "description": (
-                    "Sometimes referred to as denoising, this parameter controls how much influence the "
-                    "image parameter has on the generated image. A value of 0 would yield an image that "
-                    "is identical to the input. A value of 1 would be as if you passed in no image at all. "
-                    "Only used when mode is image-to-image."
+                    "Controls how closely the image follows the prompt (only used with SD3.5 model). "
+                    "Higher values mean stricter adherence to the prompt."
                 ),
-                "minimum": 0.0,
-                "maximum": 1.0,
+                "minimum": 1.0,
+                "maximum": 10.0,
+                "default": 4.0,
             },
             "negative_prompt": {
                 "type": "string",
@@ -178,8 +149,31 @@ TOOL_SPEC = {
                 ),
                 "maxLength": 10000,
             },
+            "mode": {
+                "type": "string",
+                "description": "Mode of operation",
+                "enum": ["text-to-image", "image-to-image"],
+                "default": "text-to-image",
+            },
+            "image": {
+                "type": "string",
+                "description": (
+                    "Input image for image-to-image generation. "
+                    "Should be base64-encoded image data in jpeg, png or webp format."
+                ),
+            },
+            "strength": {
+                "type": "number",
+                "description": (
+                    "For image-to-image mode: controls how much the input image influences the result. "
+                    "0 = identical to input, 1 = completely new image based on prompt."
+                ),
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "default": 0.5,
+            },
         },
-        "required": ["stability_api_key", "prompt", "model_id"],
+        "required": ["prompt"],
     },
 }
 
@@ -193,14 +187,26 @@ def api_route(model_id: str) -> str:
 
     Returns:
         str: The complete API route for the specified model.
+
+    Raises:
+        ValueError: If the model_id is not supported.
     """
     route_map = {
         "stability.sd3-5-large-v1:0": "sd3",
         "stability.stable-image-ultra-v1:1": "ultra",
         "stability.stable-image-core-v1:1": "core",
     }
+
+    try:
+        route_suffix = route_map[model_id]
+    except KeyError as err:
+        supported_models = list(route_map.keys())
+        raise ValueError(
+            f"Unsupported model_id: {model_id}. " f"Supported models are: {', '.join(supported_models)}"
+        ) from err
+
     base_url = "https://api.stability.ai/v2beta/stable-image"
-    return f"{base_url}/generate/{route_map[model_id]}"
+    return f"{base_url}/generate/{route_suffix}"
 
 
 def call_stability_api(
@@ -241,17 +247,8 @@ def call_stability_api(
         - image_data: bytes if return_type="image", base64 string if return_type="json"
         - finish_reason: string indicating completion status
     """
-    # Determine API endpoint based on model
-    model_endpoints = {
-        "stability.sd3-5-large-v1:0": "https://api.stability.ai/v2beta/stable-image/generate/sd3",
-        "stability.stable-image-core-v1:1": "https://api.stability.ai/v2beta/stable-image/generate/core",
-        "stability.stable-image-ultra-v1:1": "https://api.stability.ai/v2beta/stable-image/generate/ultra",
-    }
-
-    if model_id not in model_endpoints:
-        raise ValueError(f"Unsupported model_id: {model_id}")
-
-    url = model_endpoints[model_id]
+    # Get API endpoint using the api_route function
+    url = api_route(model_id)
 
     # Set accept header based on return type
     accept_header = "application/json" if return_type == "json" else "image/*"
@@ -321,71 +318,54 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Generate images from text prompts using Stability Platform API.
 
     This function transforms textual descriptions into high-quality images using
-    Stability AI's latest models including SD3.5, Stable Image Ultra, and Stable Image Core.
-    It provides extensive customization options and handles the complete process from
-    API interaction to image storage and result formatting.
+    Stability AI's latest models. It retrieves the API key and model ID from
+    environment variables.
 
-    Generation Parameters:
-    --------------------
-    - prompt: The textual description of the desired image
-    - model_id: Specific model to use (e.g., stability.stable-image-core-v1:1)
-    - return_type: Format of returned image ("json" or "image", default: "image")
-    - seed: Controls randomness for reproducible results (0 = random)
-    - style_preset: Artistic style to apply (e.g., photographic, cinematic)
-    - cfg_scale: Controls how closely the image follows the prompt, only used for stability.sd3-5-large-v1:0
-    - aspect_ratio: Controls the aspect ratio of the output image
-    - output_format: Output format (jpeg, png, webp)
-    - mode: Generation mode (text-to-image or image-to-image)
-    - strength: Influence of input image for image-to-image generation
-    - negative_prompt: Text describing what not to include in the image
-    - image: Input image for image-to-image generation
+    Environment Variables:
+        STABILITY_API_KEY: Your Stability Platform API key (required)
+        STABILITY_MODEL_ID: The model to use (optional, defaults to stability.stable-image-core-v1:1)
 
     Args:
         tool: ToolUse object containing the parameters for image generation.
-            - prompt: The text prompt describing the desired image.
-            - model_id: Model identifier (e.g., "stability.stable-image-core-v1:1").
-            - stability_api_key: API key for Stability Platform authentication.
-            - return_type: Optional return format ("json" or "image", default: "image").
-            - seed: Optional random seed (default: 0 for random).
-            - style_preset: Optional style preset name.
-            - cfg_scale: Optional CFG scale value (default: 4.0).
-            - aspect_ratio: Optional aspect ratio (default: "1:1").
-            - output_format: Optional output format (default: "png").
-            - mode: Optional generation mode (default: "text-to-image").
-            - strength: Optional input image influence (default: varies by mode).
-            - negative_prompt: Optional negative prompt to exclude elements.
-            - image: Optional input image for image-to-image generation.
-
         **kwargs: Additional keyword arguments (unused).
 
     Returns:
-        ToolResult: A dictionary containing the result status and content:
-            - On success: Contains a text message and the rendered image data.
-            - On failure: Contains an error message describing what went wrong.
+        ToolResult: A dictionary containing the result status and content.
 
-    Notes:
-        - The function requires a Stability AI API key for authentication. See https://platform.stability.ai/
-        - For best results, provide detailed, descriptive prompts
-        - Returns a ToolResult with image data and status information
+    Raises:
+        ValueError: If STABILITY_API_KEY environment variable is not set.
     """
     try:
         tool_input = tool.get("input", tool)
         tool_use_id = tool.get("toolUseId", "default_id")
 
+        # Get API key from environment
+        stability_api_key = os.environ.get("STABILITY_API_KEY")
+        if not stability_api_key:
+            raise ValueError(
+                "STABILITY_API_KEY environment variable not set. " "Please set it with your Stability API key."
+            )
+
+        # Get model ID from environment or use default
+        model_id = os.environ.get("STABILITY_MODEL_ID", "stability.stable-image-core-v1:1")
+
         # Extract input parameters with defaults
         prompt = tool_input.get("prompt")
-        model_id = tool_input.get("model_id")
-        stability_api_key = tool_input.get("stability_api_key")
         return_type = tool_input.get("return_type", "image")
         aspect_ratio = tool_input.get("aspect_ratio", "1:1")
-        cfg_scale = tool_input.get("cfg_scale", 4.0)
         seed = tool_input.get("seed", 0)
         output_format = tool_input.get("output_format", "png")
         style_preset = tool_input.get("style_preset")
         image = tool_input.get("image")
         mode = tool_input.get("mode", "text-to-image")
-        strength = tool_input.get("strength")
+        strength = tool_input.get("strength", 0.5)
         negative_prompt = tool_input.get("negative_prompt")
+
+        # cfg_scale only for SD3.5 model
+        if model_id == "stability.sd3-5-large-v1:0":
+            cfg_scale = tool_input.get("cfg_scale", 4.0)
+        else:
+            cfg_scale = 4.0  # Default value for other models
 
         # Generate the image using the API
         image_data, finish_reason = call_stability_api(
@@ -428,7 +408,7 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     except Exception as e:
         return {
-            "toolUseId": tool_use_id,
+            "toolUseId": tool.get("toolUseId", "default_id"),
             "status": "error",
             "content": [{"text": f"Error generating image: {str(e)}"}],
         }

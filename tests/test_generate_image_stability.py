@@ -3,15 +3,30 @@ Tests for the generate_image_stability tool.
 """
 
 import base64
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
 from strands_tools import generate_image_stability
+from strands_tools.generate_image_stability import call_stability_api
 
 
 @pytest.fixture
-def agent():
+def mock_env_api_key(monkeypatch):
+    """Mock the STABILITY_API_KEY environment variable."""
+    monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+
+
+@pytest.fixture
+def mock_env_with_model(monkeypatch):
+    """Mock both STABILITY_API_KEY and STABILITY_MODEL_ID environment variables."""
+    monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+    monkeypatch.setenv("STABILITY_MODEL_ID", "stability.stable-image-ultra-v1:1")
+
+
+@pytest.fixture
+def agent_with_tool(mock_env_api_key):
     """Create an agent with the generate_image_stability tool loaded."""
     return Agent(tools=[generate_image_stability])
 
@@ -26,7 +41,7 @@ def extract_result_text(result):
 @pytest.fixture
 def mock_requests():
     """Mock requests for testing Stability API calls."""
-    with patch("requests.post") as mock_post:
+    with patch("strands_tools.generate_image_stability.requests.post") as mock_post:
         # Set up mock response for image return type
         mock_response = MagicMock()
         mock_response.content = b"mock_image_data"
@@ -40,7 +55,7 @@ def mock_requests():
 @pytest.fixture
 def mock_requests_json():
     """Mock requests for testing Stability API calls with JSON return type."""
-    with patch("requests.post") as mock_post:
+    with patch("strands_tools.generate_image_stability.requests.post") as mock_post:
         # Set up mock response for JSON return type
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -53,7 +68,7 @@ def mock_requests_json():
         yield mock_post, mock_response
 
 
-def test_generate_image_stability_direct_image_type(mock_requests):
+def test_generate_image_stability_direct_image_type(mock_env_api_key, mock_requests):
     """Test direct invocation of the generate_image_stability tool with image return type."""
     mock_post, mock_response = mock_requests
 
@@ -62,28 +77,25 @@ def test_generate_image_stability_direct_image_type(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "A futuristic robot",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
             "return_type": "image",
             "seed": 123,
-            "cfg_scale": 7.0,
             "aspect_ratio": "16:9",
             "style_preset": "cinematic",
             "output_format": "png",
         },
     }
 
-    # Call the generate_image_stability function directly
+    # Call the tool function directly
     result = generate_image_stability.generate_image_stability(tool=tool_use)
 
     # Verify the API was called correctly
     mock_post.assert_called_once()
     args, kwargs = mock_post.call_args
 
-    # Check URL for SD3 model
+    # Check URL for default core model
     assert args[0] == "https://api.stability.ai/v2beta/stable-image/generate/core"
 
-    # Check headers
+    # Check headers - API key should be from environment
     assert kwargs["headers"]["authorization"] == "Bearer sk-test-key"
     assert kwargs["headers"]["accept"] == "image/*"
 
@@ -92,7 +104,6 @@ def test_generate_image_stability_direct_image_type(mock_requests):
     assert data["prompt"] == "A futuristic robot"
     assert data["output_format"] == "png"
     assert data["aspect_ratio"] == "16:9"
-    assert data["cfg_scale"] == 7.0
     assert data["seed"] == 123
     assert data["style_preset"] == "cinematic"
 
@@ -108,7 +119,7 @@ def test_generate_image_stability_direct_image_type(mock_requests):
     assert isinstance(result["content"][1]["image"]["source"]["bytes"], bytes)
 
 
-def test_model_endpoint_routing(mock_requests):
+def test_model_endpoint_routing(monkeypatch, mock_requests):
     """Test that different models route to correct API endpoints."""
     mock_post, mock_response = mock_requests
 
@@ -119,6 +130,10 @@ def test_model_endpoint_routing(mock_requests):
     ]
 
     for model_id, expected_url in model_endpoint_tests:
+        # Set up environment for this model
+        monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+        monkeypatch.setenv("STABILITY_MODEL_ID", model_id)
+
         # Reset mock for each test
         mock_post.reset_mock()
 
@@ -126,8 +141,6 @@ def test_model_endpoint_routing(mock_requests):
             "toolUseId": "test-tool-use-id",
             "input": {
                 "prompt": "Test prompt",
-                "model_id": model_id,
-                "stability_api_key": "sk-test-key",
             },
         }
 
@@ -139,14 +152,15 @@ def test_model_endpoint_routing(mock_requests):
         assert result["status"] == "success"
 
 
-def test_unsupported_model_error():
+def test_unsupported_model_error(monkeypatch):
     """Test error handling for unsupported model_id."""
+    monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+    monkeypatch.setenv("STABILITY_MODEL_ID", "unsupported.model.v1:0")
+
     tool_use = {
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "Test prompt",
-            "model_id": "unsupported.model.v1:0",
-            "stability_api_key": "sk-test-key",
         },
     }
 
@@ -157,18 +171,20 @@ def test_unsupported_model_error():
     assert "Unsupported model_id: unsupported.model.v1:0" in result["content"][0]["text"]
 
 
-def test_generate_image_stability_json_type(mock_requests_json):
+def test_generate_image_stability_json_type(monkeypatch, mock_requests_json):
     """Test generate_image_stability with JSON return type."""
     mock_post, mock_response = mock_requests_json
+
+    # Set SD3.5 model to test cfg_scale
+    monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+    monkeypatch.setenv("STABILITY_MODEL_ID", "stability.sd3-5-large-v1:0")
 
     tool_use = {
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "A cyberpunk city",
-            "model_id": "stability.sd3-5-large-v1:0",
-            "stability_api_key": "sk-test-key",
             "return_type": "json",
-            "cfg_scale": 8.0,
+            "cfg_scale": 8.0,  # This should work for SD3.5
         },
     }
 
@@ -178,7 +194,7 @@ def test_generate_image_stability_json_type(mock_requests_json):
     args, kwargs = mock_post.call_args
     assert kwargs["headers"]["accept"] == "application/json"
 
-    # Check that cfg_scale was included in the request
+    # Check that cfg_scale was included in the request (SD3.5 supports this)
     assert kwargs["data"]["cfg_scale"] == 8.0
 
     # Check the result
@@ -186,7 +202,7 @@ def test_generate_image_stability_json_type(mock_requests_json):
     assert isinstance(result["content"][1]["image"]["source"]["bytes"], bytes)
 
 
-def test_generate_image_stability_default_params(mock_requests):
+def test_generate_image_stability_default_params(mock_env_api_key, mock_requests):
     """Test generate_image_stability with default parameters."""
     mock_post, mock_response = mock_requests
 
@@ -194,8 +210,6 @@ def test_generate_image_stability_default_params(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "A simple robot",
-            "model_id": "stability.stable-image-ultra-v1:1",
-            "stability_api_key": "sk-test-key",
         },
     }
 
@@ -211,10 +225,12 @@ def test_generate_image_stability_default_params(mock_requests):
     # seed=0 means random, so it shouldn't be in the data
     assert "seed" not in data
 
+    # Check default model
+    assert "Generated image using stability.stable-image-core-v1:1" in result["content"][0]["text"]
     assert result["status"] == "success"
 
 
-def test_generate_image_stability_with_image_input(mock_requests):
+def test_generate_image_stability_with_image_input(mock_env_api_key, mock_requests):
     """Test generate_image_stability with image-to-image mode."""
     mock_post, mock_response = mock_requests
 
@@ -226,8 +242,6 @@ def test_generate_image_stability_with_image_input(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "Transform this image",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
             "mode": "image-to-image",
             "image": test_image_b64,
             "strength": 0.8,
@@ -250,7 +264,7 @@ def test_generate_image_stability_with_image_input(mock_requests):
     assert result["status"] == "success"
 
 
-def test_generate_image_stability_with_data_url_image(mock_requests):
+def test_generate_image_stability_with_data_url_image(mock_env_api_key, mock_requests):
     """Test generate_image_stability with data URL image input."""
     mock_post, mock_response = mock_requests
 
@@ -263,8 +277,6 @@ def test_generate_image_stability_with_data_url_image(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "Transform this image",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
             "mode": "image-to-image",
             "image": data_url,
             "strength": 0.5,
@@ -281,7 +293,7 @@ def test_generate_image_stability_with_data_url_image(mock_requests):
     assert result["status"] == "success"
 
 
-def test_generate_image_stability_with_negative_prompt(mock_requests):
+def test_generate_image_stability_with_negative_prompt(mock_env_api_key, mock_requests):
     """Test generate_image_stability with negative prompt."""
     mock_post, mock_response = mock_requests
 
@@ -289,8 +301,6 @@ def test_generate_image_stability_with_negative_prompt(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "A beautiful landscape",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
             "negative_prompt": "blurry, low quality, distorted",
         },
     }
@@ -304,33 +314,7 @@ def test_generate_image_stability_with_negative_prompt(mock_requests):
     assert result["status"] == "success"
 
 
-def test_generate_image_stability_seed_handling(mock_requests):
-    """Test that seed=0 results in random seed (not included in request)."""
-    mock_post, mock_response = mock_requests
-
-    # Test with seed=0 (should not be included)
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {
-            "prompt": "A robot",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
-            "seed": 0,
-        },
-    }
-
-    generate_image_stability.generate_image_stability(tool=tool_use)
-    args, kwargs = mock_post.call_args
-    assert "seed" not in kwargs["data"]
-
-    # Test with non-zero seed (should be included)
-    tool_use["input"]["seed"] = 42
-    generate_image_stability.generate_image_stability(tool=tool_use)
-    args, kwargs = mock_post.call_args
-    assert kwargs["data"]["seed"] == 42
-
-
-def test_generate_image_stability_error_handling(mock_requests):
+def test_generate_image_stability_error_handling(mock_env_api_key, mock_requests):
     """Test error handling in generate_image_stability."""
     mock_post, mock_response = mock_requests
 
@@ -341,8 +325,6 @@ def test_generate_image_stability_error_handling(mock_requests):
         "toolUseId": "test-tool-use-id",
         "input": {
             "prompt": "A robot",
-            "model_id": "stability.stable-image-core-v1:1",
-            "stability_api_key": "sk-test-key",
         },
     }
 
@@ -353,11 +335,28 @@ def test_generate_image_stability_error_handling(mock_requests):
     assert "Error generating image: API error" in result["content"][0]["text"]
 
 
+def test_missing_api_key_error():
+    """Test error when STABILITY_API_KEY is not set."""
+    # Make sure the env var is not set
+    if "STABILITY_API_KEY" in os.environ:
+        del os.environ["STABILITY_API_KEY"]
+
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "prompt": "Test prompt",
+        },
+    }
+
+    result = generate_image_stability.generate_image_stability(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "STABILITY_API_KEY environment variable not set" in result["content"][0]["text"]
+
+
 def test_call_stability_api_endpoint_routing():
     """Test that call_stability_api routes to correct endpoints."""
-    from strands_tools.generate_image_stability import call_stability_api
-
-    with patch("requests.post") as mock_post:
+    with patch("strands_tools.generate_image_stability.requests.post") as mock_post:
         # Set up mock response
         mock_response = MagicMock()
         mock_response.content = b"mock_image_data"
@@ -393,9 +392,7 @@ def test_call_stability_api_endpoint_routing():
 
 def test_call_stability_api_direct():
     """Test the call_stability_api function directly."""
-    from strands_tools.generate_image_stability import call_stability_api
-
-    with patch("requests.post") as mock_post:
+    with patch("strands_tools.generate_image_stability.requests.post") as mock_post:
         # Set up mock response
         mock_response = MagicMock()
         mock_response.content = b"mock_image_data"
@@ -422,15 +419,79 @@ def test_call_stability_api_direct():
         assert kwargs["data"]["prompt"] == "Test prompt"
 
 
-def test_generate_image_stability_via_agent(agent, mock_requests):
+def test_generate_image_stability_via_agent(agent_with_tool, mock_requests):
     """Test image generation via the agent interface."""
     mock_post, mock_response = mock_requests
 
     # This simulates how the tool would be used through the Agent interface
-    result = agent.tool.generate_image_stability(
-        prompt="Test via agent", model_id="stability.stable-image-core-v1:1", stability_api_key="sk-test-key"
-    )
+    result = agent_with_tool.tool.generate_image_stability(prompt="Test via agent")
 
     result_text = extract_result_text(result)
     assert "Generated image using stability.stable-image-core-v1:1" in result_text
     assert "Finish reason: SUCCESS" in result_text
+
+
+def test_generate_image_stability_with_env_model(mock_env_with_model, mock_requests):
+    """Test that STABILITY_MODEL_ID environment variable is used."""
+    mock_post, mock_response = mock_requests
+
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "prompt": "Test with env model",
+        },
+    }
+
+    result = generate_image_stability.generate_image_stability(tool=tool_use)
+
+    # Should use ultra model from environment
+    args, kwargs = mock_post.call_args
+    assert args[0] == "https://api.stability.ai/v2beta/stable-image/generate/ultra"
+    assert "Generated image using stability.stable-image-ultra-v1:1" in result["content"][0]["text"]
+
+
+def test_cfg_scale_only_for_sd3(monkeypatch, mock_requests):
+    """Test that cfg_scale is only accepted for SD3.5 model."""
+    mock_post, mock_response = mock_requests
+
+    # Test that SD3.5 accepts cfg_scale
+    monkeypatch.setenv("STABILITY_API_KEY", "sk-test-key")
+    monkeypatch.setenv("STABILITY_MODEL_ID", "stability.sd3-5-large-v1:0")
+
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "prompt": "Test prompt",
+            "cfg_scale": 7.5,
+        },
+    }
+
+    generate_image_stability.generate_image_stability(tool=tool_use)
+    args, kwargs = mock_post.call_args
+    assert kwargs["data"]["cfg_scale"] == 7.5
+
+    # Reset mock
+    mock_post.reset_mock()
+
+    # Test that core model ignores cfg_scale (uses default 4.0 internally)
+    monkeypatch.setenv("STABILITY_MODEL_ID", "stability.stable-image-core-v1:1")
+    generate_image_stability.generate_image_stability(tool=tool_use)
+    args, kwargs = mock_post.call_args
+    assert kwargs["data"]["cfg_scale"] == 4.0  # Default value
+
+
+def test_tool_spec_exists():
+    """Test that TOOL_SPEC is properly defined in the module."""
+    assert hasattr(generate_image_stability, "TOOL_SPEC")
+    assert generate_image_stability.TOOL_SPEC["name"] == "generate_image_stability"
+
+    # Check that required fields don't include API key or model_id
+    required_fields = generate_image_stability.TOOL_SPEC["inputSchema"]["required"]
+    assert "prompt" in required_fields
+    assert "stability_api_key" not in required_fields
+    assert "model_id" not in required_fields
+
+    # Check that properties don't include model_id anymore
+    properties = generate_image_stability.TOOL_SPEC["inputSchema"]["properties"]
+    assert "model_id" not in properties
+    assert "prompt" in properties
