@@ -486,7 +486,7 @@ class BrowserManager:
                         fixed_script = await self._fix_javascript_syntax(args["script"], str(e))
                         if fixed_script:
                             args["script"] = fixed_script
-                            logger.warning(f"Attempting retry with fixed JavaScript")
+                            logger.warning("Attempting retry with fixed JavaScript")
                             continue
 
                 # Exponential backoff
