@@ -304,35 +304,6 @@ result = agent.tool.batch(
 )
 ```
 
-### Batch Tool
-
-```python
-import os
-import sys
-
-from strands import Agent
-from strands_tools import batch, http_request, use_aws
-
-# Example usage of the batch with http_request and use_aws tools
-agent = Agent(tools=[batch, http_request, use_aws])
-
-result = agent.tool.batch(
-    invocations=[
-        {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
-        {
-            "name": "use_aws",
-            "arguments": {
-                "service_name": "s3",
-                "operation_name": "list_buckets",
-                "parameters": {},
-                "region": "us-east-1",
-                "label": "List S3 Buckets"
-            }
-        },
-    ]
-)
-```
-
 ### Use Browser
 ```python
 from strands import Agent
