@@ -416,8 +416,8 @@ class BrowserManager:
         return fixed_script
 
     async def handle_action(self, action: str, **kwargs) -> List[Dict[str, str]]:
-        max_retries = int(os.getenv("BROWSER_MAX_RETRIES", 3))
-        retry_delay = int(os.getenv("BROWSER_RETRY_DELAY", 1))
+        max_retries = int(os.getenv("STRANDS_BROWSER_MAX_RETRIES", 3))
+        retry_delay = int(os.getenv("STRANDS_BROWSER_RETRY_DELAY", 1))
 
         async def execute_action():
             if action not in self._actions:
@@ -500,7 +500,7 @@ _playwright_manager = BrowserManager()
 @tool
 def use_browser(
     url: str = None,
-    wait_time: int = int(os.getenv("DEFAULT_WAIT_TIME", 1)),
+    wait_time: int = int(os.getenv("STRANDS_DEFAULT_WAIT_TIME", 1)),
     action: str = None,
     selector: str = None,
     input_text: str = None,
@@ -618,7 +618,7 @@ def use_browser(
     Args:
         url (str, optional): URL to navigate to. Used with 'navigate' action.
         wait_time (int, optional): Time to wait in seconds after performing an action.
-            Default is set by DEFAULT_WAIT_TIME env var or 1 second.
+            Default is set by STRANDS_DEFAULT_WAIT_TIME env var or 1 second.
         action (str, optional): Single action to perform. Common actions include:
             - navigate: Go to a URL
             - click: Click on an element

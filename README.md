@@ -505,8 +505,9 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default | 
 |----------------------|-------------|---------|
-| DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
-| BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| STRANDS_DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
+| STRANDS_BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| STRANDS_BROWSER_RETRY_DELAY | Default retry delay time for retry mechanisms | 1 |
 | STRANDS_BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
 | STRANDS_BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
 | STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |

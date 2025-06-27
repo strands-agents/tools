@@ -140,7 +140,7 @@ TOOL_SPEC = {
                     "description": "Optional metadata to store with the memory",
                 },
             },
-            "required": ["action"],
+            "required": ["action"]
         }
     },
 }
