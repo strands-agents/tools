@@ -42,11 +42,18 @@ def extract_result_text(result):
 def mock_requests():
     """Mock requests for testing Stability API calls."""
     with patch("strands_tools.generate_image_stability.requests.post") as mock_post:
-        # Set up mock response for image return type
+        # Set up mock response that works for both image and json return types
         mock_response = MagicMock()
         mock_response.content = b"mock_image_data"
         mock_response.headers = {"finish_reason": "SUCCESS"}
         mock_response.raise_for_status = MagicMock()
+
+        # Add json() method for JSON return type
+        mock_response.json.return_value = {
+            "image": base64.b64encode(b"mock_image_data").decode("utf-8"),
+            "finish_reason": "SUCCESS",
+        }
+
         mock_post.return_value = mock_response
 
         yield mock_post, mock_response
@@ -219,8 +226,8 @@ def test_generate_image_stability_default_params(mock_env_api_key, mock_requests
     args, kwargs = mock_post.call_args
     data = kwargs["data"]
 
-    # Defaults from the tool spec
-    assert kwargs["headers"]["accept"] == "image/*"  # default return_type is "image"
+    # Defaults from the tool spec - now json is default
+    assert kwargs["headers"]["accept"] == "application/json"  # default return_type is now "json"
     assert data["output_format"] == "png"  # default
     # seed=0 means random, so it shouldn't be in the data
     assert "seed" not in data
@@ -314,11 +321,35 @@ def test_generate_image_stability_with_negative_prompt(mock_env_api_key, mock_re
     assert result["status"] == "success"
 
 
+def test_generate_image_stability_seed_handling(mock_env_api_key, mock_requests):
+    """Test that seed=0 results in random seed (not included in request)."""
+    mock_post, mock_response = mock_requests
+
+    # Test with seed=0 (should not be included)
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "prompt": "A robot",
+            "seed": 0,
+        },
+    }
+
+    generate_image_stability.generate_image_stability(tool=tool_use)
+    args, kwargs = mock_post.call_args
+    assert "seed" not in kwargs["data"]
+
+    # Test with non-zero seed (should be included)
+    tool_use["input"]["seed"] = 42
+    generate_image_stability.generate_image_stability(tool=tool_use)
+    args, kwargs = mock_post.call_args
+    assert kwargs["data"]["seed"] == 42
+
+
 def test_generate_image_stability_error_handling(mock_env_api_key, mock_requests):
     """Test error handling in generate_image_stability."""
     mock_post, mock_response = mock_requests
 
-    # Setup requests to raise an exception
+    # Set up requests to raise an exception
     mock_response.raise_for_status.side_effect = Exception("API error")
 
     tool_use = {
@@ -375,7 +406,6 @@ def test_call_stability_api_endpoint_routing():
             # Reset mock
             mock_post.reset_mock()
 
-            # Call the function
             image_data, finish_reason = call_stability_api(
                 prompt="Test prompt", model_id=model_id, stability_api_key="sk-test-key", return_type="image"
             )
@@ -400,7 +430,6 @@ def test_call_stability_api_direct():
         mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 
-        # Call the function
         image_data, finish_reason = call_stability_api(
             prompt="Test prompt",
             model_id="stability.stable-image-core-v1:1",
@@ -477,7 +506,7 @@ def test_cfg_scale_only_for_sd3(monkeypatch, mock_requests):
     monkeypatch.setenv("STABILITY_MODEL_ID", "stability.stable-image-core-v1:1")
     generate_image_stability.generate_image_stability(tool=tool_use)
     args, kwargs = mock_post.call_args
-    assert kwargs["data"]["cfg_scale"] == 4.0  # Default value
+    assert kwargs["data"]["cfg_scale"] == 4.0
 
 
 def test_tool_spec_exists():
@@ -491,7 +520,7 @@ def test_tool_spec_exists():
     assert "stability_api_key" not in required_fields
     assert "model_id" not in required_fields
 
-    # Check that properties don't include model_id anymore
+    # Check that properties don't include model_id
     properties = generate_image_stability.TOOL_SPEC["inputSchema"]["properties"]
     assert "model_id" not in properties
     assert "prompt" in properties

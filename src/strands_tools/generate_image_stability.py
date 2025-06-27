@@ -78,7 +78,7 @@ TOOL_SPEC = {
                     "to return a JSON object containing the image data as a base64-encoded string."
                 ),
                 "enum": ["json", "image"],
-                "default": "image",
+                "default": "json",
             },
             "aspect_ratio": {
                 "type": "string",
@@ -213,7 +213,7 @@ def call_stability_api(
     prompt: str,
     model_id: str,
     stability_api_key: str,
-    return_type: str = "image",
+    return_type: str = "json",
     aspect_ratio: str = "1:1",
     cfg_scale: float = 4.0,
     seed: int = 0,
@@ -351,7 +351,7 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Extract input parameters with defaults
         prompt = tool_input.get("prompt")
-        return_type = tool_input.get("return_type", "image")
+        return_type = tool_input.get("return_type", "json")
         aspect_ratio = tool_input.get("aspect_ratio", "1:1")
         seed = tool_input.get("seed", 0)
         output_format = tool_input.get("output_format", "png")
