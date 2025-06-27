@@ -13,13 +13,18 @@ def agent():
     return Agent(tools=[file_write, file_read, editor])
 
 
-def extract_file_content(response):
+@pytest.fixture(autouse=True)
+def bypass_tool_consent_env():
+    with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+        yield
+
+
+def extract_code_content(response):
     """Helper function to extract code block content from LLM output."""
     match = re.search(r"```(?:[a-zA-Z]*\n)?(.*?)```", str(response), re.DOTALL)
     return match.group(1) if match else str(response)
 
 
-@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_semantic_write_read_edit_workflow(agent, tmp_path):
     """Test complete semantic workflow: write -> read -> edit -> verify."""
     file_path = tmp_path / "semantic_test.txt"
@@ -29,10 +34,14 @@ def test_semantic_write_read_edit_workflow(agent, tmp_path):
     write_response = agent(f"Write '{initial_content}' to file `{file_path}`")
     assert "success" in str(write_response).lower() or "written" in str(write_response).lower()
 
-    # 2. Read file back
+    # 2. Read file back using both agent & reading file directly
     read_response = agent(f"Read the contents of file `{file_path}`")
-    content = extract_file_content(read_response)
+    content = extract_code_content(read_response)
     assert initial_content in content
+
+    with open(file_path, "r") as f:
+        raw_content = f.read()
+    assert initial_content in raw_content
 
     # 3. Replace text
     edit_response = agent(f"In file `{file_path}`, replace 'Hello' with 'Hi'")
@@ -40,12 +49,11 @@ def test_semantic_write_read_edit_workflow(agent, tmp_path):
 
     # 4. Verify
     verify_response = agent(f"Show me the contents of `{file_path}`")
-    final_content = extract_file_content(verify_response)
+    final_content = extract_code_content(verify_response)
     assert "Hi world" in final_content
     assert "Hello" not in final_content
 
 
-@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_semantic_python_file_creation(agent, tmp_path):
     """Test creating and modifying Python code semantically."""
     file_path = tmp_path / "test_script.py"
@@ -69,6 +77,7 @@ def test_semantic_python_file_creation(agent, tmp_path):
             "updated successfully",
             "replacement was successful",
             "print statement to say 'hi there!'",
+            "prints 'Hello World'",
         ]
     )
     assert semantic_success, str(modify_response)
@@ -79,7 +88,6 @@ def test_semantic_python_file_creation(agent, tmp_path):
     assert "Hi there!" in final_content
 
 
-@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_semantic_search_and_replace(agent, tmp_path):
     """Test semantic search and replace operations."""
     file_path = tmp_path / "config.txt"
