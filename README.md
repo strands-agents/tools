@@ -507,12 +507,11 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
 | BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
-| BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
-| BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
-| BROWSER_HEADLESS | Default headless setting for launching browsers | false |
-| BROWSER_WIDTH | Default width of the browser | 1280 |
-| BROWSER_HEIGHT | Default height of the browser | 800 |
-| ENABLE_DEBUG_BROWSER_LOGS | Default enable of the browser's debug logs | false |
+| STRANDS_BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
+| STRANDS_BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
+| STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
+| STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
+| STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
 
 
 ## Contributing ❤️
