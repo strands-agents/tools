@@ -18,7 +18,7 @@ Key Features:
 
 2. Response Format:
    • Rich response with both text and image data
-   • Status tracking and error handling
+   • Returns finish reason for generation, to allow identification of requests that have been content moderated
    • Direct image data for immediate display
 
 Usage with Strands Agent:
