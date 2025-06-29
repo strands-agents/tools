@@ -558,6 +558,7 @@ def memory(
     document_id: Optional[str] = None,
     query: Optional[str] = None,
     STRANDS_KNOWLEDGE_BASE_ID: Optional[str] = None,
+    data_source_id: Optional[str] = None,
     max_results: int = None,
     next_token: Optional[str] = None,
     min_score: float = None,
