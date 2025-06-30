@@ -5,7 +5,7 @@ This module provides functionality to generate high-quality images using Stabili
 latest models including SD3.5, Stable Image Ultra, and Stable Image Core through the
 Stability Platform API.
 
-This means agents can create images in a cost effictive way, using state of the art models.
+This means agents can create images in a cost effective way, using state of the art models.
 
 Key Features:
 
@@ -53,7 +53,7 @@ agent.tool.generate_image_stability(
 
 import base64
 import os
-from typing import Any, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import requests
 from strands.types.tools import ToolResult, ToolUse
@@ -214,15 +214,15 @@ def call_stability_api(
     model_id: str,
     stability_api_key: str,
     return_type: str = "json",
-    aspect_ratio: str = "1:1",
-    cfg_scale: float = 4.0,
-    seed: int = 0,
-    output_format: str = "png",
-    style_preset: str = None,
-    image: str = None,
-    mode: str = "text-to-image",
-    strength: float = None,
-    negative_prompt: str = None,
+    aspect_ratio: Optional[str] = "1:1",
+    cfg_scale: Optional[float] = 4.0,
+    seed: Optional[int] = 0,
+    output_format: Optional[str] = "png",
+    style_preset: Optional[str] = None,
+    image: Optional[str] = None,
+    mode: Optional[str] = "text-to-image",
+    strength: Optional[float] = None,
+    negative_prompt: Optional[str] = None,
 ) -> Tuple[Union[bytes, str], str]:
     """
     Generate images using Stability Platform API.
