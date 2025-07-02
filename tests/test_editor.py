@@ -126,12 +126,7 @@ class TestEditorDirectCalls:
     @patch("strands_tools.editor.get_user_input")
     def test_view_command_file(self, mock_user_input, temp_file, clean_content_history):
         """Test viewing a file directly."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "view", "path": temp_file},
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="view", path=temp_file)
 
         assert result["status"] == "success"
         assert "File content displayed in console" in result["content"][0]["text"]
@@ -140,12 +135,7 @@ class TestEditorDirectCalls:
     @patch("strands_tools.editor.get_user_input")
     def test_view_command_directory(self, mock_user_input, temp_dir, clean_content_history):
         """Test viewing a directory structure."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "view", "path": temp_dir},
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="view", path=temp_dir)
 
         assert result["status"] == "success"
         assert "Directory structure displayed" in result["content"][0]["text"]
@@ -153,12 +143,7 @@ class TestEditorDirectCalls:
     @patch("strands_tools.editor.get_user_input")
     def test_view_with_range(self, mock_user_input, temp_file, clean_content_history):
         """Test viewing a specific line range."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "view", "path": temp_file, "view_range": [1, 3]},
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="view", path=temp_file, view_range=[1, 3])
 
         assert result["status"] == "success"
         assert "File content displayed" in result["content"][0]["text"]
@@ -169,16 +154,11 @@ class TestEditorDirectCalls:
         mock_user_input.return_value = "y"  # Confirm file creation
 
         test_file = str(tmp_path / "new_file.txt")
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "create",
-                "path": test_file,
-                "file_text": "New file content",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="create",
+            path=test_file,
+            file_text="New file content",
+        )
 
         assert result["status"] == "success"
         assert "created successfully" in result["content"][0]["text"]
@@ -198,16 +178,11 @@ class TestEditorDirectCalls:
             os.environ.pop("BYPASS_TOOL_CONSENT")
 
         test_file = str(tmp_path / "should_not_exist.txt")
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "create",
-                "path": test_file,
-                "file_text": "Should not be written",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="create",
+            path=test_file,
+            file_text="Should not be written",
+        )
 
         assert result["status"] == "error"
         assert "cancelled" in result["content"][0]["text"]
@@ -219,17 +194,12 @@ class TestEditorDirectCalls:
         """Test string replacement in a file."""
         mock_user_input.return_value = "y"  # Confirm replacement
 
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "str_replace",
-                "path": temp_file,
-                "old_str": "Line 3",
-                "new_str": "REPLACED LINE",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="str_replace",
+            path=temp_file,
+            old_str="Line 3",
+            new_str="REPLACED LINE",
+        )
 
         assert result["status"] == "success"
         assert "Text replacement complete" in result["content"][0]["text"]
@@ -245,17 +215,12 @@ class TestEditorDirectCalls:
         """Test pattern-based replacement."""
         mock_user_input.return_value = "y"  # Confirm replacement
 
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "pattern_replace",
-                "path": temp_file,
-                "pattern": r"Test\s+Pattern",
-                "new_str": "PATTERN REPLACED",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="pattern_replace",
+            path=temp_file,
+            pattern=r"Test\s+Pattern",
+            new_str="PATTERN REPLACED",
+        )
 
         assert result["status"] == "success"
         assert "Pattern replacement complete" in result["content"][0]["text"]
@@ -271,17 +236,12 @@ class TestEditorDirectCalls:
         """Test inserting text at a specific line."""
         mock_user_input.return_value = "y"  # Confirm insertion
 
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "insert",
-                "path": temp_file,
-                "insert_line": 2,  # Insert after line 3 (0-based)
-                "new_str": "INSERTED LINE",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="insert",
+            path=temp_file,
+            insert_line=2,  # Insert after line 3 (0-based)
+            new_str="INSERTED LINE",
+        )
 
         assert result["status"] == "success"
         assert "Text insertion complete" in result["content"][0]["text"]
@@ -298,17 +258,12 @@ class TestEditorDirectCalls:
         """Test inserting text after a line found by search."""
         mock_user_input.return_value = "y"  # Confirm insertion
 
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "insert",
-                "path": temp_file,
-                "insert_line": "Line 3",  # Insert after this line
-                "new_str": "INSERTED AFTER SEARCH",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="insert",
+            path=temp_file,
+            insert_line="Line 3",  # Insert after this line
+            new_str="INSERTED AFTER SEARCH",
+        )
 
         assert result["status"] == "success"
         assert "Text insertion complete" in result["content"][0]["text"]
@@ -323,16 +278,11 @@ class TestEditorDirectCalls:
     @patch("strands_tools.editor.get_user_input")
     def test_find_line_command(self, mock_user_input, temp_file, clean_content_history):
         """Test finding a line by text content."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "find_line",
-                "path": temp_file,
-                "search_text": "Test Pattern",
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="find_line",
+            path=temp_file,
+            search_text="Test Pattern",
+        )
 
         assert result["status"] == "success"
         assert "Line found in file" in result["content"][0]["text"]
@@ -341,17 +291,12 @@ class TestEditorDirectCalls:
     @patch("strands_tools.editor.get_user_input")
     def test_find_line_fuzzy(self, mock_user_input, temp_file, clean_content_history):
         """Test finding a line with fuzzy matching."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "find_line",
-                "path": temp_file,
-                "search_text": "Test Patt",
-                "fuzzy": True,
-            },
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="find_line",
+            path=temp_file,
+            search_text="Test Patt",
+            fuzzy=True,
+        )
 
         assert result["status"] == "success"
         assert "Line found in file" in result["content"][0]["text"]
@@ -365,12 +310,7 @@ class TestEditorDirectCalls:
         # Create a backup by making a change first
         shutil.copy2(temp_file, f"{temp_file}.bak")
 
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "undo_edit", "path": temp_file},
-        }
-
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="undo_edit", path=temp_file)
 
         assert result["status"] == "success"
         assert "Successfully reverted changes" in result["content"][0]["text"]
@@ -382,8 +322,8 @@ class TestEditorErrors:
     @patch("strands_tools.editor.get_user_input")
     def test_missing_command(self, mock_user_input):
         """Test error when command is missing."""
-        tool_use = {"toolUseId": "test-id", "input": {"path": "/tmp/test.txt"}}
-        result = editor.editor(tool=tool_use)
+        # Since command is a required parameter, we need to test with an empty command
+        result = editor.editor(command="", path="/tmp/test.txt")
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
@@ -391,8 +331,8 @@ class TestEditorErrors:
     @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_missing_path(self):
         """Test error when path is missing."""
-        tool_use = {"toolUseId": "test-id", "input": {"command": "view"}}
-        result = editor.editor(tool=tool_use)
+        # Since path is a required parameter, we need to test with an empty path
+        result = editor.editor(command="view", path="")
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
@@ -401,11 +341,7 @@ class TestEditorErrors:
     @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_create_without_file_text(self, mock_user_input):
         """Test error when file_text is missing for create command."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "create", "path": "/tmp/test.txt"},
-        }
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="create", path="/tmp/test.txt")
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
@@ -414,15 +350,11 @@ class TestEditorErrors:
     @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_str_replace_without_required_params(self, mock_user_input):
         """Test error when required params are missing for str_replace."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "str_replace",
-                "path": "/tmp/test.txt",
-                "new_str": "new",
-            },
-        }
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="str_replace",
+            path="/tmp/test.txt",
+            new_str="new",
+        )
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
@@ -431,16 +363,12 @@ class TestEditorErrors:
     @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
     def test_pattern_replace_invalid_pattern(self, mock_user_input):
         """Test error with invalid regex pattern."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {
-                "command": "pattern_replace",
-                "path": "/tmp/test.txt",
-                "pattern": "[invalid",
-                "new_str": "new",
-            },
-        }
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(
+            command="pattern_replace",
+            path="/tmp/test.txt",
+            pattern="[invalid",
+            new_str="new",
+        )
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
@@ -448,11 +376,7 @@ class TestEditorErrors:
     @patch("strands_tools.editor.get_user_input")
     def test_find_line_without_search_text(self, mock_user_input):
         """Test error when search_text is missing for find_line command."""
-        tool_use = {
-            "toolUseId": "test-id",
-            "input": {"command": "find_line", "path": "/tmp/test.txt"},
-        }
-        result = editor.editor(tool=tool_use)
+        result = editor.editor(command="find_line", path="/tmp/test.txt")
 
         assert result["status"] == "error"
         assert "Error:" in result["content"][0]["text"]
