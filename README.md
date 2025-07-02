@@ -53,7 +53,8 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
-  
+- 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+
 ## 📦 Installation
 
 ### Quick Install
@@ -121,6 +122,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
+| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
 
 \* *These tools do not work on windows*
 
@@ -301,6 +303,32 @@ result = agent.tool.batch(
 )
 ```
 
+### Use Browser
+```python
+from strands import Agent
+from strands_tools import use_browser
+
+agent = Agent(tools=[use_browser])
+
+# Simple navigation
+result = agent.tool.use_browser(action="navigate", url="https://example.com")
+
+# Sequential actions for form filling
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/login"}},
+    {"action": "type", "args": {"selector": "#username", "text": "user@example.com"}},
+    {"action": "click", "args": {"selector": "#submit"}}
+])
+
+# Web scraping with content extraction
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/data"}},
+    {"action": "get_text", "args": {"selector": ".content"}},
+    {"action": "click", "args": {"selector": ".next-page"}},
+    {"action": "get_html", "args": {"selector": "main"}}
+])
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -442,6 +470,20 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_DIFF_TYPE_DEFAULT | Default diff type for file comparisons | unified |
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
+
+#### Use Browser Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
+| STRANDS_BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| STRANDS_BROWSER_RETRY_DELAY | Default retry delay time for retry mechanisms | 1 |
+| STRANDS_BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
+| STRANDS_BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
+| STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
+| STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
+| STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
 
 ## Contributing ❤️
 
