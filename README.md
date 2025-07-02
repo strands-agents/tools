@@ -54,11 +54,8 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 <<<<<<< HEAD
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
-  
-=======
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 
->>>>>>> b3afd62 (test(use_browser): add more unit testing for use_browser tool)
 ## 📦 Installation
 
 ### Quick Install
@@ -308,7 +305,6 @@ result = agent.tool.batch(
 ```
 
 ### Use Browser
-
 ```python
 from strands import Agent
 from strands_tools import use_browser
@@ -480,14 +476,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default | 
 |----------------------|-------------|---------|
-| DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
-| BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
-| BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
-| BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
-| BROWSER_HEADLESS | Default headless setting for launching browsers | false |
-| BROWSER_WIDTH | Default width of the browser | 1280 |
-| BROWSER_HEIGHT | Default height of the browser | 800 |
-| ENABLE_DEBUG_BROWSER_LOGS | Default enable of the browser's debug logs | false |
+| STRANDS_DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
+| STRANDS_BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| STRANDS_BROWSER_RETRY_DELAY | Default retry delay time for retry mechanisms | 1 |
+| STRANDS_BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
+| STRANDS_BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
+| STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
+| STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
+| STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
 
 
 ## Contributing ❤️
