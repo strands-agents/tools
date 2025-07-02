@@ -32,12 +32,8 @@ from strands_tools import generate_image_stability
 os.environ['STABILITY_API_KEY'] = 'sk-xxx'
 os.environ['STABILITY_MODEL_ID'] = 'stability.stable-image-ultra-v1:1'
 
-If you want to save the generated images to disk, set the environment variable `SAVE_IMAGE` to any
-of "true", "yes", "1".
-os.environ['SAVE_IMAGE'] = 'true'
-
-To specify an output directory for saved images, set the environment variable `STABILITY_OUTPUT_DIR`
-to a local directory path.
+If you want to save the generated images to disk, set the environment variable `STABILITY_OUTPUT_DIR`
+to a local directory where the images should be saved.
 
 If no model is selected, the tool defaults to 'stability.stable-image-core-v1:1'.
 
@@ -331,7 +327,7 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Environment Variables:
         STABILITY_API_KEY: Your Stability Platform API key (required)
         STABILITY_MODEL_ID: The model to use (optional, defaults to stability.stable-image-core-v1:1)
-        SAVE_IMAGE: If set to any value (or "true", "yes", "1"), saves generated images to disk
+        STABILITY_OUTPUT_DIR: If set, saves generated images to disk in the specified directory
 
     Args:
         tool: ToolUse object containing the parameters for image generation.
@@ -403,8 +399,8 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
         filename = None
         save_info = ""
         # Check if we should save the image to a file
-        save_image = os.environ.get("SAVE_IMAGE", "").lower()
-        if save_image in ("true", "yes", "1"):
+        output_dir = os.environ.get("STABILITY_OUTPUT_DIR")
+        if output_dir:
             # Create a unique filename
             import datetime
             import hashlib
@@ -420,7 +416,6 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
             unique_id = str(uuid.uuid4())[:6]
 
             # Create directory if it doesn't exist
-            output_dir = os.environ.get("STABILITY_OUTPUT_DIR", "stability_images")
             os.makedirs(output_dir, exist_ok=True)
 
             # Construct the filename
@@ -439,9 +434,10 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "source": {"bytes": image_bytes},
         }
 
+        # Disabled until strands-agents/sdk-python#341 is addressed
         # Add filename to the image object if available
-        if filename:
-            image_object["filename"] = filename
+        # if filename:
+        #    image_object["filename"] = filename
 
         return {
             "toolUseId": tool_use_id,
