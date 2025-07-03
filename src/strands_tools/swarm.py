@@ -1,5 +1,4 @@
-"""
-Swarm intelligence tool for coordinating multiple AI agents in parallel.
+"""Swarm intelligence tool for coordinating multiple AI agents in parallel.
 
 This module implements a swarm intelligence system that enables multiple Strands AI agents
 to collaborate on complex tasks through parallel processing and emergent collective intelligence.
@@ -72,12 +71,12 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, cast
 
 from rich.box import ROUNDED
 from rich.console import Console
 from rich.panel import Panel
-from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from strands import tool
 
 from strands_tools.use_llm import use_llm
 from strands_tools.utils import console_util
@@ -118,36 +117,6 @@ def create_rich_status_panel(console: Console, status: Dict[str, Any]) -> str:
     with console.capture() as capture:
         console.print(panel)
     return capture.get()
-
-
-TOOL_SPEC = {
-    "name": "swarm",
-    "description": "Create and coordinate a swarm of AI agents for parallel processing and collective intelligence",
-    "inputSchema": {
-        "json": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The main task to be processed by the swarm",
-                },
-                "swarm_size": {
-                    "type": "integer",
-                    "description": "Number of agents in the swarm (1-10)",
-                    "minimum": 1,
-                    "maximum": 10,
-                },
-                "coordination_pattern": {
-                    "type": "string",
-                    "description": "How agents should coordinate",
-                    "enum": ["collaborative", "competitive", "hybrid"],
-                    "default": "collaborative",
-                },
-            },
-            "required": ["task", "swarm_size"],
-        }
-    },
-}
 
 
 class SharedMemory:
@@ -268,7 +237,14 @@ class SwarmAgent:
         self.results: List[Dict[str, Any]] = []
         self.lock = Lock()
 
-    def process_task(self, task: str, tool_context: Dict[str, Any]) -> Dict[str, Any]:
+    def process_task(
+        self,
+        task: str,
+        parent_agent: Any,
+        model_provider: Optional[str] = None,
+        model_settings: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         Process the assigned task based on the agent's role and available knowledge.
 
@@ -280,7 +256,10 @@ class SwarmAgent:
 
         Args:
             task: The task to be processed
-            tool_context: Context information for tool execution
+            parent_agent: Parent agent to pass to use_llm
+            model_provider: Model provider to use for this agent
+            model_settings: Model configuration for this agent
+            tools: List of tools available to this agent
 
         Returns:
             Dict[str, Any]: Result of the processing
@@ -331,18 +310,14 @@ class SwarmAgent:
                 Provide your contribution as a clear, focused response.
             """).strip()
 
-            # Process task
+            # Process task using new use_llm format with model and tools configuration
             result = use_llm(
-                {
-                    "toolUseId": str(uuid.uuid4()),
-                    "name": "use_llm",
-                    "input": {
-                        "system_prompt": self.system_prompt,
-                        "prompt": prompt,
-                        "override_system_prompt": False,
-                    },
-                },
-                **tool_context,
+                prompt=prompt,
+                system_prompt=self.system_prompt,
+                model_provider=model_provider,
+                model_settings=model_settings,
+                tools=tools,
+                agent=parent_agent,
             )
 
             if result.get("status") == "success":
@@ -422,7 +397,13 @@ class Swarm:
             self.agents[agent_id] = agent
             return agent
 
-    def process_phase(self, tool_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def process_phase(
+        self,
+        parent_agent: Any,
+        model_provider: Optional[str] = None,
+        model_settings: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Process the current phase with all agents working in parallel.
 
@@ -432,7 +413,10 @@ class Swarm:
         3. Advances to the next phase after all agents complete
 
         Args:
-            tool_context: Context information for tool execution
+            parent_agent: Parent agent to pass to agents
+            model_provider: Model provider for all swarm agents
+            model_settings: Model configuration for all swarm agents
+            tools: List of tools available to all swarm agents
 
         Returns:
             List[Dict[str, Any]]: Results from all agents for this phase
@@ -443,7 +427,10 @@ class Swarm:
         with ThreadPoolExecutor(max_workers=len(self.agents)) as executor:
             # Create futures for each agent
             future_to_agent = {
-                executor.submit(agent.process_task, self.task, tool_context): agent for agent in self.agents.values()
+                executor.submit(
+                    agent.process_task, self.task, parent_agent, model_provider, model_settings, tools
+                ): agent
+                for agent in self.agents.values()
             }
 
             # Collect results as they complete
@@ -487,9 +474,17 @@ class Swarm:
         }
 
 
-def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
-    """
-    Create and coordinate a swarm of AI agents for parallel processing and collective intelligence.
+@tool
+def swarm(
+    task: str,
+    swarm_size: int,
+    coordination_pattern: str = "collaborative",
+    model_provider: Optional[str] = None,
+    model_settings: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[str]] = None,
+    agent: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Create and coordinate a swarm of AI agents for parallel processing and collective intelligence.
 
     This function implements a swarm intelligence system that enables multiple Strands AI agents
     to collaborate on complex tasks through parallel processing and emergent collective intelligence.
@@ -538,87 +533,112 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     • Thread pool management prevents resource exhaustion
 
     Args:
-        tool: Tool use object with the following input parameters:
-            - task (str): The main task to be processed by the swarm
-            - swarm_size (int): Number of agents in the swarm (1-10)
-            - coordination_pattern (str): How agents should coordinate
-              ("collaborative", "competitive", or "hybrid")
-        **kwargs: Additional keyword arguments including:
-            - system_prompt: Base system prompt for the swarm
-            - inference_config: Configuration for inference
-            - messages: Previous message history
-            - tool_config: Tool configuration options
+        task: The main task to be processed by the swarm.
+        swarm_size: Number of agents in the swarm (1-10).
+        coordination_pattern: How agents should coordinate.
+            Options: "collaborative", "competitive", "hybrid"
+            Default: "collaborative"
+        model_provider: Model provider for all swarm agents.
+            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github"
+            Special values:
+            - None: Use parent agent's model (default)
+            - "env": Use environment variables to determine provider
+        model_settings: Model configuration for all swarm agents.
+            Example: {"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0", "params": {"temperature": 0.7}}
+        tools: List of tool names available to all swarm agents.
+            Tool names must exist in the parent agent's tool registry.
+            Examples: ["calculator", "file_read", "retrieve"]
+            If not provided, inherits all tools from the parent agent.
+        agent: The parent agent (automatically passed by Strands framework).
 
     Returns:
-        ToolResult: A dictionary containing:
-            - toolUseId: The ID of the original tool use
-            - status: "success" or "error"
-            - content: Array of content items including:
-                - Rich formatted status panel
-                - Swarm results summary
-                - Collective knowledge from all agents
+        Dict containing status and response content in the format:
+        {
+            "status": "success|error",
+            "content": [{"text": "Operation result message"}]
+        }
+
+        Success case: Returns swarm results with collective intelligence
+        Error case: Returns information about what went wrong during processing
 
     Example Usage:
     -------------
     ```python
-    # Collaborative pattern for complex problem-solving
+    # Basic collaborative pattern for complex problem-solving
     result = agent.tool.swarm(
         task="Analyze the environmental impact of renewable energy sources",
         swarm_size=5,
         coordination_pattern="collaborative"
     )
 
-    # Competitive pattern for creative idea generation
+    # Enhanced swarm with specific model and tools
     result = agent.tool.swarm(
         task="Generate unique marketing campaign concepts",
         swarm_size=3,
-        coordination_pattern="competitive"
+        coordination_pattern="competitive",
+        model_provider="bedrock",
+        model_settings={"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0", "params": {"temperature": 0.9}},
+        tools=["retrieve", "generate_image", "file_write"]
+    )
+
+    # Environment-based model selection with tool restrictions
+    result = agent.tool.swarm(
+        task="Process sensitive financial data",
+        swarm_size=2,
+        coordination_pattern="collaborative",
+        model_provider="env",  # Uses STRANDS_PROVIDER environment variable
+        tools=["calculator", "file_read"]  # Only calculation and file reading tools
+    )
+
+    # Local model processing for privacy-sensitive tasks
+    result = agent.tool.swarm(
+        task="Analyze confidential research data",
+        swarm_size=3,
+        coordination_pattern="hybrid",
+        model_provider="ollama",
+        model_settings={"model_id": "llama3", "host": "http://localhost:11434"},
+        tools=["calculator", "python_repl"]
     )
     ```
+
+    Notes:
+        - Swarm size is automatically clamped between 1 and 10 for resource management
+        - Multi-phase execution provides progressive refinement of results
+        - Shared memory enables collective intelligence across agents
+        - Thread pool management prevents resource exhaustion
+        - Rich formatted output provides visual status and results
+        - Model configuration allows using different providers (bedrock, anthropic, ollama, etc.)
+        - Tools parameter enables security isolation and role-based access control
+        - Environment-based model selection supports dynamic configuration
+        - All swarm agents use the same model and tools configuration for consistency
     """
     console = console_util.create()
 
-    tool_use_id = tool.get("toolUseId", str(uuid.uuid4()))
-    tool_input = tool.get("input", {})
-
     try:
-        system_prompt = kwargs.get("system_prompt")
-        inference_config = kwargs.get("inference_config")
-        messages = kwargs.get("messages")
-        tool_config = kwargs.get("tool_config")
-        # Create tool context
-        tool_context = {
-            "system_prompt": system_prompt,
-            "inference_config": inference_config,
-            "messages": messages,
-            "tool_config": tool_config,
-        }
-        if "callback_handler" in kwargs:
-            tool_context["callback_handler"] = kwargs["callback_handler"]
-
-        # Extract parameters
-        task = tool_input["task"]
-        swarm_size = min(max(tool_input.get("swarm_size", 3), 1), 10)
-        coordination = tool_input.get("coordination_pattern", "collaborative")
+        # Validate and clamp swarm size
+        swarm_size = min(max(swarm_size, 1), 10)
 
         # Create swarm
-        swarm_instance = Swarm(task, coordination)
+        swarm_instance = Swarm(task, coordination_pattern)
 
         # Create agents with specialized roles
         for i in range(swarm_size):
             agent_id = f"agent_{i + 1}"
 
-            if coordination == "collaborative":
+            if coordination_pattern == "collaborative":
                 role = f"Collaborative Agent {i + 1} - Focus on building upon others' insights"
-            elif coordination == "competitive":
+            elif coordination_pattern == "competitive":
                 role = f"Competitive Agent {i + 1} - Focus on finding unique solutions"
             else:  # hybrid
                 role = f"Hybrid Agent {i + 1} - Balance cooperation and innovation"
 
+            # Get system prompt from parent agent if available
+            base_system_prompt = agent.system_prompt if agent else "You are a helpful AI assistant."
+
             agent_prompt = f"""You are {role} in a swarm intelligence system.
 
 Task: {task}
-Coordination Pattern: {coordination}
+Coordination Pattern: {coordination_pattern}
 
 Key Responsibilities:
 1. Review existing knowledge
@@ -627,42 +647,41 @@ Key Responsibilities:
 4. Maintain task focus
 5. Collaborate effectively
 
-{system_prompt}"""
+{base_system_prompt}"""
 
             swarm_instance.add_agent(agent_id, agent_prompt)
 
         # Process collaborative phases
         all_results = []
         for _phase in range(2):  # Two phases of collaboration
-            phase_results = swarm_instance.process_phase(tool_context)
+            phase_results = swarm_instance.process_phase(agent, model_provider, model_settings, tools)
             all_results.extend(phase_results)
 
         # Get final status
         status = swarm_instance.get_status()
 
         # Create rich output
-        status_output = create_rich_status_panel(console, status)
+        create_rich_status_panel(console, status)
 
         # Process results
-        processed_results: List[ToolResultContent] = []
+        processed_results = []
         for result in all_results:
             if result["result"].get("status") == "success":
                 for content in result["result"].get("content", []):
                     if content.get("text"):
-                        processed_results.append({"text": f"🤖 Agent {result['agent_id']}: {content['text']}"})
+                        processed_results.append(f"🤖 Agent {result['agent_id']}: {content['text']}")
 
         # Add collective knowledge
         collective_knowledge = swarm_instance.shared_memory.get_all_knowledge()
-        processed_results.append({"text": f"\n🌟 Collective Knowledge:\n{json.dumps(collective_knowledge, indent=2)}"})
+
+        # Format final response
+        response_text = f"📊 Swarm Results ({len(all_results)} responses):\n\n"
+        response_text += "\n".join(processed_results)
+        response_text += f"\n\n🌟 Collective Knowledge:\n{json.dumps(collective_knowledge, indent=2)}"
 
         return {
-            "toolUseId": tool_use_id,
             "status": "success",
-            "content": [
-                {"text": status_output},
-                {"text": f"📊 Swarm Results ({len(all_results)} responses):"},
-                *processed_results,
-            ],
+            "content": [{"text": response_text}],
         }
 
     except Exception as e:
@@ -670,12 +689,7 @@ Key Responsibilities:
         error_msg = f"Error: {str(e)}\n\nTraceback:\n{error_trace}"
         logger.error(f"\n[SWARM TOOL ERROR]\n{error_msg}")
 
-        panel = Panel(error_msg, title="⚠️ Swarm Error", box=ROUNDED, style="bold red")
-        with console.capture() as capture:
-            console.print(panel)
-
         return {
-            "toolUseId": tool_use_id,
             "status": "error",
-            "content": [{"text": capture.get()}],
+            "content": [{"text": f"⚠️ Swarm Error: {str(e)}"}],
         }
