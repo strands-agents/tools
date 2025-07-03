@@ -68,8 +68,6 @@ dev = [
     "responses>=0.6.1,<1.0.0",
     "mem0ai>=0.1.104,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
-    "nest-asyncio>=1.5.0,<2.0.0",
-    "playwright>=1.42.0,<2.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
@@ -80,6 +78,10 @@ mem0_memory = [
     # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
+]
+use_browser = [
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis]
