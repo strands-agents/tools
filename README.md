@@ -54,6 +54,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+- 🖱️ **Computer Tool** - Automate desktop actions including mouse movements, keyboard input, screenshots, and application management
 
 ## 📦 Installation
 
@@ -66,7 +67,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser]
+pip install strands-agents-tools[mem0_memory, use_browser, use_computer]
 ```
 
 ### Development Install
@@ -128,6 +129,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
+| use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 
 \* *These tools do not work on windows*
 
@@ -450,6 +452,33 @@ response = agent("discover available agents and send a greeting message")
 # - send_message(message_text, target_agent_url) to communicate
 ```
 
+### Use Computer
+```python
+from strands import Agent
+from strands_tools import use_computer
+
+agent = Agent(tools=[use_computer])
+
+# Find mouse position
+result = agent.tool.use_computer(action="mouse_position")
+
+# Automate adding text
+result = agent.tool.use_computer(action="type", text="Hello, world!", app_name="Notepad")
+
+# Screenshot and analyze screenshot to find text on computer
+result = agent.tool.use_computer(action="screenshot")
+analysis = agent.tool.use_computer(action="analyze_screenshot", screenshot_path=result)
+
+result = agent.tool.use_computer(action="open_app", app_name="Calculator")
+result = agent.tool.use_computer(action="close_app", app_name="Calendar")
+
+result = agent.tool.use_computer(
+    action="hotkey",
+    hotkey_str="command+ctrl+f",  # For macOS
+    app_name="Chrome"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -630,4 +659,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
