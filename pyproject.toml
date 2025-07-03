@@ -81,7 +81,10 @@ mem0_memory = [
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
 ]
-
+use_browser = [
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0",
+]
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0_memory"]
 dependencies = [
@@ -116,8 +119,6 @@ extra-dependencies = [
     "pytest-xdist>=3.0.0,<4.0.0",
     "responses>=0.6.1,<1.0.0",
     "pytest_asyncio>=0.23.0,<1.0.0",
-    "nest-asyncio>=1.5.0,<2.0.0",
-    "playwright>=1.42.0,<2.0.0"
 ]
 extra-args = [
     "-n",
