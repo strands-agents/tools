@@ -70,6 +70,7 @@ dev = [
     "opensearch-py>=2.8.0,<3.0.0",
     "nest-asyncio>=1.5.0,<2.0.0",
     "playwright>=1.42.0,<2.0.0",
+    "twelvelabs>=0.4.0,<1.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
@@ -80,6 +81,9 @@ mem0_memory = [
     # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
+]
+twelvelabs = [
+    "twelvelabs>=0.4.0,<1.0.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis]
@@ -108,7 +112,7 @@ lint-fix = [
 ]
 
 [tool.hatch.envs.hatch-test]
-features = ["mem0_memory"]
+features = ["mem0_memory", "twelvelabs"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",
