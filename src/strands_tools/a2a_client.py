@@ -6,7 +6,6 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
-
 """
 
 import asyncio
@@ -19,22 +18,20 @@ import httpx
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMessageRequest, TextPart
 from strands import tool
-
-from strands_tools.base import ToolProvider
+from strands.types.tools import AgentTool
 
 DEFAULT_TIMEOUT = 30
 
 logger = logging.getLogger(__name__)
 
 
-class A2AClientToolProvider(ToolProvider):
+class A2AClientToolProvider:
     """A2A Client tool provider that manages multiple A2A agents and exposes synchronous tools."""
 
     def __init__(
         self,
-        agent_urls: list[str] | None = None,
+        known_agent_urls: list[str] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
-        discover_on_init: bool = False,
     ):
         """
         Initialize A2A client tool provider.
@@ -42,20 +39,30 @@ class A2AClientToolProvider(ToolProvider):
         Args:
             agent_urls: List of A2A agent URLs to use (defaults to None)
             timeout: Timeout for HTTP operations in seconds (defaults to 30)
-            discover_on_init: Whether to discover all input agent cards during initialization (defaults to False)
         """
         self.timeout = timeout
-        self._agent_urls: list[str] = agent_urls or []
+        self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}
         self._httpx_client: httpx.AsyncClient | None = None
-        self._cleanup_registered = False
-
-        # Discover agents on initialization if requested
-        if discover_on_init and self._agent_urls:
-            self._run_async(self._discover_all_agents())
+        self._initial_discovery_done: bool = False
 
         # Register resource cleanup on program exit
         atexit.register(self.close)
+
+    @property
+    def tools(self) -> list[AgentTool]:
+        """Extract all @tool decorated methods from this instance."""
+        tools = []
+
+        for attr_name in dir(self):
+            if attr_name == "tools":
+                continue
+
+            attr = getattr(self, attr_name)
+            if isinstance(attr, AgentTool):
+                tools.append(attr)
+
+        return tools
 
     def _run_async(self, coro):
         """Handle async-to-sync conversion internally."""
@@ -85,7 +92,7 @@ class A2AClientToolProvider(ToolProvider):
         logger.info(f"A2ACardResolver created for {url}")
         return A2ACardResolver(httpx_client=httpx_client, base_url=url)
 
-    async def _discover_all_agents(self) -> None:
+    async def _discover_known_agents(self) -> None:
         """Discover all agents provided during initialization."""
 
         async def _discover_agent_with_error_handling(url: str):
@@ -93,11 +100,18 @@ class A2AClientToolProvider(ToolProvider):
             try:
                 await self._async_discover_agent_card(url)
             except Exception as e:
-                logger.error(f"Failed to discover agent at {url} during initialization: {e}")
+                logger.error(f"Failed to discover agent at {url}: {e}")
 
-        tasks = [_discover_agent_with_error_handling(url) for url in self._agent_urls]
+        tasks = [_discover_agent_with_error_handling(url) for url in self._known_agent_urls]
         if tasks:
             await asyncio.gather(*tasks)
+
+        self._initial_discovery_done = True
+
+    async def _ensure_discovered_known_agents(self) -> None:
+        """Ensure initial discovery of agent URLs from constructor has been done."""
+        if not self._initial_discovery_done and self._known_agent_urls:
+            await self._discover_known_agents()
 
     async def _async_discover_agent_card(self, url: str) -> AgentCard:
         """Internal method to discover and cache an agent card."""
@@ -134,6 +148,7 @@ class A2AClientToolProvider(ToolProvider):
     async def _async_discover_agent_card_tool(self, url: str) -> dict[str, Any]:
         """Internal async implementation for discover_agent_card tool."""
         try:
+            await self._ensure_discovered_known_agents()
             agent_card = await self._async_discover_agent_card(url)
             return {
                 "status": "success",
@@ -159,7 +174,12 @@ class A2AClientToolProvider(ToolProvider):
                 - agents: List of discovered agents with their details
                 - total_count: Total number of discovered agents
         """
+        return self._run_async(self._async_list_discovered_agents())
+
+    async def _async_list_discovered_agents(self) -> dict[str, Any]:
+        """Internal async implementation for list_discovered_agents."""
         try:
+            await self._ensure_discovered_known_agents()
             agents = [
                 agent_card.model_dump(mode="python", exclude_none=True)
                 for agent_card in self._discovered_agents.values()
@@ -203,6 +223,7 @@ class A2AClientToolProvider(ToolProvider):
         """Internal async implementation for send_message."""
 
         try:
+            await self._ensure_discovered_known_agents()
             client = await self._create_a2a_client(target_agent_url)
 
             if message_id is None:
@@ -240,9 +261,14 @@ class A2AClientToolProvider(ToolProvider):
         """Close the HTTP client and clean up resources. Safe to call multiple times."""
         if self._httpx_client is not None:
             logger.debug("Closing HTTP client and cleaning up resources")
-            self._run_async(self._httpx_client.aclose())
+            self._run_async(self._async_close())
             self._httpx_client = None
             self._discovered_agents.clear()
             logger.info("A2AClientToolProvider resources cleaned up")
         else:
             logger.debug("A2AClientToolProvider already cleaned up, skipping")
+
+    async def _async_close(self):
+        """Internal async method to close the HTTP client."""
+        if self._httpx_client is not None:
+            await self._httpx_client.aclose()
