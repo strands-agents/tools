@@ -313,7 +313,7 @@ def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Generate response using Pegasus
         with TwelveLabs(api_key) as client:
-            response = client.generate.text(
+            response = client.analyze(
                 video_id=video_id,
                 prompt=prompt,
                 temperature=temperature,
