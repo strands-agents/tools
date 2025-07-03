@@ -123,6 +123,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+| search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
+| chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 
 \* *These tools do not work on windows*
 
@@ -300,6 +302,36 @@ result = agent.tool.batch(
             }
         },
     ]
+)
+```
+
+### Video Tools
+
+```python
+from strands import Agent
+from strands_tools import search_video, chat_video
+
+agent = Agent(tools=[search_video, chat_video])
+
+# Search for video content using natural language
+result = agent.tool.search_video(
+    query="people discussing AI technology",
+    threshold="high",
+    group_by="video",
+    page_limit=5
+)
+
+# Chat with existing video (no index_id needed)
+result = agent.tool.chat_video(
+    prompt="What are the main topics discussed in this video?",
+    video_id="existing-video-id"
+)
+
+# Chat with new video file (index_id required for upload)
+result = agent.tool.chat_video(
+    prompt="Describe what happens in this video",
+    video_path="/path/to/video.mp4",
+    index_id="your-index-id"  # or set TWELVELABS_PEGASUS_INDEX_ID env var
 )
 ```
 
@@ -483,6 +515,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
 | STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
 | STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
+#### Video Tools
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| TWELVELABS_API_KEY | TwelveLabs API key for video analysis | None |
+| TWELVELABS_MARENGO_INDEX_ID | Default index ID for search_video tool | None |
+| TWELVELABS_PEGASUS_INDEX_ID | Default index ID for chat_video tool | None |
 
 
 ## Contributing ❤️
