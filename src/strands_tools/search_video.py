@@ -121,7 +121,9 @@ Usage Examples:
                 },
                 "index_id": {
                     "type": "string",
-                    "description": "TwelveLabs index ID to search. Uses TWELVELABS_MARENGO_INDEX_ID env var if not provided",
+                    "description": (
+                        "TwelveLabs index ID to search. Uses TWELVELABS_MARENGO_INDEX_ID env var if not provided"
+                    ),
                 },
                 "search_options": {
                     "type": "array",
@@ -313,7 +315,7 @@ def search_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
             }
 
     except Exception as e:
-        error_message = f"Error searching videos: {str(e)}"
+        error_message = f"Error searching videos: {e!s}"
 
         # Add helpful context for common errors
         if "api_key" in str(e).lower():
