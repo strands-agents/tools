@@ -346,11 +346,11 @@ def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
         return {
             "toolUseId": tool_use_id,
             "status": "error",
-            "content": [{"text": f"File error: {str(e)}"}],
+            "content": [{"text": f"File error: {e!s}"}],
         }
 
     except Exception as e:
-        error_message = f"Error chatting with video: {str(e)}"
+        error_message = f"Error chatting with video: {e!s}"
 
         # Add helpful context for common errors
         if "api_key" in str(e).lower():
