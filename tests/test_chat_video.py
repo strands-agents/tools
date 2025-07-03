@@ -202,7 +202,9 @@ class TestChatVideoTool:
 
     def test_chat_video_file_not_found(self):
         """Test chat with non-existent video file."""
-        with patch.dict("os.environ", {"TWELVELABS_API_KEY": "test-api-key", "TWELVELABS_PEGASUS_INDEX_ID": "test-index"}):
+        with patch.dict(
+            "os.environ", {"TWELVELABS_API_KEY": "test-api-key", "TWELVELABS_PEGASUS_INDEX_ID": "test-index"}
+        ):
             tool_use = {
                 "toolUseId": "test-chat-8",
                 "input": {"prompt": "Test prompt", "video_path": "/nonexistent/video.mp4"},
