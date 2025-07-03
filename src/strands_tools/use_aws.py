@@ -1,5 +1,4 @@
-"""
-AWS service integration tool for Strands Agent.
+"""AWS service integration tool for Strands Agent.
 
 This module provides a comprehensive interface to AWS services through boto3,
 allowing you to invoke any AWS API operation directly from your Strands Agent.
@@ -54,17 +53,15 @@ from typing import Any, Dict, List, Optional
 import boto3
 from botocore.exceptions import ParamValidationError, ValidationError
 from botocore.response import StreamingBody
-from colorama import Fore, Style, init
+from rich import box
 from rich.panel import Panel
+from rich.table import Table
 from strands.types.tools import ToolResult, ToolUse
 
 from strands_tools.utils import console_util
 from strands_tools.utils.data_util import convert_datetime_to_str
 from strands_tools.utils.generate_schema_util import generate_input_schema
 from strands_tools.utils.user_input import get_user_input
-
-# Initialize colorama
-init(autoreset=True)
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +99,7 @@ def get_boto3_client(
     region_name: str,
     profile_name: Optional[str] = None,
 ) -> Any:
-    """
-    Create an AWS boto3 client for the specified service and region.
+    """Create an AWS boto3 client for the specified service and region.
 
     Args:
         service_name: Name of the AWS service (e.g., 's3', 'ec2', 'dynamodb')
@@ -118,8 +114,7 @@ def get_boto3_client(
 
 
 def handle_streaming_body(response: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Process streaming body responses from AWS into regular Python objects.
+    """Process streaming body responses from AWS into regular Python objects.
 
     Some AWS APIs return StreamingBody objects that need special handling to
     convert them into regular Python dictionaries or strings for proper JSON serialization.
@@ -141,8 +136,7 @@ def handle_streaming_body(response: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_available_services() -> List[str]:
-    """
-    Get a list of all available AWS services supported by boto3.
+    """Get a list of all available AWS services supported by boto3.
 
     Returns:
         List of service names as strings
@@ -152,8 +146,7 @@ def get_available_services() -> List[str]:
 
 
 def get_available_operations(service_name: str) -> List[str]:
-    """
-    Get a list of all available operations for a specific AWS service.
+    """Get a list of all available operations for a specific AWS service.
 
     Args:
         service_name: Name of the AWS service (e.g., 's3', 'ec2')
@@ -289,14 +282,23 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-    # Create a panel for AWS Operation Details
-    operation_details = f"{Fore.CYAN}Service:{Style.RESET_ALL} {service_name}\n"
-    operation_details += f"{Fore.CYAN}Operation:{Style.RESET_ALL} {operation_name}\n"
-    operation_details += f"{Fore.CYAN}Parameters:{Style.RESET_ALL}\n"
-    for key, value in parameters.items():
-        operation_details += f"  - {key}: {value}\n"
+    # Create a panel for AWS Operation Details using Rich's native styling
+    details_table = Table(show_header=False, box=box.SIMPLE, pad_edge=False)
+    details_table.add_column("Property", style="cyan", justify="left", min_width=12)
+    details_table.add_column("Value", style="white", justify="left")
 
-    console.print(Panel(operation_details, title=label, expand=False))
+    details_table.add_row("Service:", service_name)
+    details_table.add_row("Operation:", operation_name)
+    details_table.add_row("Region:", region)
+
+    if parameters:
+        details_table.add_row("Parameters:", "")
+        for key, value in parameters.items():
+            details_table.add_row(f"  • {key}:", str(value))
+    else:
+        details_table.add_row("Parameters:", "None")
+
+    console.print(Panel(details_table, title=f"[bold blue]🚀 {label}[/bold blue]", border_style="blue", expand=False))
 
     logger.debug(
         "Invoking: service_name = %s, operation_name = %s, parameters = %s" % (service_name, operation_name, parameters)
@@ -321,7 +323,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check AWS service
     available_services = get_available_services()
     if service_name not in available_services:
-        logger.debug(f"{Fore.RED}Invalid AWS service: {service_name}{Style.RESET_ALL}")
+        logger.debug(f"Invalid AWS service: {service_name}")
         return {
             "toolUseId": tool_use_id,
             "status": "error",
@@ -333,7 +335,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check AWS operation
     available_operations = get_available_operations(service_name)
     if operation_name not in available_operations:
-        logger.debug(f"{Fore.RED}Invalid AWS operation: {operation_name}{Style.RESET_ALL}")
+        logger.debug(f"Invalid AWS operation: {operation_name}")
         return {
             "toolUseId": tool_use_id,
             "status": "error",
