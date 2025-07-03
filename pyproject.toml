@@ -66,6 +66,8 @@ dev = [
     "responses>=0.6.1,<1.0.0",
     "mem0ai>=0.1.104,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
@@ -107,7 +109,10 @@ extra-dependencies = [
     "pytest-xdist>=3.0.0,<4.0.0",
     "responses>=0.6.1,<1.0.0",
     "pytest-asyncio>=0.26.0,<0.27.0",
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0"
 ]
+
 extra-args = ["-n", "auto", '-vv']
 
 [[tool.hatch.envs.hatch-test.matrix]]
@@ -121,7 +126,6 @@ run-cov = [
 ]
 cov-combine = []
 cov-report = []
-
 
 [tool.hatch.envs.default.scripts]
 list = [
