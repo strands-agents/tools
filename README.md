@@ -66,7 +66,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory]
+pip install strands-agents-tools[mem0_memory, use_browser]
 ```
 
 ### Development Install
