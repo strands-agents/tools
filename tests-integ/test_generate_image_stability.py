@@ -254,8 +254,6 @@ def test_stability_save_disabled():
         image_content = result["content"][1]
         assert "image" in image_content
 
-        print(">>>>>>>>>>>>>text content:", result["content"][0])
-
         # Verify filename was not included
         assert "filename" not in image_content["image"], "Filename should not be present when saving is disabled"
 

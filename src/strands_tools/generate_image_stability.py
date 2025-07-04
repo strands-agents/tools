@@ -55,7 +55,6 @@ agent.tool.generate_image_stability(
     cfg_scale=7.0,
     seed=42
 )
-```
 """
 
 import base64
