@@ -1,6 +1,7 @@
 import base64
 import os
 import re
+import shutil
 from unittest import mock
 
 import pytest
@@ -25,6 +26,14 @@ def os_environment():
     mock_env = {k: os.environ.get(k) for k in keys_to_copy if k in os.environ}
     with mock.patch.object(os, "environ", mock_env):
         yield mock_env
+
+
+@pytest.fixture
+def test_output_dir():
+    path = "test_stability_output"
+    yield path
+    if os.path.exists(path):
+        shutil.rmtree(path)
 
 
 def test_stability_image_generation_integration():
@@ -150,12 +159,11 @@ def test_stability_error_handling_integration():
     assert "Error generating image" in result["content"][0]["text"]
 
 
-def test_stability_save_feature(os_environment):
+def test_stability_save_feature(os_environment, test_output_dir):
     """
     Test the image saving feature when STABILITY_OUTPUT_DIR is set.
     """
     # Create a test directory for output
-    test_output_dir = "test_stability_output"
     os_environment["STABILITY_OUTPUT_DIR"] = test_output_dir
 
     # Create agent with the tool
