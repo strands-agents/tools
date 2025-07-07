@@ -2,6 +2,7 @@
 Tests for the memory tool using the Agent interface.
 """
 
+import builtins
 import json
 import os
 import sys
@@ -337,12 +338,20 @@ def test_invalid_action(mock_opensearch, mock_mem0_client, mock_tool):
 def test_missing_opensearch_host(mock_tool):
     """Test missing OpenSearch host defaults to FAISS."""
     # Configure the mock_tool
-    mock_tool.get.side_effect = lambda key, default=None: {"toolUseId": "test-id", "input": {"action": "list"}}.get(
-        key, default
-    )
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "list", "user_id": "test-user"},
+    }.get(key, default)
+
+    real_import = builtins.__import__
+
+    def fail_faiss(name, *args, **kwargs):
+        if name == "faiss":
+            raise ImportError("No module named 'faiss'")
+        return real_import(name, *args, **kwargs)
 
     # Mock faiss import
-    with patch("strands_tools.mem0_memory.faiss", create=True):
+    with patch("builtins.__import__", side_effect=fail_faiss):
         result = mem0_memory.mem0_memory(tool=mock_tool)
         assert result["status"] == "error"
         assert "The faiss-cpu package is required" in str(result["content"][0]["text"])
