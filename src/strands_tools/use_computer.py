@@ -15,6 +15,18 @@ from strands import tool
 
 from strands_tools.utils.user_input import get_user_input
 
+# Import libraries for macOS
+if platform.system().lower() == "darwin":
+    from Quartz.CoreGraphics import (
+        CGEventCreateMouseEvent,
+        CGEventPost,
+        kCGEventLeftMouseDown,
+        kCGEventLeftMouseUp,
+        kCGHIDEventTap,
+        kCGMouseButtonLeft,
+        kCGMouseEventClickState,
+    )
+
 
 class UseComputerMethods:
     def __init__(self):
@@ -31,14 +43,21 @@ class UseComputerMethods:
         if x is None or y is None:
             raise ValueError("Missing x or y coordinates for click")
 
-        pyautogui.moveTo(x, y, duration=0.5)
+        pyautogui.moveTo(x, y, duration=0.1)
+        time.sleep(0.05)  # Let pointer settle
+
+        system = platform.system().lower()
 
         if click_type == "left":
             pyautogui.click()
         elif click_type == "right":
             pyautogui.rightClick()
         elif click_type == "double":
-            pyautogui.doubleClick()
+            if system == "darwin":
+                self._native_mac_double_click(x, y)
+            else:
+                pyautogui.click(clicks=2, interval=0.2)
+            time.sleep(0.1)
         elif click_type == "middle":
             pyautogui.middleClick()
         else:
@@ -81,18 +100,16 @@ class UseComputerMethods:
         # If x and y are provided, move to that position first
         if x is not None and y is not None:
             pyautogui.moveTo(x, y, duration=0.3)
+            time.sleep(0.1)  # Small pause to ensure mouse is positioned
         else:
             # If x and y are not provided, use current mouse position
             x, y = pyautogui.position()
 
         try:
-            # Perform the drag operation
-            pyautogui.mouseDown()
-            pyautogui.moveTo(drag_to_x, drag_to_y, duration=duration)
-            pyautogui.mouseUp()
+            # Use pyautogui.drag() which handles the complete drag operation
+            pyautogui.drag(drag_to_x - x, drag_to_y - y, duration=duration, button="left")
             return f"Dragged from ({x}, {y}) to ({drag_to_x}, {drag_to_y})"
         except Exception as e:
-            pyautogui.mouseUp()  # Ensure mouse is released even if drag fails
             raise Exception(f"Drag operation failed: {str(e)}") from e
 
     def scroll(
@@ -102,6 +119,7 @@ class UseComputerMethods:
         app_name: Optional[str],
         scroll_direction: str = "up",
         scroll_amount: int = 15,
+        click_first: bool = True,
     ) -> str:
         """Handle scrolling actions."""
         if x is None or y is None:
@@ -118,12 +136,29 @@ class UseComputerMethods:
 
         pyautogui.moveTo(x, y, duration=0.3)
 
+        # Click to ensure the scrollable area has focus
+        if click_first:
+            pyautogui.click()
+            time.sleep(0.1)
+
         if scroll_direction in ["up", "down"]:
             scroll_value = scroll_amount if scroll_direction == "up" else -scroll_amount
             pyautogui.scroll(scroll_value)
+
         elif scroll_direction in ["left", "right"]:
-            scroll_value = scroll_amount if scroll_direction == "right" else -scroll_amount
-            pyautogui.hscroll(scroll_value)
+            # horizontal scrolling is handled differently on mac
+            if platform.system().lower() == "darwin":
+                # Use keycode for macOS
+                keycode = 124 if scroll_direction == "right" else 123  # macOS keycodes
+                for _ in range(scroll_amount):
+                    subprocess.run(
+                        ["osascript", "-e", f'tell application "System Events" to key code {keycode}'], check=False
+                    )
+                    time.sleep(0.01)
+            else:
+                # Use hscroll for Windows/Linux
+                scroll_value = scroll_amount if scroll_direction == "right" else -scroll_amount
+                pyautogui.hscroll(scroll_value)
 
         return f"Scrolled {scroll_direction} by {scroll_amount} steps at coordinates ({x}, {y})"
 
@@ -223,6 +258,27 @@ class UseComputerMethods:
         if not app_name:
             raise ValueError("No application name provided")
         return close_application(app_name)
+
+    # I cannot find a way to double click using pyautoguis built in functions on macos
+    # This function uses lower level mac functions to double click
+    def _native_mac_double_click(self, x: int, y: int):
+        """Perform a true macOS native double-click using Quartz."""
+        from Quartz.CoreGraphics import CGEventSetIntegerValueField
+
+        for i in range(2):
+            click_down = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, (x, y), kCGMouseButtonLeft)
+            click_up = CGEventCreateMouseEvent(None, kCGEventLeftMouseUp, (x, y), kCGMouseButtonLeft)
+
+            # Set click state: 1 = first click, 2 = second click
+            CGEventSetIntegerValueField(click_down, kCGMouseEventClickState, i + 1)
+            CGEventSetIntegerValueField(click_up, kCGMouseEventClickState, i + 1)
+
+            CGEventPost(kCGHIDEventTap, click_down)
+            CGEventPost(kCGHIDEventTap, click_up)
+
+            # Small delay between clicks for proper double-click timing
+            if i == 0:
+                time.sleep(0.05)
 
 
 # Helper function to sort the text extracted from the screenshots
@@ -552,6 +608,7 @@ def use_computer(
             - drag: Click and drag from current position (requires app_name when dragging in application)
             - scroll: Scroll in specified direction
                 (requires x,y coordinates and app_name when scrolling in application)
+            - scroll_to_bottom: Scroll to bottom of page/document (requires app_name)
             - type: Type specified text (requires app_name)
             - key_press: Press specified key (requires app_name)
             - key_hold: Hold key combination (requires app_name)
