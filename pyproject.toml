@@ -122,6 +122,7 @@ extra-dependencies = [
     "pytest_asyncio>=0.23.0,<1.0.0",
     "opencv-python>=4.8.0,<5.0.0", 
     "pyautogui>=0.9.54,<1.0.0",
+    "nest-asyncio>=1.5.0,<2.0.0",
     "pytesseract>=0.3.10,<0.4.0",
 ]
 extra-args = [
