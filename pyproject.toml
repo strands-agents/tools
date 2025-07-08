@@ -86,7 +86,9 @@ use_browser = [
     "playwright>=1.42.0,<2.0.0",
 ]
 use_computer = [
-    "opencv-python>=4.8.0,<5.0.0",  
+    "opencv-python>=4.8.0,<5.0.0",
+    "pyautogui>=0.9.54",
+    "pytesseract>=0.3.10",
 ]
 
 [tool.hatch.envs.hatch-static-analysis]

@@ -1,5 +1,14 @@
+# flake8: noqa: E402
+
+import sys
+from unittest import mock
+
+sys.modules["pyautogui"] = mock.MagicMock()
+sys.modules["mouseinfo"] = mock.MagicMock()
+sys.modules["cv2"] = mock.MagicMock()
+
+import platform
 import unittest
-import unittest.mock as mock
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -807,6 +816,8 @@ class TestUseComputerEdgeCases:
             assert result == "Screenshot saved to test.png"
 
 
+# Only run this test if on mac, because the tool has some mac specific way of performing actions
+@pytest.mark.skipif(platform.system() != "Darwin", reason="Tests only valid on macOS")
 class TestNativeMacDoubleClick:
     @pytest.fixture
     def computer(self):
