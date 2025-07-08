@@ -54,7 +54,8 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔌 **MCP Client** - Connect to any Model Context Protocol server and access remote tools
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
-  
+- 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+
 ## 📦 Installation
 
 ### Quick Install
@@ -66,7 +67,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory]
+pip install strands-agents-tools[mem0_memory, use_browser]
 ```
 
 ### Development Install
@@ -78,7 +79,7 @@ cd tools
 
 # Create and activate virtual environment
 python3 -m venv .venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source .venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -96,16 +97,17 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
-| shell | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
+| shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
-| python_repl | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
+| python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
-| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
+| generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
 | image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
 | journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
@@ -115,14 +117,17 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
 | sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
-| cron | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax |
+| cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
-| speak | `agent.tool.speak(message="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
+| speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | Connect to any MCP server via stdio, sse, or streamable_http, list tools, and call remote tools with simplified configuration |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
+| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+
+\* *These tools do not work on windows*
 
 ## 💻 Usage Examples
 
@@ -198,6 +203,8 @@ agent.tool.mcp_client(
 
 ### Shell Commands
 
+*Note: `shell` does not work on Windows.*
+
 ```python
 from strands import Agent
 from strands_tools import shell
@@ -240,6 +247,8 @@ response = agent.tool.http_request(
 ```
 
 ### Python Code Execution
+
+*Note: `python_repl` does not work on Windows.*
 
 ```python
 from strands import Agent
@@ -352,6 +361,32 @@ result = agent.tool.batch(
         },
     ]
 )
+```
+
+### Use Browser
+```python
+from strands import Agent
+from strands_tools import use_browser
+
+agent = Agent(tools=[use_browser])
+
+# Simple navigation
+result = agent.tool.use_browser(action="navigate", url="https://example.com")
+
+# Sequential actions for form filling
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/login"}},
+    {"action": "type", "args": {"selector": "#username", "text": "user@example.com"}},
+    {"action": "click", "args": {"selector": "#submit"}}
+])
+
+# Web scraping with content extraction
+result = agent.tool.use_browser(actions=[
+    {"action": "navigate", "args": {"url": "https://example.com/data"}},
+    {"action": "get_text", "args": {"selector": ".content"}},
+    {"action": "click", "args": {"selector": ".next-page"}},
+    {"action": "get_html", "args": {"selector": "main"}}
+])
 ```
 
 ## 🌍 Environment Variables Configuration
@@ -501,6 +536,20 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_DIFF_TYPE_DEFAULT | Default diff type for file comparisons | unified |
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
+
+#### Use Browser Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
+| STRANDS_BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
+| STRANDS_BROWSER_RETRY_DELAY | Default retry delay time for retry mechanisms | 1 |
+| STRANDS_BROWSER_SCREENSHOTS_DIR | Default directory where screenshots will be saved | screenshots |
+| STRANDS_BROWSER_USER_DATA_DIR | Default directory where data for reloading a browser instance is stored | ~/.browser_automation |
+| STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
+| STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
+| STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
 
 ## Contributing ❤️
 
