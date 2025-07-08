@@ -37,7 +37,6 @@ dependencies = [
     "slack_bolt>=1.23.0,<2.0.0",
     # Note: Always want the latest tzdata
     "tzdata ; platform_system == 'Windows'",
-    "a2a-sdk>=0.2.6",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -80,9 +79,10 @@ mem0_memory = [
     "opensearch-py>=2.8.0,<3.0.0",
 ]
 use_browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
+a2a = ["a2a-sdk>=0.2.6"]
 
 [tool.hatch.envs.hatch-static-analysis]
-features = ["mem0_memory", "use_browser"]
+features = ["mem0_memory", "use_browser", "a2a"]
 dependencies = [
     "strands-agents>=0.1.0,<1.0.0",
     "mypy>=0.981,<1.0.0",
@@ -101,7 +101,7 @@ lint-check = [
 lint-fix = ["ruff check --fix"]
 
 [tool.hatch.envs.hatch-test]
-features = ["mem0_memory", "use_browser"]
+features = ["mem0_memory", "use_browser", "a2a"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",
