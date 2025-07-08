@@ -37,6 +37,7 @@ dependencies = [
     "slack_bolt>=1.23.0,<2.0.0",
     # Note: Always want the latest tzdata
     "tzdata ; platform_system == 'Windows'",
+    "a2a-sdk>=0.2.6",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -67,7 +68,6 @@ dev = [
     "opensearch-py>=2.8.0,<3.0.0",
     "nest-asyncio>=1.5.0,<2.0.0",
     "playwright>=1.42.0,<2.0.0",
-    "a2a-sdk>=0.2.6",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
