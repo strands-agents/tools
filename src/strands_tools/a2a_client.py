@@ -6,6 +6,10 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
+
+Warning: when using this collection of tools ensure max_parallel_tools>1 for your Strands Agent.
+This is typically set by default since the the Strands Agents use cpu count as the default value.
+However, if you see "event loop is already running" errors, you should ensure max_parallel_tools>1.
 """
 
 import asyncio
@@ -65,7 +69,10 @@ class A2AClientToolProvider:
         return tools
 
     def _run_async(self, coro):
-        """Handle async-to-sync conversion internally."""
+        """Handle async-to-sync conversion internally.
+
+        This function requires max_parallel_tools>1 on the Strands Agent.
+        """
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
