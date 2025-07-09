@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 import platform
 import subprocess
@@ -20,12 +21,15 @@ if platform.system().lower() == "darwin":
     from Quartz.CoreGraphics import (
         CGEventCreateMouseEvent,
         CGEventPost,
+        CGEventSetIntegerValueField,
         kCGEventLeftMouseDown,
         kCGEventLeftMouseUp,
         kCGHIDEventTap,
         kCGMouseButtonLeft,
         kCGMouseEventClickState,
     )
+
+logger = logging.getLogger(__name__)
 
 
 class UseComputerMethods:
@@ -40,12 +44,7 @@ class UseComputerMethods:
 
     def click(self, x: int, y: int, click_type: str = "left") -> str:
         """Handle mouse clicks."""
-        if x is None or y is None:
-            raise ValueError("Missing x or y coordinates for click")
-
-        pyautogui.moveTo(x, y, duration=0.1)
-        time.sleep(0.05)  # Let pointer settle
-
+        x, y = self._prepare_mouse_position(x, y)
         system = platform.system().lower()
 
         if click_type == "left":
@@ -67,9 +66,7 @@ class UseComputerMethods:
 
     def move_mouse(self, x: int, y: int) -> str:
         """Move mouse to specified coordinates."""
-        if x is None or y is None:
-            raise ValueError("Missing x or y coordinates for mouse movement")
-        pyautogui.moveTo(x, y, duration=0.5)
+        x, y = self._prepare_mouse_position(x, y, duration=0.5)
         return f"Moved mouse to ({x}, {y})"
 
     def drag(
@@ -99,8 +96,7 @@ class UseComputerMethods:
 
         # If x and y are provided, move to that position first
         if x is not None and y is not None:
-            pyautogui.moveTo(x, y, duration=0.3)
-            time.sleep(0.1)  # Small pause to ensure mouse is positioned
+            x, y = self._prepare_mouse_position(x, y, duration=0.3)
         else:
             # If x and y are not provided, use current mouse position
             x, y = pyautogui.position()
@@ -127,7 +123,7 @@ class UseComputerMethods:
                 screen_width, screen_height = pyautogui.size()
                 x = screen_width // 2
                 y = screen_height // 2
-                print(f"No coordinates provided for scroll, using app center: ({x}, {y})")
+                logger.info(f"No coordinates provided for scroll, using app center: ({x}, {y})")
             else:
                 raise ValueError(
                     "Missing x or y coordinates for scrolling. "
@@ -216,26 +212,13 @@ class UseComputerMethods:
             keys = ["command" if k.lower() == "cmd" else k for k in keys]
 
         pyautogui.hotkey(*keys)
-        print(f"clicked keys: {keys}")
+        logger.info(f"Executing hotkey combination: {keys}")
 
         return f"Pressed hotkey combination: {hotkey_str}"
 
     def screenshot(self, region: Optional[List[int]] = None) -> str:
         """Capture screen screenshot."""
-        screenshots_dir = "screenshots"
-        if not os.path.exists(screenshots_dir):
-            os.makedirs(screenshots_dir)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"screenshot_{timestamp}.png"
-        filepath = os.path.join(screenshots_dir, filename)
-
-        if region:
-            screenshot = pyautogui.screenshot(region=region)
-        else:
-            screenshot = pyautogui.screenshot()
-
-        screenshot.save(filepath)
+        filepath = create_screenshot(region)
         return f"Screenshot saved to {filepath}"
 
     def analyze_screenshot(
@@ -249,7 +232,7 @@ class UseComputerMethods:
         return f"Screen size: {width}x{height}"
 
     def open_app(self, app_name):
-        print("We enter the helper for open app")
+        logger.info(f"Opening application: {app_name}")
         if not app_name:
             raise ValueError("No application name provided")
         return open_application(app_name)
@@ -263,7 +246,6 @@ class UseComputerMethods:
     # This function uses lower level mac functions to double click
     def _native_mac_double_click(self, x: int, y: int):
         """Perform a true macOS native double-click using Quartz."""
-        from Quartz.CoreGraphics import CGEventSetIntegerValueField
 
         for i in range(2):
             click_down = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, (x, y), kCGMouseButtonLeft)
@@ -279,6 +261,33 @@ class UseComputerMethods:
             # Small delay between clicks for proper double-click timing
             if i == 0:
                 time.sleep(0.05)
+
+    def _prepare_mouse_position(self, x: int, y: int, duration: float = 0.1) -> tuple[int, int]:
+        """Move mouse to specified coordinates with error handling."""
+        if x is None or y is None:
+            raise ValueError("Missing x or y coordinates")
+        pyautogui.moveTo(x, y, duration=duration)
+        time.sleep(0.05)  # Let pointer settle
+        return x, y
+
+
+def create_screenshot(region: Optional[List[int]] = None) -> str:
+    """Helper function to create and save a screenshot."""
+    screenshots_dir = "screenshots"
+    if not os.path.exists(screenshots_dir):
+        os.makedirs(screenshots_dir)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"screenshot_{timestamp}.png"
+    filepath = os.path.join(screenshots_dir, filename)
+
+    if region:
+        screenshot = pyautogui.screenshot(region=region)
+    else:
+        screenshot = pyautogui.screenshot()
+
+    screenshot.save(filepath)
+    return filepath
 
 
 # Helper function to sort the text extracted from the screenshots
@@ -529,50 +538,54 @@ def focus_application(app_name: str) -> bool:
     return False
 
 
+def delete_screenshot(filepath: str) -> None:
+    """Helper function to delete a screenshot file."""
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except Exception:
+        pass  # Silently ignore deletion errors
+
+
 def handle_analyze_screenshot(
     screenshot_path: Optional[str], region: Optional[List[int]], min_confidence: float = 0.5
 ) -> str:
     """Extract text and coordinates from screenshot."""
+    # Check if screenshot_path was given then do not delete the screenshot
     if screenshot_path:
         if not os.path.exists(screenshot_path):
             raise ValueError(f"Screenshot not found at {screenshot_path}")
         image_path = screenshot_path
+        should_delete = False
     else:
-        screenshots_dir = "screenshots"
-        if not os.path.exists(screenshots_dir):
-            os.makedirs(screenshots_dir)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"screenshot_{timestamp}.png"
-        filepath = os.path.join(screenshots_dir, filename)
-
-        if region:
-            screenshot = pyautogui.screenshot(region=region)
-        else:
-            screenshot = pyautogui.screenshot()
-
-        screenshot.save(filepath)
-        image_path = filepath
+        image_path = create_screenshot(region)
+        should_delete = True
 
     try:
         text_data = extract_text_from_image(image_path, min_confidence)
         if not text_data:
-            return f"No text detected in screenshot {image_path}"
+            result = f"No text detected in screenshot {image_path}"
+        else:
+            formatted_result = f"Detected {len(text_data)} text elements in {image_path}:\n\n"
+            for idx, item in enumerate(text_data, 1):
+                coords = item["coordinates"]
+                formatted_result += (
+                    f"{idx}. Text: '{item['text']}'\n"
+                    f"   Confidence: {item['confidence']:.2f}\n"
+                    f"   Position: X={coords['x']}, Y={coords['y']}, "
+                    f"W={coords['width']}, H={coords['height']}\n"
+                    f"   Center: ({coords['center_x']}, {coords['center_y']})\n\n"
+                )
+            result = formatted_result
 
-        formatted_result = f"Detected {len(text_data)} text elements in {image_path}:\n\n"
-        for idx, item in enumerate(text_data, 1):
-            coords = item["coordinates"]
-            formatted_result += (
-                f"{idx}. Text: '{item['text']}'\n"
-                f"   Confidence: {item['confidence']:.2f}\n"
-                f"   Position: X={coords['x']}, Y={coords['y']}, "
-                f"W={coords['width']}, H={coords['height']}\n"
-                f"   Center: ({coords['center_x']}, {coords['center_y']})\n\n"
-            )
+        if should_delete:
+            delete_screenshot(image_path)
 
-        return formatted_result
+        return result
 
     except Exception as e:
+        if should_delete:
+            delete_screenshot(image_path)
         return f"Error analyzing screenshot: {str(e)}"
 
 
@@ -608,7 +621,6 @@ def use_computer(
             - drag: Click and drag from current position (requires app_name when dragging in application)
             - scroll: Scroll in specified direction
                 (requires x,y coordinates and app_name when scrolling in application)
-            - scroll_to_bottom: Scroll to bottom of page/document (requires app_name)
             - type: Type specified text (requires app_name)
             - key_press: Press specified key (requires app_name)
             - key_hold: Hold key combination (requires app_name)
@@ -683,7 +695,7 @@ def use_computer(
         focus_success = focus_application(app_name)
         if not focus_success:
             return f"Warning: Could not focus on {app_name}. Proceeding with action anyway."
-    print(f"performing action: {action} in app: {app_name}")
+    logger.info(f"Performing action: {action} in app: {app_name}")
 
     computer = UseComputerMethods()
 

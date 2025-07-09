@@ -317,13 +317,13 @@ class TestMouseOperations:
             patch("pyautogui.scroll") as mock_scroll,
             patch("pyautogui.click"),
             patch("pyautogui.size", return_value=(1920, 1080)) as mock_size,
-            patch("builtins.print") as mock_print,
+            patch("src.strands_tools.use_computer.logger.info") as mock_logger,
         ):
             result = computer.scroll(None, None, "TestApp", "up", 15)
 
             mock_size.assert_called_once()
             mock_move.assert_called_once_with(960, 540, duration=0.3)
-            mock_print.assert_called_once_with("No coordinates provided for scroll, using app center: (960, 540)")
+            mock_logger.assert_called_once_with("No coordinates provided for scroll, using app center: (960, 540)")
             mock_scroll.assert_called_once_with(15)
 
             assert "Scrolled up by 15 steps at coordinates (960, 540)" in result
@@ -747,7 +747,7 @@ class TestUseComputerEdgeCases:
         with (
             patch("src.strands_tools.use_computer.focus_application", return_value=True) as mock_focus,
             patch("src.strands_tools.use_computer.UseComputerMethods.click") as mock_click,
-            patch("builtins.print") as mock_print,
+            patch("src.strands_tools.use_computer.logger.info") as mock_logger,
         ):
             mock_click.return_value = "Left clicked at (100, 200)"
 
@@ -755,7 +755,7 @@ class TestUseComputerEdgeCases:
 
             mock_focus.assert_called_once_with("TestApp")
             mock_click.assert_called_once()
-            mock_print.assert_called_with("performing action: click in app: TestApp")
+            mock_logger.assert_called_with("Performing action: click in app: TestApp")
 
             assert result == "Left clicked at (100, 200)"
 
@@ -766,7 +766,7 @@ class TestUseComputerEdgeCases:
         with (
             patch("src.strands_tools.use_computer.focus_application") as mock_focus,
             patch("src.strands_tools.use_computer.UseComputerMethods.scroll") as mock_scroll,
-            patch("builtins.print") as mock_print,
+            patch("src.strands_tools.use_computer.logger.info") as mock_logger,
         ):
             mock_scroll.return_value = "Scrolled up by 15 steps at coordinates (100, 100)"
 
@@ -774,7 +774,7 @@ class TestUseComputerEdgeCases:
 
             mock_focus.assert_not_called()
             mock_scroll.assert_called_once()
-            mock_print.assert_called_with("performing action: scroll in app: None")
+            mock_logger.assert_called_with("Performing action: scroll in app: None")
 
             assert result == "Scrolled up by 15 steps at coordinates (100, 100)"
 
@@ -785,7 +785,7 @@ class TestUseComputerEdgeCases:
         with (
             patch("src.strands_tools.use_computer.focus_application") as mock_focus,
             patch("src.strands_tools.use_computer.UseComputerMethods.mouse_position") as mock_mouse,
-            patch("builtins.print") as mock_print,
+            patch("src.strands_tools.use_computer.logger.info") as mock_logger,
         ):
             mock_mouse.return_value = "Mouse position: (100, 200)"
 
@@ -793,7 +793,7 @@ class TestUseComputerEdgeCases:
 
             mock_focus.assert_not_called()
             mock_mouse.assert_called_once()
-            mock_print.assert_called_with("performing action: mouse_position in app: TestApp")
+            mock_logger.assert_called_with("Performing action: mouse_position in app: TestApp")
 
             assert result == "Mouse position: (100, 200)"
 
@@ -842,27 +842,23 @@ class TestNativeMacDoubleClick:
 
         with (
             patch("src.strands_tools.use_computer.CGEventCreateMouseEvent", mock_create_mouse_event),
+            patch("src.strands_tools.use_computer.CGEventSetIntegerValueField", mock_set_integer_value_field),
             patch("src.strands_tools.use_computer.CGEventPost", mock_event_post),
             patch("time.sleep") as mock_sleep,
         ):
-            # Mock the import that happens inside the method
-            with patch.dict(
-                "sys.modules",
-                {"Quartz.CoreGraphics": MagicMock(CGEventSetIntegerValueField=mock_set_integer_value_field)},
-            ):
-                computer._native_mac_double_click(100, 200)
+            computer._native_mac_double_click(100, 200)
 
-                # Verify CGEventCreateMouseEvent was called 4 times (2 down, 2 up)
-                assert mock_create_mouse_event.call_count == 4
+            # Verify CGEventCreateMouseEvent was called 4 times (2 down, 2 up)
+            assert mock_create_mouse_event.call_count == 4
 
-                # Verify CGEventPost was called 4 times (post each event)
-                assert mock_event_post.call_count == 4
+            # Verify CGEventPost was called 4 times (post each event)
+            assert mock_event_post.call_count == 4
 
-                # Verify CGEventSetIntegerValueField was called 4 times (set state for each event)
-                assert mock_set_integer_value_field.call_count == 4
+            # Verify CGEventSetIntegerValueField was called 4 times (set state for each event)
+            assert mock_set_integer_value_field.call_count == 4
 
-                # Verify sleep was called once (between first and second click)
-                mock_sleep.assert_called_once_with(0.05)
+            # Verify sleep was called once (between first and second click)
+            mock_sleep.assert_called_once_with(0.05)
 
     def test_native_mac_double_click_coordinates(self, computer):
         """Test that coordinates are passed correctly to mouse events"""
@@ -946,26 +942,23 @@ class TestNativeMacDoubleClick:
 
         with (
             patch("src.strands_tools.use_computer.CGEventCreateMouseEvent", mock_create_mouse_event),
+            patch("src.strands_tools.use_computer.CGEventSetIntegerValueField", mock_set_integer_value_field),
             patch("src.strands_tools.use_computer.CGEventPost", mock_event_post),
             patch("time.sleep"),
         ):
-            with patch.dict(
-                "sys.modules",
-                {"Quartz.CoreGraphics": MagicMock(CGEventSetIntegerValueField=mock_set_integer_value_field)},
-            ):
-                computer._native_mac_double_click(100, 200)
+            computer._native_mac_double_click(100, 200)
 
-                # Verify click states are set correctly
-                expected_calls = [
-                    # First click: state = 1
-                    unittest.mock.call(mock_down_event, kCGMouseEventClickState, 1),
-                    unittest.mock.call(mock_up_event, kCGMouseEventClickState, 1),
-                    # Second click: state = 2
-                    unittest.mock.call(mock_down_event, kCGMouseEventClickState, 2),
-                    unittest.mock.call(mock_up_event, kCGMouseEventClickState, 2),
-                ]
+            # Verify click states are set correctly
+            expected_calls = [
+                # First click: state = 1
+                unittest.mock.call(mock_down_event, kCGMouseEventClickState, 1),
+                unittest.mock.call(mock_up_event, kCGMouseEventClickState, 1),
+                # Second click: state = 2
+                unittest.mock.call(mock_down_event, kCGMouseEventClickState, 2),
+                unittest.mock.call(mock_up_event, kCGMouseEventClickState, 2),
+            ]
 
-                mock_set_integer_value_field.assert_has_calls(expected_calls)
+            mock_set_integer_value_field.assert_has_calls(expected_calls)
 
     def test_native_mac_double_click_event_posting(self, computer):
         """Test that events are posted in the correct order"""
@@ -1093,32 +1086,29 @@ class TestNativeMacDoubleClick:
 
         with (
             patch("src.strands_tools.use_computer.CGEventCreateMouseEvent", mock_create_mouse_event),
+            patch("src.strands_tools.use_computer.CGEventSetIntegerValueField", mock_set_integer_value_field),
             patch("src.strands_tools.use_computer.CGEventPost", mock_event_post),
             patch("time.sleep", mock_sleep),
         ):
-            with patch.dict(
-                "sys.modules",
-                {"Quartz.CoreGraphics": MagicMock(CGEventSetIntegerValueField=mock_set_integer_value_field)},
-            ):
-                computer._native_mac_double_click(100, 200)
+            computer._native_mac_double_click(100, 200)
 
-                # Expected sequence: create_down, create_up, set_field_down, set_field_up,
-                # post_down, post_up, sleep, create_down, create_up, set_field_down,
-                # set_field_up, post_down, post_up
-                expected_sequence = [
-                    "create_mouse_event",  # First down
-                    "create_mouse_event",  # First up
-                    "set_integer_value_field",  # Set first down state
-                    "set_integer_value_field",  # Set first up state
-                    "event_post",  # Post first down
-                    "event_post",  # Post first up
-                    "sleep",  # Delay between clicks
-                    "create_mouse_event",  # Second down
-                    "create_mouse_event",  # Second up
-                    "set_integer_value_field",  # Set second down state
-                    "set_integer_value_field",  # Set second up state
-                    "event_post",  # Post second down
-                    "event_post",  # Post second up
-                ]
+            # Expected sequence: create_down, create_up, set_field_down, set_field_up,
+            # post_down, post_up, sleep, create_down, create_up, set_field_down,
+            # set_field_up, post_down, post_up
+            expected_sequence = [
+                "create_mouse_event",  # First down
+                "create_mouse_event",  # First up
+                "set_integer_value_field",  # Set first down state
+                "set_integer_value_field",  # Set first up state
+                "event_post",  # Post first down
+                "event_post",  # Post first up
+                "sleep",  # Delay between clicks
+                "create_mouse_event",  # Second down
+                "create_mouse_event",  # Second up
+                "set_integer_value_field",  # Set second down state
+                "set_integer_value_field",  # Set second up state
+                "event_post",  # Post second down
+                "event_post",  # Post second up
+            ]
 
-                assert call_order == expected_sequence
+            assert call_order == expected_sequence
