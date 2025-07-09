@@ -54,6 +54,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+- 🖱️ **Computer Tool** - Automate desktop actions including mouse movements, keyboard input, screenshots, and application management
 
 ## 📦 Installation
 
@@ -66,7 +67,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser]
+pip install strands-agents-tools[mem0_memory, use_browser, use_computer]
 ```
 
 ### Development Install
@@ -125,6 +126,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+| use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome")	` | Desktop automation, GUI interaction, screen capture |
+
 
 \* *These tools do not work on windows*
 
@@ -350,21 +353,32 @@ response = agent("discover available agents and send a greeting message")
 # - send_message(message_text, target_agent_url) to communicate
 ```
 
-## 🌍 Environment Variables Configuration
+### Use Computer
+```python
+from strands import Agent
+from strands_tools import use_computer
 
-Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
+agent = Agent(tools=[use_computer])
 
-### Global Environment Variables
+# Find mouse position
+result = agent.tool.use_computer(action="mouse_position")
 
-These variables affect multiple tools:
+# Automate adding text
+result = agent.tool.use_computer(action="type", text="Hello, world!", app_name="Notepad")
 
-| Environment Variable | Description | Default | Affected Tools |
-|----------------------|-------------|---------|---------------|
-| BYPASS_TOOL_CONSENT | Bypass consent for tool invocation, set to "true" to enable | false | All tools that require consent (e.g. shell, file_write, python_repl) |
-| STRANDS_TOOL_CONSOLE_MODE | Enable rich UI for tools, set to "enabled" to enable | disabled | All tools that have optional rich UI |
-| AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
-| AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
-| LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
+# Screenshot and analyze screenshot to find text on computer
+result = agent.tool.use_computer(action="screenshot")
+analysis = agent.tool.use_computer(action="analyze_screenshot", screenshot_path=result)
+
+result = agent.tool.use_computer(action="open_app", app_name="Calculator")
+result = agent.tool.use_computer(action="close_app", app_name="Calendar")
+
+result = agent.tool.use_computer(
+    action="hotkey",
+    hotkey_str="command+ctrl+f",  # For macOS
+    app_name="Chrome"
+)
+```
 
 ### Tool-Specific Environment Variables
 
