@@ -1,5 +1,4 @@
-"""
-Editor tool designed to do changes iteratively on multiple files.
+"""Editor tool designed to do changes iteratively on multiple files.
 
 This module provides a comprehensive file and code editor with rich output formatting,
 syntax highlighting, and intelligent text manipulation capabilities. It's designed for
@@ -72,7 +71,7 @@ See the editor function docstring for more details on available commands and par
 import os
 import re
 import shutil
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from rich import box
 from rich.panel import Panel
@@ -80,7 +79,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
-from strands.types.tools import ToolResult, ToolUse
+from strands import tool
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
@@ -136,132 +135,6 @@ def validate_pattern(pattern: str) -> bool:
         return False
 
 
-TOOL_SPEC = {
-    "name": "editor",
-    "description": "Editor tool designed to do changes iteratively on multiple files.\n\n"
-    "IMPORTANT ERROR PREVENTION:\n"
-    "1. Required Parameters:\n"
-    "   • file_text: REQUIRED for 'create' command - content of file to create\n"
-    "   • search_text: REQUIRED for 'find_line' command - text to search\n"
-    "   • insert command: BOTH new_str AND insert_line REQUIRED\n\n"
-    "2. Command-Specific Requirements:\n"
-    "   • create: Must provide file_text, file_text is required for create command\n"
-    "   • str_replace: Both old_str and new_str are required for str_replace command\n"
-    "   • pattern_replace: Both pattern and new_str required\n"
-    "   • insert: Both new_str and insert_line required\n"
-    "   • find_line: search_text required\n\n"
-    "3. Path Handling:\n"
-    "   • Use absolute paths (e.g., /Users/name/file.txt)\n"
-    "   • Or user-relative paths (~/folder/file.txt)\n"
-    "   • Ensure parent directories exist for create command\n\n"
-    "Core Features:\n\n"
-    "1. Rich Text Display:\n"
-    "   • Syntax highlighting (Python, JavaScript, Java, HTML, etc.)\n"
-    "   • Line numbering and code formatting\n"
-    "   • Interactive directory trees with icons\n"
-    "   • Beautiful console output with panels and tables\n\n"
-    "2. File Operations:\n"
-    "   • View: Smart file content display with syntax highlighting\n"
-    "   • Create: New file creation with proper directory handling\n"
-    "   • Replace: Precise string and pattern-based replacement\n"
-    "   • Insert: Smart line finding and content insertion\n"
-    "   • Undo: Automatic backup and restore capability\n\n"
-    "3. Smart Features:\n"
-    "   • Content History: Caches file contents to reduce reads\n"
-    "   • Pattern Matching: Regex-based replacements\n"
-    "   • Smart Line Finding: Context-aware line location\n"
-    "   • Fuzzy Search: Flexible text matching\n\n"
-    "4. Safety Features:\n"
-    "   • Automatic backup creation before modifications\n"
-    "   • Content caching for performance\n"
-    "   • Error prevention and validation\n"
-    "   • One-step undo functionality\n\n"
-    "Example Usage:\n"
-    "1. Create file: command='create', path='/path/to/file.txt', file_text='content'\n"
-    "2. View file: command='view', path='/path/to/file.txt'\n"
-    "3. Insert text: command='insert', path='/path/to/file.txt', new_str='text', insert_line=5\n"
-    "4. Replace text: command='str_replace', path='/file.txt', old_str='old', new_str='new'\n"
-    "5. Find line: command='find_line', path='/file.txt', search_text='find this'\n"
-    "6. Undo change: command='undo_edit', path='/path/to/file.txt'",
-    "inputSchema": {
-        "json": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "enum": [
-                        "view",
-                        "create",
-                        "str_replace",
-                        "pattern_replace",
-                        "insert",
-                        "find_line",
-                        "undo_edit",
-                    ],
-                    "description": (
-                        "The commands to run: `view`, `create`, `str_replace`, `pattern_replace`, "
-                        "`insert`, `find_line`, `undo_edit`."
-                    ),
-                },
-                "path": {
-                    "description": "Absolute path to file or directory, e.g. `/repo/file.py` or `/repo`.",
-                    "type": "string",
-                },
-                "file_text": {
-                    "description": (
-                        "Required parameter of `create` command, with the content of the file to be created."
-                    ),
-                    "type": "string",
-                },
-                "insert_line": {
-                    "description": (
-                        "Required parameter of `insert` command. The `new_str` will be inserted AFTER "
-                        "the line `insert_line` of `path`. Can be a line number or search text."
-                    ),
-                    "type": "string",
-                },
-                "new_str": {
-                    "description": (
-                        "Required parameter containing the new string for `str_replace`, "
-                        "`pattern_replace` or `insert` commands."
-                    ),
-                    "type": "string",
-                },
-                "old_str": {
-                    "description": (
-                        "Required parameter of `str_replace` command containing the exact string to replace."
-                    ),
-                    "type": "string",
-                },
-                "pattern": {
-                    "description": (
-                        "Required parameter of `pattern_replace` command containing the regex pattern to match."
-                    ),
-                    "type": "string",
-                },
-                "search_text": {
-                    "description": "Text to search for in `find_line` command. Supports fuzzy matching.",
-                    "type": "string",
-                },
-                "fuzzy": {
-                    "description": "Enable fuzzy matching for `find_line` command.",
-                    "type": "boolean",
-                },
-                "view_range": {
-                    "description": (
-                        "Optional parameter of `view` command. Line range to show [start, end]. "
-                        "Supports negative indices."
-                    ),
-                    "items": {"type": "integer"},
-                    "type": "array",
-                },
-            },
-            "required": ["command", "path"],
-        }
-    },
-}
-
-
 def format_code(code: str, language: str) -> Syntax:
     """Format code using Rich syntax highlighting."""
     syntax = Syntax(code, language, theme="monokai", line_numbers=True)
@@ -307,7 +180,19 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
     return panel
 
 
-def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
+@tool
+def editor(
+    command: str,
+    path: str,
+    file_text: Optional[str] = None,
+    insert_line: Optional[Union[str, int]] = None,
+    new_str: Optional[str] = None,
+    old_str: Optional[str] = None,
+    pattern: Optional[str] = None,
+    search_text: Optional[str] = None,
+    fuzzy: bool = False,
+    view_range: Optional[List[int]] = None,
+) -> Dict[str, Any]:
     """
     Editor tool designed to do changes iteratively on multiple files.
 
@@ -429,14 +314,15 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
     console = console_util.create()
 
     try:
-        tool_use_id = tool.get("toolUseId", "default-id")
-        tool_input = tool.get("input", {})
+        path = os.path.expanduser(path)
 
-        command = tool_input.get("command")
-        path = os.path.expanduser(tool_input.get("path", ""))
+        if not command:
+            raise ValueError("Command is required")
 
-        if not command or not path:
-            raise ValueError("Both command and path are required")
+        # Validate command
+        valid_commands = ["view", "create", "str_replace", "pattern_replace", "insert", "find_line", "undo_edit"]
+        if command not in valid_commands:
+            raise ValueError(f"Unknown command: {command}. Valid commands: {', '.join(valid_commands)}")
 
         # Get environment variables at runtime
         editor_dir_tree_max_depth = int(os.getenv("EDITOR_DIR_TREE_MAX_DEPTH", "2"))
@@ -455,7 +341,9 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Preview specific changes for each command
             if command == "create":
-                content = tool_input.get("file_text", "")
+                if not file_text:
+                    raise ValueError("file_text is required for create command")
+                content = file_text
                 language = detect_language(path)
                 # Use Syntax directly for proper highlighting
                 syntax = Syntax(content, language, theme="monokai", line_numbers=True)
@@ -468,8 +356,11 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     )
                 )
             elif command in {"str_replace", "pattern_replace"}:
-                old = tool_input.get("old_str" if command == "str_replace" else "pattern", "")
-                new = tool_input.get("new_str", "")
+                old = old_str if command == "str_replace" else pattern
+                new = new_str
+                if not old or not new:
+                    param_name = "old_str" if command == "str_replace" else "pattern"
+                    raise ValueError(f"Both {param_name} and new_str are required for {command} command")
                 language = detect_language(path)
 
                 # Create table grid for side-by-side display
@@ -526,8 +417,8 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 console.print(preview_panel)
                 console.print()
             elif command == "insert":
-                new_str = tool_input.get("new_str", "")
-                insert_line = tool_input.get("insert_line", "")
+                if not new_str or insert_line is None:
+                    raise ValueError("Both new_str and insert_line are required for insert command")
                 language = detect_language(path)
                 # Create table with syntax highlighting
                 table = Table(title="Insertion Preview", show_header=True)
@@ -559,7 +450,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
                 console.print(error_panel)
                 return {
-                    "toolUseId": tool_use_id,
                     "status": "error",
                     "content": [{"text": error_message}],
                 }
@@ -573,7 +463,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         content = f.read()
                     save_content_history(path, content)
 
-                view_range = tool_input.get("view_range")
                 if view_range:
                     lines = content.split("\n")
                     start = max(0, view_range[0] - 1)
@@ -612,7 +501,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 raise ValueError(f"Path {path} does not exist")
 
         elif command == "create":
-            file_text = tool_input.get("file_text")
             if not file_text:
                 raise ValueError("file_text is required for create command")
 
@@ -627,9 +515,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             result = f"File {path} created successfully"
 
         elif command == "str_replace":
-            old_str = tool_input.get("old_str")
-            new_str = tool_input.get("new_str")
-
             if not old_str or not new_str:
                 raise ValueError("Both old_str and new_str are required for str_replace command")
 
@@ -645,7 +530,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if count == 0:
                 # Return existing content if no matches
                 return {
-                    "toolUseId": tool_use_id,
                     "status": "error",
                     "content": [{"text": f"Note: old_str not found in {path}. Current content:\n{content}"}],
                 }
@@ -660,15 +544,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 f.write(new_content)
             save_content_history(path, new_content)
 
-            # First check if we actually have matches
-            count = content.count(old_str)
-            if count == 0:
-                return {
-                    "toolUseId": tool_use_id,
-                    "status": "error",
-                    "content": [{"text": f"Note: old_str not found in {path}. Current content:\n{content}"}],
-                }
-
             result = (
                 f"Text replacement complete and details displayed in console.\nFile: {path}\n"
                 f"Replaced {count} occurrence{'s' if count > 1 else ''}\n"
@@ -676,9 +551,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif command == "pattern_replace":
-            pattern = tool_input.get("pattern")
-            new_str = tool_input.get("new_str")
-
             if not pattern or not new_str:
                 raise ValueError("Both pattern and new_str are required for pattern_replace command")
 
@@ -698,7 +570,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             matches = list(regex.finditer(content))
             if not matches:
                 return {
-                    "toolUseId": tool_use_id,
                     "status": "success",
                     "content": [{"text": f"Note: pattern '{pattern}' not found in {path}. Current content:{content}"}],
                 }
@@ -723,7 +594,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
                 before = content[context_start:start]
                 matched = content[start:end]
-                after = content[end:context_end]
 
                 # Highlight the replacement
                 preview = regex.sub(new_str, matched)
@@ -774,9 +644,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif command == "insert":
-            new_str = tool_input.get("new_str")
-            insert_line = tool_input.get("insert_line")
-
             if not new_str or insert_line is None:
                 raise ValueError("Both new_str and insert_line are required for insert command")
 
@@ -791,11 +658,9 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Handle string-based line finding
             if isinstance(insert_line, str):
-                fuzzy = tool_input.get("fuzzy", False)
                 line_num = find_context_line(content, insert_line, fuzzy)
                 if line_num == -1:
                     return {
-                        "toolUseId": tool_use_id,
                         "status": "success",
                         "content": [
                             {
@@ -849,7 +714,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif command == "find_line":
-            search_text = tool_input.get("search_text")
             if not search_text:
                 raise ValueError("search_text is required for find_line command")
 
@@ -861,12 +725,10 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 save_content_history(path, content)
 
             # Find line
-            fuzzy = tool_input.get("fuzzy", False)
             line_num = find_context_line(content, search_text, fuzzy)
 
             if line_num == -1:
                 return {
-                    "toolUseId": tool_use_id,
                     "status": "success",
                     "content": [
                         {
@@ -924,7 +786,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
             raise ValueError(f"Unknown command: {command}")
 
         return {
-            "toolUseId": tool_use_id,
             "status": "success",
             "content": [{"text": result}],
         }
@@ -933,7 +794,6 @@ def editor(tool: ToolUse, **kwargs: Any) -> ToolResult:
         error_msg = format_output("❌ Error", str(e), "red")
         console.print(error_msg)
         return {
-            "toolUseId": tool_use_id if "tool_use_id" in locals() else "error-id",
             "status": "error",
             "content": [{"text": f"Error: {str(e)}"}],
         }

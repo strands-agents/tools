@@ -141,12 +141,6 @@ TOOL_SPEC = {
                 },
             },
             "required": ["action"],
-            "allOf": [
-                {
-                    "if": {"properties": {"action": {"enum": ["store", "list", "retrieve"]}}},
-                    "then": {"oneOf": [{"required": ["user_id"]}, {"required": ["agent_id"]}]},
-                }
-            ],
         }
     },
 }
