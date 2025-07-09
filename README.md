@@ -21,7 +21,7 @@
     <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
     <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
   </div>
-  
+
   <p>
     <a href="https://strandsagents.com/">Documentation</a>
     ◆ <a href="https://github.com/strands-agents/samples">Samples</a>
@@ -93,6 +93,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
+| a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -330,6 +331,25 @@ result = agent.tool.use_browser(actions=[
 ])
 ```
 
+### A2A Client
+
+```python
+from strands import Agent
+from strands_tools.a2a_client import A2AClientToolProvider
+
+# Initialize the A2A client provider with known agent URLs
+provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"])
+agent = Agent(tools=provider.tools)
+
+# Use natural language to interact with A2A agents
+response = agent("discover available agents and send a greeting message")
+
+# The agent will automatically use the available tools:
+# - discover_agent(url) to find agents
+# - list_discovered_agents() to see all discovered agents
+# - send_message(message_text, target_agent_url) to communicate
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -350,7 +370,7 @@ These variables affect multiple tools:
 
 #### Calculator Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | CALCULATOR_MODE | Default calculation mode | evaluate |
 | CALCULATOR_PRECISION | Number of decimal places for results | 10 |
@@ -363,13 +383,13 @@ These variables affect multiple tools:
 
 #### Current Time Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | DEFAULT_TIMEZONE | Default timezone for current_time tool | UTC |
 
 #### Sleep Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
 
@@ -403,13 +423,13 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Memory Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | MEMORY_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
 | MEMORY_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
 #### Nova Reels Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | NOVA_REEL_DEFAULT_SEED | Default seed for video generation | 0 |
 | NOVA_REEL_DEFAULT_FPS | Default frames per second for generated videos | 24 |
@@ -418,19 +438,19 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Python REPL Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
 
 #### Shell Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | SHELL_DEFAULT_TIMEOUT | Default timeout in seconds for shell commands | 900 |
 
 #### Slack Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | SLACK_DEFAULT_EVENT_COUNT | Default number of events to retrieve | 42 |
 | STRANDS_SLACK_AUTO_REPLY | Enable automatic replies to messages | false |
@@ -438,7 +458,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Speak Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | SPEAK_DEFAULT_STYLE | Default style for status messages | green |
 | SPEAK_DEFAULT_MODE | Default speech mode (fast/polly) | fast |
@@ -448,7 +468,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Editor Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | EDITOR_DIR_TREE_MAX_DEPTH | Maximum depth for directory tree visualization | 2 |
 | EDITOR_DEFAULT_STYLE | Default style for output panels | default |
@@ -456,13 +476,13 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Environment Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
 
 #### File Read Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | FILE_READ_RECURSIVE_DEFAULT | Default setting for recursive file searching | true |
 | FILE_READ_CONTEXT_LINES_DEFAULT | Default number of context lines around search matches | 2 |
@@ -474,7 +494,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 #### Use Browser Tool
 
-| Environment Variable | Description | Default | 
+| Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | STRANDS_DEFAULT_WAIT_TIME | Default setting for wait time with actions | 1 |
 | STRANDS_BROWSER_MAX_RETRIES | Default number of retries to perform when an action fails | 3 |
