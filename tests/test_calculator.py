@@ -467,22 +467,17 @@ def test_edge_case_error_handling(agent):
 
 def test_direct_tool_call():
     """Test direct call to the calculator tool function."""
-    tool_use = {
-        "toolUseId": "test-id",
-        "input": {"expression": "2+2", "mode": "evaluate"},
-    }
 
     # Test basic calculation
     with mock.patch("src.strands_tools.calculator.Console"):
-        result = calculator_func(tool_use)
+        result = calculator_func(expression="2+2", mode="evaluate")
         assert result["status"] == "success"
         assert "Result: 4" in result["content"][0]["text"]
 
     # Test with error - division by zero may not raise an error in SymPy
-    tool_use["input"]["expression"] = "x +* 2"  # Invalid syntax
     with mock.patch("src.strands_tools.calculator.Console"):
         with mock.patch("src.strands_tools.calculator.create_error_panel"):
-            result = calculator_func(tool_use)
+            result = calculator_func(expression="x +* 2", mode="evaluate")
             assert result["status"] == "error"
             assert "Error" in result["content"][0]["text"]
 
@@ -611,14 +606,6 @@ def test_calculator_tool_with_system_of_equations():
     # Create a tool use with a system of equations
     from src.strands_tools.calculator import calculator as calc_function
 
-    tool_use = {
-        "toolUseId": "test_id",
-        "input": {
-            "expression": "['x + y - 10', 'x - y - 2']",  # System of equations
-            "mode": "solve",
-        },
-    }
-
     # Mock parse_expression to return a list of expressions
     with mock.patch(
         "src.strands_tools.calculator.parse_expression",
@@ -629,7 +616,7 @@ def test_calculator_tool_with_system_of_equations():
         ),
     ):
         # This should trigger the system of equations path in calculator function
-        result = calc_function(tool_use)
+        result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
 
         # Check for success status
         assert result["status"] == "success"
