@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeBaseHelper:
     def __init__(self):
-        self.clients = self._get_boto_clients()
+        self.clients = self.get_boto_clients()
         self.index = {
             "role_name": "StrandsMemoryIntegTestRole",
             "kb_name": "strands-memory-integ-test-kb",
@@ -39,7 +39,7 @@ class KnowledgeBaseHelper:
         self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "true").lower() == "true"
 
     @staticmethod
-    def _get_boto_clients():
+    def get_boto_clients():
         return {
             "iam": boto3.client("iam", region_name=AWS_REGION),
             "bedrock-agent": boto3.client("bedrock-agent", region_name=AWS_REGION),

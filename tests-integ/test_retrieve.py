@@ -58,7 +58,7 @@ def test_retrieve_semantic_search(kb_id):
     )
     assert doc_id, "Could not parse Document ID"
 
-    bedrock_client = KnowledgeBaseHelper._get_boto_clients()["bedrock-agent"]
+    bedrock_client = KnowledgeBaseHelper.get_boto_clients()["bedrock-agent"]
     ds = bedrock_client.list_data_sources(knowledgeBaseId=kb_id)["dataSourceSummaries"][0]["dataSourceId"]
     for _ in range(MAX_POLLS):
         details = bedrock_client.list_knowledge_base_documents(knowledgeBaseId=kb_id, dataSourceId=ds)[

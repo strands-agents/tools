@@ -41,7 +41,7 @@ def test_memory_integration_store_and_retrieve(managed_knowledge_base):
     """
     kb_id = managed_knowledge_base
     agent = Agent(tools=[memory])
-    clients = KnowledgeBaseHelper._get_boto_clients()
+    clients = KnowledgeBaseHelper.get_boto_clients()
 
     test_uuid = str(uuid.uuid4())
     unique_content = f"The secret password for the test is {test_uuid}."
