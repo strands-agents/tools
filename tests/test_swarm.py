@@ -206,6 +206,7 @@ def test_create_rich_status_panel():
     status = {
         "task": "Test task",
         "coordination_pattern": "collaborative",
+        "phases": 2,  # Add phases field
         "memory_id": "test-memory-id",
         "agents": [
             {"id": "agent1", "status": "completed", "contributions": 2},

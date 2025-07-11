@@ -103,6 +103,7 @@ def create_rich_status_panel(console: Console, status: Dict[str, Any]) -> str:
     content = []
     content.append(f"[bold blue]Task:[/bold blue] {status['task']}")
     content.append(f"[bold blue]Pattern:[/bold blue] {status['coordination_pattern']}")
+    content.append(f"[bold blue]Phases:[/bold blue] {status['phases']}")
     content.append(f"[bold blue]Shared Memory ID:[/bold blue] {status['memory_id']}")
     content.append("\n[bold magenta]Agents:[/bold magenta]")
 
@@ -142,6 +143,13 @@ TOOL_SPEC = {
                     "description": "How agents should coordinate",
                     "enum": ["collaborative", "competitive", "hybrid"],
                     "default": "collaborative",
+                },
+                "phases": {
+                    "type": "integer",
+                    "description": "Number of collaborative phases to process (1-5)",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 2,
                 },
             },
             "required": ["task", "swarm_size"],
@@ -387,21 +395,24 @@ class Swarm:
     Attributes:
         task: The main task being processed by the swarm
         coordination_pattern: The pattern used for agent coordination
+        phases: The number of collaborative phases to process
         shared_memory: The shared memory instance for this swarm
         agents: Dictionary of agents in this swarm
         lock: Thread lock for ensuring thread safety
     """
 
-    def __init__(self, task: str, coordination_pattern: str) -> None:
+    def __init__(self, task: str, coordination_pattern: str, phases: int = 2) -> None:
         """
         Initialize a new swarm intelligence system.
 
         Args:
             task: The main task to be processed
             coordination_pattern: Pattern for agent coordination ("collaborative", "competitive", or "hybrid")
+            phases: Number of collaborative phases to process (default: 2)
         """
         self.task = task
         self.coordination_pattern = coordination_pattern
+        self.phases = phases
         self.shared_memory = SharedMemory()
         self.agents: Dict[str, SwarmAgent] = {}
         self.lock = Lock()
@@ -482,6 +493,7 @@ class Swarm:
         return {
             "task": self.task,
             "coordination_pattern": self.coordination_pattern,
+            "phases": self.phases,
             "memory_id": self.shared_memory.memory_id,
             "agents": [agent.get_status() for agent in self.agents.values()],
         }
@@ -543,6 +555,7 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - swarm_size (int): Number of agents in the swarm (1-10)
             - coordination_pattern (str): How agents should coordinate
               ("collaborative", "competitive", or "hybrid")
+            - phases (int): Number of collaborative phases to process (1-5, default: 2)
         **kwargs: Additional keyword arguments including:
             - system_prompt: Base system prompt for the swarm
             - inference_config: Configuration for inference
@@ -561,18 +574,19 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Example Usage:
     -------------
     ```python
-    # Collaborative pattern for complex problem-solving
+    # Collaborative pattern for complex problem-solving with default phases (2)
     result = agent.tool.swarm(
         task="Analyze the environmental impact of renewable energy sources",
         swarm_size=5,
         coordination_pattern="collaborative"
     )
 
-    # Competitive pattern for creative idea generation
+    # Competitive pattern for creative idea generation with 3 phases
     result = agent.tool.swarm(
         task="Generate unique marketing campaign concepts",
         swarm_size=3,
-        coordination_pattern="competitive"
+        coordination_pattern="competitive",
+        phases=3
     )
     ```
     """
@@ -600,9 +614,10 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
         task = tool_input["task"]
         swarm_size = min(max(tool_input.get("swarm_size", 3), 1), 10)
         coordination = tool_input.get("coordination_pattern", "collaborative")
+        phases = min(max(tool_input.get("phases", 2), 1), 5)  # Default to 2 phases, limit between 1-5
 
         # Create swarm
-        swarm_instance = Swarm(task, coordination)
+        swarm_instance = Swarm(task, coordination, phases)
 
         # Create agents with specialized roles
         for i in range(swarm_size):
@@ -633,7 +648,7 @@ Key Responsibilities:
 
         # Process collaborative phases
         all_results = []
-        for _phase in range(2):  # Two phases of collaboration
+        for _ in range(phases):  # Use configurable number of phases
             phase_results = swarm_instance.process_phase(tool_context)
             all_results.extend(phase_results)
 
