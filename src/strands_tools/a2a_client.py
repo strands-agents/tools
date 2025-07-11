@@ -24,7 +24,7 @@ from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMes
 from strands import tool
 from strands.types.tools import AgentTool
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class A2AClientToolProvider:
         return agent_card
 
     @tool
-    def discover_agent(self, url: str) -> dict[str, Any]:
+    def a2a_discover_agent(self, url: str) -> dict[str, Any]:
         """
         Discover an A2A agent and return its agent card with capabilities.
 
@@ -171,7 +171,7 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def list_discovered_agents(self) -> dict[str, Any]:
+    def a2a_list_discovered_agents(self) -> dict[str, Any]:
         """
         List all discovered A2A agents and their capabilities.
 
@@ -205,7 +205,9 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def send_message(self, message_text: str, target_agent_url: str, message_id: str | None = None) -> dict[str, Any]:
+    def a2a_send_message(
+        self, message_text: str, target_agent_url: str, message_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
 
