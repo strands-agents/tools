@@ -33,9 +33,9 @@ def test_tools_property():
 
     # Should have the three @tool decorated methods
     tool_names = [tool.tool_name for tool in tools]
-    assert "discover_agent" in tool_names
-    assert "list_discovered_agents" in tool_names
-    assert "send_message" in tool_names
+    assert "a2a_discover_agent" in tool_names
+    assert "a2a_list_discovered_agents" in tool_names
+    assert "a2a_send_message" in tool_names
 
 
 @patch("strands_tools.a2a_client.asyncio.get_event_loop")
@@ -220,7 +220,7 @@ def test_discover_agent_success(mock_run_async):
     expected_result = {"status": "success", "agent_card": {"name": "test_agent"}, "url": "http://test.com"}
     mock_run_async.return_value = expected_result
 
-    result = provider.discover_agent("http://test.com")
+    result = provider.a2a_discover_agent("http://test.com")
 
     assert result == expected_result
 
@@ -264,7 +264,7 @@ def test_list_discovered_agents_empty():
         expected = {"status": "success", "agents": [], "total_count": 0}
         mock_run_async.return_value = expected
 
-        result = provider.list_discovered_agents()
+        result = provider.a2a_list_discovered_agents()
 
         assert result == expected
 
@@ -315,7 +315,7 @@ def test_send_message_with_message_id(mock_run_async):
     }
     mock_run_async.return_value = expected_result
 
-    result = provider.send_message("Hello", "http://test.com", "test_id")
+    result = provider.a2a_send_message("Hello", "http://test.com", "test_id")
 
     assert result == expected_result
 
@@ -332,7 +332,7 @@ def test_send_message_without_message_id(mock_run_async):
     }
     mock_run_async.return_value = expected_result
 
-    result = provider.send_message("Hello", "http://test.com")
+    result = provider.a2a_send_message("Hello", "http://test.com")
 
     assert result == expected_result
 
