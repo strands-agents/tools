@@ -337,7 +337,6 @@ def test_invalid_action(mock_opensearch, mock_mem0_client, mock_tool):
 @patch.dict(os.environ, {})
 def test_missing_opensearch_host(mock_tool):
     """Test missing OpenSearch host defaults to FAISS."""
-    # Configure the mock_tool
     mock_tool.get.side_effect = lambda key, default=None: {
         "toolUseId": "test-id",
         "input": {"action": "list", "user_id": "test-user"},
@@ -350,7 +349,6 @@ def test_missing_opensearch_host(mock_tool):
             raise ImportError("No module named 'faiss'")
         return real_import(name, *args, **kwargs)
 
-    # Mock faiss import
     with patch("builtins.__import__", side_effect=fail_faiss):
         result = mem0_memory.mem0_memory(tool=mock_tool)
         assert result["status"] == "error"
