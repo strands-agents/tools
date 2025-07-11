@@ -11,7 +11,6 @@ from strands_tools import nova_reels
 
 AWS_REGION = "us-east-1"
 TEST_BUCKET = f"nova-reels-e2e-test-{str(uuid.uuid4())[:8]}".lower()
-INVOKE_ARN = f"arn:aws:bedrock:{AWS_REGION}:123456789012:async-inference/{uuid.uuid4()}"
 TIMEOUT_SECONDS = 600
 POLL_INTERVAL = 15
 
@@ -52,17 +51,21 @@ def test_generate_video_store_to_s3(agent, s3_bucket):
     assert arn_match, f"No valid Bedrock async invoke ARN found in agent reply: {reply_text}"
     arn = arn_match.group(0)
 
-    # Poll for job completion
-    bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+    # Use the nova_reels tool via the agent to check job status
     status = "InProgress"
     current_time = time.time()
     while status == "InProgress" and (time.time() - current_time) < TIMEOUT_SECONDS:
-        response = bedrock.get_async_invoke(invocationArn=arn)
-        status = response["status"]
-        if status == "Completed":
+        status_response = agent.tool.nova_reels(action="status", invocation_arn=arn)
+        status_content = status_response.get("content", [])
+        status_texts = [item["text"].lower() for item in status_content]
+
+        if any("completed" in text for text in status_texts):
+            status = "Completed"
             break
-        elif status == "Failed":
-            pytest.fail(f"Nova Reels job failed: {response.get('failureMessage')}")
+        elif any("failed" in text for text in status_texts):
+            failure_msg = next((text for text in status_texts if "error:" in text), "Unknown failure")
+            pytest.fail(f"Nova Reels job failed: {failure_msg}")
+
         time.sleep(POLL_INTERVAL)
     else:
         pytest.fail("Nova Reels video generation timed out after 10 minutes")
