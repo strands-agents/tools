@@ -80,6 +80,8 @@ mem0_memory = [
 ]
 use_browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
 a2a_client = ["a2a-sdk[sql]>=0.2.11"]
+# Optional dependency for PostgreSQL-related tools (e.g., query_postgres)
+query_postgres = ["psycopg2-binary>=2.9.9,<3.0.0"]
 
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0_memory", "use_browser", "a2a_client"]
@@ -101,7 +103,7 @@ lint-check = [
 lint-fix = ["ruff check --fix"]
 
 [tool.hatch.envs.hatch-test]
-features = ["mem0_memory", "use_browser", "a2a_client"]
+features = ["mem0_memory", "use_browser", "a2a_client", "query_postgres"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",

@@ -54,7 +54,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
-
+- 🐘 **Query Postgres** – Query PostgreSQL with Natural Language
 ## 📦 Installation
 
 ### Quick Install
@@ -91,40 +91,41 @@ pre-commit install
 
 Below is a comprehensive table of all available tools, how to use them with an agent, and typical use cases:
 
-| Tool | Agent Usage | Use Case |
-|------|-------------|----------|
-| a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
-| file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
-| file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
-| editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
-| shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
-| http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
-| python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
-| calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
-| use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
-| nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
-| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
-| memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
-| environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
-| generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
-| generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
-| image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
-| journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
-| think | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes |
-| load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
-| swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
-| current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
-| sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
-| agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
-| cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
-| slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
-| speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
-| stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
-| use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
-| workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
-| batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
-| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+| Tool                     | Agent Usage                                                                                                                                | Use Case |
+|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| a2a_client               | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)`                        | Discover and communicate with A2A-compliant agents, send messages between agents |
+| file_read                | `agent.tool.file_read(path="path/to/file.txt")`                                                                                            | Reading configuration files, parsing code files, loading datasets |
+| file_write               | `agent.tool.file_write(path="path/to/file.txt", content="file content")`                                                                   | Writing results to files, creating new files, saving output data |
+| editor                   | `agent.tool.editor(command="view", path="path/to/file.py")`                                                                                | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
+| shell*                   | `agent.tool.shell(command="ls -la")`                                                                                                       | Executing shell commands, interacting with the operating system, running scripts |
+| http_request             | `agent.tool.http_request(method="GET", url="https://api.example.com/data")`                                                                | Making API calls, fetching web data, sending data to external services |
+| python_repl*             | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")`                                       | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
+| calculator               | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")`                                                                            | Performing mathematical operations, symbolic math, equation solving |
+| use_aws                  | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")`                                  | Interacting with AWS services, cloud resource management |
+| retrieve                 | `agent.tool.retrieve(text="What is STRANDS?")`                                                                                             | Retrieving information from Amazon Bedrock Knowledge Bases |
+| nova_reels               | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")`                                      | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
+| mem0_memory              | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")`                                         | Store user and agent memories across agent runs to provide personalized experience |
+| memory                   | `agent.tool.memory(action="retrieve", query="product features")`                                                                           | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
+| environment              | `agent.tool.environment(action="list", prefix="AWS_")`                                                                                     | Managing environment variables, configuration management |
+| generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")`                                                                            | Creating images using Stability AI models |
+| generate_image           | `agent.tool.generate_image(prompt="A sunset over mountains")`                                                                              | Creating AI-generated images for various applications |
+| image_reader             | `agent.tool.image_reader(image_path="path/to/image.jpg")`                                                                                  | Processing and reading image files for AI analysis |
+| journal                  | `agent.tool.journal(action="write", content="Today's progress notes")`                                                                     | Creating structured logs, maintaining documentation |
+| query_postgres           | `agent.tool.query_postgres(query="SELECT name FROM users WHERE active = true")`                                                            | Run secure, read-only PostgreSQL queries for insights |
+| think                    | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)`                                                                    | Advanced reasoning, multi-step thinking processes |
+| load_tool                | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")`                                                                  | Dynamically loading custom tools and extensions |
+| swarm                    | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")`                                        | Coordinating multiple AI agents to solve complex problems through collective intelligence |
+| current_time             | `agent.tool.current_time(timezone="US/Pacific")`                                                                                           | Get the current time in ISO 8601 format for a specified timezone |
+| sleep                    | `agent.tool.sleep(seconds=5)`                                                                                                              | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
+| agent_graph              | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])`                                    | Create and visualize agent relationship graphs for complex multi-agent systems |
+| cron*                    | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")`                                               | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
+| slack                    | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")`                                                           | Interact with Slack workspace for messaging and monitoring |
+| speak                    | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")`                                                   | Output status messages with rich formatting and optional text-to-speech |
+| stop                     | `agent.tool.stop(message="Process terminated by user request")`                                                                            | Gracefully terminate agent execution with custom message |
+| use_llm                  | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")`                                                   | Create nested AI loops with customized system prompts for specialized tasks |
+| workflow                 | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])`                       | Define, execute, and manage multi-step automated workflows |
+| batch                    | `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])`  | Call multiple other tools in parallel. |
+| use_browser              | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	`                                                                | Web scraping, automated testing, form filling, web automation tasks |
 
 \* *These tools do not work on windows*
 
@@ -350,6 +351,50 @@ response = agent("discover available agents and send a greeting message")
 # - send_message(message_text, target_agent_url) to communicate
 ```
 
+### Query Postgres
+```python
+import os
+from strands import Agent
+from strands.models import BedrockModel
+from strands_tools.query_postgres import  query_postgres
+
+# Show rich UI for tools in CLI
+os.environ["STRANDS_TOOL_CONSOLE_MODE"] = "enabled"
+
+model = BedrockModel(model_id="apac.anthropic.claude-sonnet-4-20250514-v1:0")
+
+# Initialize the agent with tools, model, and configuration
+agent = Agent(
+    tools=[query_postgres],
+    system_prompt="""
+You are a helpful business analysis tool that answers user questions by generating and executing SQL queries on a PostgreSQL database. 
+You only respond with SQL query results via the tool named `query_postgres`.
+
+### Database Schema
+List you schema here for best results.
+
+### Instructions
+- Use the `query_postgres` tool to run SQL queries.
+- You do not need to handle connection details — they are automatically managed via environment variables: `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGPORT`.
+- Limit SELECT results to a maximum of 100 rows unless otherwise specified.
+- Always be accurate with JOINs and field references based on the schema.
+- If a query returns multiple results, structure the output for readability.
+- Only return text content via `content: [{"text": "..."}]`.
+
+You are expected to translate user queries like:
+- "What is the average product price?"
+- "List top 5 customers by total order value"
+- "Show the number of orders per customer"
+
+into valid SQL and return the results cleanly.
+""",
+    model=model
+)
+
+agent("What is the average price of the products")
+```
+
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -504,6 +549,15 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
 | STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
 | STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
+### Query Postgres Tool
+| Environment Variable | Description                                     | Default    |
+|----------------------| ----------------------------------------------- |------------|
+| PGHOST               | Hostname or IP address of the PostgreSQL server | localhost  |
+| PGPORT               | Port number to connect to PostgreSQL            | 5432       |
+| PGDATABASE           | Name of the PostgreSQL database to connect to   | *Required* |
+| PGUSER               | **Read-only** user for executing queries        | *Required* |
+| PGPASSWORD           | Password for the PostgreSQL user                | *Required* |
 
 
 ## Contributing ❤️
