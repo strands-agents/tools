@@ -13,19 +13,28 @@ from strands_tools import think, stop
 
 agent = Agent(tools=[think, stop])
 
-# Basic usage with default system prompt
+# Basic usage with default system prompt (inherits all parent tools)
 result = agent.tool.think(
     thought="How might we improve renewable energy storage solutions?",
     cycle_count=3,
     system_prompt="You are an expert energy systems analyst."
 )
 
-# Advanced usage with custom system prompt
+# Usage with specific tools filtered from parent agent
+result = agent.tool.think(
+    thought="Calculate energy efficiency and analyze the data",
+    cycle_count=3,
+    system_prompt="You are an expert energy systems analyst.",
+    tools=["calculator", "file_read", "python_repl"]
+)
+
+# Usage with mixed tool filtering from parent agent
 result = agent.tool.think(
     thought="Analyze the implications of quantum computing on cryptography.",
     cycle_count=5,
     system_prompt="You are a specialist in quantum computing and cryptography. Analyze this topic deeply,
-    considering both technical and practical aspects."
+    considering both technical and practical aspects.",
+    tools=["retrieve", "calculator", "http_request"]
 )
 ```
 
@@ -79,6 +88,7 @@ Please provide your analysis directly:
         cycle: int,
         total_cycles: int,
         custom_system_prompt: str,
+        specified_tools=None,
         **kwargs: Any,
     ) -> str:
         """Process a single thinking cycle."""
@@ -97,8 +107,20 @@ Please provide your analysis directly:
         trace_attributes = {}
         parent_agent = kwargs.get("agent")
         if parent_agent:
-            tools = list(parent_agent.tool_registry.registry.values())
             trace_attributes = parent_agent.trace_attributes
+
+            # If specific tools are provided, filter parent tools; otherwise inherit all tools from parent
+            if specified_tools is not None:
+                # Filter parent agent tools to only include specified tool names
+                filtered_tools = []
+                for tool_name in specified_tools:
+                    if tool_name in parent_agent.tool_registry.registry:
+                        filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
+                    else:
+                        logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
+                tools = filtered_tools
+            else:
+                tools = list(parent_agent.tool_registry.registry.values())
 
         # Initialize the new Agent with provided parameters
         agent = Agent(messages=[], tools=tools, system_prompt=custom_system_prompt, trace_attributes=trace_attributes)
@@ -122,7 +144,7 @@ Please provide your analysis directly:
 
 
 @tool
-def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dict[str, Any]:
+def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None, agent: Any = None) -> Dict[str, Any]:
     """
     Recursive thinking tool for sophisticated thought generation, learning, and self-reflection.
 
@@ -162,7 +184,10 @@ def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dic
             provide a good balance of depth and efficiency.
         system_prompt: Custom system prompt to use for the LLM thinking process. This should
             specify the expertise domain and thinking approach for processing the thought.
-        **kwargs: Additional keyword arguments passed to the underlying LLM processing.
+        tools: List of tool names to make available to the nested agent. Tool names must
+            exist in the parent agent's tool registry. Examples: ["calculator", "file_read", "retrieve"]
+            If not provided, inherits all tools from the parent agent.
+        agent: The parent agent (automatically passed by Strands framework)
 
     Returns:
         Dict containing status and response content in the format:
@@ -210,6 +235,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, agent: Any) -> Dic
                 cycle,
                 cycle_count,
                 custom_system_prompt,
+                specified_tools=tools,
                 **cycle_kwargs,
             )
 

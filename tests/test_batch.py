@@ -27,12 +27,12 @@ def test_batch_success(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
     assert len(result["content"]) == 2
-    assert result["content"][0]["name"] == "http_request"
-    assert result["content"][0]["status"] == "success"
-    assert result["content"][0]["result"]["result"]["ip"] == "127.0.0.1"
-    assert result["content"][1]["name"] == "use_aws"
-    assert result["content"][1]["status"] == "success"
-    assert result["content"][1]["result"]["result"]["buckets"] == ["bucket1", "bucket2"]
+    assert result["content"][0]["json"]["name"] == "http_request"
+    assert result["content"][0]["json"]["status"] == "success"
+    assert result["content"][0]["json"]["result"]["result"]["ip"] == "127.0.0.1"
+    assert result["content"][1]["json"]["name"] == "use_aws"
+    assert result["content"][1]["json"]["status"] == "success"
+    assert result["content"][1]["json"]["result"]["result"]["buckets"] == ["bucket1", "bucket2"]
 
 
 def test_batch_missing_tool(mock_agent):
