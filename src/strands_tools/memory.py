@@ -76,7 +76,6 @@ Notes:
 -----
 Knowledge base IDs must contain only alphanumeric characters (no hyphens or special characters).
 ENV variable STRANDS_KNOWLEDGE_BASE_ID can be used instead of passing the ID to each call.
-The tool now works with Knowledge Bases that have non-CUSTOM data sources (fixes GitHub issue #90).
 """
 
 import json
@@ -177,7 +176,7 @@ class MemoryServiceClient:
         # Get data source details to determine the type
         data_sources = self.agent_client.list_data_sources(knowledgeBaseId=kb_id)
 
-        if not data_sources.get("dataSourceSummaries"):
+        if data_sources and not data_sources.get("dataSourceSummaries"):
             raise ValueError(f"No data sources found for knowledge base {kb_id}")
 
         # Look for CUSTOM data source first, then fallback
