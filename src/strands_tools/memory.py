@@ -494,6 +494,7 @@ class MemoryFormatter:
 
             result_text += f"\n\nScore: {score:.4f}"
             result_text += f"\nDocument ID: {doc_id}"
+            result_text += f"content_text: {text}"
 
             # Try to parse content as JSON for better display
             try:
@@ -506,10 +507,10 @@ class MemoryFormatter:
                 pass
 
             # Add content preview
-            preview = text[:150]
-            if len(text) > 150:
-                preview += "..."
-            result_text += f"\nContent Preview: {preview}"
+            # preview = text[:150]
+            # if len(text) > 150:
+            #     preview += "..."
+            # result_text += f"\nContent Preview: {preview}"
 
         content.append({"text": result_text})
 
