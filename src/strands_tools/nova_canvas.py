@@ -126,7 +126,7 @@ TOOL_SPEC = {
             "properties": {
                 "task_type": {
                     "type": "string",
-                    "description": "The task type for Amazon Nova Canvas",
+                    "description": "Required: the task type for Amazon Nova Canvas",
                     "enum": ["TEXT_IMAGE", "VIRTUAL_TRY_ON", "BACKGROUND_REMOVAL"],
                     "default": "TEXT_IMAGE"
                 },
@@ -137,20 +137,20 @@ TOOL_SPEC = {
                 },
                 "negative_text": {
                     "type": "string",
-                    "description": "Negative text prompt (TEXT_IMAGE only)"
+                    "description": "Optional: negative text prompt (TEXT_IMAGE only)"
                 },
                 "style": {
                     "type": "string",
-                    "description": "Style for image generation (TEXT_IMAGE only)",
+                    "description": "Optional: style for image generation (TEXT_IMAGE only)",
                     "enum": ["3D_ANIMATED_FAMILY_FILM", "DESIGN_SKETCH", "FLAT_VECTOR_ILLUSTRATION", "GRAPHIC_NOVEL_ILLUSTRATION", "MAXIMALISM", "MIDCENTURY_RETRO", "PHOTOREALISM", "SOFT_DIGITAL_PAINTING"]
                 },
                 "width": {
                     "type": "integer",
-                    "description": "Image width in pixels (TEXT_IMAGE only)"
+                    "description": "Optional: image width in pixels (TEXT_IMAGE only)"
                 },
                 "height": {
                     "type": "integer",
-                    "description": "Image height in pixels (TEXT_IMAGE only)"
+                    "description": "Optional: image height in pixels (TEXT_IMAGE only)"
                 },
                 # VIRTUAL_TRY_ON parameters
                 "image_path": {
@@ -163,16 +163,12 @@ TOOL_SPEC = {
                 },
                 "mask_type": {
                     "type": "string",
-                    "description": "Specifies whether the mask is provided as an image, prompt, or garment mask (required for VIRTUAL_TRY_ON)",
-                    "enum": ["IMAGE", "GARMENT", "PROMPT"]
-                },
-                "mask_image_path": {
-                    "type": "string",
-                    "description": "Path to mask image file defining areas to edit (black) and ignore (white). Required when mask_type is IMAGE"
+                    "description": "Specifies whether the mask is provided as prompt, or garment mask (required for VIRTUAL_TRY_ON)",
+                    "enum": ["GARMENT", "PROMPT"]
                 },
                 "mask_shape": {
                     "type": "string",
-                    "description": "Defines the shape of the mask bounding box, affecting how reference image is transferred",
+                    "description": "Defines the shape of the mask bounding box, affecting how reference image is transferred (optional for mask_type GARMET and PROMPT)",
                     "enum": ["CONTOUR", "BOUNDING_BOX", "DEFAULT"]
                 },
                 "garment_class": {
@@ -182,17 +178,17 @@ TOOL_SPEC = {
                 },
                 "long_sleeve_style": {
                     "type": "string",
-                    "description": "Styling for long sleeve garments (applies only to upper body garments)",
+                    "description": "Styling for long sleeve garments (optional for GARMET mask_type and applies only to upper body garments)",
                     "enum": ["SLEEVE_DOWN", "SLEEVE_UP"]
                 },
                 "tucking_style": {
                     "type": "string",
-                    "description": "Tucking style option (applies only to upper body garments)",
+                    "description": "Tucking style option (optional for GARMET mask_type and applies only to upper body garments)",
                     "enum": ["UNTUCKED", "TUCKED"]
                 },
                 "outer_layer_style": {
                     "type": "string",
-                    "description": "Styling for outer layer garments (applies only to outer layer, upper body garments)",
+                    "description": "Styling for outer layer garments (optional for GARMET mask_type and applies only to outer layer, upper body garments)",
                     "enum": ["CLOSED", "OPEN"]
                 },
                 "mask_prompt": {
@@ -201,29 +197,24 @@ TOOL_SPEC = {
                 },
                 "preserve_body_pose": {
                     "type": "string",
-                    "description": "Whether to preserve the body pose in the output image when a person is detected",
+                    "description": "Optional: whether to preserve the body pose in the output image when a person is detected",
                     "enum": ["ON", "OFF", "DEFAULT"]
                 },
                 "preserve_hands": {
                     "type": "string",
-                    "description": "Whether to preserve hands in the output image when a person is detected",
+                    "description": "Optional: whether to preserve hands in the output image when a person is detected",
                     "enum": ["ON", "OFF", "DEFAULT"]
                 },
                 "preserve_face": {
                     "type": "string",
-                    "description": "Whether to preserve the face in the output image when a person is detected",
+                    "description": "Optional: whether to preserve the face in the output image when a person is detected",
                     "enum": ["OFF", "ON", "DEFAULT"]
                 },
                 "merge_style": {
                     "type": "string",
-                    "description": "Determines how source and reference images are stitched together",
+                    "description": "Optional: determines how source and reference images are stitched together",
                     "enum": ["BALANCED", "SEAMLESS", "DETAILED"],
                     "default": "BALANCED"
-                },
-                "return_mask": {
-                    "type": "boolean",
-                    "description": "Whether to return the mask image with the output image",
-                    "default": false
                 },
                 # BACKGROUND_REMOVAL parameters
                 # (uses image_path parameter defined above)
@@ -271,6 +262,12 @@ def create_filename(prompt: str) -> str:
     return filename[:100]  # Limit filename length
 
 
+def encode_image_file(file_path):
+    """Read an image file and return its base64 encoded string."""
+    with open(file_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
+
 def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Use Amazon Nova Canvas for image generation, virtual try-on, and background removal.
@@ -296,7 +293,7 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             request_body = {
                 "taskType": "TEXT_IMAGE",
                 "textToImageParams": {
-                    "text": tool_input.get("text", "A beautiful landscape")
+                    "text": tool_input.get("prompt", "A beautiful landscape")
                 },
                 "imageGenerationConfig": {
                     "quality": tool_input.get("quality", "standard")
@@ -305,7 +302,7 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             
             # Add optional TEXT_IMAGE parameters
             if "negative_text" in tool_input:
-                request_body["textToImageParams"]["negativeText"] = tool_input["negative_text"]
+                request_body["textToImageParams"]["negativeText"] = tool_input["negative_prompt"]
             if "style" in tool_input:
                 request_body["textToImageParams"]["style"] = tool_input["style"]
             if "width" in tool_input:
@@ -319,19 +316,23 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 
         elif task_type == "VIRTUAL_TRY_ON":
             # Validate required parameters
-            if "source_image" not in tool_input:
-                raise ValueError("source_image is required for VIRTUAL_TRY_ON")
-            if "reference_image" not in tool_input:
-                raise ValueError("reference_image is required for VIRTUAL_TRY_ON")
+            if "image_path" not in tool_input:
+                raise ValueError("image_path is required for VIRTUAL_TRY_ON")
+            if "reference_image_path" not in tool_input:
+                raise ValueError("reference_image_path is required for VIRTUAL_TRY_ON")
             if "mask_type" not in tool_input:
                 raise ValueError("mask_type is required for VIRTUAL_TRY_ON")
+            
+            # Read and encode images
+            source_image_b64 = encode_image_file(tool_input["image_path"])
+            reference_image_b64 = encode_image_file(tool_input["reference_image_path"])
                 
             # Initialize request structure
             request_body = {
                 "taskType": "VIRTUAL_TRY_ON",
                 "virtualTryOnParams": {
-                    "sourceImage": tool_input["source_image"],
-                    "referenceImage": tool_input["reference_image"],
+                    "sourceImage": source_image_b64,
+                    "referenceImage": reference_image_b64,
                     "maskType": tool_input["mask_type"]
                 },
                 "imageGenerationConfig": {
@@ -343,10 +344,12 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             mask_type = tool_input["mask_type"]
             
             if mask_type == "IMAGE":
-                if "mask_image" not in tool_input:
-                    raise ValueError("mask_image is required when mask_type is IMAGE")
+                if "mask_image_path" not in tool_input:
+                    raise ValueError("mask_image_path is required when mask_type is IMAGE")
+                
+                mask_image_b64 = encode_image_file(tool_input["mask_image_path"])
                 request_body["virtualTryOnParams"]["imageBasedMask"] = {
-                    "maskImage": tool_input["mask_image"]
+                    "maskImage": mask_image_b64
                 }
                 
             elif mask_type == "GARMENT":
@@ -412,13 +415,16 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 request_body["imageGenerationConfig"]["seed"] = tool_input["seed"]
                 
         elif task_type == "BACKGROUND_REMOVAL":
-            if "image" not in tool_input:
-                raise ValueError("image is required for BACKGROUND_REMOVAL")
+            if "image_path" not in tool_input:
+                raise ValueError("image_path is required for BACKGROUND_REMOVAL")
+            
+            # Read and encode image
+            image_b64 = encode_image_file(tool_input["image_path"])
                 
             request_body = {
                 "taskType": "BACKGROUND_REMOVAL",
                 "backgroundRemovalParams": {
-                    "image": tool_input["image"]
+                    "image": image_b64
                 }
             }
         else:
@@ -441,9 +447,15 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if task_type == "TEXT_IMAGE":
                 filename = create_filename(tool_input.get("text", "generated_image"))
             elif task_type == "VIRTUAL_TRY_ON":
-                filename = f"virtual_try_on_{int(time.time())}"
+                # Extract filename from source image path
+                source_filename = os.path.basename(tool_input["image_path"])
+                base_name = os.path.splitext(source_filename)[0]
+                filename = f"{base_name}_try_on"
             else:  # BACKGROUND_REMOVAL
-                filename = f"background_removal_{int(time.time())}"
+                # Extract filename from image path
+                source_filename = os.path.basename(tool_input["image_path"])
+                base_name = os.path.splitext(source_filename)[0]
+                filename = f"{base_name}_no_bg"
             
             # Save image
             output_dir = "output"
@@ -490,128 +502,5 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "toolUseId": tool_use_id,
             "status": "error",
             "content": [{"text": f"Error: {str(e)}"}],
-        }style"]
-            if "width" in tool_input:
-                request_body["imageGenerationConfig"]["width"] = tool_input["width"]
-            if "height" in tool_input:
-                request_body["imageGenerationConfig"]["height"] = tool_input["height"]
-            if "cfg_scale" in tool_input:
-                request_body["imageGenerationConfig"]["cfgScale"] = tool_input["cfg_scale"]
-            if "seed" in tool_input:
-                request_body["imageGenerationConfig"]["seed"] = tool_input["seed"]
-                
-        elif task_type == "VIRTUAL_TRY_ON":
-            request_body = {
-                "taskType": "VIRTUAL_TRY_ON",
-                "virtualTryOnParams": {
-                    "sourceImage": tool_input["source_image"],
-                    "referenceImage": tool_input["reference_image"],
-                    "maskType": tool_input.get("mask_type", "GARMENT")
-                },
-                "imageGenerationConfig": {
-                    "quality": tool_input.get("quality", "standard")
-                }
-            }
-            
-            # Add mask-specific parameters
-            if tool_input.get("mask_type") == "IMAGE" and "mask_image" in tool_input:
-                request_body["virtualTryOnParams"]["imageBasedMask"] = {
-                    "maskImage": tool_input["mask_image"]
-                }
-            elif tool_input.get("mask_type") == "GARMENT":
-                garment_mask = {}
-                if "mask_shape" in tool_input:
-                    garment_mask["maskShape"] = tool_input["mask_shape"]
-                if "garment_class" in tool_input:
-                    garment_mask["garmentClass"] = tool_input["garment_class"]
-                if any(k in tool_input for k in ["long_sleeve_style", "tucking_style", "outer_layer_style"]):
-                    garment_mask["garmentStyling"] = {}
-                    if "long_sleeve_style" in tool_input:
-                        garment_mask["garmentStyling"]["longSleeveStyle"] = tool_input["long_sleeve_style"]
-                    if "tucking_style" in tool_input:
-                        garment_mask["garmentStyling"]["tuckingStyle"] = tool_input["tucking_style"]
-                    if "outer_layer_style" in tool_input:
-                        garment_mask["garmentStyling"]["outerLayerStyle"] = tool_input["outer_layer_style"]
-                request_body["virtualTryOnParams"]["garmentBasedMask"] = garment_mask
-            elif tool_input.get("mask_type") == "PROMPT" and "mask_prompt" in tool_input:
-                prompt_mask = {"maskPrompt": tool_input["mask_prompt"]}
-                if "mask_shape" in tool_input:
-                    prompt_mask["maskShape"] = tool_input["mask_shape"]
-                request_body["virtualTryOnParams"]["promptBasedMask"] = prompt_mask
-            
-            # Add mask exclusions
-            if any(k in tool_input for k in ["preserve_body_pose", "preserve_hands", "preserve_face"]):
-                request_body["virtualTryOnParams"]["maskExclusions"] = {}
-                if "preserve_body_pose" in tool_input:
-                    request_body["virtualTryOnParams"]["maskExclusions"]["preserveBodyPose"] = tool_input["preserve_body_pose"]
-                if "preserve_hands" in tool_input:
-                    request_body["virtualTryOnParams"]["maskExclusions"]["preserveHands"] = tool_input["preserve_hands"]
-                if "preserve_face" in tool_input:
-                    request_body["virtualTryOnParams"]["maskExclusions"]["preserveFace"] = tool_input["preserve_face"]
-            
-            # Add other virtual try-on parameters
-            if "merge_style" in tool_input:
-                request_body["virtualTryOnParams"]["mergeStyle"] = tool_input["merge_style"]
-            if "return_mask" in tool_input:
-                request_body["virtualTryOnParams"]["returnMask"] = tool_input["return_mask"]
-            if "cfg_scale" in tool_input:
-                request_body["imageGenerationConfig"]["cfgScale"] = tool_input["cfg_scale"]
-            if "seed" in tool_input:
-                request_body["imageGenerationConfig"]["seed"] = tool_input["seed"]
-                
-        elif task_type == "BACKGROUND_REMOVAL":
-            request_body = {
-                "taskType": "BACKGROUND_REMOVAL",
-                "backgroundRemovalParams": {
-                    "image": tool_input["image"]
-                }
-            }
-        else:
-            raise ValueError(f"Unsupported task type: {task_type}")
-        
-        # Invoke the model
-        response = client.invoke_model(
-            modelId=model_id,
-            body=json.dumps(request_body)
-        )
-        
-        # Process response
-        model_response = json.loads(response["body"].read().decode("utf-8"))
-        base64_image_data = model_response["images"][0]
-        
-        # Save image
-        filename = create_filename(tool_input.get("text", task_type.lower()))
-        output_dir = "output"
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        i = 1
-        base_image_path = os.path.join(output_dir, f"{filename}.png")
-        image_path = base_image_path
-        while os.path.exists(image_path):
-            image_path = os.path.join(output_dir, f"{filename}_{i}.png")
-            i += 1
-        
-        with open(image_path, "wb") as file:
-            file.write(base64.b64decode(base64_image_data))
-        
-        return {
-            "toolUseId": tool_use_id,
-            "status": "success",
-            "content": [
-                {"text": f"Task {task_type} completed. Image saved to {image_path}"},
-                {
-                    "image": {
-                        "format": "png",
-                        "source": {"bytes": base64.b64decode(base64_image_data)},
-                    }
-                },
-            ],
         }
         
-    except Exception as e:
-        return {
-            "toolUseId": tool_use_id,
-            "status": "error",
-            "content": [{"text": f"Error: {str(e)}"}],
-        }
