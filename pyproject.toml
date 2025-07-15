@@ -24,8 +24,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "strands-agents @ git+ssh://git@github.com/strands-agents/sdk-python.git",
-    "strands-agents[a2a] @ git+ssh://git@github.com/strands-agents/sdk-python.git",
+    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
+    "strands-agents[a2a] @ git+https://github.com/strands-agents/sdk-python.git",
     "rich>=14.0.0,<15.0.0",
     "sympy>=1.12.0,<2.0.0",
     "prompt_toolkit>=3.0.51,<4.0.0",
@@ -87,7 +87,7 @@ a2a_client = ["a2a-sdk[sql]>=0.2.11"]
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0_memory", "use_browser", "a2a_client"]
 dependencies = [
-    "strands-agents @ git+ssh://git@github.com/strands-agents/sdk-python.git",
+    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
     "mypy>=0.981,<1.0.0",
     "ruff>=0.4.4,<0.5.0",
 ]
