@@ -15,8 +15,8 @@ from rich.console import Console
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
 
-from strands_tools.models.model import create_model
 from strands_tools.utils import console_util
+from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 

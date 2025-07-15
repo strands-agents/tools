@@ -69,8 +69,8 @@ from rich.table import Table
 from strands import Agent, tool
 from strands.multiagent.graph import GraphBuilder
 
-from strands_tools.models.model import create_model
 from strands_tools.utils import console_util
+from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 

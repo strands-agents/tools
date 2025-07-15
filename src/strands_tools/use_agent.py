@@ -63,7 +63,7 @@ from typing import Any, Dict, List, Optional
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
 
-from strands_tools.models.model import create_model
+from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 

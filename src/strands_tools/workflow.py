@@ -120,8 +120,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from strands_tools.models.model import create_model
 from strands_tools.utils import console_util
+from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 
