@@ -31,7 +31,10 @@ def test_handoff_with_breakout_true_direct(mock_request_state):
     # Create a tool use dictionary similar to how the agent would call it
     tool_use = {
         "toolUseId": "test-tool-use-id",
-        "input": {"message": "Task completed. Please review the results.", "breakout_of_loop": True},
+        "input": {
+            "message": "Task completed. Please review the results.",
+            "breakout_of_loop": True,
+        },
     }
 
     # Call the handoff_to_user function directly with our mock request state
@@ -95,7 +98,10 @@ def test_handoff_keyboard_interrupt_direct(mock_get_user_input, mock_request_sta
 def test_handoff_missing_request_state():
     """Test handoff works even without request_state."""
     # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"message": "Task completed.", "breakout_of_loop": True}}
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"message": "Task completed.", "breakout_of_loop": True},
+    }
 
     # Call the handoff_to_user function without request_state
     result = handoff_to_user.handoff_to_user(tool=tool_use)
