@@ -343,16 +343,8 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             # Handle mask type specific parameters
             mask_type = tool_input["mask_type"]
             
-            if mask_type == "IMAGE":
-                if "mask_image_path" not in tool_input:
-                    raise ValueError("mask_image_path is required when mask_type is IMAGE")
-                
-                mask_image_b64 = encode_image_file(tool_input["mask_image_path"])
-                request_body["virtualTryOnParams"]["imageBasedMask"] = {
-                    "maskImage": mask_image_b64
-                }
-                
-            elif mask_type == "GARMENT":
+
+            if mask_type == "GARMENT":
                 if "garment_class" not in tool_input:
                     raise ValueError("garment_class is required when mask_type is GARMENT")
                     
@@ -445,7 +437,7 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             
             # Create filename based on task type
             if task_type == "TEXT_IMAGE":
-                filename = create_filename(tool_input.get("text", "generated_image"))
+                filename = create_filename(tool_input.get("prompt", "generated_image"))
             elif task_type == "VIRTUAL_TRY_ON":
                 # Extract filename from source image path
                 source_filename = os.path.basename(tool_input["image_path"])
@@ -472,20 +464,11 @@ def nova_canvas(tool: ToolUse, **kwargs: Any) -> ToolResult:
             with open(image_path, "wb") as file:
                 file.write(base64.b64decode(base64_image_data))
             
-            # Handle mask if returned
-            mask_message = ""
-            if task_type == "VIRTUAL_TRY_ON" and tool_input.get("return_mask") and "maskImage" in model_response:
-                mask_data = model_response["maskImage"]
-                mask_path = os.path.join(output_dir, f"{filename}_mask.png")
-                with open(mask_path, "wb") as file:
-                    file.write(base64.b64decode(mask_data))
-                mask_message = f" Mask saved to {mask_path}."
-            
             return {
                 "toolUseId": tool_use_id,
                 "status": "success",
                 "content": [
-                    {"text": f"{task_type} task completed successfully. Image saved to {image_path}.{mask_message}"},
+                    {"text": f"{task_type} task completed successfully. Image saved to {image_path}"},
                     {
                         "image": {
                             "format": "png",
