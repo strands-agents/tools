@@ -87,7 +87,7 @@ a2a_client = ["a2a-sdk[sql]>=0.2.11"]
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0_memory", "use_browser", "a2a_client"]
 dependencies = [
-    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
+    "strands-agents>=0.1.0,<1.0.0",
     "mypy>=0.981,<1.0.0",
     "ruff>=0.4.4,<0.5.0",
 ]
