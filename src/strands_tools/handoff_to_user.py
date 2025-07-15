@@ -37,9 +37,13 @@ depending on the breakout_of_loop parameter.
 import logging
 from typing import Any
 
+from rich.panel import Panel
 from strands.types.tools import ToolResult, ToolUse
 
-# Initialize logging
+from strands_tools.utils import console_util
+from strands_tools.utils.user_input import get_user_input
+
+# Initialize logging and console
 logger = logging.getLogger(__name__)
 
 TOOL_SPEC = {
@@ -145,17 +149,25 @@ def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
     message = tool_input.get("message", "Agent requesting user handoff")
     breakout_of_loop = tool_input.get("breakout_of_loop", False)
 
-    # Display handoff notification
-    print("\n" + "=" * 60)
-    print("🤝 AGENT REQUESTING USER HANDOFF")
-    print("=" * 60)
-    print(f"\n{message}\n")
+    # Display handoff notification using rich console
+    console = console_util.create()
+    console.print()
+    handoff_panel = Panel(
+        f"🤝 [bold green]AGENT REQUESTING USER HANDOFF[/bold green]\n\n{message}", border_style="green", padding=(1, 2)
+    )
+    console.print(handoff_panel)
 
     if breakout_of_loop:
         # Stop the event loop and hand off control
         request_state["stop_event_loop"] = True
-        print("🛑 Agent execution stopped. Control handed off to user.")
-        print("=" * 60 + "\n")
+
+        stop_panel = Panel(
+            "🛑 [bold red]Agent execution stopped. Control handed off to user.[/bold red]",
+            border_style="red",
+            padding=(0, 2),
+        )
+        console.print(stop_panel)
+        console.print()
 
         logger.info(f"Agent handoff initiated with message: {message}")
 
@@ -166,12 +178,10 @@ def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
         }
     else:
         # Wait for user input and continue
-        print("⏳ Waiting for your response...")
-        print("-" * 40)
-
         try:
-            user_response = input("Your response: ").strip()
-            print("=" * 60 + "\n")
+            user_response = get_user_input("<bold>Your response:</bold> ").strip()
+
+            console.print()
 
             logger.info(f"User handoff completed. User response: {user_response}")
 
@@ -181,8 +191,12 @@ def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "content": [{"text": f"User response received: {user_response}"}],
             }
         except KeyboardInterrupt:
-            print("\n🛑 User interrupted. Stopping execution.")
-            print("=" * 60 + "\n")
+            console.print()
+            interrupt_panel = Panel(
+                "🛑 [bold red]User interrupted. Stopping execution.[/bold red]", border_style="red", padding=(0, 2)
+            )
+            console.print(interrupt_panel)
+            console.print()
             request_state["stop_event_loop"] = True
 
             logger.info("User interrupted handoff. Execution stopped.")
@@ -194,8 +208,12 @@ def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
             }
         except Exception as e:
             logger.error(f"Error during user handoff: {e}")
-            print(f"❌ Error getting user input: {e}")
-            print("=" * 60 + "\n")
+
+            error_panel = Panel(
+                f"❌ [bold red]Error getting user input: {e}[/bold red]", border_style="red", padding=(0, 2)
+            )
+            console.print(error_panel)
+            console.print()
 
             return {
                 "toolUseId": tool_use_id,

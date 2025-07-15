@@ -47,8 +47,8 @@ def test_handoff_with_breakout_true_direct(mock_request_state):
     assert mock_request_state.get("stop_event_loop") is True
 
 
-@patch("builtins.input", return_value="user response")
-def test_handoff_with_breakout_false_direct(mock_input, mock_request_state):
+@patch("strands_tools.handoff_to_user.get_user_input", return_value="user response")
+def test_handoff_with_breakout_false_direct(mock_get_user_input, mock_request_state):
     """Test handoff with breakout_of_loop=False waits for user input (direct call)."""
     # Create a tool use dictionary
     tool_use = {
@@ -59,8 +59,8 @@ def test_handoff_with_breakout_false_direct(mock_input, mock_request_state):
     # Call the handoff_to_user function directly
     result = handoff_to_user.handoff_to_user(tool=tool_use, request_state=mock_request_state)
 
-    # Verify input was called
-    mock_input.assert_called_once()
+    # Verify get_user_input was called
+    mock_get_user_input.assert_called_once_with("<bold>Your response:</bold> ")
 
     # Verify the result has the expected structure
     assert result["toolUseId"] == "test-tool-use-id"
@@ -71,8 +71,8 @@ def test_handoff_with_breakout_false_direct(mock_input, mock_request_state):
     assert mock_request_state.get("stop_event_loop") is not True
 
 
-@patch("builtins.input", side_effect=KeyboardInterrupt())
-def test_handoff_keyboard_interrupt_direct(mock_input, mock_request_state):
+@patch("strands_tools.handoff_to_user.get_user_input", side_effect=KeyboardInterrupt())
+def test_handoff_keyboard_interrupt_direct(mock_get_user_input, mock_request_state):
     """Test handoff handles KeyboardInterrupt gracefully (direct call)."""
     # Create a tool use dictionary
     tool_use = {
@@ -106,8 +106,8 @@ def test_handoff_missing_request_state():
     assert "Agent handoff completed" in result["content"][0]["text"]
 
 
-@patch("builtins.input", side_effect=Exception("Test error"))
-def test_handoff_input_error_direct(mock_input, mock_request_state):
+@patch("strands_tools.handoff_to_user.get_user_input", side_effect=Exception("Test error"))
+def test_handoff_input_error_direct(mock_get_user_input, mock_request_state):
     """Test handoff handles input errors gracefully (direct call)."""
     # Create a tool use dictionary
     tool_use = {
@@ -135,15 +135,17 @@ def test_handoff_default_message():
     assert "Agent requesting user handoff" in result["content"][0]["text"]
 
 
-def test_handoff_default_breakout_false():
+@patch("strands_tools.handoff_to_user.get_user_input", return_value="test response")
+def test_handoff_default_breakout_false(mock_get_user_input):
     """Test handoff defaults to breakout_of_loop=False when not specified."""
-    with patch("builtins.input", return_value="test response"):
-        tool_use = {"toolUseId": "test-tool-use-id", "input": {"message": "Test message"}}
+    tool_use = {"toolUseId": "test-tool-use-id", "input": {"message": "Test message"}}
 
-        result = handoff_to_user.handoff_to_user(tool=tool_use)
+    result = handoff_to_user.handoff_to_user(tool=tool_use)
 
-        assert result["status"] == "success"
-        assert "test response" in result["content"][0]["text"]
+    assert result["status"] == "success"
+    assert "test response" in result["content"][0]["text"]
+    # Verify get_user_input was called (indicating breakout_of_loop=False)
+    mock_get_user_input.assert_called_once()
 
 
 def test_handoff_via_agent(agent):
