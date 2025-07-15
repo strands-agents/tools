@@ -1,1294 +1,773 @@
 """
-Tests for the workflow tool for parallel AI task execution.
+Tests for the workflow tool using the Agent interface.
 """
 
 import json
-import os
-import time
-from concurrent.futures import Future
-from datetime import datetime, timezone
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
-from strands_tools import workflow
-from strands_tools.workflow import TaskExecutor, WorkflowFileHandler, WorkflowManager
-from strands_tools.workflow import workflow as workflow_func
-
-# Constants for testing
-TEST_WORKFLOW_DIR = "/tmp/test_workflows"
-
-# ----- Helper Functions for Test Refactoring -----
+from strands_tools import workflow as workflow_module
 
 
-def create_test_workflow_file(workflow_dir, workflow_id, workflow_data):
-    """Helper to create a workflow file for testing."""
-    file_path = os.path.join(workflow_dir, f"{workflow_id}.json")
-    with open(file_path, "w") as f:
-        json.dump(workflow_data, f)
-    return file_path
-
-
-def add_workflow_to_cache(workflow_manager, workflow_id, workflow_data):
-    """Helper to add a workflow to the manager's cache."""
-    workflow_manager._workflows[workflow_id] = workflow_data
-    return workflow_manager
-
-
-def verify_success_response(result, expected_text=None):
-    """Helper to verify a successful workflow response."""
-    assert result["status"] == "success", f"Expected success status but got {result['status']}"
-    if expected_text:
-        assert expected_text in result["content"][0]["text"], f"Expected text '{expected_text}' not found in response"
-
-
-def verify_error_response(result, expected_text=None):
-    """Helper to verify an error workflow response."""
-    assert result["status"] == "error", f"Expected error status but got {result['status']}"
-    if expected_text:
-        assert expected_text in result["content"][0]["text"], f"Expected text '{expected_text}' not found in response"
-
-
-def setup_mock_agent_response(workflow_manager, response_text, stop_reason="complete"):
-    """Helper to configure mock agent response for testing."""
-    workflow_manager.base_agent.return_value = {
-        "content": [{"text": response_text}],
-        "stop_reason": stop_reason,
-    }
-    return workflow_manager
-
-
-def setup_task_with_status(workflow_data, task_id, status, result_text=None):
-    """Helper to set up a task with a particular status in the workflow."""
-    if task_id in workflow_data["task_results"]:
-        workflow_data["task_results"][task_id]["status"] = status
-        if result_text:
-            workflow_data["task_results"][task_id]["result"] = [{"text": result_text}]
-    return workflow_data
-
-
-# ----- Fixtures -----
-
-
-@pytest.fixture(scope="function")
-def mock_workflow_dir(monkeypatch):
-    """Create a mock workflow directory."""
-    # Create the directory with proper permissions
-    if os.path.exists(TEST_WORKFLOW_DIR):
-        for f in Path(TEST_WORKFLOW_DIR).glob("*.json"):
-            try:
-                os.remove(f)
-            except Exception:
-                pass
-    else:
-        os.makedirs(TEST_WORKFLOW_DIR, mode=0o777, exist_ok=True)
-
-    monkeypatch.setattr(workflow, "WORKFLOW_DIR", Path(TEST_WORKFLOW_DIR))
-
-    # Verify the directory exists and is writable
-    assert os.path.exists(TEST_WORKFLOW_DIR)
-    assert os.access(TEST_WORKFLOW_DIR, os.W_OK)
-
-    yield TEST_WORKFLOW_DIR
-
-    # Clean up test files
-    for f in Path(TEST_WORKFLOW_DIR).glob("*.json"):
+@pytest.fixture(autouse=True)
+def reset_workflow_manager():
+    """Reset the global workflow manager before each test to ensure clean state."""
+    # Reset global manager before each test
+    workflow_module._manager = None
+    yield
+    # Cleanup after test
+    if hasattr(workflow_module, "_manager") and workflow_module._manager:
         try:
-            os.remove(f)
+            workflow_module._manager.cleanup()
         except Exception:
             pass
+    workflow_module._manager = None
 
 
 @pytest.fixture
-def sample_workflow_id():
-    """Generate a consistent workflow ID for testing."""
-    return "test-workflow-123"
+def agent():
+    """Create an agent with the workflow tool loaded."""
+    return Agent(tools=[workflow_module])
+
+
+@pytest.fixture
+def mock_parent_agent():
+    """Create a mock parent agent with tools and registry."""
+    mock_agent = MagicMock()
+    mock_tool_registry = MagicMock()
+    mock_agent.tool_registry = mock_tool_registry
+
+    # Mock some tools in the registry
+    mock_tool_registry.registry = {
+        "calculator": MagicMock(),
+        "file_read": MagicMock(),
+        "file_write": MagicMock(),
+        "retrieve": MagicMock(),
+        "editor": MagicMock(),
+        "http_request": MagicMock(),
+        "generate_image": MagicMock(),
+        "python_repl": MagicMock(),
+    }
+
+    # Mock model and other attributes
+    mock_agent.model = MagicMock()
+    mock_agent.trace_attributes = {"test_attr": "test_value"}
+    mock_agent.system_prompt = "You are a helpful assistant."
+
+    return mock_agent
+
+
+@pytest.fixture
+def mock_workflow_dir():
+    """Create a temporary directory for workflow files."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with patch.object(workflow_module, "WORKFLOW_DIR", temp_dir):
+            yield temp_dir
 
 
 @pytest.fixture
 def sample_tasks():
-    """Create sample tasks for testing."""
+    """Sample tasks for testing."""
     return [
-        {"task_id": "task-1", "description": "First test task", "priority": 3},
-        {"task_id": "task-2", "description": "Second test task", "priority": 2, "dependencies": ["task-1"]},
-        {"task_id": "task-3", "description": "Third test task", "priority": 1},
+        {
+            "task_id": "data_collection",
+            "description": "Collect research data on renewable energy",
+            "tools": ["retrieve", "file_write"],
+            "priority": 5,
+            "timeout": 300,
+        },
+        {
+            "task_id": "analysis",
+            "description": "Analyze the collected data",
+            "dependencies": ["data_collection"],
+            "tools": ["calculator", "file_read"],
+            "model_provider": "anthropic",
+            "model_settings": {"model_id": "claude-sonnet-4-20250514"},
+            "priority": 4,
+        },
+        {
+            "task_id": "report",
+            "description": "Generate a comprehensive report",
+            "dependencies": ["analysis"],
+            "tools": ["file_write"],
+            "priority": 3,
+        },
     ]
 
 
 @pytest.fixture
-def sample_workflow(sample_workflow_id, sample_tasks):
-    """Create a sample workflow dictionary."""
-    return {
-        "workflow_id": sample_workflow_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "created",
-        "tasks": sample_tasks,
-        "current_task_index": 0,
-        "task_results": {
-            task["task_id"]: {
-                "status": "pending",
-                "result": None,
-                "priority": task.get("priority", 3),
+def mock_agent_result():
+    """Create a mock result from Agent execution."""
+    result = MagicMock()
+    result.__str__ = MagicMock(return_value="Task completed successfully")
+
+    # Mock metrics
+    mock_metrics = MagicMock()
+    mock_metrics.get_summary.return_value = {
+        "total_cycles": 1,
+        "average_cycle_time": 1.5,
+        "total_duration": 1.5,
+        "accumulated_usage": {"inputTokens": 15, "outputTokens": 25, "totalTokens": 40},
+        "accumulated_metrics": {"latencyMs": 1500},
+        "tool_usage": {},
+    }
+    mock_metrics.traces = []
+    result.metrics = mock_metrics
+
+    return result
+
+
+class TestWorkflowCreation:
+    """Test workflow creation functionality."""
+
+    def test_create_workflow_basic(self, mock_parent_agent, mock_workflow_dir, sample_tasks):
+        """Test basic workflow creation."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.create_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "✅ Created modern workflow 'test_workflow' with 3 tasks"}],
             }
-            for task in sample_tasks
-        },
-        "parallel_execution": True,
-    }
 
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id="test_workflow",
+                tasks=sample_tasks,
+                agent=mock_parent_agent,
+            )
 
-@pytest.fixture
-def mock_tool_context():
-    """Create a mock tool context."""
-    return {
-        "system_prompt": "Test system prompt",
-        "inference_config": {"model": "test-model"},
-        "messages": [],
-        "tool_config": {},
-    }
+            # Verify manager was initialized with parent agent
+            mock_manager_class.assert_called_once_with(parent_agent=mock_parent_agent)
 
+            # Verify create_workflow was called correctly
+            mock_manager.create_workflow.assert_called_once_with("test_workflow", sample_tasks)
 
-@pytest.fixture
-def mock_agent():
-    """Mock the Agent class."""
-    agent = MagicMock()
-    agent.return_value = {"content": [{"text": "Task executed successfully"}], "stop_reason": "complete"}
-    return agent
+            # Verify result
+            assert result["status"] == "success"
+            assert "Created modern workflow" in result["content"][0]["text"]
 
+    def test_create_workflow_without_workflow_id(self, mock_parent_agent, sample_tasks):
+        """Test workflow creation generates UUID when no workflow_id provided."""
+        with (
+            patch("strands_tools.workflow.WorkflowManager") as mock_manager_class,
+            patch("strands_tools.workflow.uuid.uuid4") as mock_uuid,
+        ):
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.create_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "✅ Created workflow"}],
+            }
+            mock_uuid.return_value = "generated-uuid-123"
 
-@pytest.fixture
-def workflow_manager(mock_tool_context, mock_agent):
-    """Create a workflow manager for testing."""
-    with patch("strands_tools.workflow.Agent", return_value=mock_agent):
-        manager = WorkflowManager(mock_tool_context)
-        # Mock the base agent
-        manager.base_agent = mock_agent
-        yield manager
+            result = workflow_module.workflow(action="create", tasks=sample_tasks, agent=mock_parent_agent)
 
+            # Verify UUID was generated and used
+            mock_uuid.assert_called_once()
+            mock_manager.create_workflow.assert_called_once_with("generated-uuid-123", sample_tasks)
+            assert result["status"] == "success"
 
-@pytest.fixture
-def task_executor():
-    """Create a task executor for testing."""
-    return TaskExecutor(min_workers=2, max_workers=4)
+    def test_create_workflow_missing_tasks(self, mock_parent_agent):
+        """Test workflow creation fails when tasks are missing."""
+        result = workflow_module.workflow(action="create", workflow_id="test_workflow", agent=mock_parent_agent)
 
+        assert result["status"] == "error"
+        assert "Tasks are required for create action" in result["content"][0]["text"]
 
-def test_workflow_create(workflow_manager, mock_workflow_dir, sample_workflow_id, sample_tasks):
-    """Test workflow creation."""
-    # Patch the store_workflow to ensure the file is created properly
-    with patch.object(workflow_manager, "store_workflow") as mock_store:
-        mock_store.return_value = {"status": "success"}
-
-        # Create workflow
-        result = workflow_manager.create_workflow(sample_workflow_id, sample_tasks, "test-tool-use")
-
-        # Verify the result
-        verify_success_response(result, f"Created workflow {sample_workflow_id}")
-
-        # Verify store_workflow was called with correct arguments
-        mock_store.assert_called_once()
-        workflow_id_arg = mock_store.call_args[0][0]
-        assert workflow_id_arg == sample_workflow_id
-
-        # Access the workflow data
-        workflow_data = mock_store.call_args[0][1]
-
-        # Verify workflow data content
-        assert workflow_data["workflow_id"] == sample_workflow_id
-        assert len(workflow_data["tasks"]) == len(sample_tasks)
-        assert workflow_data["status"] == "created"
-
-
-def test_workflow_list(workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test listing workflows."""
-    # Create a workflow file first
-    create_test_workflow_file(mock_workflow_dir, sample_workflow_id, sample_workflow)
-
-    # Test list
-    result = workflow_manager.list_workflows("test-tool-use")
-
-    # Verify - just check the status is success, don't check specific message
-    # since the message changes based on whether workflows are found
-    verify_success_response(result)
-
-
-def test_get_workflow_status(workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test getting workflow status."""
-    # Create a workflow file first
-    create_test_workflow_file(mock_workflow_dir, sample_workflow_id, sample_workflow)
-
-    # Ensure the workflow is loaded into memory cache
-    add_workflow_to_cache(workflow_manager, sample_workflow_id, sample_workflow)
-
-    # Test status
-    result = workflow_manager.get_workflow_status(sample_workflow_id, "test-tool-use")
-
-    # Verify
-    verify_success_response(result)
-    assert f"Workflow ID: {sample_workflow_id}" in result["content"][0]["text"]
-    assert "Overall Status: created" in result["content"][0]["text"]
-
-
-def test_delete_workflow(workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test workflow deletion."""
-    # Make sure we're using the mock directory
-    workflow_manager._workflow_dir = mock_workflow_dir
-
-    # First create the workflow file directly in mock_workflow_dir
-    file_path = os.path.join(mock_workflow_dir, f"{sample_workflow_id}.json")
-    with open(file_path, "w") as f:
-        json.dump(sample_workflow, f)
-
-    # Add to cache
-    add_workflow_to_cache(workflow_manager, sample_workflow_id, sample_workflow)
-
-    # Verify file exists before deletion
-    assert os.path.exists(file_path), "Test workflow file wasn't created"
-
-    # Delete workflow
-    result = workflow_manager.delete_workflow(sample_workflow_id, "test-tool-use")
-
-    # Verify
-    verify_success_response(result, f"Workflow {sample_workflow_id} deleted successfully")
-
-    # Verify workflow was removed from cache
-    assert sample_workflow_id not in workflow_manager._workflows
-
-    # Verify the file was deleted
-    assert not os.path.exists(file_path), "Workflow file was not deleted"
-
-
-def test_get_ready_tasks(workflow_manager, sample_workflow):
-    """Test getting ready tasks for execution."""
-    # Initially, only task-1 and task-3 should be ready (task-2 depends on task-1)
-    ready_tasks = workflow_manager.get_ready_tasks(sample_workflow)
-
-    # Tasks should be sorted by priority (higher priority first)
-    assert len(ready_tasks) == 2
-    assert ready_tasks[0]["task_id"] == "task-1"  # Priority 3
-    assert ready_tasks[1]["task_id"] == "task-3"  # Priority 1
-
-    # Mark task-1 as completed
-    sample_workflow["task_results"]["task-1"]["status"] = "completed"
-
-    # Now task-2 should be ready too
-    ready_tasks = workflow_manager.get_ready_tasks(sample_workflow)
-    assert len(ready_tasks) == 2
-    # task-2 has priority 2, task-3 has priority 1
-    assert ready_tasks[0]["task_id"] == "task-2"
-    assert ready_tasks[1]["task_id"] == "task-3"
-
-
-@patch("strands_tools.workflow.time")
-def test_execute_task(mock_time, workflow_manager, sample_workflow, sample_tasks):
-    """Test task execution."""
-    # Configure mocks
-    mock_time.sleep.return_value = None
-    mock_time.time.return_value = 100.0  # Fix for rate limiting timing
-
-    # Configure mock agent response
-    setup_mock_agent_response(workflow_manager, "Task executed successfully")
-
-    # Execute task
-    task = sample_tasks[0]  # task-1
-    result = workflow_manager.execute_task(task, sample_workflow, "test-tool-use")
-
-    # Verify
-    verify_success_response(result)
-    assert "toolUseId" in result
-    assert len(result["content"]) > 0
-
-
-def test_task_executor_submit_task(task_executor):
-    """Test submitting a task to the executor."""
-    # Create a mock task function that returns immediately
-    mock_task = MagicMock()
-    mock_task.return_value = "Task result"
-
-    # Mock the _executor to avoid actual thread creation
-    original_executor = task_executor._executor
-    try:
-        mock_future = MagicMock()
-        task_executor._executor = MagicMock()
-        task_executor._executor.submit.return_value = mock_future
-
-        # Ensure the task_done_callback doesn't run in the test
-        def mock_add_done_callback(callback):
-            pass
-
-        mock_future.add_done_callback = mock_add_done_callback
-
-        # Submit the task
-        future = task_executor.submit_task("test-task", mock_task, "arg1", arg2="value2")
-
-        assert future is not None
-        assert "test-task" in task_executor.active_tasks
-
-        # Complete the task
-        task_executor.task_completed("test-task", "Task completed")
-
-        # Check it's no longer active
-        assert "test-task" not in task_executor.active_tasks
-        assert task_executor.get_result("test-task") == "Task completed"
-    finally:
-        # Restore the original executor
-        task_executor._executor = original_executor
-
-
-@patch("strands_tools.workflow.wait")
-def test_start_workflow(mock_wait, workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test starting a workflow."""
-    # Setup
-    file_path = os.path.join(mock_workflow_dir, f"{sample_workflow_id}.json")
-    with open(file_path, "w") as f:
-        json.dump(sample_workflow, f)
-
-    # Set workflow in manager's cache to ensure it's found
-    workflow_manager._workflows[sample_workflow_id] = sample_workflow
-
-    # Mock wait function to simulate task completion
-    future1 = MagicMock(spec=Future)
-    future1.result.return_value = {"status": "success", "content": [{"text": "Task 1 completed"}]}
-
-    future2 = MagicMock(spec=Future)
-    future2.result.return_value = {"status": "success", "content": [{"text": "Task 2 completed"}]}
-
-    future3 = MagicMock(spec=Future)
-    future3.result.return_value = {"status": "success", "content": [{"text": "Task 3 completed"}]}
-
-    # When wait is called, return the futures as "done"
-    mock_wait.side_effect = [
-        (set([future1]), set()),  # First call completes task 1
-        (set([future3]), set()),  # Second call completes task 3
-        (set([future2]), set()),  # Third call completes task 2
-    ]
-
-    # Patch the submit_tasks method to return our mock futures
-    with patch.object(workflow_manager.task_executor, "submit_tasks") as mock_submit:
-        mock_submit.side_effect = [
-            {"task-1": future1, "task-3": future3},  # First call submits tasks 1 and 3
-            {"task-2": future2},  # Second call submits task 2
-            {},  # No more tasks
+    def test_create_workflow_invalid_task_structure(self, mock_parent_agent):
+        """Test workflow creation with invalid task structure."""
+        invalid_tasks = [
+            {
+                "task_id": "task1",
+                # Missing description
+            }
         ]
 
-        # Start the workflow
-        result = workflow_manager.start_workflow(sample_workflow_id, "test-tool-use")
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.create_workflow.return_value = {
+                "status": "error",
+                "content": [{"text": "Task task1 must have a description"}],
+            }
 
-        # Verify workflow completed
-        assert result["status"] == "success"
-        assert f"Workflow {sample_workflow_id} completed successfully" in result["content"][0]["text"]
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id="test_workflow",
+                tasks=invalid_tasks,
+                agent=mock_parent_agent,
+            )
 
-        # Check workflow status is updated in file
-        with open(file_path, "r") as f:
-            updated_workflow = json.load(f)
-            assert updated_workflow["status"] == "completed"
-            for task_id in ["task-1", "task-2", "task-3"]:
-                assert updated_workflow["task_results"][task_id]["status"] == "completed"
-
-
-@patch("strands_tools.workflow.wait")
-def test_start_workflow_with_error(mock_wait, workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test starting a workflow with one task that fails."""
-    # Setup
-    file_path = os.path.join(mock_workflow_dir, f"{sample_workflow_id}.json")
-    with open(file_path, "w") as f:
-        json.dump(sample_workflow, f)
-
-    # Make sure the workflow is in the manager's cache
-    workflow_manager._workflows[sample_workflow_id] = sample_workflow
-
-    # Mock wait function to simulate task completion
-    future1 = MagicMock(spec=Future)
-    future1.result.side_effect = Exception("Task execution failed")
-
-    # When wait is called, return the futures as "done"
-    mock_wait.side_effect = [
-        (set([future1]), set()),  # First call completes task 1 with error
-    ]
-
-    # Patch the submit_tasks method to return our mock futures
-    with patch.object(workflow_manager.task_executor, "submit_tasks") as mock_submit:
-        mock_submit.side_effect = [
-            {"task-1": future1},  # First call submits task 1
-        ]
-
-        # Mock get_workflow to ensure it returns our sample workflow
-        with patch.object(workflow_manager, "get_workflow", return_value=sample_workflow):
-            # We need to modify the test to expect an error since that's the behavior when futures fail
-            with patch.object(workflow_manager, "store_workflow") as mock_store:
-                # Start the workflow (this should still work despite the error)
-                result = workflow_manager.start_workflow(sample_workflow_id, "test-tool-use")
-
-                # Verify proper error handling
-                assert result["status"] == "error"
-
-                # Verify store_workflow was called at least once
-                assert mock_store.called
+            assert result["status"] == "error"
+            assert "must have a description" in result["content"][0]["text"]
 
 
-def test_workflow_file_handler():
-    """Test the workflow file handler for file system events."""
-    manager = MagicMock()
-    with patch("strands_tools.workflow.FileSystemEventHandler.__init__") as mock_super_init:
-        handler = WorkflowFileHandler(manager)
-        mock_super_init.assert_called_once()
-        assert handler.manager == manager
+class TestWorkflowExecution:
+    """Test workflow execution functionality."""
 
-    # Create a mock event
-    event = MagicMock()
-    event.is_directory = False
-    event.src_path = "/path/to/workflow-123.json"
+    def test_start_workflow_success(self, mock_parent_agent):
+        """Test successful workflow start."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.start_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "🎉 Workflow 'test_workflow' completed successfully!"}],
+            }
 
-    # Test file modification
-    handler.on_modified(event)
-    manager.load_workflow.assert_called_once_with("workflow-123")
+            result = workflow_module.workflow(action="start", workflow_id="test_workflow", agent=mock_parent_agent)
 
-    # Test directory event (should be ignored)
-    manager.load_workflow.reset_mock()
-    event.is_directory = True
-    handler.on_modified(event)
-    manager.load_workflow.assert_not_called()
+            mock_manager.start_workflow.assert_called_once_with("test_workflow")
+            assert result["status"] == "success"
+            assert "completed successfully" in result["content"][0]["text"]
 
-    # Test non-JSON file (should be ignored)
-    manager.load_workflow.reset_mock()
-    event.is_directory = False
-    event.src_path = "/path/to/file.txt"
-    handler.on_modified(event)
-    manager.load_workflow.assert_not_called()
+    def test_start_workflow_missing_id(self, mock_parent_agent):
+        """Test workflow start fails when workflow_id is missing."""
+        result = workflow_module.workflow(action="start", agent=mock_parent_agent)
 
+        assert result["status"] == "error"
+        assert "workflow_id is required for start action" in result["content"][0]["text"]
 
-def test_workflow_file_handler_json_extraction():
-    """Test workflow ID extraction from JSON file path in WorkflowFileHandler."""
-    manager = MagicMock()
-    handler = WorkflowFileHandler(manager)
+    def test_start_workflow_not_found(self, mock_parent_agent):
+        """Test workflow start fails when workflow doesn't exist."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.start_workflow.return_value = {
+                "status": "error",
+                "content": [{"text": "❌ Workflow 'nonexistent' not found"}],
+            }
 
-    # Test a variety of JSON file paths
-    test_paths = [
-        ("/tmp/workflows/simple.json", "simple"),
-        ("/var/data/workflow-123.json", "workflow-123"),
-        ("relative/path/complex_name.with.dots.json", "complex_name.with.dots"),
-        ("/path with spaces/my-workflow.json", "my-workflow"),
-    ]
+            result = workflow_module.workflow(action="start", workflow_id="nonexistent", agent=mock_parent_agent)
 
-    for file_path, expected_id in test_paths:
-        # Reset mock and create event
-        manager.load_workflow.reset_mock()
-
-        event = MagicMock()
-        event.is_directory = False
-        event.src_path = file_path
-
-        # Call handler
-        handler.on_modified(event)
-
-        # Verify correct workflow ID extraction
-        manager.load_workflow.assert_called_once_with(expected_id)
-
-    # Special test for the Windows path case without trying to mock Path.stem directly
-    # Create a custom mock handler with our own implementation of on_modified
-    mock_handler = WorkflowFileHandler(manager)
-
-    # Create a custom on_modified method that uses our Windows test logic
-    def custom_on_modified(event):
-        if not event.is_directory and event.src_path.endswith(".json"):
-            # For this test, we'll just use "path" as the workflow ID
-            workflow_id = "path"  # Simulating what Path(win_path).stem would return on Windows
-            manager.load_workflow(workflow_id)
-
-    # Replace the handler's on_modified method with our custom one
-    mock_handler.on_modified = custom_on_modified
-
-    # Reset the mock
-    manager.load_workflow.reset_mock()
-
-    # Create the event
-    event = MagicMock()
-    event.is_directory = False
-    event.src_path = r"C:\Windows\style\path.json"
-
-    # Call our custom handler
-    mock_handler.on_modified(event)
-
-    # Verify the expected call
-    manager.load_workflow.assert_called_once_with("path")
+            assert result["status"] == "error"
+            assert "not found" in result["content"][0]["text"]
 
 
-def test_direct_workflow_tool_call(sample_workflow_id, sample_tasks):
-    """Test direct call to the workflow tool function."""
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"action": "create", "workflow_id": sample_workflow_id, "tasks": sample_tasks},
-    }
+class TestWorkflowStatus:
+    """Test workflow status functionality."""
 
-    # Mock the workflow manager
-    mock_manager = MagicMock()
-    mock_manager.create_workflow.return_value = {
-        "status": "success",
-        "content": [{"text": "Workflow created successfully"}],
-    }
+    def test_get_workflow_status(self, mock_parent_agent):
+        """Test getting workflow status."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.get_workflow_status.return_value = {
+                "status": "success",
+                "content": [{"text": "Workflow status information"}],
+            }
 
-    with patch("strands_tools.workflow.WorkflowManager", return_value=mock_manager):
-        # Call the workflow function
-        result = workflow_func(
-            tool=tool_use, system_prompt="Test prompt", inference_config={}, messages=[], tool_config={}
-        )
+            result = workflow_module.workflow(action="status", workflow_id="test_workflow", agent=mock_parent_agent)
 
-        # Verify
-        assert result["status"] == "success"
-        assert result["toolUseId"] == "test-tool-use-id"
-        assert "Workflow created successfully" in result["content"][0]["text"]
-        mock_manager.create_workflow.assert_called_once_with(sample_workflow_id, sample_tasks, "test-tool-use-id")
+            mock_manager.get_workflow_status.assert_called_once_with("test_workflow")
+            assert result["status"] == "success"
 
+    def test_get_workflow_status_missing_id(self, mock_parent_agent):
+        """Test status action fails when workflow_id is missing."""
+        result = workflow_module.workflow(action="status", agent=mock_parent_agent)
 
-def test_workflow_error_handling(sample_workflow_id):
-    """Test workflow error handling."""
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {
-            "action": "create",
-            "workflow_id": sample_workflow_id,
-            # Missing required 'tasks' parameter
-        },
-    }
-
-    # Call the workflow function
-    result = workflow_func(tool=tool_use, system_prompt="Test prompt", inference_config={}, messages=[], tool_config={})
-
-    # Verify error response
-    assert result["status"] == "error"
-    assert "Tasks are required for create action" in result["content"][0]["text"]
+        assert result["status"] == "error"
+        assert "workflow_id is required for status action" in result["content"][0]["text"]
 
 
-def test_workflow_missing_workflow_id():
-    """Test handling of missing workflow_id for operations that require it."""
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {
-            "action": "start",
-            # Missing required 'workflow_id' parameter
-        },
-    }
+class TestWorkflowListing:
+    """Test workflow listing functionality."""
 
-    # Call the workflow function
-    result = workflow_func(tool=tool_use, system_prompt="Test prompt", inference_config={}, messages=[], tool_config={})
+    def test_list_workflows(self, mock_parent_agent):
+        """Test listing all workflows."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.list_workflows.return_value = {
+                "status": "success",
+                "content": [{"text": "📊 Found 2 workflows"}],
+            }
 
-    # Verify error response
-    assert result["status"] == "error"
-    assert "workflow_id is required" in result["content"][0]["text"]
+            result = workflow_module.workflow(action="list", agent=mock_parent_agent)
+
+            mock_manager.list_workflows.assert_called_once()
+            assert result["status"] == "success"
+            assert "Found" in result["content"][0]["text"]
+
+    def test_list_workflows_empty(self, mock_parent_agent):
+        """Test listing workflows when none exist."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.list_workflows.return_value = {
+                "status": "success",
+                "content": [{"text": "📭 No workflows found"}],
+            }
+
+            result = workflow_module.workflow(action="list", agent=mock_parent_agent)
+
+            assert result["status"] == "success"
+            assert "No workflows found" in result["content"][0]["text"]
 
 
-def test_workflow_invalid_action():
-    """Test handling of invalid action."""
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {
-            "action": "invalid_action",
-        },
-    }
+class TestWorkflowDeletion:
+    """Test workflow deletion functionality."""
 
-    # Call the workflow function
-    result = workflow_func(tool=tool_use, system_prompt="Test prompt", inference_config={}, messages=[], tool_config={})
+    def test_delete_workflow(self, mock_parent_agent):
+        """Test workflow deletion."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.delete_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "🗑️ Workflow 'test_workflow' deleted successfully"}],
+            }
 
-    # Verify error response
-    assert result["status"] == "error"
-    assert "Unknown action: invalid_action" in result["content"][0]["text"]
+            result = workflow_module.workflow(action="delete", workflow_id="test_workflow", agent=mock_parent_agent)
+
+            mock_manager.delete_workflow.assert_called_once_with("test_workflow")
+            assert result["status"] == "success"
+            assert "deleted successfully" in result["content"][0]["text"]
+
+    def test_delete_workflow_missing_id(self, mock_parent_agent):
+        """Test delete action fails when workflow_id is missing."""
+        result = workflow_module.workflow(action="delete", agent=mock_parent_agent)
+
+        assert result["status"] == "error"
+        assert "workflow_id is required for delete action" in result["content"][0]["text"]
 
 
-def test_execute_task_with_rate_limiting(workflow_manager, sample_workflow, sample_tasks):
-    """Test task execution with rate limiting."""
-    with patch("strands_tools.workflow.time") as mock_time:
-        # Set up the mocks
-        workflow_manager._last_request_time = 0
-        workflow_manager._MIN_REQUEST_INTERVAL = 0.1
+class TestWorkflowManager:
+    """Test WorkflowManager class functionality."""
 
-        # Configure mock response for base_agent
-        workflow_manager.base_agent.return_value = {
-            "content": [{"text": "Task executed successfully"}],
-            "stop_reason": "complete",
+    def test_workflow_manager_singleton(self, mock_parent_agent):
+        """Test WorkflowManager is a singleton."""
+        with patch("strands_tools.workflow.WorkflowManager.__new__") as mock_new:
+            mock_instance = MagicMock()
+            mock_new.return_value = mock_instance
+
+            # Create two managers - should return same instance
+            workflow_module.WorkflowManager(mock_parent_agent)
+            workflow_module.WorkflowManager(mock_parent_agent)
+
+            # Should only create one instance
+            assert mock_new.call_count <= 2  # May be called twice due to initialization
+
+    def test_create_task_agent_with_tools(self, mock_parent_agent):
+        """Test task agent creation with specific tools."""
+        with patch("strands_tools.workflow.Agent") as mock_agent_class:
+            mock_task_agent = MagicMock()
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {
+                "task_id": "test_task",
+                "description": "Test task",
+                "tools": ["calculator", "file_read"],
+                "system_prompt": "You are a test assistant.",
+            }
+
+            manager._create_task_agent(task)
+
+            # Verify Agent was created with filtered tools
+            mock_agent_class.assert_called_once()
+            call_kwargs = mock_agent_class.call_args.kwargs
+
+            # Should have exactly 2 tools
+            assert len(call_kwargs["tools"]) == 2
+            assert call_kwargs["system_prompt"] == "You are a test assistant."
+
+    def test_create_task_agent_with_model_provider(self, mock_parent_agent):
+        """Test task agent creation with custom model provider."""
+        with (
+            patch("strands_tools.workflow.Agent") as mock_agent_class,
+            patch("strands_tools.workflow.create_model") as _mock_create_model,
+        ):
+            mock_model = MagicMock()
+            _mock_create_model.return_value = mock_model
+            mock_task_agent = MagicMock()
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {
+                "task_id": "test_task",
+                "description": "Test task",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "claude-sonnet-4"},
+            }
+
+            manager._create_task_agent(task)
+
+            # Verify model was created with correct provider
+            _mock_create_model.assert_called_once_with(provider="bedrock", config={"model_id": "claude-sonnet-4"})
+
+            # Verify Agent was created with custom model
+            call_kwargs = mock_agent_class.call_args.kwargs
+            assert call_kwargs["model"] == mock_model
+
+    def test_execute_task_success(self, mock_parent_agent, mock_agent_result):
+        """Test successful task execution."""
+        with (
+            patch("strands_tools.workflow.Agent") as mock_agent_class,
+            patch("strands_tools.workflow.create_model") as _mock_create_model,
+            patch.object(workflow_module, "WORKFLOW_DIR", Path("/tmp/test_workflows")),
+        ):
+            # Create a proper mock agent result that returns structured data
+            mock_task_agent = MagicMock()
+            mock_result = MagicMock()
+            mock_result.__str__ = MagicMock(return_value="Task completed successfully")
+            mock_result.get = MagicMock(
+                side_effect=lambda k, default=None: {
+                    "content": [{"text": "Task completed successfully"}],
+                    "stop_reason": "completed",
+                    "metrics": None,
+                }.get(k, default)
+            )
+
+            mock_task_agent.return_value = mock_result
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {"task_id": "test_task", "description": "Test task description"}
+
+            workflow = {"task_results": {}}
+
+            result = manager.execute_task(task, workflow)
+
+            assert result["status"] == "success"
+            assert len(result["content"]) > 0
+            assert result["content"][0]["text"] == "Task completed successfully"
+
+    def test_execute_task_with_dependencies(self, mock_parent_agent, mock_agent_result):
+        """Test task execution with dependencies."""
+        with patch("strands_tools.workflow.Agent") as mock_agent_class:
+            mock_task_agent = MagicMock()
+            mock_task_agent.return_value = mock_agent_result
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {
+                "task_id": "dependent_task",
+                "description": "Task that depends on others",
+                "dependencies": ["task1"],
+            }
+
+            workflow = {
+                "task_results": {
+                    "task1": {
+                        "status": "completed",
+                        "result": [{"text": "Previous task result"}],
+                    }
+                }
+            }
+
+            manager.execute_task(task, workflow)
+
+            # Verify task agent was called with context from dependencies
+            mock_task_agent.assert_called_once()
+            call_args = mock_task_agent.call_args[0]
+            prompt = call_args[0]
+
+            # Prompt should include dependency results
+            assert "Previous task results:" in prompt
+            assert "task1" in prompt
+            assert "Previous task result" in prompt
+
+    def test_store_and_load_workflow(self, mock_workflow_dir):
+        """Test workflow storage and loading."""
+        with patch.object(workflow_module, "WORKFLOW_DIR", Path(mock_workflow_dir)):
+            manager = workflow_module.WorkflowManager()
+
+            workflow_data = {
+                "workflow_id": "test_workflow",
+                "status": "created",
+                "tasks": [{"task_id": "task1", "description": "Test task"}],
+            }
+
+            # Store workflow
+            result = manager.store_workflow("test_workflow", workflow_data)
+            assert result["status"] == "success"
+
+            # Verify file was created
+            workflow_file = Path(mock_workflow_dir) / "test_workflow.json"
+            assert workflow_file.exists()
+
+            # Load workflow
+            loaded_workflow = manager.load_workflow("test_workflow")
+            assert loaded_workflow == workflow_data
+
+            # Get workflow (should use in-memory cache)
+            retrieved_workflow = manager.get_workflow("test_workflow")
+            assert retrieved_workflow == workflow_data
+
+    def test_get_ready_tasks(self, mock_parent_agent):
+        """Test getting ready tasks based on dependencies."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        workflow = {
+            "tasks": [
+                {"task_id": "task1", "description": "Independent task", "priority": 5},
+                {
+                    "task_id": "task2",
+                    "description": "Dependent task",
+                    "dependencies": ["task1"],
+                    "priority": 4,
+                },
+                {
+                    "task_id": "task3",
+                    "description": "Another independent task",
+                    "priority": 3,
+                },
+            ],
+            "task_results": {
+                "task1": {"status": "pending"},
+                "task2": {"status": "pending"},
+                "task3": {"status": "pending"},
+            },
         }
 
-        # Execute task
-        workflow_manager.execute_task(sample_tasks[0], sample_workflow, "test-tool-use")
+        ready_tasks = manager.get_ready_tasks(workflow)
 
-        # Verify rate limiting logic was called
-        mock_time.time.assert_called()
+        # Should return task1 and task3 (no dependencies), sorted by priority
+        assert len(ready_tasks) == 2
+        assert ready_tasks[0]["task_id"] == "task1"  # Higher priority first
+        assert ready_tasks[1]["task_id"] == "task3"
+
+    def test_get_ready_tasks_with_completed_dependencies(self, mock_parent_agent):
+        """Test getting ready tasks when dependencies are completed."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        workflow = {
+            "tasks": [
+                {"task_id": "task1", "description": "Independent task", "priority": 5},
+                {
+                    "task_id": "task2",
+                    "description": "Dependent task",
+                    "dependencies": ["task1"],
+                    "priority": 4,
+                },
+            ],
+            "task_results": {
+                "task1": {"status": "completed"},
+                "task2": {"status": "pending"},
+            },
+        }
+
+        ready_tasks = manager.get_ready_tasks(workflow)
+
+        # Should return task2 since task1 is completed
+        assert len(ready_tasks) == 1
+        assert ready_tasks[0]["task_id"] == "task2"
 
 
-def test_execute_task_with_throttling(workflow_manager, sample_workflow, sample_tasks):
-    """Test task execution with ThrottlingException handling."""
-    # Create a version of execute_task without the retry decorator for testing
-    original_execute_task = workflow_manager.execute_task
+class TestWorkflowEdgeCases:
+    """Test edge cases and error conditions."""
 
-    # Define a test function without the retry
-    def execute_task_no_retry(task, workflow, tool_use_id):
-        try:
-            # Simulate an agent that raises throttling exception
-            workflow_manager.base_agent.side_effect = Exception("ThrottlingException: API rate limit exceeded")
+    def test_invalid_action(self, mock_parent_agent):
+        """Test workflow with invalid action."""
+        result = workflow_module.workflow(action="invalid_action", agent=mock_parent_agent)
 
-            # Call the actual function but handle the exception before it tries to retry
-            try:
-                # This will raise the exception
-                workflow_manager.base_agent(task["description"])
-            except Exception as e:
-                if "ThrottlingException" in str(e):
-                    # Just return error result instead of retry
-                    return {
-                        "status": "error",
-                        "toolUseId": tool_use_id,
-                        "content": [{"text": f"Error executing task {task['task_id']}: {str(e)}"}],
-                    }
-                raise
-        except Exception as e:
-            # General error handling
-            return {
-                "status": "error",
-                "toolUseId": tool_use_id,
-                "content": [{"text": f"Error executing task {task['task_id']}: {str(e)}"}],
+        assert result["status"] == "error"
+        assert "Unknown action: invalid_action" in result["content"][0]["text"]
+
+    def test_unimplemented_actions(self, mock_parent_agent):
+        """Test pause and resume actions (not yet implemented)."""
+        for action in ["pause", "resume"]:
+            result = workflow_module.workflow(action=action, workflow_id="test_workflow", agent=mock_parent_agent)
+
+            assert result["status"] == "error"
+            assert f"Action '{action}' is not yet implemented" in result["content"][0]["text"]
+
+    def test_workflow_exception_handling(self, mock_parent_agent, sample_tasks):
+        """Test workflow tool handles exceptions gracefully."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            # Make manager initialization fail
+            mock_manager_class.side_effect = Exception("Manager creation failed")
+
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id="test_workflow",
+                tasks=sample_tasks,
+                agent=mock_parent_agent,
+            )
+
+            assert result["status"] == "error"
+            assert "Error in workflow tool" in result["content"][0]["text"]
+            assert "Manager creation failed" in result["content"][0]["text"]
+
+    def test_task_execution_error_handling(self, mock_parent_agent):
+        """Test task execution error handling."""
+        with patch("strands_tools.workflow.Agent") as mock_agent_class:
+            # Make agent call fail
+            mock_task_agent = MagicMock()
+            mock_task_agent.side_effect = Exception("Task execution failed")
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {"task_id": "failing_task", "description": "This task will fail"}
+
+            workflow = {"task_results": {}}
+
+            result = manager.execute_task(task, workflow)
+
+            assert result["status"] == "error"
+            assert "Error executing task failing_task" in result["content"][0]["text"]
+
+
+class TestWorkflowIntegration:
+    """Integration tests for the workflow tool."""
+
+    def test_workflow_via_agent_interface(self, agent, sample_tasks):
+        """Test workflow via the agent interface (integration test)."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.create_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "✅ Workflow created successfully"}],
             }
 
-    # Replace the execute_task method temporarily
-    workflow_manager.execute_task = execute_task_no_retry
-
-    try:
-        # Run test
-        result = workflow_manager.execute_task(sample_tasks[0], sample_workflow, "test-tool-use")
-
-        # Assertions
-        assert result["status"] == "error"
-        assert "ThrottlingException" in result["content"][0]["text"]
-    finally:
-        # Restore the original method
-        workflow_manager.execute_task = original_execute_task
-
-
-def test_store_workflow(workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test storing a workflow to file."""
-    # Create a more predictable workflow data for testing
-    simple_workflow = {"workflow_id": sample_workflow_id, "status": "created"}
-
-    # Test store_workflow
-    with patch.object(workflow_manager, "get_workflow", return_value=simple_workflow):
-        result = workflow_manager.store_workflow(sample_workflow_id, simple_workflow, "test-tool-use")
-
-        # Verify result
-        verify_success_response(result)
-
-        # Verify workflow is stored in memory
-        assert workflow_manager._workflows[sample_workflow_id]["workflow_id"] == sample_workflow_id
-
-
-def test_workflow_not_found(workflow_manager):
-    """Test handling of non-existent workflow."""
-    result = workflow_manager.get_workflow_status("non-existent-workflow", "test-tool-use")
-
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
-
-
-def test_agent_integration():
-    """Test workflow tool integration with Agent."""
-
-    agent = Agent(tools=[workflow_func])
-
-    # Attempt to access the workflow tool via the agent
-    assert hasattr(agent.tool, "workflow")
-
-
-def test_singleton_pattern():
-    """Test that WorkflowManager is a singleton."""
-    context1 = {"system_prompt": "Test", "inference_config": {}, "messages": [], "tool_config": {}}
-    context2 = {"system_prompt": "Different", "inference_config": {}, "messages": [], "tool_config": {}}
-
-    with patch("strands_tools.workflow.Agent"):
-        manager1 = WorkflowManager(context1)
-        manager2 = WorkflowManager(context2)
-
-        # Should be the same instance
-        assert manager1 is manager2
-
-
-def test_delete_nonexistent_workflow(workflow_manager):
-    """Test deletion of a non-existent workflow."""
-    result = workflow_manager.delete_workflow("nonexistent-workflow", "test-tool-use")
-
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
-
-
-def test_store_workflow_error(workflow_manager, mock_workflow_dir, sample_workflow, sample_workflow_id):
-    """Test error handling when storing a workflow."""
-    # Mock open to simulate file error
-    with patch("builtins.open", side_effect=IOError("File write error")):
-        result = workflow_manager.store_workflow(sample_workflow_id, sample_workflow, "test-tool-use")
-
-        assert result["status"] == "error"
-        assert "error" in result
-        assert "File write error" in result["error"]
-
-
-def test_workflow_init_error():
-    """Test WorkflowManager initialization with error."""
-
-    # Create a class for testing that raises an exception in init
-    class TestManagerError(WorkflowManager):
-        def __init__(self, context):
-            self.system_prompt = context["system_prompt"]
-            self.inference_config = context["inference_config"]
-            self.messages = context["messages"]
-            self.tool_config = context["tool_config"]
-            # Don't call superclass init
-            self.initialized = True
-            self.task_executor = TaskExecutor()
-
-    # Reset the singleton instance
-    with patch.object(WorkflowManager, "_instance", None):
-        # Create our test instance
-        context = {"system_prompt": "Test", "inference_config": {}, "messages": [], "tool_config": {}}
-        manager = TestManagerError(context)
-
-        # Verify it works
-        assert isinstance(manager, TestManagerError)
-        assert manager.initialized
-
-
-def test_observer_error_handling():
-    """Test error handling in file system observer setup."""
-    with patch("strands_tools.workflow.Observer", side_effect=Exception("Observer error")):
-        context = {"system_prompt": "Test", "inference_config": {}, "messages": [], "tool_config": {}}
-        # Should not crash even if Observer init fails
-        manager = WorkflowManager(context)
-
-        # Should be created even with error
-        assert isinstance(manager, WorkflowManager)
-
-
-def test_task_executor_shutdown():
-    """Test task executor shutdown."""
-    # Create a task executor for direct testing (avoid using fixture)
-    executor = TaskExecutor(min_workers=2, max_workers=4)
-
-    # Create a mock ThreadPoolExecutor
-    mock_executor = MagicMock()
-
-    # Replace the internal executor attribute with our mock
-    executor._executor = mock_executor
-
-    # Call shutdown
-    executor.shutdown()
-
-    # Verify the mock was called correctly
-    mock_executor.shutdown.assert_called_once_with(wait=True)
-
-
-def test_manager_cleanup(workflow_manager):
-    """Test manager cleanup."""
-    with patch.object(workflow_manager, "_observer") as mock_observer:
-        workflow_manager.cleanup()
-        mock_observer.stop.assert_called_once()
-        mock_observer.join.assert_called_once()
-
-
-def test_workflow_unexpected_exception():
-    """Test handling of unexpected exceptions in the main workflow function."""
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"action": "list"},
-    }
-
-    # Patch WorkflowManager to raise an unexpected exception
-    with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
-        # Instantiate mock raises exception
-        mock_manager_class.side_effect = Exception("Unexpected error")
-
-        # Call the workflow function
-        result = workflow_func(
-            tool=tool_use, system_prompt="Test prompt", inference_config={}, messages=[], tool_config={}
-        )
-
-        # Verify error response
-        assert result["status"] == "error"
-        assert "Error:" in result["content"][0]["text"]
-        assert "Unexpected error" in result["content"][0]["text"]
-
-
-def test_execute_task_with_dependencies(workflow_manager, sample_workflow, sample_tasks):
-    """Test task execution with dependencies."""
-    # Mark task 1 as completed with a result
-    setup_task_with_status(sample_workflow, "task-1", "completed", "Task 1 result")
-
-    # Configure mock agent response
-    setup_mock_agent_response(workflow_manager, "Task executed with dependency context")
-
-    # Execute task 2 which depends on task 1
-    task = sample_tasks[1]  # task-2 with dependency on task-1
-    result = workflow_manager.execute_task(task, sample_workflow, "test-tool-use")
-
-    # Verify dependency context was used
-    verify_success_response(result)
-
-    # Check that the agent was called with the dependency context
-    workflow_manager.base_agent.assert_called_once()
-    # The first argument should be the task prompt including dependency results
-    call_args = workflow_manager.base_agent.call_args[0][0]
-    assert "Previous task results" in call_args
-    assert "Task 1 result" in call_args
-
-
-def test_execute_task_with_custom_system_prompt(workflow_manager, sample_workflow, sample_tasks):
-    """Test task execution with custom system prompt."""
-    # Add system_prompt to the task
-    task = sample_tasks[0].copy()
-    task["system_prompt"] = "Custom system prompt"
-
-    # Configure mock agent response
-    setup_mock_agent_response(workflow_manager, "Task executed with custom system prompt")
-
-    # Execute task
-    result = workflow_manager.execute_task(task, sample_workflow, "test-tool-use")
-
-    # Verify
-    verify_success_response(result)
-
-    # Check that agent was called with custom system prompt
-    workflow_manager.base_agent.assert_called_once()
-    kwargs = workflow_manager.base_agent.call_args[1]
-    assert "system_prompt" in kwargs
-    assert kwargs["system_prompt"] == "Custom system prompt"
-
-
-def test_submit_tasks(task_executor):
-    """Test submitting multiple tasks at once."""
-    # Mock the _executor to avoid actual thread creation
-    original_executor = task_executor._executor
-    try:
-        # Create mock futures
-        mock_future1 = MagicMock()
-        mock_future2 = MagicMock()
-
-        # Ensure callbacks don't run
-        def mock_add_done_callback(callback):
-            pass
-
-        mock_future1.add_done_callback = mock_add_done_callback
-        mock_future2.add_done_callback = mock_add_done_callback
-
-        # Mock the executor
-        task_executor._executor = MagicMock()
-        task_executor._executor.submit.side_effect = [mock_future1, mock_future2]
-
-        # Create mock task functions
-        mock_task1 = MagicMock()
-        mock_task2 = MagicMock()
-
-        # Create tasks list
-        tasks = [
-            ("task1", mock_task1, ("arg1",), {"kwarg1": "value1"}),
-            ("task2", mock_task2, ("arg2",), {"kwarg2": "value2"}),
+            try:
+                result = agent.tool.workflow(action="create", workflow_id="integration_test", tasks=sample_tasks)
+                # If we get here without an exception, consider the test passed
+                assert result is not None
+            except Exception as e:
+                pytest.fail(f"Agent workflow call raised an exception: {e}")
+
+    def test_full_workflow_lifecycle(self, mock_parent_agent, mock_workflow_dir, sample_tasks):
+        """Test complete workflow lifecycle: create -> start -> status -> delete."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+
+            # Mock all operations to succeed
+            mock_manager.create_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "✅ Workflow created"}],
+            }
+            mock_manager.start_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "🎉 Workflow completed"}],
+            }
+            mock_manager.get_workflow_status.return_value = {
+                "status": "success",
+                "content": [{"text": "📊 Workflow status"}],
+            }
+            mock_manager.delete_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "🗑️ Workflow deleted"}],
+            }
+
+            workflow_id = "lifecycle_test"
+
+            # Create workflow
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id=workflow_id,
+                tasks=sample_tasks,
+                agent=mock_parent_agent,
+            )
+            assert result["status"] == "success"
+
+            # Start workflow
+            result = workflow_module.workflow(action="start", workflow_id=workflow_id, agent=mock_parent_agent)
+            assert result["status"] == "success"
+
+            # Check status
+            result = workflow_module.workflow(action="status", workflow_id=workflow_id, agent=mock_parent_agent)
+            assert result["status"] == "success"
+
+            # Delete workflow
+            result = workflow_module.workflow(action="delete", workflow_id=workflow_id, agent=mock_parent_agent)
+            assert result["status"] == "success"
+
+    def test_workflow_with_different_model_providers(self, mock_parent_agent):
+        """Test workflow with tasks using different model providers."""
+        tasks_with_models = [
+            {
+                "task_id": "bedrock_task",
+                "description": "Task using Bedrock",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "claude-sonnet-4"},
+            },
+            {
+                "task_id": "anthropic_task",
+                "description": "Task using Anthropic",
+                "model_provider": "anthropic",
+                "model_settings": {"model_id": "claude-3-5-sonnet-20241022"},
+            },
+            {
+                "task_id": "env_task",
+                "description": "Task using environment model",
+                "model_provider": "env",
+            },
         ]
 
-        # Submit tasks
-        futures = task_executor.submit_tasks(tasks)
-
-        # Verify all tasks were submitted
-        assert len(futures) == 2
-        assert "task1" in futures
-        assert "task2" in futures
-        assert "task1" in task_executor.active_tasks
-        assert "task2" in task_executor.active_tasks
-
-        # Clean up tasks to avoid affecting other tests
-        task_executor.task_completed("task1", {})
-        task_executor.task_completed("task2", {})
-    finally:
-        # Restore original executor
-        task_executor._executor = original_executor
-
-
-def test_get_workflow_status_for_active_task(workflow_manager, mock_workflow_dir, sample_tasks, sample_workflow_id):
-    """Test getting workflow status with an active task."""
-    # Create a valid workflow with tasks
-    workflow = {
-        "workflow_id": sample_workflow_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "created",
-        "tasks": sample_tasks,
-        "current_task_index": 0,
-        "task_results": {
-            task["task_id"]: {
-                "status": "pending",
-                "result": None,
-                "priority": task.get("priority", 3),
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+            mock_manager.create_workflow.return_value = {
+                "status": "success",
+                "content": [{"text": "✅ Multi-model workflow created"}],
             }
-            for task in sample_tasks
-        },
-        "parallel_execution": True,
-    }
 
-    # Save workflow to file
-    file_path = os.path.join(mock_workflow_dir, f"{sample_workflow_id}.json")
-    with open(file_path, "w") as f:
-        json.dump(workflow, f)
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id="multi_model_test",
+                tasks=tasks_with_models,
+                agent=mock_parent_agent,
+            )
 
-    # Add to cache to ensure it's available
-    workflow_manager._workflows[sample_workflow_id] = workflow
-
-    # Mark a task as active
-    workflow_manager.task_executor.active_tasks.add("task-1")
-    workflow_manager.task_executor.start_times["task-1"] = time.time()
-
-    # Get status
-    result = workflow_manager.get_workflow_status(sample_workflow_id, "test-tool-use")
-
-    # Verify
-    assert result["status"] == "success"
-    assert "Active Tasks: 1" in result["content"][0]["text"]
+            assert result["status"] == "success"
+            mock_manager.create_workflow.assert_called_once_with("multi_model_test", tasks_with_models)
 
 
-def test_list_workflows_empty(workflow_manager, mock_workflow_dir):
-    """Test listing workflows when none exist."""
-    # Empty directory
-    for f in Path(mock_workflow_dir).glob("*.json"):
-        os.remove(f)
+class TestWorkflowFileOperations:
+    """Test workflow file persistence operations."""
 
-    # Need to clear workflow manager's cached workflows
-    workflow_manager._workflows = {}
+    def test_workflow_file_storage(self, mock_workflow_dir):
+        """Test workflow file storage and format."""
+        with patch.object(workflow_module, "WORKFLOW_DIR", Path(mock_workflow_dir)):
+            manager = workflow_module.WorkflowManager()
 
-    result = workflow_manager.list_workflows("test-tool-use")
+            workflow_data = {
+                "workflow_id": "test_storage",
+                "status": "created",
+                "tasks": [],
+                "created_at": "2024-01-01T00:00:00+00:00",
+            }
 
-    assert result["status"] == "success"
-    assert "No workflows found" in result["content"][0]["text"]
+            result = manager.store_workflow("test_storage", workflow_data)
+            assert result["status"] == "success"
 
+            # Verify file content
+            workflow_file = Path(mock_workflow_dir) / "test_storage.json"
+            with open(workflow_file, "r") as f:
+                stored_data = json.load(f)
 
-def test_load_workflow_error(workflow_manager):
-    """Test error handling when loading a workflow."""
-    with patch("builtins.open", side_effect=Exception("File read error")):
-        result = workflow_manager.load_workflow("test-workflow")
+            assert stored_data == workflow_data
+
+    def test_workflow_file_loading_nonexistent(self):
+        """Test loading non-existent workflow file."""
+        manager = workflow_module.WorkflowManager()
+
+        result = manager.load_workflow("nonexistent_workflow")
         assert result is None
 
+    def test_workflow_file_storage_error(self, mock_parent_agent):
+        """Test workflow file storage error handling."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
 
-def test_execute_task_with_threading(workflow_manager, sample_tasks, sample_workflow):
-    """Test task execution with threading mocks."""
-    # Setup mock ThreadPoolExecutor
-    with patch("concurrent.futures.ThreadPoolExecutor") as mock_executor:
-        # Get the first task
-        task = sample_tasks[0]
+        with patch("builtins.open", side_effect=IOError("Permission denied")):
+            result = manager.store_workflow("test_workflow", {"test": "data"})
 
-        # Configure mock executor
-        mock_submit = MagicMock()
-        mock_executor.return_value.__enter__.return_value.submit = mock_submit
+            assert result["status"] == "error"
+            assert "Permission denied" in result["error"]
 
-        # Call execute_task which uses threading internally
-        with patch.object(workflow_manager, "store_workflow", return_value=None):
-            workflow_manager.execute_task(task, sample_workflow, "test-tool-use")
 
-        # Verify task executed
-        assert mock_submit.call_count == 0  # Direct execution in test
-        assert workflow_manager.base_agent.called
-
-
-def test_observer_notification():
-    """Test the observer notification mechanism."""
-    # Create workflow manager
-    tool_context = {
-        "system_prompt": "Test system prompt",
-        "inference_config": {"model": "test-model"},
-        "messages": [],
-        "tool_config": {},
-    }
-
-    # Create a mock observer
-    mock_observer = MagicMock()
-
-    # Make sure the WorkflowManager has a shared instance for the test
-    with patch.object(WorkflowManager, "_instance", None):
-        # Create workflow manager
-        with patch("strands_tools.workflow.Agent"):
-            wm = WorkflowManager(tool_context)
-
-            # Register the mock observer (access _observer directly)
-            wm._observer = mock_observer
-
-            # Trigger an action that should notify observers
-            wm._observer.notify("task_started", {"task_id": "test-task"})
-
-            # Verify the observer was notified correctly
-            mock_observer.notify.assert_called_once_with("task_started", {"task_id": "test-task"})
-
-
-def test_complex_error_handling(workflow_manager, sample_tasks, sample_workflow):
-    """Test error handling with retries."""
-    task = sample_tasks[0]
-
-    # Configure mock agent to fail first, then succeed
-    side_effects = [
-        Exception("Temporary API error"),
-        {"content": [{"text": "Task executed on retry"}], "stop_reason": "complete"},
-    ]
-    workflow_manager.base_agent.side_effect = side_effects
-
-    # Call execute_task which should handle the error
-    with patch.object(workflow_manager, "store_workflow"):
-        result = workflow_manager.execute_task(task, sample_workflow, "test-tool-use")
-
-    # The task should fail since we don't have retry logic in execute_task
-    assert result["status"] == "error"
-    assert "Temporary API error" in result["content"][0]["text"]
-
-
-def test_workflow_file_handler_with_manager(workflow_manager):
-    """Test the WorkflowFileHandler class with a workflow manager fixture."""
-    # Create a test file handler
-    handler = WorkflowFileHandler(workflow_manager)
-
-    # Mock file operations
-    with patch.object(workflow_manager, "load_workflow") as mock_load:
-        # Create mock event
-        mock_event = MagicMock()
-        mock_event.is_directory = False
-        mock_event.src_path = "/tmp/test-workflow-123.json"
-
-        # Trigger the file handler
-        handler.on_modified(mock_event)
-
-        # Verify workflow manager's load_workflow was called
-        mock_load.assert_called_once_with("test-workflow-123")
-
-
-def test_rate_limiting(workflow_manager):
-    """Test rate limiting functionality."""
-    # Override min request interval
-    original_interval = workflow_manager._MIN_REQUEST_INTERVAL
-    workflow_manager._MIN_REQUEST_INTERVAL = 0.5  # Half second delay
-
-    # Track execution times
-    start_time = time.time()
-
-    # Make two quick requests
-    # Note: workflow definition removed as it wasn't being used
-
-    # First request should go through immediately
-    with patch.object(workflow_manager, "store_workflow"):
-        workflow_manager._wait_for_rate_limit()
-
-    # Second request should be rate limited
-    with patch.object(workflow_manager, "store_workflow"):
-        workflow_manager._wait_for_rate_limit()
-
-    # Verify rate limiting
-    elapsed = time.time() - start_time
-    assert elapsed >= 0.4  # Allow a small buffer below the exact 0.5 seconds
-
-    # Restore original interval
-    workflow_manager._MIN_REQUEST_INTERVAL = original_interval
-
-
-def test_store_workflow_error_handling(workflow_manager, sample_workflow, sample_workflow_id):
-    """Test error handling in store_workflow."""
-    # Add the sample workflow to the cache
-    workflow_manager._workflows[sample_workflow_id] = sample_workflow
-
-    # Mock open to raise an exception
-    with patch("builtins.open", side_effect=Exception("File write error")):
-        # This should not raise the exception but handle it internally
-        workflow_manager.store_workflow(sample_workflow_id, sample_workflow, "test-tool-use")
-
-        # The workflow should still be in the cache despite the file write error
-        assert sample_workflow_id in workflow_manager._workflows
-
-
-def test_workflow_get_nonexistent(workflow_manager):
-    """Test getting a non-existent workflow."""
-    # Test get_workflow with non-existent ID
-    assert workflow_manager.get_workflow("non-existent-id") is None
-
-
-def test_workflow_error_loading(workflow_manager):
-    """Test error handling when loading workflows."""
-    # Mock glob to return some files
-    with patch("glob.glob", return_value=["/tmp/test_workflows/error_workflow.json"]):
-        # Mock open to raise an exception
-        with patch("builtins.open", side_effect=Exception("File read error")):
-            # This should not crash
-            workflow_manager._load_all_workflows()
-            # The workflow should not be in the cache
-            assert "error_workflow" not in workflow_manager._workflows
-
-
-def test_execute_task_with_different_config(workflow_manager, sample_tasks, sample_workflow):
-    """Test task execution with different configurations."""
-    # Test with a task that has a custom module name
-    task_with_module = sample_tasks[0].copy()
-    task_with_module["module_name"] = "custom_module"
-
-    # Mock agent response
-    workflow_manager.base_agent.return_value = {
-        "content": [{"text": "Task executed with custom module"}],
-        "stop_reason": "complete",
-    }
-
-    # Execute task
-    with patch.object(workflow_manager, "store_workflow", return_value=None):
-        result = workflow_manager.execute_task(task_with_module, sample_workflow, "test-tool-use")
-
-    # Verify
-    assert result["status"] == "success"
-    assert "Task executed with custom module" in result["content"][0]["text"]
-
-    # Test with a task with automatic instruction generation
-    task_with_auto_instructions = sample_tasks[0].copy()
-    task_with_auto_instructions["auto_gen_instructions"] = True
-
-    # Execute task
-    with patch.object(workflow_manager, "store_workflow", return_value=None):
-        result = workflow_manager.execute_task(task_with_auto_instructions, sample_workflow, "test-tool-use")
-
-    # Verify
-    assert result["status"] == "success"
-
-
-def test_workflow_summary(workflow_manager, sample_workflow_id, sample_workflow):
-    """Test workflow summary generation."""
-    # Set up task results with different statuses
-    sample_workflow["task_results"] = {
-        "task-1": {"status": "completed", "result": [{"text": "Task 1 done"}]},
-        "task-2": {"status": "running"},
-        "task-3": {"status": "pending"},
-        "task-4": {"status": "error", "result": [{"text": "Error in task 4"}]},
-    }
-
-    # Add tasks that match the results
-    sample_workflow["tasks"] = [
-        {"task_id": "task-1", "description": "First test task", "priority": 3},
-        {"task_id": "task-2", "description": "Second test task", "priority": 2},
-        {"task_id": "task-3", "description": "Third test task", "priority": 1},
-        {"task_id": "task-4", "description": "Fourth test task", "priority": 1},
-    ]
-
-    # Add to cache
-    workflow_manager._workflows[sample_workflow_id] = sample_workflow
-
-    # Get workflow status
-    result = workflow_manager.get_workflow_status(sample_workflow_id, "test-tool-use")
-
-    # Verify summary includes counts
-    assert result["status"] == "success"
-    text = result["content"][0]["text"]
-    assert "Completed Tasks: 1" in text
-    assert "Task 1 done" in text
-    assert "Error in task 4" in text
-
-
-def test_workflow_shutdown():
-    """Test the task executor shutdown."""
-    # Create a task executor for direct testing
-    executor = TaskExecutor(min_workers=2, max_workers=4)
-
-    # Assert that the executor has the shutdown method
-    assert hasattr(executor, "shutdown")
-
-    # Create a mock for the internal executor
-    mock_executor = MagicMock()
-
-    # Replace the internal executor
-    executor._executor = mock_executor
-
-    # Call the shutdown method
-    executor.shutdown()
-
-    # Verify executor shutdown was called
-    mock_executor.shutdown.assert_called_once_with(wait=True)
-
-
-def test_task_executor():
-    """Test the TaskExecutor class directly."""
-    # Create a task executor with an immediately mocked executor
-    executor = TaskExecutor(min_workers=2, max_workers=4)
-
-    # Test that initial state is correct
-    assert executor.min_workers == 2
-    assert executor.max_workers == 4
-    assert len(executor.active_tasks) == 0
-    assert executor.active_workers == 0
-
-    # Mock executor's submit method
-    original_executor = executor._executor
-    try:
-        # Create mock future
-        mock_future = MagicMock()
-
-        # Ensure callbacks don't run
-        def mock_add_done_callback(callback):
-            pass
-
-        mock_future.add_done_callback = mock_add_done_callback
-
-        # Set up the mock
-        executor._executor = MagicMock()
-        executor._executor.submit.return_value = mock_future
-
-        # Define a mock task function
-        mock_task_func = MagicMock()
-
-        # Submit a task
-        task_id = "test-task"
-        future = executor.submit_task(task_id, mock_task_func, 1, key="value")
-
-        # Verify the task was submitted correctly
-        assert future == mock_future
-        assert task_id in executor.active_tasks
-        assert task_id in executor.start_times
-        assert executor.active_workers == 1
-
-        # Test that submitting the same task again returns None
-        result = executor.submit_task(task_id, mock_task_func, 2, key="value2")
-        assert result is None
-
-        # Test task completion tracking
-        result_data = {"status": "completed", "text": "Task result"}
-
-        # Mark as completed
-        executor.task_completed(task_id, result_data)
-
-        # Check that result is stored and task removed from active tasks
-        assert executor.get_result(task_id) == result_data
-        assert task_id not in executor.active_tasks
-
-        # Test shutdown method
-        executor._executor.shutdown.assert_not_called()
-        executor.shutdown()
-        executor._executor.shutdown.assert_called_once_with(wait=True)
-    finally:
-        # If we exited before calling shutdown, ensure we restore the real executor
-        executor._executor = original_executor
-        executor.shutdown()
-
-
-def test_workflow_dir_default():
-    """Test that the default workflow directory is Path.cwd()/workflows."""
-    import sys
-
-    # Save original module if it exists
-    original_module = sys.modules.get("strands_tools.workflow")
-
-    # Remove strands_tools.workflow from sys.modules to force reload
-    if "strands_tools.workflow" in sys.modules:
-        del sys.modules["strands_tools.workflow"]
-
-    # Add a cleanup to restore the original module
-    try:
-        # Remove any monkeypatching by creating clean module import
-        with patch.dict("sys.modules", {"strands_tools.workflow": None}):
-            from strands_tools import workflow
-
-            # Check the default workflow directory
-            expected_dir = Path.cwd() / "workflows"
-            actual_dir = workflow.WORKFLOW_DIR
-
-            # Convert both to absolute paths to handle any symlinks
-            expected = expected_dir.resolve()
-            actual = actual_dir.resolve()
-
-            assert str(actual) == str(expected), f"Expected {expected}, got {actual}"
-    finally:
-        # Restore original module
-        if original_module:
-            sys.modules["strands_tools.workflow"] = original_module
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

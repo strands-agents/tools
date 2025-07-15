@@ -1,56 +1,22 @@
-"""
-Advanced recursive thinking tool for Strands Agent.
+"""Recursive thinking tool for Strands Agent with model switching support.
 
 This module provides functionality for deep analytical thinking through multiple recursive cycles,
-enabling sophisticated thought processing, learning, and self-reflection capabilities.
-The tool processes thoughts through sequential cycles, each building upon the previous,
-to generate progressively refined insights.
-
-Usage with Strands Agent:
-```python
-from strands import Agent
-from strands_tools import think, stop
-
-agent = Agent(tools=[think, stop])
-
-# Basic usage with default system prompt (inherits all parent tools)
-result = agent.tool.think(
-    thought="How might we improve renewable energy storage solutions?",
-    cycle_count=3,
-    system_prompt="You are an expert energy systems analyst."
-)
-
-# Usage with specific tools filtered from parent agent
-result = agent.tool.think(
-    thought="Calculate energy efficiency and analyze the data",
-    cycle_count=3,
-    system_prompt="You are an expert energy systems analyst.",
-    tools=["calculator", "file_read", "python_repl"]
-)
-
-# Usage with mixed tool filtering from parent agent
-result = agent.tool.think(
-    thought="Analyze the implications of quantum computing on cryptography.",
-    cycle_count=5,
-    system_prompt="You are a specialist in quantum computing and cryptography. Analyze this topic deeply,
-    considering both technical and practical aspects.",
-    tools=["retrieve", "calculator", "http_request"]
-)
-```
-
-See the think function docstring for more details on configuration options and parameters.
+enabling sophisticated thought processing, learning, and self-reflection capabilities with support
+for different model providers for specialized thinking tasks.
 """
 
 import logging
+import os
 import traceback
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
 
 from strands_tools.utils import console_util
+from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +28,17 @@ class ThoughtProcessor:
         self.tool_use_id = str(uuid.uuid4())
         self.console = console
 
-    def create_thinking_prompt(self, thought: str, cycle: int, total_cycles: int) -> str:
-        """Create a focused prompt for the thinking process."""
-        prompt = f"""
+    def create_thinking_prompt(
+        self,
+        thought: str,
+        cycle: int,
+        total_cycles: int,
+        thinking_system_prompt: Optional[str] = None,
+    ) -> str:
+        """Create a focused prompt for the thinking process with optional custom thinking instructions."""
+
+        # Default thinking instructions
+        default_instructions = """
 Direct Tasks:
 1. Process this thought deeply and analytically
 2. Generate clear, structured insights
@@ -72,7 +46,15 @@ Direct Tasks:
 4. Provide actionable conclusions
 5. DO NOT call the think tool again
 6. USE other tools.
+"""
 
+        # Use custom thinking instructions if provided, otherwise use defaults
+        if thinking_system_prompt:
+            thinking_instructions = f"\n{thinking_system_prompt}\n"
+        else:
+            thinking_instructions = default_instructions
+
+        prompt = f"""{thinking_instructions}
 Current Cycle: {cycle}/{total_cycles}
 
 Thought to process:
@@ -89,41 +71,90 @@ Please provide your analysis directly:
         total_cycles: int,
         custom_system_prompt: str,
         specified_tools=None,
+        model_provider: Optional[str] = None,
+        model_settings: Optional[Dict[str, Any]] = None,
+        thinking_system_prompt: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
-        """Process a single thinking cycle."""
+        """Process a single thinking cycle with optional model switching and custom thinking instructions."""
 
         logger.debug(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
         self.console.print(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
 
-        # Create cycle-specific prompt
-        prompt = self.create_thinking_prompt(thought, cycle, total_cycles)
+        # Create cycle-specific prompt with custom thinking instructions
+        prompt = self.create_thinking_prompt(thought, cycle, total_cycles, thinking_system_prompt)
 
         # Display input prompt
         logger.debug(f"\n--- Input Prompt ---\n{prompt}\n")
 
-        # Get tools from parent agent if available
-        tools = []
+        # Get tools and trace attributes from parent agent
+        filtered_tools = []
         trace_attributes = {}
+        extra_kwargs = {}
+        model_info = "Using parent agent's model"
+
         parent_agent = kwargs.get("agent")
         if parent_agent:
             trace_attributes = parent_agent.trace_attributes
+            extra_kwargs["callback_handler"] = parent_agent.callback_handler
 
             # If specific tools are provided, filter parent tools; otherwise inherit all tools from parent
             if specified_tools is not None:
                 # Filter parent agent tools to only include specified tool names
-                filtered_tools = []
                 for tool_name in specified_tools:
                     if tool_name in parent_agent.tool_registry.registry:
                         filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
                     else:
                         logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
-                tools = filtered_tools
             else:
-                tools = list(parent_agent.tool_registry.registry.values())
+                filtered_tools = list(parent_agent.tool_registry.registry.values())
 
-        # Initialize the new Agent with provided parameters
-        agent = Agent(messages=[], tools=tools, system_prompt=custom_system_prompt, trace_attributes=trace_attributes)
+        # Determine which model to use
+        selected_model = None
+
+        if model_provider is None:
+            # Use parent agent's model (original behavior)
+            selected_model = parent_agent.model if parent_agent else None
+            model_info = "Using parent agent's model"
+
+        elif model_provider == "env":
+            # Use environment variables to determine model
+            try:
+                env_provider = os.getenv("STRANDS_PROVIDER", "bedrock")
+                selected_model = create_model(provider=env_provider, config=model_settings)
+                model_info = f"Using environment model: {env_provider}"
+                logger.debug(f"🔄 Created model from environment: {env_provider}")
+
+            except Exception as e:
+                logger.warning(f"Failed to create model from environment: {e}")
+                logger.debug("Falling back to parent agent's model")
+                selected_model = parent_agent.model if parent_agent else None
+                model_info = f"Failed to use environment model, using parent's model (Error: {str(e)})"
+
+        else:
+            # Use specified model provider
+            try:
+                selected_model = create_model(provider=model_provider, config=model_settings)
+                model_info = f"Using {model_provider} model"
+                logger.debug(f"🔄 Created {model_provider} model for thinking cycle")
+
+            except Exception as e:
+                logger.warning(f"Failed to create {model_provider} model: {e}")
+                logger.debug("Falling back to parent agent's model")
+                selected_model = parent_agent.model if parent_agent else None
+                model_info = f"Failed to use {model_provider} model, using parent's model (Error: {str(e)})"
+
+        logger.debug(f"--- Model Info ---\n{model_info}\n")
+
+        # Initialize the new Agent with selected model
+        agent = Agent(
+            model=selected_model,
+            messages=[],
+            tools=filtered_tools,
+            system_prompt=custom_system_prompt,
+            trace_attributes=trace_attributes,
+            **extra_kwargs,
+        )
 
         # Run the agent with the provided prompt
         result = agent(prompt)
@@ -144,13 +175,22 @@ Please provide your analysis directly:
 
 
 @tool
-def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None, agent: Any = None) -> Dict[str, Any]:
-    """
-    Recursive thinking tool for sophisticated thought generation, learning, and self-reflection.
+def think(
+    thought: str,
+    cycle_count: int,
+    system_prompt: str,
+    tools: Optional[List[str]] = None,
+    model_provider: Optional[str] = None,
+    model_settings: Optional[Dict[str, Any]] = None,
+    thinking_system_prompt: Optional[str] = None,
+    agent: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Recursive thinking tool with model switching support for sophisticated thought generation.
 
     This tool implements a multi-cycle cognitive analysis approach that progressively refines thoughts
-    through iterative processing. Each cycle builds upon insights from the previous cycle,
-    creating a depth of analysis that would be difficult to achieve in a single pass.
+    through iterative processing, with the ability to use different model providers for specialized
+    thinking tasks. Each cycle builds upon insights from the previous cycle, creating a depth of
+    analysis that would be difficult to achieve in a single pass.
 
     How It Works:
     ------------
@@ -159,22 +199,32 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
     3. A specialized system prompt guides the thinking process toward specific expertise domains
     4. Each cycle's output is captured and included in the final comprehensive analysis
     5. The tool avoids recursive self-calls and encourages the use of other tools when appropriate
+    6. Optionally uses different model providers for specialized thinking capabilities
 
-    Thinking Process:
-    ---------------
-    - First cycle processes the original thought directly with the provided system prompt
-    - Each subsequent cycle builds upon the previous cycle's output
-    - Cycles are tracked and labeled clearly in the output
-    - The process creates a chain of progressive refinement and deeper insights
-    - Final output includes the complete thought evolution across all cycles
+    Model Selection Process:
+    ----------------------
+    1. If model_provider is None: Uses parent agent's model (original behavior)
+    2. If model_provider is "env": Uses environment variables (STRANDS_PROVIDER, etc.)
+    3. If model_provider is specified: Uses that provider with optional custom config
+    4. Model utilities handle all provider-specific configuration automatically
+
+    System Prompt vs Thinking System Prompt:
+    --------------------------------------
+    - **system_prompt**: Controls the agent's persona, role, and expertise domain
+      Example: "You are a creative AI researcher specializing in educational technology."
+
+    - **thinking_system_prompt**: Controls the thinking methodology and approach
+      Example: "Use design thinking: empathize, define, ideate, prototype, test."
+
+    Together they provide: WHO the agent is (system_prompt) + HOW it thinks (thinking_system_prompt)
 
     Common Usage Scenarios:
     ---------------------
-    - Problem analysis: Breaking down complex problems into manageable components
-    - Idea development: Progressively refining creative concepts
-    - Learning exploration: Generating questions and insights about new domains
-    - Strategic planning: Developing multi-step approaches to challenges
-    - Self-reflection: Analyzing decision processes and potential biases
+    - Creative thinking: Use creative models for brainstorming and ideation
+    - Technical analysis: Use analytical models for code review and system design
+    - Multi-model comparison: Compare thinking approaches across different models
+    - Specialized domains: Use domain-specific models (math, creative writing, etc.)
+    - Cost optimization: Use cheaper models for exploratory thinking cycles
 
     Args:
         thought: The detailed thought or idea to process through multiple thinking cycles.
@@ -187,6 +237,20 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
         tools: List of tool names to make available to the nested agent. Tool names must
             exist in the parent agent's tool registry. Examples: ["calculator", "file_read", "retrieve"]
             If not provided, inherits all tools from the parent agent.
+        model_provider: Model provider to use for the thinking cycles.
+            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github"
+            Special values:
+            - None: Use parent agent's model (default, preserves original behavior)
+            - "env": Use environment variables to determine provider
+            Examples: "bedrock", "anthropic", "litellm", "env"
+        model_settings: Optional custom configuration for the model.
+            If not provided, uses default configuration for the provider.
+            Example: {"model_id": "claude-sonnet-4-20250514", "params": {"temperature": 1}}
+        thinking_system_prompt: Optional custom thinking instructions that override the default
+            thinking methodology. This controls HOW the agent thinks about the problem, separate
+            from the system_prompt which controls the agent's persona/role.
+            Example: "Use first principles reasoning. Break down complex problems into fundamental
+            components. Question assumptions at each step."
         agent: The parent agent (automatically passed by Strands framework)
 
     Returns:
@@ -199,12 +263,69 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
         Success case: Returns concatenated results from all thinking cycles
         Error case: Returns information about what went wrong during processing
 
+    Environment Variables for Model Switching:
+    ----------------------------------------
+    When model_provider="env", these variables are used:
+    - STRANDS_PROVIDER: Model provider name
+    - STRANDS_MODEL_ID: Specific model identifier
+    - STRANDS_MAX_TOKENS: Maximum tokens to generate
+    - STRANDS_TEMPERATURE: Sampling temperature
+    - Provider-specific keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
+
+    Examples:
+    --------
+    # Use Bedrock for creative thinking
+    result = agent.tool.think(
+        thought="How can we make AI more creative?",
+        cycle_count=3,
+        system_prompt="You are a creative AI researcher.",
+        model_provider="bedrock"
+    )
+
+    # Use Ollama for local processing
+    result = agent.tool.think(
+        thought="Analyze this code architecture",
+        cycle_count=5,
+        system_prompt="You are a software architect.",
+        model_provider="ollama",
+        model_settings={"model_id": "qwen3:4b", "host": "http://localhost:11434"}
+    )
+
+    # Use environment configuration with custom thinking methodology
+    os.environ["STRANDS_PROVIDER"] = "anthropic"
+    os.environ["STRANDS_MODEL_ID"] = "claude-sonnet-4-20250514"
+    result = agent.tool.think(
+        thought="What are the ethical implications?",
+        cycle_count=4,
+        system_prompt="You are an AI ethics expert.",
+        model_provider="env",
+        thinking_system_prompt=Use Socratic questioning method:
+        1. Question fundamental assumptions
+        2. Explore implications through dialogue
+        3. Consider multiple perspectives
+        4. Challenge each conclusion with 'but what if...'
+        5. Build understanding through systematic inquiry
+    )
+
+    # Custom thinking methodology for creative problem solving
+    result = agent.tool.think(
+        thought="How can we revolutionize online education?",
+        cycle_count=3,
+        system_prompt="You are an innovative education technology expert.",
+        thinking_system_prompt='''Apply design thinking methodology:
+        1. Empathize: Understand user pain points deeply
+        2. Define: Clearly articulate the core problem
+        3. Ideate: Generate diverse, unconventional solutions
+        4. Prototype: Outline practical implementation steps
+        5. Test: Consider potential challenges and iterations'''
+    )
+
     Notes:
-        - Higher cycle counts provide deeper analysis but consume more resources
-        - The system_prompt significantly influences the thinking style and domain expertise
-        - For complex topics, more specific system prompts tend to yield better results
-        - The tool is designed to avoid recursive self-calls that could cause infinite loops
-        - Each cycle has visibility into previous cycle outputs to enable building upon insights
+        - Model switching requires the appropriate dependencies (bedrock, anthropic, ollama, etc.)
+        - When model_provider is None, behavior is identical to the original implementation
+        - Custom model_settings overrides default environment-based configuration
+        - Each cycle uses the same model - mixed model cycles not currently supported
+        - Model information is logged for transparency and debugging
     """
     console = console_util.create()
 
@@ -215,6 +336,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
             custom_system_prompt = (
                 "You are an expert analytical thinker. Process the thought deeply and provide clear insights."
             )
+
         kwargs = {"agent": agent}
         # Create thought processor instance with the available context
         processor = ThoughtProcessor(kwargs, console)
@@ -225,7 +347,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
 
         # Process through each cycle
         for cycle in range(1, cycle_count + 1):
-            # Process current cycle - need to remove thought from kwargs to prevent duplicate parameters
+            # Process current cycle
             cycle_kwargs = kwargs.copy()
             if "thought" in cycle_kwargs:
                 del cycle_kwargs["thought"]  # Prevent duplicate 'thought' parameter
@@ -236,6 +358,9 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
                 cycle_count,
                 custom_system_prompt,
                 specified_tools=tools,
+                model_provider=model_provider,
+                model_settings=model_settings,
+                thinking_system_prompt=thinking_system_prompt,
                 **cycle_kwargs,
             )
 
@@ -245,7 +370,7 @@ def think(thought: str, cycle_count: int, system_prompt: str, tools: list = None
             # Update thought for next cycle based on current response
             current_thought = f"Previous cycle concluded: {cycle_response}\nContinue developing these ideas further."
 
-        # Combine all responses into final output (removing duplicate code)
+        # Combine all responses into final output
         final_output = "\n\n".join([f"Cycle {r['cycle']}/{cycle_count}:\n{r['response']}" for r in all_responses])
 
         # Return combined result
