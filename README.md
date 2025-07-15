@@ -121,6 +121,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
+| handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
@@ -336,6 +337,27 @@ result = agent.tool.use_browser(actions=[
     {"action": "click", "args": {"selector": ".next-page"}},
     {"action": "get_html", "args": {"selector": "main"}}
 ])
+```
+
+### Handoff to User
+
+```python
+from strands import Agent
+from strands_tools import handoff_to_user
+
+agent = Agent(tools=[handoff_to_user])
+
+# Request user confirmation and continue
+response = agent.tool.handoff_to_user(
+    message="I need your approval to proceed with deleting these files. Type 'yes' to confirm.",
+    breakout_of_loop=False
+)
+
+# Complete handoff to user (stops agent execution)
+agent.tool.handoff_to_user(
+    message="Task completed. Please review the results and take any necessary follow-up actions.",
+    breakout_of_loop=True
+)
 ```
 
 ### A2A Client
