@@ -24,8 +24,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
-    "strands-agents[a2a] @ git+https://github.com/strands-agents/sdk-python.git",
+    "strands-agents>=0.1.0,<1.0.0",
+    "strands-agents[a2a]>=0.1.0,<1.0.0",
     "rich>=14.0.0,<15.0.0",
     "sympy>=1.12.0,<2.0.0",
     "prompt_toolkit>=3.0.51,<4.0.0",
