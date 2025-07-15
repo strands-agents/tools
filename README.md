@@ -537,12 +537,20 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 ## Contributing ❤️
 
-We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
-- Reporting bugs & features
-- Development setup
-- Contributing via Pull Requests
-- Code of Conduct
-- Reporting of security issues
+This is a community-driven project, powered by passionate developers like you.
+We enthusiastically welcome contributions from everyone,
+regardless of experience level—your unique perspective is valuable to us!
+
+### How to Get Started?
+
+1. **Find your first opportunity**: If you're new to the project, explore our labeled "good first issues" for beginner-friendly tasks.
+2. **Understand our workflow**: Review our [Contributing Guide](CONTRIBUTING.md)  to learn about our development setup, coding standards, and pull request process.
+3. **Make your impact**: Contributions come in many forms—fixing bugs, enhancing documentation, improving performance, adding features, writing tests, or refining the user experience.
+4. **Submit your work**: When you're ready, submit a well-documented pull request, and our maintainers will provide feedback to help get your changes merged.
+
+Your questions, insights, and ideas are always welcome!
+
+Together, we're building something meaningful that impacts real users. We look forward to collaborating with you!
 
 ## License
 
@@ -552,8 +560,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
-## ⚠️ Preview Status
-
-Strands Agents is currently in public preview. During this period:
-- APIs may change as we refine the SDK
-- We welcome feedback and contributions
