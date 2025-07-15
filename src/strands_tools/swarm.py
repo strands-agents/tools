@@ -298,7 +298,7 @@ class SwarmAgent:
 
             # Construct focused collaborative prompt
             historical_knowledge_str = (
-                json.dumps(historical_knowledge, indent=2)
+                json.dumps(historical_knowledge, indent=2, ensure_ascii=False)
                 if historical_knowledge
                 else "No previous knowledge available yet."
             )
@@ -592,6 +592,7 @@ def swarm(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "inference_config": inference_config,
             "messages": messages,
             "tool_config": tool_config,
+            "agent": kwargs.get("agent"),
         }
         if "callback_handler" in kwargs:
             tool_context["callback_handler"] = kwargs["callback_handler"]
@@ -653,7 +654,9 @@ Key Responsibilities:
 
         # Add collective knowledge
         collective_knowledge = swarm_instance.shared_memory.get_all_knowledge()
-        processed_results.append({"text": f"\n🌟 Collective Knowledge:\n{json.dumps(collective_knowledge, indent=2)}"})
+        processed_results.append(
+            {"text": f"\n🌟 Collective Knowledge:\n{json.dumps(collective_knowledge, indent=2,ensure_ascii=False)}"}
+        )
 
         return {
             "toolUseId": tool_use_id,
