@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "AWS", email = "opensource@amazon.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
