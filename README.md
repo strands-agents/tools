@@ -101,6 +101,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
+| code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
@@ -218,6 +219,33 @@ processed = data.groupby('category').mean()
 processed.head()
 """)
 ```
+
+### Code Interpreter
+
+from strands import Agent
+from strands_tools.code_interpreter import AgentCoreCodeInterpreter
+
+# Create the code interpreter tool
+bedrock_agent_core_code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
+
+# Create a session and execute code
+agent.tool.code_interpreter({
+    "action": {
+        "type": "initSession",
+        "description": "Data analysis session",
+        "session_name": "analysis-session"
+    }
+})
+
+agent.tool.code_interpreter({
+    "action": {
+        "type": "executeCode",
+        "session_name": "analysis-session",
+        "code": "import pandas as pd\nprint('Hello from sandbox!')",
+        "language": "python"
+    }
+})
 
 ### Swarm Intelligence
 
