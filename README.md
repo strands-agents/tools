@@ -127,7 +127,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
-| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+| browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 
 \* *These tools do not work on windows*
 
@@ -383,30 +383,31 @@ result = agent.tool.agent_core_memory(
 )
 ```
 
-### Use Browser
+### Browser
 ```python
 from strands import Agent
-from strands_tools import use_browser
+from strands_tools.browser import LocalChromiumBrowser
 
-agent = Agent(tools=[use_browser])
+# Create browser tool
+browser = LocalChromiumBrowser()
+agent = Agent(tools=[browser.browser])
 
 # Simple navigation
-result = agent.tool.use_browser(action="navigate", url="https://example.com")
+result = agent.tool.browser({
+    "action": {
+        "type": "navigate",
+        "url": "https://example.com"
+    }
+})
 
-# Sequential actions for form filling
-result = agent.tool.use_browser(actions=[
-    {"action": "navigate", "args": {"url": "https://example.com/login"}},
-    {"action": "type", "args": {"selector": "#username", "text": "user@example.com"}},
-    {"action": "click", "args": {"selector": "#submit"}}
-])
-
-# Web scraping with content extraction
-result = agent.tool.use_browser(actions=[
-    {"action": "navigate", "args": {"url": "https://example.com/data"}},
-    {"action": "get_text", "args": {"selector": ".content"}},
-    {"action": "click", "args": {"selector": ".next-page"}},
-    {"action": "get_html", "args": {"selector": "main"}}
-])
+# Initialize a session first
+result = agent.tool.browser({
+    "action": {
+        "type": "initSession",
+        "session_name": "main-session",
+        "description": "Web automation session"
+    }
+})
 ```
 
 ### Handoff to User
