@@ -592,7 +592,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
 
-#### Use Browser Tool
+#### Browser Tool
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|

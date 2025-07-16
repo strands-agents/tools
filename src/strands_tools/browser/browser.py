@@ -668,7 +668,10 @@ class Browser(ABC):
             new_page = await session.context.new_page()
             session.add_tab(tab_id, new_page)
 
-            return {"status": "success", "content": [{"text": f"Created new tab with ID: {tab_id} and switched active tab to {tab_id}."}]}
+            return {
+                "status": "success",
+                "content": [{"text": f"Created new tab with ID: {tab_id} and switched active tab to {tab_id}."}],
+            }
         except Exception as e:
             logger.debug("exception=<%s> | new tab action failed", str(e))
             return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
