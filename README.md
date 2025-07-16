@@ -104,6 +104,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
+| agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
@@ -310,6 +311,47 @@ result = agent.tool.batch(
             }
         },
     ]
+)
+```
+
+### AgentCore Memory
+
+```python
+from strands import Agent
+from strands_tools.agent_core_memory import AgentCoreMemoryToolProvider
+
+
+provider = AgentCoreMemoryToolProvider(
+    memory_id="memory-123abc",  # Required
+    actor_id="user-456",        # Required
+    session_id="session-789",   # Required
+    namespace="default",        # Required
+    region="us-west-2"          # Optional, defaults to us-west-2
+)
+
+agent = Agent(tools=provider.tools)
+
+# Create a new memory
+result = agent.tool.agent_core_memory(
+    action="record",
+    content="I am allergic to shellfish"
+)
+
+# Search for relevant memories
+result = agent.tool.agent_core_memory(
+    action="retrieve",
+    query="user preferences"
+)
+
+# List all memories
+result = agent.tool.agent_core_memory(
+    action="list"
+)
+
+# Get a specific memory by ID
+result = agent.tool.agent_core_memory(
+    action="get",
+    memory_record_id="mr-12345"
 )
 ```
 
