@@ -6,7 +6,7 @@ from strands_tools import load_tool
 @pytest.fixture
 def temporary_tool(tmp_path):
     # Create a simple tool in a temporary directory
-    tools_dir = tmp_path / ".strand" / "tools"
+    tools_dir = tmp_path / ".strands" / "tools"
     tools_dir.mkdir(parents=True, exist_ok=True)
     tools_dir_str = str(tools_dir)
 
