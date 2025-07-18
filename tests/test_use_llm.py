@@ -192,7 +192,7 @@ def test_use_llm_with_parent_agent_callback():
 
     # Create a mock parent agent with a callback handler
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry.values.return_value = []
+    mock_parent_agent.tool_registry.list_tools.return_value = {}
     mock_parent_agent.trace_attributes = {"test_attribute": "test_value"}
     mock_parent_agent.callback_handler = MagicMock(name="parent_callback_handler")
 
@@ -232,7 +232,7 @@ def test_use_llm_with_explicit_callback():
 
     # Create a mock parent agent with a callback handler
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry.values.return_value = []
+    mock_parent_agent.tool_registry.list_tools.return_value = {}
     mock_parent_agent.trace_attributes = {"test_attribute": "test_value"}
     mock_parent_agent.callback_handler = MagicMock(name="parent_callback_handler")
 
@@ -284,11 +284,13 @@ def test_use_llm_with_tool_filtering():
 
     # Create a mock parent agent with multiple tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {
+    mock_tools = {
         "calculator": mock_calculator_tool,
         "file_read": mock_file_read_tool,
         "other_tool": mock_other_tool,
     }
+    mock_parent_agent.tool_registry.list_tools.return_value = mock_tools
+    mock_parent_agent.tool_registry.read_tool = lambda name: mock_tools[name] if name in mock_tools else None
     mock_parent_agent.trace_attributes = {}
     mock_parent_agent.callback_handler = MagicMock()
 
@@ -338,7 +340,9 @@ def test_use_llm_with_nonexistent_tool_filtering():
 
     # Create a mock parent agent with limited tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {"calculator": mock_calculator_tool, "file_read": mock_file_read_tool}
+    mock_tools = {"calculator": mock_calculator_tool, "file_read": mock_file_read_tool}
+    mock_parent_agent.tool_registry.list_tools.return_value = mock_tools
+    mock_parent_agent.tool_registry.read_tool = lambda name: mock_tools[name] if name in mock_tools else None
     mock_parent_agent.trace_attributes = {}
     mock_parent_agent.callback_handler = MagicMock()
 
@@ -381,7 +385,9 @@ def test_use_llm_with_empty_tool_filtering():
 
     # Create a mock parent agent with tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {"calculator": MagicMock(), "file_read": MagicMock()}
+    mock_tools = {"calculator": MagicMock(), "file_read": MagicMock()}
+    mock_parent_agent.tool_registry.list_tools.return_value = mock_tools
+    mock_parent_agent.tool_registry.read_tool = lambda name: mock_tools[name] if name in mock_tools else None
     mock_parent_agent.trace_attributes = {}
     mock_parent_agent.callback_handler = MagicMock()
 
@@ -428,11 +434,8 @@ def test_use_llm_without_tool_filtering_inherits_all():
 
     # Create a mock parent agent with multiple tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry.values.return_value = [
-        mock_calculator_tool,
-        mock_file_read_tool,
-        mock_other_tool,
-    ]
+    mock_tools = [mock_calculator_tool, mock_file_read_tool, mock_other_tool]
+    mock_parent_agent.tool_registry.list_tools.return_value = {f"tool_{i}": tool for i, tool in enumerate(mock_tools)}
     mock_parent_agent.trace_attributes = {}
     mock_parent_agent.callback_handler = MagicMock()
 

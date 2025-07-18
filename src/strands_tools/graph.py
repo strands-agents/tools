@@ -150,13 +150,15 @@ def create_agent_with_model(
         if tools:
             # Filter parent agent tools to only include specified tool names
             for tool_name in tools:
-                if tool_name in parent_agent.tool_registry.registry:
-                    agent_tools.append(parent_agent.tool_registry.registry[tool_name])
-                else:
+                try:
+                    tool_spec = parent_agent.tool_registry.read_tool(tool_name)
+                    agent_tools.append(tool_spec)
+                except ValueError:
                     logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
         else:
             # Use all parent agent tools
-            agent_tools = list(parent_agent.tool_registry.registry.values())
+            tools_dict = parent_agent.tool_registry.list_tools()
+            agent_tools = list(tools_dict.values())
 
     # Create and return agent
     kwargs = {}
@@ -213,7 +215,7 @@ class GraphManager:
                     # Create basic agent with parent agent's model and tools
                     # Get all tools from parent agent if no specific tools configuration
                     parent_tools = (
-                        list(parent_agent.tool_registry.registry.values()) if parent_agent.tool_registry else []
+                        list(parent_agent.tool_registry.list_tools().values()) if parent_agent.tool_registry else []
                     )
                     node_agent = Agent(
                         system_prompt=node_def["system_prompt"],

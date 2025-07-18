@@ -24,13 +24,15 @@ def mock_parent_agent():
     mock_agent.tool_registry = mock_tool_registry
 
     # Mock some tools in the registry
-    mock_tool_registry.registry = {
+    mock_tools = {
         "calculator": MagicMock(),
         "file_read": MagicMock(),
         "editor": MagicMock(),
         "http_request": MagicMock(),
         "test_tool": MagicMock(),
     }
+    mock_tool_registry.list_tools.return_value = mock_tools
+    mock_tool_registry.read_tool = lambda name: mock_tools[name] if name in mock_tools else None
 
     # Mock model and other attributes
     mock_agent.model = MagicMock()
@@ -241,9 +243,10 @@ def test_use_agent_with_tool_filtering(mock_parent_agent, mock_agent_result):
         assert len(filtered_tools) == 2
 
         # Verify the tools were selected from parent registry
+        mock_tools = mock_parent_agent.tool_registry.list_tools()
         expected_tools = [
-            mock_parent_agent.tool_registry.registry["calculator"],
-            mock_parent_agent.tool_registry.registry["file_read"],
+            mock_tools["calculator"],
+            mock_tools["file_read"],
         ]
         assert filtered_tools == expected_tools
 
@@ -303,7 +306,7 @@ def test_use_agent_inherit_all_tools(mock_parent_agent, mock_agent_result):
         inherited_tools = call_kwargs["tools"]
 
         # Should have all tools from parent registry
-        expected_tools = list(mock_parent_agent.tool_registry.registry.values())
+        expected_tools = list(mock_parent_agent.tool_registry.list_tools().values())
         assert inherited_tools == expected_tools
 
         assert result["status"] == "success"

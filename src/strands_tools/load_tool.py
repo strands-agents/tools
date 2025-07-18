@@ -81,7 +81,7 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
     -------------------
     - Expands the path to handle user paths with tilde (~)
     - Validates that the file exists at the specified path
-    - Uses the tool_registry's load_tool_from_filepath method to:
+    - Uses the tool_registry's create_tool method to:
       * Parse the Python file
       * Extract the tool function and metadata
       * Register the tool with the provided name
@@ -198,7 +198,7 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
             raise FileNotFoundError(f"Tool file not found: {path}")
 
         # Load the tool using the agent's tool registry
-        current_agent.tool_registry.load_tool_from_filepath(tool_name=name, tool_path=path)
+        current_agent.tool_registry.create_tool({"name": name, "path": path})
 
         # Return success message with tool details
         message = f"✅ Tool '{name}' loaded successfully from {path}"

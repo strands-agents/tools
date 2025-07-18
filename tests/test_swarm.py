@@ -24,7 +24,7 @@ def mock_parent_agent():
     mock_agent.tool_registry = mock_tool_registry
 
     # Mock some tools in the registry
-    mock_tool_registry.registry = {
+    mock_tools = {
         "calculator": MagicMock(),
         "file_read": MagicMock(),
         "editor": MagicMock(),
@@ -32,6 +32,7 @@ def mock_parent_agent():
         "generate_image": MagicMock(),
         "file_write": MagicMock(),
     }
+    mock_tool_registry.list_tools.return_value = mock_tools
 
     # Mock model and other attributes
     mock_agent.model = MagicMock()

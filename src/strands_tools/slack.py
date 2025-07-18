@@ -350,7 +350,7 @@ class SocketModeHandler:
             logger.info("Skipping own message")
             return
 
-        tools = list(self.agent.tool_registry.registry.values())
+        tools = list(self.agent.tool_registry.list_tools().values())
         trace_attributes = self.agent.trace_attributes
 
         agent = Agent(
@@ -435,7 +435,7 @@ class SocketModeHandler:
         """Process an interactive event."""
         # Process interactive events similar to messages
         if client and self.agent:
-            tools = list(self.agent.tool_registry.registry.values())
+            tools = list(self.agent.tool_registry.list_tools().values())
 
             agent = Agent(messages=[], system_prompt=SLACK_SYSTEM_PROMPT, tools=tools, callback_handler=None)
 
