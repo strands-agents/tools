@@ -102,12 +102,13 @@ Please provide your analysis directly:
             if specified_tools is not None:
                 # Filter parent agent tools to only include specified tool names
                 for tool_name in specified_tools:
-                    if tool_name in parent_agent.tool_registry.registry:
-                        filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
+                    tool_spec = parent_agent.tool_registry.read_tool(tool_name)
+                    if tool_spec is not None:
+                        filtered_tools.append(tool_spec)
                     else:
                         logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
             else:
-                filtered_tools = list(parent_agent.tool_registry.registry.values())
+                filtered_tools = list(parent_agent.tool_registry.list_tools().values())
 
         # Determine which model to use
         selected_model = None

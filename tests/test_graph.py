@@ -23,7 +23,7 @@ def mock_parent_agent():
     mock_agent.tool_registry = mock_tool_registry
 
     # Mock some tools in the registry
-    mock_tool_registry.registry = {
+    mock_tools = {
         "calculator": MagicMock(),
         "file_read": MagicMock(),
         "file_write": MagicMock(),
@@ -31,6 +31,8 @@ def mock_parent_agent():
         "http_request": MagicMock(),
         "researcher_tool": MagicMock(),
     }
+    mock_tool_registry.list_tools.return_value = mock_tools
+    mock_tool_registry.read_tool = lambda name: mock_tools[name] if name in mock_tools else None
 
     # Mock model and other attributes
     mock_agent.model = MagicMock()

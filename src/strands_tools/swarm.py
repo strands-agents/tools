@@ -191,7 +191,7 @@ def _create_custom_agents(
         agent_tools = spec.get("tools")
         if agent_tools and parent_agent and hasattr(parent_agent, "tool_registry"):
             # Filter tools to ensure they exist in parent agent's registry
-            available_tools = parent_agent.tool_registry.registry.keys()
+            available_tools = parent_agent.tool_registry.list_tools().keys()
             agent_tools = [tool for tool in agent_tools if tool in available_tools]
             if len(agent_tools) != len(spec.get("tools", [])):
                 missing_tools = set(spec.get("tools", [])) - set(agent_tools)
