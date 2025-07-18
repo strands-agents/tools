@@ -185,6 +185,9 @@ def test_list_documents_with_defaults(mock_session):
     # Mock get_data_source_id
     agent_client.list_data_sources.return_value = {"dataSourceSummaries": [{"dataSourceId": "ds123"}]}
 
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
     # Initialize client
     client = MemoryServiceClient()
 
@@ -228,6 +231,9 @@ def test_get_document(mock_session):
     # Mock get_data_source_id
     agent_client.list_data_sources.return_value = {"dataSourceSummaries": [{"dataSourceId": "ds123"}]}
 
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
     # Initialize client
     client = MemoryServiceClient()
 
@@ -253,6 +259,12 @@ def test_store_document(mock_session):
 
     # Mock get_data_source_id
     agent_client.list_data_sources.return_value = {"dataSourceSummaries": [{"dataSourceId": "ds123"}]}
+
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
 
     # Mock ingest response
     agent_client.ingest_knowledge_base_documents.return_value = {"status": "success"}
@@ -299,6 +311,12 @@ def test_store_document_no_title(mock_session):
     # Mock get_data_source_id
     agent_client.list_data_sources.return_value = {"dataSourceSummaries": [{"dataSourceId": "ds123"}]}
 
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
     # Mock ingest response
     agent_client.ingest_knowledge_base_documents.return_value = {"status": "success"}
 
@@ -334,6 +352,12 @@ def test_delete_document(mock_session):
 
     # Mock get_data_source_id
     agent_client.list_data_sources.return_value = {"dataSourceSummaries": [{"dataSourceId": "ds123"}]}
+
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
+
+    # Mock get_data_source for _detect_data_source_type method
+    agent_client.get_data_source.return_value = {"dataSource": {"dataSourceConfiguration": {"type": "CUSTOM"}}}
 
     # Mock delete response
     agent_client.delete_knowledge_base_documents.return_value = {"status": "success"}
