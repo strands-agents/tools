@@ -31,6 +31,20 @@ def mock_memory_formatter():
     return formatter
 
 
+@pytest.fixture
+def mock_boto3_session():
+    """Create a mock boto3 session."""
+    session = MagicMock()
+
+    # Mock the client method to return appropriate clients
+    def get_client(service_name, **kwargs):
+        client = MagicMock()
+        return client
+
+    session.client.side_effect = get_client
+    return session
+
+
 def extract_result_text(result):
     """Extract the result text from the agent response."""
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
@@ -41,7 +55,12 @@ def extract_result_text(result):
 @patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
-def test_list_documents(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
+def test_list_documents(
+    mock_get_formatter,
+    mock_get_client,
+    mock_memory_service_client,
+    mock_memory_formatter,
+):
     """Test list documents functionality."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
@@ -50,7 +69,11 @@ def test_list_documents(mock_get_formatter, mock_get_client, mock_memory_service
     # Mock data
     list_response = {
         "documentDetails": [
-            {"identifier": {"custom": {"id": "doc123"}}, "status": "INDEXED", "updatedAt": "2023-05-09T10:00:00Z"}
+            {
+                "identifier": {"custom": {"id": "doc123"}},
+                "status": "INDEXED",
+                "updatedAt": "2023-05-09T10:00:00Z",
+            }
         ]
     }
 
@@ -72,10 +95,18 @@ def test_list_documents(mock_get_formatter, mock_get_client, mock_memory_service
     mock_memory_formatter.format_list_response.assert_called_once_with(list_response)
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
+@patch.dict(
+    os.environ,
+    {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"},
+)
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
-def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
+def test_store_document(
+    mock_get_formatter,
+    mock_get_client,
+    mock_memory_service_client,
+    mock_memory_formatter,
+):
     """Test store document functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
@@ -87,7 +118,11 @@ def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service
 
     # Configure mocks
     mock_memory_service_client.get_data_source_id.return_value = "ds123"
-    mock_memory_service_client.store_document.return_value = ({"status": "success"}, doc_id, doc_title)
+    mock_memory_service_client.store_document.return_value = (
+        {"status": "success"},
+        doc_id,
+        doc_title,
+    )
     mock_memory_formatter.format_store_response.return_value = [
         {"text": "✅ Successfully stored content in knowledge base:"},
         {"text": f"📝 Title: {doc_title}"},
@@ -107,8 +142,11 @@ def test_store_document(mock_get_formatter, mock_get_client, mock_memory_service
 
 
 @patch("strands_tools.memory.get_memory_service_client")
-def test_store_document_different_region(mock_memory_service_client):
+def test_store_document_different_region(mock_get_client):
     """Test store document functionality with a different region than default."""
+    # Setup mock
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
 
     # Mock data
     doc_title = "Test Title"
@@ -119,13 +157,21 @@ def test_store_document_different_region(mock_memory_service_client):
     # Verify correct functions were called and that the specified region was used
     # memory_service_client uses region as the parameter name,
     # while the memory tool uses region_name to maintain the standard of public AWS APIs
-    mock_memory_service_client.assert_called_once_with(region="eu-west-1")
+    mock_get_client.assert_called_once_with(region="eu-west-1", session=None)
 
 
-@patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"})
+@patch.dict(
+    os.environ,
+    {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb", "BYPASS_TOOL_CONSENT": "true"},
+)
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
-def test_delete_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
+def test_delete_document(
+    mock_get_formatter,
+    mock_get_client,
+    mock_memory_service_client,
+    mock_memory_formatter,
+):
     """Test delete document functionality with BYPASS_TOOL_CONSENT mode enabled."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
@@ -159,7 +205,12 @@ def test_delete_document(mock_get_formatter, mock_get_client, mock_memory_servic
 @patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
-def test_get_document(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
+def test_get_document(
+    mock_get_formatter,
+    mock_get_client,
+    mock_memory_service_client,
+    mock_memory_formatter,
+):
     """Test get document functionality."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
@@ -203,7 +254,12 @@ def test_get_document(mock_get_formatter, mock_get_client, mock_memory_service_c
 @patch.dict(os.environ, {"STRANDS_KNOWLEDGE_BASE_ID": "test123kb"})
 @patch("strands_tools.memory.get_memory_service_client")
 @patch("strands_tools.memory.get_memory_formatter")
-def test_retrieve(mock_get_formatter, mock_get_client, mock_memory_service_client, mock_memory_formatter):
+def test_retrieve(
+    mock_get_formatter,
+    mock_get_client,
+    mock_memory_service_client,
+    mock_memory_formatter,
+):
     """Test retrieve functionality."""
     # Setup mocks
     mock_get_client.return_value = mock_memory_service_client
@@ -323,18 +379,48 @@ def test_action_specific_missing_params(mock_get_client):
 
 
 @patch("boto3.Session")
-def test_memory_service_client_init(mock_session):
+def test_memory_service_client_init(mock_session_class):
     """Test MemoryServiceClient initialization."""
+    # Create a mock session instance
+    mock_session_instance = MagicMock()
+    mock_session_class.return_value = mock_session_instance
+
     # Test with default parameters
     client = MemoryServiceClient()
     assert client.region == os.environ.get("AWS_REGION", "us-west-2")
     assert client.profile_name is None
+    assert client.session is None
 
-    # Test with custom parameters
-    custom_client = MemoryServiceClient(region="us-east-1", profile_name="test-profile")
-    assert custom_client.region == "us-east-1"
-    assert custom_client.profile_name == "test-profile"
-    mock_session.assert_called_with(profile_name="test-profile")
+    # Test with custom region
+    client_region = MemoryServiceClient(region="us-east-1")
+    assert client_region.region == "us-east-1"
+    assert client_region.profile_name is None
+    assert client_region.session is None
+
+    # Test with profile name (should create a session)
+    client_profile = MemoryServiceClient(profile_name="test-profile")
+    assert client_profile.region == os.environ.get("AWS_REGION", "us-west-2")
+    assert client_profile.profile_name == "test-profile"
+    assert client_profile.session == mock_session_instance
+    mock_session_class.assert_called_with(profile_name="test-profile")
+
+    # Test with provided session
+    provided_session = MagicMock()
+    client_session = MemoryServiceClient(session=provided_session)
+    assert client_session.region == os.environ.get("AWS_REGION", "us-west-2")
+    assert client_session.profile_name is None
+    assert client_session.session == provided_session
+
+    # Test with all parameters (profile should override session)
+    mock_session_class.reset_mock()
+    new_session_instance = MagicMock()
+    mock_session_class.return_value = new_session_instance
+
+    client_all = MemoryServiceClient(region="eu-west-1", profile_name="override-profile", session=provided_session)
+    assert client_all.region == "eu-west-1"
+    assert client_all.profile_name == "override-profile"
+    assert client_all.session == new_session_instance  # New session created by profile
+    mock_session_class.assert_called_with(profile_name="override-profile")
 
 
 def test_memory_formatter():
@@ -349,7 +435,11 @@ def test_memory_formatter():
     # Test format_list_response with documents
     list_response = {
         "documentDetails": [
-            {"identifier": {"custom": {"id": "doc123"}}, "status": "INDEXED", "updatedAt": "2023-05-09T10:00:00Z"}
+            {
+                "identifier": {"custom": {"id": "doc123"}},
+                "status": "INDEXED",
+                "updatedAt": "2023-05-09T10:00:00Z",
+            }
         ]
     }
     list_content = formatter.format_list_response(list_response)
