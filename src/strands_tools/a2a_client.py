@@ -6,10 +6,6 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
-
-Warning: when using this collection of tools ensure max_parallel_tools>1 for your Strands Agent.
-This is typically set by default since the the Strands Agents use cpu count as the default value.
-However, if you see "event loop is already running" errors, you should ensure max_parallel_tools>1.
 """
 
 import asyncio
@@ -24,7 +20,7 @@ from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMes
 from strands import tool
 from strands.types.tools import AgentTool
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +65,7 @@ class A2AClientToolProvider:
         return tools
 
     def _run_async(self, coro):
-        """Handle async-to-sync conversion internally.
-
-        This function requires max_parallel_tools>1 on the Strands Agent.
-        """
+        """Handle async-to-sync conversion internally."""
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -133,7 +126,7 @@ class A2AClientToolProvider:
         return agent_card
 
     @tool
-    def discover_agent(self, url: str) -> dict[str, Any]:
+    def a2a_discover_agent(self, url: str) -> dict[str, Any]:
         """
         Discover an A2A agent and return its agent card with capabilities.
 
@@ -171,7 +164,7 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def list_discovered_agents(self) -> dict[str, Any]:
+    def a2a_list_discovered_agents(self) -> dict[str, Any]:
         """
         List all discovered A2A agents and their capabilities.
 
@@ -205,7 +198,9 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def send_message(self, message_text: str, target_agent_url: str, message_id: str | None = None) -> dict[str, Any]:
+    def a2a_send_message(
+        self, message_text: str, target_agent_url: str, message_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
 
