@@ -38,6 +38,13 @@ result = agent.tool.shell(
 # Execute commands in parallel
 result = agent.tool.shell(command=["task1", "task2"], parallel=True)
 ```
+
+Configuration:
+- STRANDS_NON_INTERACTIVE (environment variable): Set to "true" to run the tool
+  in a non-interactive mode, suppressing all user prompts for confirmation.
+- BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
+  user confirmation prompt, even in an otherwise interactive session.
+
 """
 
 import json
@@ -184,17 +191,18 @@ class CommandExecutor:
         self.exit_code = None
         self.error = None
 
-    def execute_with_pty(self, command: str, cwd: str) -> Tuple[int, str, str]:
+    def execute_with_pty(self, command: str, cwd: str, non_interactive_mode: bool) -> Tuple[int, str, str]:
         """Execute command with PTY and timeout support."""
         output = []
         start_time = time.time()
-
+        old_tty = None
+        pid = -1
         # Save original terminal settings
-        try:
-            old_tty = termios.tcgetattr(sys.stdin)
-        except BaseException:
-            old_tty = None
-
+        if not non_interactive_mode:
+            try:
+                old_tty = termios.tcgetattr(sys.stdin)
+            except BaseException:
+                non_interactive_mode = True
         try:
             # Fork a new PTY
             pid, fd = pty.fork()
@@ -207,21 +215,25 @@ class CommandExecutor:
                     logger.debug(f"Error in child: {e}")
                     sys.exit(1)
             else:  # Parent process
-                try:
-                    if old_tty:
-                        tty.setraw(sys.stdin.fileno())
-                except Exception as e:
-                    logger.debug(f"Warning: Could not set raw mode: {e}")
-
+                if not non_interactive_mode and old_tty:
+                    tty.setraw(sys.stdin.fileno())
                 while True:
                     if time.time() - start_time > self.timeout:
-                        os.kill(pid, signal.SIGTERM)
+                        try:
+                            # This kill entire group, not just parent shell.
+                            os.killpg(os.getpgid(pid), signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
                         raise TimeoutError(f"Command timed out after {self.timeout} seconds")
 
+                    fds_to_watch = [fd]
+                    if not non_interactive_mode:
+                        fds_to_watch.append(sys.stdin)
+
                     try:
-                        readable, writable, exceptional = select.select([fd, sys.stdin], [], [], 0.1)
-                    except (select.error, TypeError) as select_error:
-                        logger.debug(f"Warning: select() failed: {select_error}")
+                        readable, _, _ = select.select(fds_to_watch, [], [], 0.1)
+                    except (select.error, ValueError):
+                        logger.debug("select() failed, assuming process ended.")
                         break
 
                     if fd in readable:
@@ -235,41 +247,43 @@ class CommandExecutor:
                         except OSError:
                             break
 
-                    if sys.stdin in readable:
+                    # Handle interactive input from user
+                    if not non_interactive_mode and sys.stdin in readable:
                         try:
-                            stdin_data: bytes = os.read(sys.stdin.fileno(), 1024)
-                            os.write(fd, stdin_data)  # bytes to bytes is fine
+                            stdin_data = os.read(sys.stdin.fileno(), 1024)
+                            os.write(fd, stdin_data)
                         except OSError:
                             break
-
                 try:
                     _, status = os.waitpid(pid, 0)
-                    exit_code = os.WEXITSTATUS(status)
-                except OSError as e:
-                    logger.debug(f"Error waiting for process: {e}")
-                    exit_code = 1
+                    if os.WIFEXITED(status):
+                        exit_code = os.WEXITSTATUS(status)
+                    else:
+                        exit_code = -1  # Process was terminated by a signal
+                except OSError:
+                    exit_code = -1  # waitpid failed
 
+                # In non_interactive_mode, we should not print the live output to the console.
+                # The captured output is returned for the agent to process.
                 return exit_code, "".join(output), ""
 
         finally:
-            if old_tty:
-                try:
-                    termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
-                    current_tty = termios.tcgetattr(sys.stdin)
-                    if current_tty != old_tty:
-                        logger.debug("Warning: Terminal settings not fully restored!")
-                except Exception as restore_error:
-                    logger.debug(f"Error restoring terminal settings: {restore_error}")
-                    os.system("stty sane")
+            # Restore terminal settings only if they were saved and changed.
+            if not non_interactive_mode and old_tty:
+                termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
 
 
-def execute_single_command(command: Union[str, Dict], work_dir: str, timeout: int) -> Dict[str, Any]:
+def execute_single_command(
+    command: Union[str, Dict], work_dir: str, timeout: int, non_interactive_mode: bool
+) -> Dict[str, Any]:
     """Execute a single command and return its results."""
     cmd_str, cmd_opts = validate_command(command)
     executor = CommandExecutor(timeout=timeout)
 
     try:
-        exit_code, output, error = executor.execute_with_pty(cmd_str, work_dir)
+        exit_code, output, error = executor.execute_with_pty(
+            cmd_str, work_dir, non_interactive_mode=non_interactive_mode
+        )
 
         result = {
             "command": cmd_str,
@@ -329,6 +343,7 @@ def execute_commands(
     ignore_errors: bool,
     work_dir: str,
     timeout: int,
+    non_interactive_mode: bool,
 ) -> List[Dict[str, Any]]:
     """Execute multiple commands either sequentially or in parallel."""
     results = []
@@ -337,7 +352,10 @@ def execute_commands(
     if parallel:
         # For parallel execution, use the initial work_dir for all commands
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(execute_single_command, cmd, work_dir, timeout) for cmd in commands]
+            futures = [
+                executor.submit(execute_single_command, cmd, work_dir, timeout, non_interactive_mode)
+                for cmd in commands
+            ]
 
             for future in as_completed(futures):
                 result = future.result()
@@ -354,7 +372,9 @@ def execute_commands(
             cmd_str = cmd if isinstance(cmd, str) else cmd.get("command", "")
 
             # Execute in current context directory
-            result = execute_single_command(cmd, context.current_dir, timeout)
+            result = execute_single_command(
+                cmd, context.current_dir, timeout, non_interactive_mode=non_interactive_mode
+            )
             results.append(result)
 
             # Update context if command was successful
@@ -371,14 +391,9 @@ def normalize_commands(
     command: Union[str, List[Union[str, Dict[Any, Any]]], Dict[Any, Any]],
 ) -> List[Union[str, Dict]]:
     """Convert command input into a normalized list of commands."""
-    if isinstance(command, str):
-        return [command]
-    if isinstance(command, list):  # Changed from elif to if to avoid unreachable code warning
+    if isinstance(command, list):
         return command
-    if isinstance(command, dict):  # Explicit check for dict type
-        return [command]
-    # Fallback case (though all cases should be handled above)
-    return [str(command)]  # type: ignore # Convert to string as last resort
+    return [command]
 
 
 def format_command_preview(command: Union[str, Dict], parallel: bool, ignore_errors: bool, work_dir: str) -> Panel:
@@ -478,8 +493,9 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool.get("toolUseId", "default-id")
     tool_input = tool.get("input", {})
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
+    is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+    # Here we keep both doors open,but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
+    non_interactive_mode = is_strands_non_interactive or kwargs.get("non_interactive_mode", False)
 
     # Extract and validate parameters
     command_input = tool_input.get("command")
@@ -542,7 +558,9 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
         if not non_interactive_mode:
             console.print("\n[bold green]⏳ Starting Command Execution...[/bold green]\n")
 
-        results = execute_commands(commands, parallel, ignore_errors, work_dir, timeout)
+        results = execute_commands(
+            commands, parallel, ignore_errors, work_dir, timeout, non_interactive_mode=non_interactive_mode
+        )
 
         if not non_interactive_mode:
             console.print("\n[bold green]✅ Command Execution Complete[/bold green]\n")
