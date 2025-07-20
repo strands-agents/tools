@@ -193,10 +193,16 @@ def test_think_with_nonexistent_tool_filtering():
 
     # Create a mock parent agent with limited tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {"calculator": mock_calculator_tool, "file_read": mock_file_read_tool}
+    mock_parent_agent.tool_registry.registry = {
+        "calculator": mock_calculator_tool,
+        "file_read": mock_file_read_tool,
+    }
     mock_parent_agent.trace_attributes = {}
 
-    with patch("strands_tools.think.Agent") as mock_agent_class, patch("strands_tools.think.logger") as mock_logger:
+    with (
+        patch("strands_tools.think.Agent") as mock_agent_class,
+        patch("strands_tools.think.logger") as mock_logger,
+    ):
         mock_agent = mock_agent_class.return_value
         mock_result = AgentResult(
             message={"content": [{"text": "Analysis with missing tool."}]},
@@ -236,7 +242,10 @@ def test_think_with_empty_tool_filtering():
     """Test think tool with empty tools list (should result in no tools)."""
     # Create a mock parent agent with tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {"calculator": MagicMock(), "file_read": MagicMock()}
+    mock_parent_agent.tool_registry.registry = {
+        "calculator": MagicMock(),
+        "file_read": MagicMock(),
+    }
     mock_parent_agent.trace_attributes = {}
 
     with patch("strands_tools.think.Agent") as mock_agent_class:
@@ -327,7 +336,10 @@ def test_think_tool_filtering_with_multiple_cycles():
 
     # Create a mock parent agent with tools
     mock_parent_agent = MagicMock()
-    mock_parent_agent.tool_registry.registry = {"calculator": mock_calculator_tool, "file_read": mock_file_read_tool}
+    mock_parent_agent.tool_registry.registry = {
+        "calculator": mock_calculator_tool,
+        "file_read": mock_file_read_tool,
+    }
     mock_parent_agent.trace_attributes = {}
 
     with patch("strands_tools.think.Agent") as mock_agent_class:
