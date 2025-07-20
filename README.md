@@ -32,7 +32,7 @@
   </p>
 </div>
 
-Strands Agents Tools provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
+Strands Agents Tools is a community-driven project that provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
 
@@ -55,6 +55,7 @@ Strands Agents Tools provides a powerful set of tools for your agents to use. It
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 - 🐘 **Query Postgres** – Query PostgreSQL with Natural Language
+
 ## 📦 Installation
 
 ### Quick Install
@@ -101,9 +102,11 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
+| code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
+| agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
@@ -125,7 +128,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
-| use_browser | `agent.tool.use_browser(action="navigate", url="https://www.example.com")	` | Web scraping, automated testing, form filling, web automation tasks |
+| browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | query_postgres | `agent.tool.query_postgres(query="SELECT name FROM users WHERE active = true")` | Run secure, read-only PostgreSQL queries for insights |
 \* *These tools do not work on windows*
 
@@ -217,6 +220,33 @@ processed = data.groupby('category').mean()
 processed.head()
 """)
 ```
+
+### Code Interpreter
+
+from strands import Agent
+from strands_tools.code_interpreter import AgentCoreCodeInterpreter
+
+# Create the code interpreter tool
+bedrock_agent_core_code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
+
+# Create a session and execute code
+agent.tool.code_interpreter({
+    "action": {
+        "type": "initSession",
+        "description": "Data analysis session",
+        "session_name": "analysis-session"
+    }
+})
+
+agent.tool.code_interpreter({
+    "action": {
+        "type": "executeCode",
+        "session_name": "analysis-session",
+        "code": "import pandas as pd\nprint('Hello from sandbox!')",
+        "language": "python"
+    }
+})
 
 ### Swarm Intelligence
 
@@ -313,30 +343,72 @@ result = agent.tool.batch(
 )
 ```
 
-### Use Browser
+### AgentCore Memory
+
 ```python
 from strands import Agent
-from strands_tools import use_browser
+from strands_tools.agent_core_memory import AgentCoreMemoryToolProvider
 
-agent = Agent(tools=[use_browser])
+
+provider = AgentCoreMemoryToolProvider(
+    memory_id="memory-123abc",  # Required
+    actor_id="user-456",        # Required
+    session_id="session-789",   # Required
+    namespace="default",        # Required
+    region="us-west-2"          # Optional, defaults to us-west-2
+)
+
+agent = Agent(tools=provider.tools)
+
+# Create a new memory
+result = agent.tool.agent_core_memory(
+    action="record",
+    content="I am allergic to shellfish"
+)
+
+# Search for relevant memories
+result = agent.tool.agent_core_memory(
+    action="retrieve",
+    query="user preferences"
+)
+
+# List all memories
+result = agent.tool.agent_core_memory(
+    action="list"
+)
+
+# Get a specific memory by ID
+result = agent.tool.agent_core_memory(
+    action="get",
+    memory_record_id="mr-12345"
+)
+```
+
+### Browser
+```python
+from strands import Agent
+from strands_tools.browser import LocalChromiumBrowser
+
+# Create browser tool
+browser = LocalChromiumBrowser()
+agent = Agent(tools=[browser.browser])
 
 # Simple navigation
-result = agent.tool.use_browser(action="navigate", url="https://example.com")
+result = agent.tool.browser({
+    "action": {
+        "type": "navigate",
+        "url": "https://example.com"
+    }
+})
 
-# Sequential actions for form filling
-result = agent.tool.use_browser(actions=[
-    {"action": "navigate", "args": {"url": "https://example.com/login"}},
-    {"action": "type", "args": {"selector": "#username", "text": "user@example.com"}},
-    {"action": "click", "args": {"selector": "#submit"}}
-])
-
-# Web scraping with content extraction
-result = agent.tool.use_browser(actions=[
-    {"action": "navigate", "args": {"url": "https://example.com/data"}},
-    {"action": "get_text", "args": {"selector": ".content"}},
-    {"action": "click", "args": {"selector": ".next-page"}},
-    {"action": "get_html", "args": {"selector": "main"}}
-])
+# Initialize a session first
+result = agent.tool.browser({
+    "action": {
+        "type": "initSession",
+        "session_name": "main-session",
+        "description": "Web automation session"
+    }
+})
 ```
 
 ### Handoff to User
@@ -565,7 +637,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
 
-#### Use Browser Tool
+#### Browser Tool
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
@@ -590,12 +662,20 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 ## Contributing ❤️
 
-We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
-- Reporting bugs & features
-- Development setup
-- Contributing via Pull Requests
-- Code of Conduct
-- Reporting of security issues
+This is a community-driven project, powered by passionate developers like you.
+We enthusiastically welcome contributions from everyone,
+regardless of experience level—your unique perspective is valuable to us!
+
+### How to Get Started?
+
+1. **Find your first opportunity**: If you're new to the project, explore our labeled "good first issues" for beginner-friendly tasks.
+2. **Understand our workflow**: Review our [Contributing Guide](CONTRIBUTING.md)  to learn about our development setup, coding standards, and pull request process.
+3. **Make your impact**: Contributions come in many forms—fixing bugs, enhancing documentation, improving performance, adding features, writing tests, or refining the user experience.
+4. **Submit your work**: When you're ready, submit a well-documented pull request, and our maintainers will provide feedback to help get your changes merged.
+
+Your questions, insights, and ideas are always welcome!
+
+Together, we're building something meaningful that impacts real users. We look forward to collaborating with you!
 
 ## License
 
@@ -605,8 +685,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
-## ⚠️ Preview Status
-
-Strands Agents is currently in public preview. During this period:
-- APIs may change as we refine the SDK
-- We welcome feedback and contributions
