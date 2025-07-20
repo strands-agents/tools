@@ -221,7 +221,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         console.print(content_panel)
 
         # Confirm write operation
-        user_input = get_user_input("<yellow><bold>Do you want to proceed with the file write?</bold> [y/*]</yellow>")
+        user_input = get_user_input("<red><bold>Do you want to proceed with the file write?</bold> [y/*]</red>")
         if user_input.lower().strip() != "y":
             cancellation_reason = (
                 user_input if user_input.strip() != "n" else get_user_input("Please provide a reason for cancellation:")
