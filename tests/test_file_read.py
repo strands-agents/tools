@@ -2,11 +2,13 @@
 Tests for the file_read tool using the Agent interface.
 """
 
+import io
 import os
 import tempfile
 import unittest.mock
 
 import pytest
+from rich.console import Console
 from strands import Agent
 from strands_tools import file_read
 
@@ -27,6 +29,19 @@ def temp_test_file():
     yield temp_name
 
     # Clean up after test
+    if os.path.exists(temp_name):
+        os.remove(temp_name)
+
+
+@pytest.fixture
+def temp_bracket_file():
+    """Create a temporary file containing bracket characters."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as temp:
+        temp.write("Line [1]: Bracket test\nAnother line with text")
+        temp_name = temp.name
+
+    yield temp_name
+
     if os.path.exists(temp_name):
         os.remove(temp_name)
 
@@ -278,3 +293,33 @@ def test_create_rich_panel_function():
     """Test the create_rich_panel utility function."""
     panel = file_read.create_rich_panel("Content", "Title", "file.py")
     assert panel is not None
+
+
+def test_read_file_lines_handles_brackets(temp_bracket_file):
+    """Ensure read_file_lines can handle lines with '[' safely."""
+    console = Console(file=io.StringIO())
+
+    lines = file_read.read_file_lines(console, temp_bracket_file, 0, 1)
+
+    assert "[1]" in lines[0]
+
+
+def test_read_file_chunk_handles_brackets(temp_bracket_file):
+    """Ensure read_file_chunk can handle content with '[' safely."""
+    console = Console(file=io.StringIO())
+
+    content = file_read.read_file_chunk(console, temp_bracket_file, chunk_size=20)
+
+    assert "[1]" in content
+
+
+def test_file_read_error_message_brackets():
+    """Errors containing '[' characters should not raise markup issues."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"path": "missing[file].txt", "mode": "view"},
+    }
+
+    result = file_read.file_read(tool=tool_use)
+
+    assert result["status"] == "error"
