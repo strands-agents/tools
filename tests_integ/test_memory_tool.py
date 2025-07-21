@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 from strands import Agent
 from strands_tools import memory
-from utils.knowledge_base_helper import KnowledgeBaseHelper
+from .utils.knowledge_base_util import KnowledgeBaseHelper
 
 AWS_REGION = "us-east-1"
 

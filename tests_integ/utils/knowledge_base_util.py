@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeBaseHelper:
     def __init__(self):
-        self.clients = self._get_boto_clients()
+        self.clients = self.get_boto_clients()
         self.index = {
             "role_name": "StrandsMemoryIntegTestRole",
             "kb_name": "strands-memory-integ-test-kb",
@@ -39,7 +39,7 @@ class KnowledgeBaseHelper:
         self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "true").lower() == "true"
 
     @staticmethod
-    def _get_boto_clients():
+    def get_boto_clients():
         return {
             "iam": boto3.client("iam", region_name=AWS_REGION),
             "bedrock-agent": boto3.client("bedrock-agent", region_name=AWS_REGION),
@@ -179,6 +179,8 @@ class KnowledgeBaseHelper:
         except ClientError as e:
             if e.response["Error"]["Code"] != "ConflictException":
                 raise
+
+        time.sleep(30) # Give the policy 30 seconds to take effect.
         # 5. Wait for OpenSearch Collection to be Active
         collection_details = self._wait_for_resource(
             lambda: client["opensearchserverless"].batch_get_collection(ids=[collection_id])["collectionDetails"][0],
