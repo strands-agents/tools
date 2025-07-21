@@ -12,6 +12,7 @@ import numpy as np
 import psutil
 import pyautogui
 import pytesseract
+from PIL import Image
 from strands import tool
 
 from strands_tools.utils.user_input import get_user_input
@@ -223,8 +224,29 @@ class UseComputerMethods:
 
     def analyze_screenshot(
         self, screenshot_path: Optional[str] = None, region: Optional[List[int]] = None, min_confidence: float = 0.5
-    ) -> str:
-        return handle_analyze_screenshot(screenshot_path, region, min_confidence)
+    ) -> Dict:
+        analysis_results = handle_analyze_screenshot(screenshot_path, region, min_confidence)
+
+        # Prepare text analysis result
+        text_result = analysis_results.get("text_result", "No text analysis available")
+
+        # Prepare image for the LLM
+        image_path = analysis_results.get("image_path")
+        image_content = handle_sending_results_to_llm(image_path)
+
+        # Clean up if needed
+        should_delete = analysis_results.get("should_delete", False)
+        if should_delete and os.path.exists(image_path):
+            delete_screenshot(image_path)
+
+        # Return a dictionary with both text analysis and image content
+        return {
+            "status": "success",
+            "content": [
+                {"text": text_result},  # Text analysis results
+                image_content,  # Image content for LLM
+            ],
+        }
 
     def screen_size(self) -> str:
         """Get screen dimensions."""
@@ -547,9 +569,40 @@ def delete_screenshot(filepath: str) -> None:
         pass  # Silently ignore deletion errors
 
 
+def handle_sending_results_to_llm(image_path: str) -> dict:
+    """
+    Prepare the screenshot image to be sent to the LLM.
+
+    Args:
+        image_path: Path to the screenshot image
+
+    Returns:
+        Dictionary containing the image data formatted for the Converse API
+    """
+    try:
+        # Check if file exists
+        if not os.path.exists(image_path):
+            return {"text": f"Screenshot image not found at path: {image_path}"}
+
+        # Read the image file as binary data
+        with open(image_path, "rb") as file:
+            file_bytes = file.read()
+
+        # Determine image format using PIL
+        with Image.open(image_path) as img:
+            image_format = img.format.lower()
+            if image_format not in ["png", "jpeg", "jpg", "gif", "webp"]:
+                image_format = "png"  # Default to PNG if format is not recognized
+
+        # Return the image data in the format expected by the Converse API
+        return {"image": {"format": image_format, "source": {"bytes": file_bytes}}}
+    except Exception as e:
+        return {"text": f"Error preparing image for LLM: {str(e)}"}
+
+
 def handle_analyze_screenshot(
     screenshot_path: Optional[str], region: Optional[List[int]], min_confidence: float = 0.5
-) -> str:
+) -> dict:
     """Extract text and coordinates from screenshot."""
     # Check if screenshot_path was given then do not delete the screenshot
     if screenshot_path:
@@ -578,15 +631,13 @@ def handle_analyze_screenshot(
                 )
             result = formatted_result
 
-        if should_delete:
-            delete_screenshot(image_path)
-
-        return result
+        # Return the text result and keep the image path for sending to LLM
+        return {"text_result": result, "image_path": image_path, "should_delete": should_delete}
 
     except Exception as e:
         if should_delete:
             delete_screenshot(image_path)
-        return f"Error analyzing screenshot: {str(e)}"
+        raise RuntimeError(f"Error analyzing screenshot: {str(e)}") from e
 
 
 @tool
@@ -607,7 +658,7 @@ def use_computer(
     screenshot_path: Optional[str] = None,
     hotkey_str: Optional[str] = None,
     min_confidence: Optional[float] = 0.5,
-) -> str:
+) -> Dict:
     """
     Control computer using mouse, keyboard, and capture screenshots.
     IMPORTANT: When performing actions within an application (clicking, typing, etc.),
@@ -651,7 +702,9 @@ def use_computer(
         min_confidence (float, optional): Minimum confidence level for OCR text detection (default: 0.5)
 
     Returns:
-        str: Description of the action result or error message
+        Dict: For most actions, returns a simple dictionary with status and text content.
+              For analyze_screenshot, returns both text analysis results and the image content
+              in a format that can be processed by the model.
 
     Example Usage:
         # Correct usage - with app_name for application interaction
@@ -694,7 +747,10 @@ def use_computer(
     if action in actions_requiring_focus and app_name:
         focus_success = focus_application(app_name)
         if not focus_success:
-            return f"Warning: Could not focus on {app_name}. Proceeding with action anyway."
+            return {
+                "status": "warning",
+                "content": [{"text": f"Warning: Could not focus on {app_name}. Proceeding with action anyway."}],
+            }
     logger.info(f"Performing action: {action} in app: {app_name}")
 
     computer = UseComputerMethods()
@@ -726,9 +782,15 @@ def use_computer(
             # Get method signature to only pass valid parameters
             sig = inspect.signature(method)
             valid_params = {k: v for k, v in method_params.items() if k in sig.parameters}
-            return_value = method(**valid_params)
-            return return_value
+            result = method(**valid_params)
+
+            # If it's already a dictionary with the expected format, return it directly
+            if isinstance(result, dict) and "status" in result and "content" in result:
+                return result
+
+            # Otherwise, wrap the result in our standard format
+            return {"status": "success", "content": [{"text": result}]}
         else:
-            raise ValueError(f"Unknown action: {action}")
+            return {"status": "error", "content": [{"text": f"Unknown action: {action}"}]}
     except Exception as e:
-        return f"Error: {str(e)}"
+        return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}

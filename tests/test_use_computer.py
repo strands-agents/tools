@@ -35,7 +35,7 @@ class TestUseComputerConsent:
         with patch("src.strands_tools.use_computer.UseComputerMethods.mouse_position") as mock_mouse:
             mock_mouse.return_value = "Mouse position: (100, 200)"
             result = use_computer(action="mouse_position")
-            assert result == "Mouse position: (100, 200)"
+            assert result == {"status": "success", "content": [{"text": "Mouse position: (100, 200)"}]}
 
     def test_use_computer_without_bypass_consent_user_says_no(self, monkeypatch):
         """Test use_computer cancels with user input = 'n'"""
@@ -56,7 +56,7 @@ class TestUseComputerConsent:
             with patch("src.strands_tools.use_computer.UseComputerMethods.mouse_position") as mock_mouse:
                 mock_mouse.return_value = "Mouse position: (50, 60)"
                 result = use_computer(action="mouse_position")
-                assert result == "Mouse position: (50, 60)"
+                assert result == {"status": "success", "content": [{"text": "Mouse position: (50, 60)"}]}
 
 
 class TestUseComputerMethods:
@@ -222,7 +222,7 @@ class TestScreenshotAndAnalysis:
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=[]),
         ):
             result = handle_analyze_screenshot("test.png", None)
-            assert "No text detected" in result
+            assert "No text detected" in result["text_result"]
 
     @patch("os.path.exists", return_value=True)
     def test_analyze_screenshot_with_text(self, mock_exists):
@@ -235,7 +235,7 @@ class TestScreenshotAndAnalysis:
         ]
         with patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data):
             result = handle_analyze_screenshot("test.png", None)
-            assert "Detected 1 text elements" in result
+            assert "Detected 1 text elements" in result["text_result"]
 
 
 class TestApplicationManagement:
@@ -602,9 +602,9 @@ class TestHandleAnalyzeScreenshot:
         ):
             result = handle_analyze_screenshot("test.png", None)
 
-            assert "Detected 1 text elements" in result
-            assert "Sample Text" in result
-            assert "Confidence: 0.95" in result
+            assert "Detected 1 text elements" in result["text_result"]
+            assert "Sample Text" in result["text_result"]
+            assert "Confidence: 0.95" in result["text_result"]
 
     def test_handle_analyze_screenshot_nonexistent_path(self):
         with patch("os.path.exists", return_value=False):
@@ -637,8 +637,8 @@ class TestHandleAnalyzeScreenshot:
 
             mock_makedirs.assert_called_once_with("screenshots")
             mock_screenshot.save.assert_called_once()
-            assert "Detected 1 text elements" in result
-            assert "Auto Screenshot" in result
+            assert "Detected 1 text elements" in result["text_result"]
+            assert "Auto Screenshot" in result["text_result"]
 
     def test_handle_analyze_screenshot_with_region(self):
         mock_text_data = []
@@ -657,7 +657,7 @@ class TestHandleAnalyzeScreenshot:
 
             # Verify screenshot was called with region
             mock_pyautogui_screenshot.assert_called_once_with(region=[0, 0, 100, 100])
-            assert "No text detected" in result
+            assert "No text detected" in result["text_result"]
 
     def test_handle_analyze_screenshot_no_text_found(self):
         with (
@@ -665,15 +665,16 @@ class TestHandleAnalyzeScreenshot:
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=[]),
         ):
             result = handle_analyze_screenshot("test.png", None)
-            assert "No text detected in screenshot test.png" in result
+            assert "No text detected in screenshot test.png" in result["text_result"]
 
     def test_handle_analyze_screenshot_analysis_error(self):
         with (
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", side_effect=Exception("OCR Error")),
         ):
-            result = handle_analyze_screenshot("test.png", None)
-            assert "Error analyzing screenshot: OCR Error" in result
+            with pytest.raises(Exception) as excinfo:
+                handle_analyze_screenshot("test.png", None)
+            assert "Error analyzing screenshot: OCR Error" in str(excinfo.value)
 
     def test_handle_analyze_screenshot_formatted_output(self):
         mock_text_data = [
@@ -696,13 +697,13 @@ class TestHandleAnalyzeScreenshot:
             result = handle_analyze_screenshot("test.png", None)
 
             # Check that both text elements are included with proper formatting
-            assert "Detected 2 text elements" in result
-            assert "1. Text: 'First'" in result
-            assert "2. Text: 'Second'" in result
-            assert "Confidence: 0.90" in result
-            assert "Confidence: 0.85" in result
-            assert "Position: X=10, Y=20, W=40, H=15" in result
-            assert "Center: (30, 27)" in result
+            assert "Detected 2 text elements" in result["text_result"]
+            assert "1. Text: 'First'" in result["text_result"]
+            assert "2. Text: 'Second'" in result["text_result"]
+            assert "Confidence: 0.90" in result["text_result"]
+            assert "Confidence: 0.85" in result["text_result"]
+            assert "Position: X=10, Y=20, W=40, H=15" in result["text_result"]
+            assert "Center: (30, 27)" in result["text_result"]
 
 
 class TestUseComputerEdgeCases:
@@ -713,7 +714,7 @@ class TestUseComputerEdgeCases:
         monkeypatch.setenv("BYPASS_TOOL_CONSENT", "true")
 
         result = use_computer(action="invalid_unknown_action")
-        assert result == "Error: Unknown action: invalid_unknown_action"
+        assert result == {"status": "error", "content": [{"text": "Unknown action: invalid_unknown_action"}]}
 
     def test_use_computer_method_exception(self, monkeypatch):
         """Test use_computer catches exceptions from methods and returns error message"""
@@ -722,7 +723,7 @@ class TestUseComputerEdgeCases:
         with patch("src.strands_tools.use_computer.UseComputerMethods.mouse_position") as mock_mouse:
             mock_mouse.side_effect = RuntimeError("Test error message")
             result = use_computer(action="mouse_position")
-            assert result == "Error: Test error message"
+            assert result == {"status": "error", "content": [{"text": "Error: Test error message"}]}
 
     def test_use_computer_method_different_exception_type(self, monkeypatch):
         """Test use_computer catches different exception types"""
@@ -731,14 +732,14 @@ class TestUseComputerEdgeCases:
         with patch("src.strands_tools.use_computer.UseComputerMethods.click") as mock_click:
             mock_click.side_effect = ConnectionError("Network issue")
             result = use_computer(action="click", x=100, y=200)
-            assert result == "Error: Network issue"
+            assert result == {"status": "error", "content": [{"text": "Error: Network issue"}]}
 
     def test_use_computer_getattr_returns_none(self, monkeypatch):
         """Test use_computer when getattr returns None (method doesn't exist)"""
         monkeypatch.setenv("BYPASS_TOOL_CONSENT", "true")
 
         result = use_computer(action="completely_nonexistent_method")
-        assert result == "Error: Unknown action: completely_nonexistent_method"
+        assert result == {"status": "error", "content": [{"text": "Unknown action: completely_nonexistent_method"}]}
 
     def test_use_computer_focus_application_success(self, monkeypatch):
         """Test use_computer calls focus_application when action requires focus and app_name provided - success case"""
@@ -757,7 +758,7 @@ class TestUseComputerEdgeCases:
             mock_click.assert_called_once()
             mock_logger.assert_called_with("Performing action: click in app: TestApp")
 
-            assert result == "Left clicked at (100, 200)"
+            assert result == {"status": "success", "content": [{"text": "Left clicked at (100, 200)"}]}
 
     def test_use_computer_focus_not_required_no_app_name(self, monkeypatch):
         """Test use_computer skips focus when action requires focus but no app_name provided"""
@@ -776,7 +777,10 @@ class TestUseComputerEdgeCases:
             mock_scroll.assert_called_once()
             mock_logger.assert_called_with("Performing action: scroll in app: None")
 
-            assert result == "Scrolled up by 15 steps at coordinates (100, 100)"
+            assert result == {
+                "status": "success",
+                "content": [{"text": "Scrolled up by 15 steps at coordinates (100, 100)"}],
+            }
 
     def test_use_computer_action_not_requiring_focus(self, monkeypatch):
         """Test use_computer skips focus for actions that don't require focus"""
@@ -795,7 +799,7 @@ class TestUseComputerEdgeCases:
             mock_mouse.assert_called_once()
             mock_logger.assert_called_with("Performing action: mouse_position in app: TestApp")
 
-            assert result == "Mouse position: (100, 200)"
+            assert result == {"status": "success", "content": [{"text": "Mouse position: (100, 200)"}]}
 
     def test_use_computer_screenshot_requires_focus(self, monkeypatch):
         """Test use_computer calls focus for screenshot action when app_name provided"""
@@ -813,7 +817,7 @@ class TestUseComputerEdgeCases:
             mock_focus.assert_called_once_with("TestApp")
             mock_screenshot.assert_called_once()
 
-            assert result == "Screenshot saved to test.png"
+            assert result == {"status": "success", "content": [{"text": "Screenshot saved to test.png"}]}
 
 
 # Only run this test if on mac, because the tool has some mac specific way of performing actions
