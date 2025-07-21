@@ -1,172 +1,157 @@
-import matplotlib
-
-matplotlib.use("Agg")  # Add this line before other imports
 import importlib
+import inspect
 import logging
 import os
+import pkgutil
 import platform
 import subprocess
 from typing import Any, Dict, List, Union
 
 import graphviz
+import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 from diagrams import Diagram as CloudDiagram
+from diagrams import aws
 from strands import tool
 
-# AWS service categories - comprehensive list
-AWS_CATEGORIES = [
-    "analytics",
-    "compute",
-    "database",
-    "network",
-    "storage",
-    "security",
-    "integration",
-    "management",
-    "ml",
-    "general",
-    "mobile",
-    "migration",
-    "devtools",
-    "blockchain",
-    "business",
-    "cost",
-    "customer",
-    "game",
-    "iot",
-    "media",
-    "quantum",
-    "robotics",
-    "satellite",
-]
-
-# Common aliases for AWS components
-COMMON_ALIASES = {
-    # Non-AWS components
-    "users": "Users",
-    "user": "Users",
-    "client": "Users",
-    "clients": "Users",
-    "internet": "Internet",
-    "web": "Internet",
-    # Common AWS aliases
-    "api_gateway": "APIGateway",
-    "apigateway": "APIGateway",
-    "api-gateway": "APIGateway",
-    "dynamo": "Dynamodb",
-    "ddb": "Dynamodb",
-    "ec2": "EC2",
-    "instance": "EC2",
-    "server": "EC2",
-    "ecr": "EC2ContainerRegistry",
-    "registry": "EC2ContainerRegistry",
-    "ecs": "ElasticContainerService",
-    "container": "ElasticContainerService",
-    "eks": "ElasticKubernetesService",
-    "kubernetes": "ElasticKubernetesService",
-    "k8s": "ElasticKubernetesService",
-    "redis": "Elasticache",
-    "memcached": "Elasticache",
-    "es": "Elasticsearch",
-    "elb": "ElasticLoadBalancing",
-    "loadbalancer": "ElasticLoadBalancing",
-    "alb": "ApplicationLoadBalancer",
-    "nlb": "NetworkLoadBalancer",
-    "events": "Eventbridge",
-    "identity": "IAM",
-    "streaming": "Kinesis",
-    "encryption": "KMS",
-    "function": "Lambda",
-    "serverless": "Lambda",
-    "mysql": "RDS",
-    "postgres": "RDS",
-    "warehouse": "Redshift",
-    "dns": "Route53",
-    "r53": "Route53",
-    "bucket": "SimpleStorageServiceS3",
-    "storage": "SimpleStorageServiceS3",
-    "secrets": "SecretsManager",
-    "notification": "SimpleNotificationServiceSns",
-    "topic": "SimpleNotificationServiceSns",
-    "queue": "SimpleQueueServiceSqs",
-    "messaging": "SimpleQueueServiceSqs",
-    "workflow": "StepFunctions",
-    "firewall": "WAF",
-}
-
-# Cache for discovered components
-_aws_component_cache = {}
+matplotlib.use("Agg")  # Set the backend after importing matplotlib
 
 
-def get_aws_node(node_type: str) -> Any:
-    """Dynamically discover and return AWS component - supports all 532+ components"""
-    # Check cache first
-    if node_type in _aws_component_cache:
-        return _aws_component_cache[node_type]
+class AWSComponentRegistry:
+    """
+    Class responsible for discovering and managing AWS components from the diagrams package.
+    Encapsulates the component discovery, caching and lookup functionality.
+    """
 
-    # Normalize input
-    normalized = node_type.lower().replace("-", "_").replace(" ", "_")
+    def __init__(self):
+        """Initialize the registry with discovered components and aliases"""
+        self._component_cache = {}
+        self.categories = self._discover_categories()
+        self.components = self._discover_components()
+        self.aliases = self._build_aliases()
 
-    # Try common aliases first
-    canonical_name = COMMON_ALIASES.get(normalized, node_type)
-
-    # Try non-AWS components (Users, Internet, etc.)
-    if canonical_name in ["Users", "Internet", "Mobile"]:
-        # Try main diagrams module first
+    def _discover_categories(self) -> List[str]:
+        """Dynamically discover all AWS categories from the diagrams package"""
+        categories = []
         try:
-            module = importlib.import_module("diagrams")
-            if hasattr(module, canonical_name):
-                component = getattr(module, canonical_name)
-                _aws_component_cache[node_type] = component
-                return component
-        except ImportError:
-            pass
+            # Use pkgutil to discover all modules in diagrams.aws
+            for _, name, is_pkg in pkgutil.iter_modules(aws.__path__):
+                if not is_pkg and not name.startswith("_"):
+                    categories.append(name)
+        except Exception as e:
+            logging.warning(f"Failed to discover AWS categories: {e}")
+            return []
+        return categories
 
-        # Try onprem.network for Internet
-        if canonical_name == "Internet":
+    def _discover_components(self) -> Dict[str, List[str]]:
+        """Dynamically discover all available AWS components by category"""
+        components = {}
+        for category in self.categories:
             try:
-                module = importlib.import_module("diagrams.onprem.network")
-                if hasattr(module, canonical_name):
-                    component = getattr(module, canonical_name)
-                    _aws_component_cache[node_type] = component
-                    return component
+                module = importlib.import_module(f"diagrams.aws.{category}")
+                # Get all public classes (components) from the module
+                components[category] = [
+                    name
+                    for name, obj in inspect.getmembers(module)
+                    if inspect.isclass(obj) and not name.startswith("_")
+                ]
             except ImportError:
-                pass
+                continue
+        return components
 
-    # Search all AWS categories for the component
-    for category in AWS_CATEGORIES:
-        try:
-            module = importlib.import_module(f"diagrams.aws.{category}")
-            # Try exact match first
-            if hasattr(module, canonical_name):
-                component = getattr(module, canonical_name)
-                _aws_component_cache[node_type] = component
-                return component
-            # Try case-insensitive match
-            for attr in dir(module):
-                if attr.lower() == canonical_name.lower() and not attr.startswith("_"):
-                    component = getattr(module, attr)
-                    _aws_component_cache[node_type] = component
+    def _build_aliases(self) -> Dict[str, str]:
+        """Build aliases dictionary by analyzing available components"""
+        aliases = {}
+
+        # Add non-AWS components first
+        aliases.update(
+            {
+                "users": "Users",
+                "user": "Users",
+                "client": "Users",
+                "clients": "Users",
+                "internet": "Internet",
+                "web": "Internet",
+                "mobile": "Mobile",
+            }
+        )
+
+        # Analyze component names to create common aliases
+        for _, component_list in self.components.items():
+            for component in component_list:
+                # Create lowercase alias
+                aliases[component.lower()] = component
+
+                # Create alias without service prefix/suffix
+                clean_name = component.replace("Service", "").replace("Amazon", "").replace("AWS", "")
+                if clean_name != component:
+                    aliases[clean_name.lower()] = component
+
+                # Add common abbreviations
+                if component.isupper():  # Likely an acronym
+                    aliases[component.lower()] = component
+
+        return aliases
+
+    def get_node(self, node_type: str) -> Any:
+        """Get AWS component class using dynamic discovery with caching"""
+        # Check cache first
+        if node_type in self._component_cache:
+            return self._component_cache[node_type]
+
+        # Normalize input
+        normalized = node_type.lower()
+
+        # Try common aliases first
+        canonical_name = self.aliases.get(normalized, node_type)
+
+        # Search through all discovered components
+        for category, component_list in self.components.items():
+            try:
+                module = importlib.import_module(f"diagrams.aws.{category}")
+                # Try exact match first
+                if canonical_name in component_list:
+                    component = getattr(module, canonical_name)
+                    self._component_cache[node_type] = component
                     return component
-        except ImportError:
-            continue
+                # Try case-insensitive match
+                for component_name in component_list:
+                    if component_name.lower() == canonical_name.lower():
+                        component = getattr(module, component_name)
+                        self._component_cache[node_type] = component
+                        return component
+            except ImportError:
+                continue
 
-    # Try original input as-is
-    for category in AWS_CATEGORIES:
-        try:
-            module = importlib.import_module(f"diagrams.aws.{category}")
-            if hasattr(module, node_type):
-                component = getattr(module, node_type)
-                _aws_component_cache[node_type] = component
-                return component
-        except ImportError:
-            continue
+        raise ValueError(f"Component '{node_type}' not found in available AWS components")
 
-    raise ValueError(f"Component '{node_type}' not found. Try: {list(COMMON_ALIASES.keys())[:10]}...")
+    def list_available_components(self, category: str = None) -> Dict[str, List[str]]:
+        """List all available AWS components and their aliases"""
+        if category:
+            return {category: self.components.get(category, [])}
+        return self.components
 
 
-# These functions have been removed as the agent can generate mermaid/ascii directly
+# Initialize the AWS component registry as a singleton
+aws_registry = AWSComponentRegistry()
+
+
+# Expose necessary functions and variables at module level for backward compatibility
+def get_aws_node(node_type: str) -> Any:
+    """Get AWS component class using dynamic discovery"""
+    return aws_registry.get_node(node_type)
+
+
+def list_available_components(category: str = None) -> Dict[str, List[str]]:
+    """List all available AWS components and their aliases"""
+    return aws_registry.list_available_components(category)
+
+
+# Export variables for backward compatibility
+AWS_CATEGORIES = aws_registry.categories
+AVAILABLE_AWS_COMPONENTS = aws_registry.components
+COMMON_ALIASES = aws_registry.aliases
 
 
 class DiagramBuilder:
@@ -180,13 +165,7 @@ class DiagramBuilder:
 
     def render(self, diagram_type: str, output_format: str) -> str:
         """Main render method that delegates to specific renderers"""
-        if output_format in ["mermaid", "ascii"]:
-            raise NotImplementedError(
-                "Mermaid and ASCII rendering has been removed. "
-                "Use the agent's LLM capabilities to generate mermaid code directly."
-            )
 
-        # Delegate to specific diagram type methods
         method_map = {
             "cloud": self._render_cloud,
             "graph": self._render_graph,
@@ -197,13 +176,6 @@ class DiagramBuilder:
             raise ValueError(f"Unsupported diagram type: {diagram_type}")
 
         return method_map[diagram_type](output_format)
-
-    def _render_text(self, output_format: str) -> str:
-        """Handle text formats (mermaid/ascii) - unified for all diagram types"""
-        raise NotImplementedError(
-            "Mermaid and ASCII rendering has been removed. "
-            "Use the agent's LLM capabilities to generate mermaid code directly."
-        )
 
     def _render_cloud(self, output_format: str) -> str:
         """Create AWS architecture diagram"""
@@ -227,16 +199,34 @@ class DiagramBuilder:
             for node_id, node_type in invalid_nodes:
                 # Find close matches
                 close_matches = [k for k in COMMON_ALIASES.keys() if node_type.lower() in k or k in node_type.lower()]
+                # Find canonical names for suggestions
+                canonical_suggestions = [COMMON_ALIASES[k] for k in close_matches[:3]] if close_matches else []
+
                 if close_matches:
-                    suggestions.append(f"  - '{node_id}' (type: '{node_type}') -> try: {close_matches[:3]}")
+                    suggestions.append(
+                        f"  - '{node_id}' (type: '{node_type}') -> try: \
+                        {close_matches[:3]} (maps to: {canonical_suggestions})"
+                    )
                 else:
                     suggestions.append(f"  - '{node_id}' (type: '{node_type}') -> no close matches found")
 
-            common_types = ["ec2", "s3", "lambda", "rds", "api_gateway", "cloudfront", "route53", "elb"]
+            common_types = [
+                "ec2",
+                "s3",
+                "lambda",
+                "rds",
+                "api_gateway",
+                "cloudfront",
+                "route53",
+                "elb",
+                "opensearch",
+                "dynamodb",
+            ]
             error_msg = (
                 f"Invalid AWS component types found:\n{chr(10).join(suggestions)}\n\n"
                 f"Common types: {common_types}\nNote: "
-                f"All 532+ AWS components are supported - try the exact AWS service name"
+                f"All 532+ AWS components are supported - \
+                    try using one of the aliases in COMMON_ALIASES or the exact AWS service name"
             )
             raise ValueError(error_msg)
 
@@ -381,12 +371,6 @@ class UMLDiagramBuilder:
 
     def render(self, output_format: str = "png") -> str:
         """Render the UML diagram based on type"""
-        # Handle text formats (mermaid/ascii) for UML diagrams
-        if output_format in ["mermaid", "ascii"]:
-            raise NotImplementedError(
-                "Mermaid and ASCII rendering has been removed. "
-                "Use the agent's LLM capabilities to generate mermaid code directly."
-            )
 
         method_map = {
             # Structural diagrams
@@ -1040,13 +1024,6 @@ class UMLDiagramBuilder:
         else:  # association
             multiplicity = rel.get("multiplicity", "")
             dot.edge(rel["from"], rel["to"], label=multiplicity)
-
-    def _render_text(self, output_format: str) -> str:
-        """Handle text formats (mermaid/ascii) for UML diagrams"""
-        raise NotImplementedError(
-            "Mermaid and ASCII rendering has been removed. "
-            "Use the agent's LLM capabilities to generate mermaid code directly."
-        )
 
     def _save_diagram(self, dot: graphviz.Digraph, output_format: str) -> str:
         """Save diagram and return file path"""

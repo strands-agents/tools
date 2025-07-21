@@ -17,27 +17,6 @@ from strands_tools.diagram import (
 class TestGetAwsNode:
     """Tests for the get_aws_node function."""
 
-    def test_get_aws_node_internet_component(self):
-        """Test retrieving the Internet component from onprem.network."""
-        with patch("importlib.import_module") as mock_import:
-            # First mock the main diagrams module (which fails)
-            main_module = MagicMock(spec=[])
-            # Then mock the onprem.network module (which succeeds)
-            onprem_module = MagicMock()
-            onprem_module.Internet = "InternetClass"
-
-            def side_effect(module_name):
-                if module_name == "diagrams":
-                    return main_module
-                elif module_name == "diagrams.onprem.network":
-                    return onprem_module
-                raise ImportError(f"Mock import error: {module_name}")
-
-            mock_import.side_effect = side_effect
-
-            result = get_aws_node("Internet")
-            assert result == "InternetClass"
-
     def test_get_aws_node_case_insensitive_match(self):
         """Test retrieving a node with case-insensitive matching."""
         with patch("importlib.import_module") as mock_import:
@@ -149,12 +128,6 @@ class TestDiagramBuilder:
         with pytest.raises(ValueError) as excinfo:
             self.builder.render("unsupported", "png")
         assert "Unsupported diagram type: unsupported" in str(excinfo.value)
-
-    def test_render_unsupported_format(self):
-        """Test rendering with unsupported output format."""
-        with pytest.raises(NotImplementedError) as excinfo:
-            self.builder.render("graph", "mermaid")
-        assert "Mermaid and ASCII rendering has been removed" in str(excinfo.value)
 
     @patch("strands_tools.diagram.save_diagram_to_directory")
     @patch("strands_tools.diagram.open_diagram")
@@ -289,12 +262,6 @@ class TestUMLDiagramBuilder:
         with pytest.raises(ValueError) as excinfo:
             builder.render("png")
         assert "Unsupported UML diagram type: unsupported" in str(excinfo.value)
-
-    def test_render_unsupported_format(self):
-        """Test rendering with unsupported output format."""
-        with pytest.raises(NotImplementedError) as excinfo:
-            self.builder.render("mermaid")
-        assert "Mermaid and ASCII rendering has been removed" in str(excinfo.value)
 
     @patch("strands_tools.diagram.UMLDiagramBuilder._save_diagram")
     def test_render_class(self, mock_save):
