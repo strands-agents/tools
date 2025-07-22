@@ -139,7 +139,8 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
-    logger.warning(
+    # Log deprecation warning as info to avoid interfering with other warnings that tests may be checking for
+    logger.info(
         "DEPRECATION WARNING: use_llm will be removed in the next major release. "
         "Migration path: replace use_llm calls with use_agent for equivalent functionality."
     )
@@ -162,13 +163,14 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
             # Filter parent agent tools to only include specified tool names
             filtered_tools = []
             for tool_name in specified_tools:
-                if tool_name in parent_agent.tool_registry.registry:
-                    filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
+                tool_spec = parent_agent.tool_registry.read_tool(tool_name)
+                if tool_spec is not None:
+                    filtered_tools.append(tool_spec)
                 else:
                     logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
             tools = filtered_tools
         else:
-            tools = list(parent_agent.tool_registry.registry.values())
+            tools = list(parent_agent.tool_registry.list_tools().values())
 
     if "callback_handler" in kwargs:
         extra_kwargs["callback_handler"] = kwargs["callback_handler"]

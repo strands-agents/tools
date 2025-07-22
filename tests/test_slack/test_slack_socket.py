@@ -16,8 +16,8 @@ class TestSocketModeHandlerProcessing(unittest.TestCase):
         self.mock_agent = MagicMock()
         # Create a tool registry structure manually for the mock agent
         self.mock_agent.tool_registry = MagicMock()
-        self.mock_agent.tool_registry.registry = MagicMock()
-        self.mock_agent.tool_registry.registry.values.return_value = ["tool1", "tool2"]
+        mock_tools = {"tool1": "tool1", "tool2": "tool2"}
+        self.mock_agent.tool_registry.list_tools.return_value = mock_tools
         self.mock_agent.system_prompt = "Test system prompt"
         self.handler.agent = self.mock_agent
 

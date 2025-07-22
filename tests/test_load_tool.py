@@ -71,9 +71,7 @@ def test_load_tool_direct(temp_tool_file):
     assert "loaded successfully" in result["content"][0]["text"]
 
     # Verify the tool was loaded via the registry
-    mock_tool_registry.load_tool_from_filepath.assert_called_once_with(
-        tool_name="sample_tool", tool_path=temp_tool_file
-    )
+    mock_tool_registry.create_tool.assert_called_once_with({"name": "sample_tool", "path": temp_tool_file})
 
 
 def test_load_tool_disabled():
@@ -90,7 +88,7 @@ def test_load_tool_disabled():
         assert "disabled" in result["content"][0]["text"]
 
         # Verify the tool was not loaded
-        mock_agent.tool_registry.load_tool_from_filepath.assert_not_called()
+        mock_agent.tool_registry.create_tool.assert_not_called()
 
 
 def test_load_tool_file_not_found():
@@ -105,13 +103,13 @@ def test_load_tool_file_not_found():
     assert "not found" in str(result["content"][0]["text"])
 
     # Verify the tool was not loaded
-    mock_agent.tool_registry.load_tool_from_filepath.assert_not_called()
+    mock_agent.tool_registry.create_tool.assert_not_called()
 
 
 def test_load_tool_exception():
     """Test load_tool when an exception occurs during loading."""
     mock_agent = MagicMock()
-    mock_agent.tool_registry.load_tool_from_filepath.side_effect = Exception("Test exception")
+    mock_agent.tool_registry.create_tool.side_effect = Exception("Test exception")
 
     with tempfile.NamedTemporaryFile(suffix=".py") as f:
         # Call the load_tool function with the new signature
