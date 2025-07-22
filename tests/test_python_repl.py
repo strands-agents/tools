@@ -1,6 +1,4 @@
-"""
-Tests for the python_repl tool using the Agent interface.
-"""
+"""Tests for the python_repl tool using the Agent interface."""
 
 import os
 import sys
@@ -315,13 +313,19 @@ class TestPythonRepl:
 
     def test_user_rejection_cancels_execution(self, mock_console):
         """Test that user rejection properly cancels execution."""
+        # Clear REPL state to ensure clean test environment
+        python_repl.repl_state.clear_state()
+
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "should_not_execute = True", "interactive": False},
         }
 
-        # Mock user rejecting the execution
-        with patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]):
+        # Mock user rejecting the execution and ensure bypass conditions are disabled
+        with (
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "error"
@@ -330,13 +334,19 @@ class TestPythonRepl:
 
     def test_custom_rejection_message(self, mock_console):
         """Test that custom rejection message is included."""
+        # Clear REPL state to ensure clean test environment
+        python_repl.repl_state.clear_state()
+
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "print('Should not run')", "interactive": False},
         }
 
-        # Mock user providing custom rejection reason
-        with patch("strands_tools.python_repl.get_user_input", side_effect=["custom reason", ""]):
+        # Mock user providing custom rejection reason and ensure bypass conditions are disabled
+        with (
+            patch("strands_tools.python_repl.get_user_input", side_effect=["custom reason", ""]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "error"
