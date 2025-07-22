@@ -213,7 +213,7 @@ def test_virtual_try_on_mask_garment(agent, tmp_path):
                             respond with yes or no first")
     assert "yes" in str(semantic_result).lower() 
 
-# def test_virtual_try_on_prompt_mask(agent, tmp_path):
+def test_virtual_try_on_prompt_mask(agent, tmp_path):
     # 1. Generate an image of an empty living room
     prompt = "a living room with a white background and a purple couch in the middle"
     image_gen_result = agent.tool.nova_canvas(
