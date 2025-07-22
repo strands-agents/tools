@@ -38,47 +38,6 @@ def test_tools_property():
     assert "a2a_send_message" in tool_names
 
 
-@patch("strands_tools.a2a_client.asyncio.get_event_loop")
-@patch("strands_tools.a2a_client.asyncio.new_event_loop")
-@patch("strands_tools.a2a_client.asyncio.set_event_loop")
-def test_run_async_with_event_loop(mock_set_event_loop, mock_new_event_loop, mock_get_event_loop):
-    """Test _run_async uses event loop directly."""
-    mock_coro = Mock()
-    mock_loop = Mock()
-    mock_loop.run_until_complete.return_value = "test_result"
-    mock_get_event_loop.return_value = mock_loop
-
-    provider = A2AClientToolProvider()
-    result = provider._run_async(mock_coro)
-
-    assert result == "test_result"
-    mock_get_event_loop.assert_called_once()
-    mock_loop.run_until_complete.assert_called_once_with(mock_coro)
-    mock_new_event_loop.assert_not_called()
-    mock_set_event_loop.assert_not_called()
-
-
-@patch("strands_tools.a2a_client.asyncio.get_event_loop")
-@patch("strands_tools.a2a_client.asyncio.new_event_loop")
-@patch("strands_tools.a2a_client.asyncio.set_event_loop")
-def test_run_async_creates_new_event_loop(mock_set_event_loop, mock_new_event_loop, mock_get_event_loop):
-    """Test _run_async creates new event loop when none exists."""
-    mock_coro = Mock()
-    mock_loop = Mock()
-    mock_loop.run_until_complete.return_value = "test_result"
-    mock_get_event_loop.side_effect = RuntimeError("No event loop")
-    mock_new_event_loop.return_value = mock_loop
-
-    provider = A2AClientToolProvider()
-    result = provider._run_async(mock_coro)
-
-    assert result == "test_result"
-    mock_get_event_loop.assert_called_once()
-    mock_new_event_loop.assert_called_once()
-    mock_set_event_loop.assert_called_once_with(mock_loop)
-    mock_loop.run_until_complete.assert_called_once_with(mock_coro)
-
-
 @pytest.mark.asyncio
 async def test_ensure_httpx_client_creates_new_client():
     """Test _ensure_httpx_client creates new client when none exists."""
@@ -109,8 +68,8 @@ async def test_ensure_httpx_client_reuses_existing():
 
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_create_a2a_card_resolver")
-async def test_async_discover_agent_card_success(mock_create_resolver):
-    """Test _async_discover_agent_card successfully discovers and caches agent."""
+async def test_discover_agent_card_success(mock_create_resolver):
+    """Test _discover_agent_card successfully discovers and caches agent."""
     provider = A2AClientToolProvider()
     provider._initial_discovery_done = False
     mock_resolver = Mock()
@@ -118,7 +77,7 @@ async def test_async_discover_agent_card_success(mock_create_resolver):
     mock_resolver.get_agent_card = AsyncMock(return_value=mock_agent_card)
     mock_create_resolver.return_value = mock_resolver
 
-    result = await provider._async_discover_agent_card("http://test.com")
+    result = await provider._discover_agent_card("http://test.com")
 
     assert result == mock_agent_card
     assert provider._discovered_agents["http://test.com"] == mock_agent_card
@@ -126,20 +85,20 @@ async def test_async_discover_agent_card_success(mock_create_resolver):
 
 
 @pytest.mark.asyncio
-async def test_async_discover_agent_card_cached():
-    """Test _async_discover_agent_card returns cached agent."""
+async def test_discover_agent_card_cached():
+    """Test _discover_agent_card returns cached agent."""
     provider = A2AClientToolProvider()
     provider._initial_discovery_done = False
     cached_card = Mock()
     provider._discovered_agents["http://test.com"] = cached_card
 
-    result = await provider._async_discover_agent_card("http://test.com")
+    result = await provider._discover_agent_card("http://test.com")
 
     assert result == cached_card
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_async_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
 async def test_discover_known_agents_success(mock_discover):
     """Test _discover_known_agents with successful discovery."""
     provider = A2AClientToolProvider()
@@ -157,7 +116,7 @@ async def test_discover_known_agents_success(mock_discover):
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_async_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
 async def test_discover_known_agents_with_errors(mock_discover):
     """Test _discover_known_agents handles individual agent errors."""
     provider = A2AClientToolProvider()
@@ -213,29 +172,32 @@ async def test_ensure_discovered_known_agents_skips_when_no_urls():
         mock_discover.assert_not_called()
 
 
-@patch.object(A2AClientToolProvider, "_run_async")
-def test_discover_agent_success(mock_run_async):
-    """Test discover_agent tool returns success result."""
+@pytest.mark.asyncio
+async def test_discover_agent_success():
+    """Test a2a_discover_agent tool returns success result."""
     provider = A2AClientToolProvider()
-    expected_result = {"status": "success", "agent_card": {"name": "test_agent"}, "url": "http://test.com"}
-    mock_run_async.return_value = expected_result
 
-    result = provider.a2a_discover_agent("http://test.com")
+    with patch.object(provider, "_discover_agent_card_tool") as mock_discover_tool:
+        expected_result = {"status": "success", "agent_card": {"name": "test_agent"}, "url": "http://test.com"}
+        mock_discover_tool.return_value = expected_result
 
-    assert result == expected_result
+        result = await provider.a2a_discover_agent("http://test.com")
+
+        assert result == expected_result
+        mock_discover_tool.assert_called_once_with("http://test.com")
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_async_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_discover_agent_card_tool_success(mock_ensure, mock_discover):
-    """Test _async_discover_agent_card_tool returns success result."""
+async def test_discover_agent_card_tool_success(mock_ensure, mock_discover):
+    """Test _discover_agent_card_tool returns success result."""
     provider = A2AClientToolProvider()
     mock_agent_card = Mock()
     mock_agent_card.model_dump.return_value = {"name": "test_agent"}
     mock_discover.return_value = mock_agent_card
 
-    result = await provider._async_discover_agent_card_tool("http://test.com")
+    result = await provider._discover_agent_card_tool("http://test.com")
 
     expected = {"status": "success", "agent_card": {"name": "test_agent"}, "url": "http://test.com"}
     assert result == expected
@@ -243,36 +205,38 @@ async def test_async_discover_agent_card_tool_success(mock_ensure, mock_discover
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_async_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_discover_agent_card_tool_error(mock_ensure, mock_discover):
-    """Test _async_discover_agent_card_tool handles errors."""
+async def test_discover_agent_card_tool_error(mock_ensure, mock_discover):
+    """Test _discover_agent_card_tool handles errors."""
     provider = A2AClientToolProvider()
     mock_discover.side_effect = Exception("Network error")
 
-    result = await provider._async_discover_agent_card_tool("http://test.com")
+    result = await provider._discover_agent_card_tool("http://test.com")
 
     expected = {"status": "error", "error": "Network error", "url": "http://test.com"}
     assert result == expected
 
 
-def test_list_discovered_agents_empty():
-    """Test list_discovered_agents with no discovered agents."""
+@pytest.mark.asyncio
+async def test_list_discovered_agents_empty():
+    """Test a2a_list_discovered_agents with no discovered agents."""
     provider = A2AClientToolProvider()
 
-    with patch.object(provider, "_run_async") as mock_run_async:
+    with patch.object(provider, "_list_discovered_agents") as mock_list_agents:
         expected = {"status": "success", "agents": [], "total_count": 0}
-        mock_run_async.return_value = expected
+        mock_list_agents.return_value = expected
 
-        result = provider.a2a_list_discovered_agents()
+        result = await provider.a2a_list_discovered_agents()
 
         assert result == expected
+        mock_list_agents.assert_called_once()
 
 
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_list_discovered_agents_with_agents(mock_ensure):
-    """Test _async_list_discovered_agents with discovered agents."""
+async def test_list_discovered_agents_with_agents(mock_ensure):
+    """Test _list_discovered_agents with discovered agents."""
     provider = A2AClientToolProvider()
     mock_card1 = Mock()
     mock_card1.model_dump.return_value = {"name": "agent1"}
@@ -281,7 +245,7 @@ async def test_async_list_discovered_agents_with_agents(mock_ensure):
 
     provider._discovered_agents = {"http://agent1.com": mock_card1, "http://agent2.com": mock_card2}
 
-    result = await provider._async_list_discovered_agents()
+    result = await provider._list_discovered_agents()
 
     expected = {"status": "success", "agents": [{"name": "agent1"}, {"name": "agent2"}], "total_count": 2}
     assert result == expected
@@ -290,59 +254,65 @@ async def test_async_list_discovered_agents_with_agents(mock_ensure):
 
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_list_discovered_agents_error(mock_ensure):
-    """Test _async_list_discovered_agents handles errors."""
+async def test_list_discovered_agents_error(mock_ensure):
+    """Test _list_discovered_agents handles errors."""
     provider = A2AClientToolProvider()
     mock_card = Mock()
     mock_card.model_dump.side_effect = Exception("Serialization error")
     provider._discovered_agents = {"http://test.com": mock_card}
 
-    result = await provider._async_list_discovered_agents()
+    result = await provider._list_discovered_agents()
 
     expected = {"status": "error", "error": "Serialization error", "total_count": 0}
     assert result == expected
 
 
-@patch.object(A2AClientToolProvider, "_run_async")
-def test_send_message_with_message_id(mock_run_async):
-    """Test send_message with provided message_id."""
+@pytest.mark.asyncio
+async def test_send_message_with_message_id():
+    """Test a2a_send_message with provided message_id."""
     provider = A2AClientToolProvider()
-    expected_result = {
-        "status": "success",
-        "response": {"result": "ok"},
-        "message_id": "test_id",
-        "target_agent_url": "http://test.com",
-    }
-    mock_run_async.return_value = expected_result
 
-    result = provider.a2a_send_message("Hello", "http://test.com", "test_id")
+    with patch.object(provider, "_send_message") as mock_send_message:
+        expected_result = {
+            "status": "success",
+            "response": {"result": "ok"},
+            "message_id": "test_id",
+            "target_agent_url": "http://test.com",
+        }
+        mock_send_message.return_value = expected_result
 
-    assert result == expected_result
+        result = await provider.a2a_send_message("Hello", "http://test.com", "test_id")
+
+        assert result == expected_result
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id")
 
 
-@patch.object(A2AClientToolProvider, "_run_async")
-def test_send_message_without_message_id(mock_run_async):
-    """Test send_message without message_id (auto-generated)."""
+@pytest.mark.asyncio
+async def test_send_message_without_message_id():
+    """Test a2a_send_message without message_id (auto-generated)."""
     provider = A2AClientToolProvider()
-    expected_result = {
-        "status": "success",
-        "response": {"result": "ok"},
-        "message_id": "auto_generated",
-        "target_agent_url": "http://test.com",
-    }
-    mock_run_async.return_value = expected_result
 
-    result = provider.a2a_send_message("Hello", "http://test.com")
+    with patch.object(provider, "_send_message") as mock_send_message:
+        expected_result = {
+            "status": "success",
+            "response": {"result": "ok"},
+            "message_id": "auto_generated",
+            "target_agent_url": "http://test.com",
+        }
+        mock_send_message.return_value = expected_result
 
-    assert result == expected_result
+        result = await provider.a2a_send_message("Hello", "http://test.com")
+
+        assert result == expected_result
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", None)
 
 
 @pytest.mark.asyncio
 @patch("strands_tools.a2a_client.uuid4")
 @patch.object(A2AClientToolProvider, "_create_a2a_client")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_send_message_success(mock_ensure, mock_create_client, mock_uuid):
-    """Test _async_send_message successful message sending."""
+async def test_send_message_success(mock_ensure, mock_create_client, mock_uuid):
+    """Test _send_message successful message sending."""
     provider = A2AClientToolProvider()
 
     # Mock UUID generation
@@ -359,7 +329,7 @@ async def test_async_send_message_success(mock_ensure, mock_create_client, mock_
     mock_client.send_message = AsyncMock(return_value=mock_response)
     mock_create_client.return_value = mock_client
 
-    result = await provider._async_send_message("Hello world", "http://test.com", None)
+    result = await provider._send_message("Hello world", "http://test.com", None)
 
     expected = {
         "status": "success",
@@ -382,12 +352,12 @@ async def test_async_send_message_success(mock_ensure, mock_create_client, mock_
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_create_a2a_client")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_async_send_message_error(mock_ensure, mock_create_client):
-    """Test _async_send_message handles errors."""
+async def test_send_message_error(mock_ensure, mock_create_client):
+    """Test _send_message handles errors."""
     provider = A2AClientToolProvider()
     mock_create_client.side_effect = Exception("Connection failed")
 
-    result = await provider._async_send_message("Hello", "http://test.com", "test_id")
+    result = await provider._send_message("Hello", "http://test.com", "test_id")
 
     expected = {
         "status": "error",
@@ -418,7 +388,7 @@ async def test_create_a2a_card_resolver(mock_ensure_client):
 
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_ensure_httpx_client")
-@patch.object(A2AClientToolProvider, "_async_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
 async def test_create_a2a_client(mock_discover, mock_ensure_client):
     """Test _create_a2a_client creates client with correct parameters."""
     provider = A2AClientToolProvider()
@@ -435,46 +405,3 @@ async def test_create_a2a_client(mock_discover, mock_ensure_client):
 
         mock_client_class.assert_called_once_with(httpx_client=mock_client, agent_card=mock_agent_card)
         assert result == mock_a2a_client
-
-
-@patch.object(A2AClientToolProvider, "_run_async")
-def test_close_with_client(mock_run_async):
-    """Test close method with existing HTTP client."""
-    provider = A2AClientToolProvider()
-    mock_client = AsyncMock()
-    provider._httpx_client = mock_client
-    provider._discovered_agents = {"http://test.com": Mock()}
-
-    provider.close()
-
-    mock_run_async.assert_called_once()
-    assert provider._httpx_client is None
-    assert provider._discovered_agents == {}
-
-
-def test_close_without_client():
-    """Test close method without HTTP client (idempotent)."""
-    provider = A2AClientToolProvider()
-    provider._httpx_client = None
-
-    provider.close()
-
-    assert provider._httpx_client is None
-
-
-@pytest.mark.asyncio
-async def test_close_async_functionality():
-    """Test the async close functionality directly."""
-    provider = A2AClientToolProvider()
-    mock_client = AsyncMock()
-    provider._httpx_client = mock_client
-    provider._discovered_agents = {"http://test.com": Mock()}
-
-    # Call the internal async close method
-    await provider._async_close()
-    provider._httpx_client = None
-    provider._discovered_agents.clear()
-
-    mock_client.aclose.assert_called_once()
-    assert provider._httpx_client is None
-    assert provider._discovered_agents == {}
