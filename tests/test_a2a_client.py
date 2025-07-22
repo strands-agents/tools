@@ -346,7 +346,7 @@ async def test_send_message_success(mock_ensure, mock_create_client, mock_uuid):
     assert isinstance(call_args, SendMessageRequest)
     assert call_args.id == "request_id_456"
     assert call_args.params.message.role == Role.user
-    assert call_args.params.message.messageId == "message_id_123"
+    assert call_args.params.message.message_id == "message_id_123"
 
 
 @pytest.mark.asyncio
