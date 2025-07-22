@@ -222,6 +222,7 @@ processed.head()
 
 ### Code Interpreter
 
+```python
 from strands import Agent
 from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 
@@ -229,7 +230,7 @@ from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 bedrock_agent_core_code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
 agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
 
-# Create a session and execute code
+# Create a session
 agent.tool.code_interpreter({
     "action": {
         "type": "initSession",
@@ -238,14 +239,16 @@ agent.tool.code_interpreter({
     }
 })
 
+# Execute Python code
 agent.tool.code_interpreter({
     "action": {
         "type": "executeCode",
         "session_name": "analysis-session",
-        "code": "import pandas as pd\nprint('Hello from sandbox!')",
+        "code": "print('Hello from sandbox!')",
         "language": "python"
     }
 })
+```
 
 ### Swarm Intelligence
 
