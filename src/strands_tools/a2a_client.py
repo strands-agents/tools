@@ -222,7 +222,7 @@ class A2AClientToolProvider:
                 kind="message",
                 role=Role.user,
                 parts=[Part(TextPart(kind="text", text=message_text))],
-                messageId=message_id,
+                message_id=message_id,
             )
 
             request = SendMessageRequest(id=str(uuid4()), params=MessageSendParams(message=message))
