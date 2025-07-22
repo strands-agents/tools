@@ -74,11 +74,11 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     tool_use = {
         "toolUseId": "test-tool-use-id",
         "input": {
-            "prompt": "A cute robot",
+            "task_type": "TEXT_IMAGE",
+            "text": "A cute robot",
             "seed": 123,
-            "aspect_ratio": "5:4",
-            "output_format": "png",
-            "negative_prompt": "blurry, low resolution, pixelated, grainy, unrealistic",
+            "negative_text": "blurry, low resolution, pixelated, grainy, unrealistic",
+            "style": "DESIGN_SKETCH",
         },
     }
 
@@ -94,11 +94,10 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     args, kwargs = mock_client_instance.invoke_model.call_args
     request_body = json.loads(kwargs["body"])
 
-    assert request_body["prompt"] == "A cute robot"
-    assert request_body["seed"] == 123
-    assert request_body["aspect_ratio"] == "5:4"
-    assert request_body["output_format"] == "png"
-    assert request_body["negative_prompt"] == "blurry, low resolution, pixelated, grainy, unrealistic"
+    assert request_body["textToImageParams"]["text"] == "A cute robot"
+    assert request_body["textToImageParams"]["style"] == "DESIGN_SKETCH"
+    assert request_body["textToImageParams"]["negativeText"] == "blurry, low resolution, pixelated, grainy, unrealistic"
+    assert request_body["imageGenerationConfig"]["seed"] == 123
 
     # Verify directory creation
     mock_os_makedirs.assert_called_once()
@@ -110,7 +109,7 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     # Check the result
     assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
-    assert "The generated image has been saved locally" in result["content"][0]["text"]
+    assert "TEXT_IMAGE task completed successfully." in result["content"][0]["text"]
     assert result["content"][1]["image"]["format"] == "png"
     assert isinstance(result["content"][1]["image"]["source"]["bytes"], bytes)
 
@@ -127,11 +126,8 @@ def test_generate_image_default_params(mock_boto3_client, mock_os_path_exists, m
     args, kwargs = mock_client_instance.invoke_model.call_args
     request_body = json.loads(kwargs["body"])
 
-    assert request_body["seed"] == 42  # From our mocked random.randint
-    assert request_body["aspect_ratio"] == "1:1"
-    assert request_body["output_format"] == "jpeg"
-    assert request_body["negative_prompt"] == "bad lighting, harsh lighting"
-
+    assert request_body["imageGenerationConfig"]["seed"] == 42  # From our mocked random.randint
+    assert request_body["imageGenerationConfig"]["quality"] == "standard"
     assert result["status"] == "success"
 
 
@@ -148,6 +144,69 @@ def test_generate_image_error_handling(mock_boto3_client):
     # Verify error handling
     assert result["status"] == "error"
     assert "Error generating image: API error" in result["content"][0]["text"]
+
+
+def test_virtual_try_on(mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open):
+    """Test virtual try-on functionality."""
+    # Mock file reading for images
+    with patch("builtins.open", mock_file_open[0]):
+        with patch("strands_tools.nova_canvas.encode_image_file") as mock_encode:
+            mock_encode.side_effect = ["source_image_b64", "reference_image_b64"]
+
+            tool_use = {
+                "toolUseId": "test-tool-use-id",
+                "input": {
+                    "task_type": "VIRTUAL_TRY_ON",
+                    "image_path": "person.jpg",
+                    "reference_image_path": "shirt.jpg",
+                    "mask_type": "GARMENT",
+                    "garment_class": "SHORT_SLEEVE_SHIRT",
+                    "preserve_face": "ON",
+                },
+            }
+
+            result = nova_canvas.nova_canvas(tool=tool_use)
+
+            # Verify the function was called with correct parameters
+            mock_client_instance = mock_boto3_client.return_value
+            args, kwargs = mock_client_instance.invoke_model.call_args
+            request_body = json.loads(kwargs["body"])
+
+            assert request_body["taskType"] == "VIRTUAL_TRY_ON"
+            assert request_body["virtualTryOnParams"]["sourceImage"] == "source_image_b64"
+            assert request_body["virtualTryOnParams"]["referenceImage"] == "reference_image_b64"
+            assert request_body["virtualTryOnParams"]["maskType"] == "GARMENT"
+            assert request_body["virtualTryOnParams"]["garmentBasedMask"]["garmentClass"] == "SHORT_SLEEVE_SHIRT"
+            assert request_body["virtualTryOnParams"]["maskExclusions"]["preserveFace"] == "ON"
+
+            assert result["status"] == "success"
+            assert "VIRTUAL_TRY_ON task completed successfully" in result["content"][0]["text"]
+
+
+def test_background_removal(mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open):
+    """Test background removal functionality."""
+    # Mock file reading for image
+    with patch("builtins.open", mock_file_open[0]):
+        with patch("strands_tools.nova_canvas.encode_image_file") as mock_encode:
+            mock_encode.return_value = "image_b64_data"
+
+            tool_use = {
+                "toolUseId": "test-tool-use-id",
+                "input": {"task_type": "BACKGROUND_REMOVAL", "image_path": "photo.jpg"},
+            }
+
+            result = nova_canvas.nova_canvas(tool=tool_use)
+
+            # Verify the function was called with correct parameters
+            mock_client_instance = mock_boto3_client.return_value
+            args, kwargs = mock_client_instance.invoke_model.call_args
+            request_body = json.loads(kwargs["body"])
+
+            assert request_body["taskType"] == "BACKGROUND_REMOVAL"
+            assert request_body["backgroundRemovalParams"]["image"] == "image_b64_data"
+
+            assert result["status"] == "success"
+            assert "BACKGROUND_REMOVAL task completed successfully" in result["content"][0]["text"]
 
 
 def test_filename_creation():
@@ -177,9 +236,9 @@ def test_filename_creation():
 
 
 def test_generate_image_via_agent(agent, mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open):
-    """Test image generation via the agent interface."""
+    """Test image generation (default tool) via the agent interface."""
     # This simulates how the tool would be used through the Agent interface
     result = agent.tool.nova_canvas(prompt="Test via agent")
 
     result_text = extract_result_text(result)
-    assert "The generated image has been saved locally" in result_text
+    assert "TEXT_IMAGE task completed successfully." in result_text
