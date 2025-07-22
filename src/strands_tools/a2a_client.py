@@ -6,14 +6,9 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
-
-Warning: when using this collection of tools ensure max_parallel_tools>1 for your Strands Agent.
-This is typically set by default since the the Strands Agents use cpu count as the default value.
-However, if you see "event loop is already running" errors, you should ensure max_parallel_tools>1.
 """
 
 import asyncio
-import atexit
 import logging
 from typing import Any
 from uuid import uuid4
@@ -24,7 +19,7 @@ from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMes
 from strands import tool
 from strands.types.tools import AgentTool
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +45,6 @@ class A2AClientToolProvider:
         self._httpx_client: httpx.AsyncClient | None = None
         self._initial_discovery_done: bool = False
 
-        # Register resource cleanup on program exit
-        atexit.register(self.close)
-
     @property
     def tools(self) -> list[AgentTool]:
         """Extract all @tool decorated methods from this instance."""
@@ -68,18 +60,6 @@ class A2AClientToolProvider:
 
         return tools
 
-    def _run_async(self, coro):
-        """Handle async-to-sync conversion internally.
-
-        This function requires max_parallel_tools>1 on the Strands Agent.
-        """
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-
     async def _ensure_httpx_client(self) -> httpx.AsyncClient:
         """Ensure the shared HTTP client is initialized."""
         if self._httpx_client is None:
@@ -89,7 +69,7 @@ class A2AClientToolProvider:
     async def _create_a2a_client(self, url: str) -> A2AClient:
         """Create a new A2A client for the given URL."""
         httpx_client = await self._ensure_httpx_client()
-        agent_card = await self._async_discover_agent_card(url)
+        agent_card = await self._discover_agent_card(url)
         logger.info(f"A2AClient created for {url}")
         return A2AClient(httpx_client=httpx_client, agent_card=agent_card)
 
@@ -105,7 +85,7 @@ class A2AClientToolProvider:
         async def _discover_agent_with_error_handling(url: str):
             """Helper method to discover an agent with error handling."""
             try:
-                await self._async_discover_agent_card(url)
+                await self._discover_agent_card(url)
             except Exception as e:
                 logger.error(f"Failed to discover agent at {url}: {e}")
 
@@ -120,7 +100,7 @@ class A2AClientToolProvider:
         if not self._initial_discovery_done and self._known_agent_urls:
             await self._discover_known_agents()
 
-    async def _async_discover_agent_card(self, url: str) -> AgentCard:
+    async def _discover_agent_card(self, url: str) -> AgentCard:
         """Internal method to discover and cache an agent card."""
         if url in self._discovered_agents:
             return self._discovered_agents[url]
@@ -133,7 +113,7 @@ class A2AClientToolProvider:
         return agent_card
 
     @tool
-    def discover_agent(self, url: str) -> dict[str, Any]:
+    async def a2a_discover_agent(self, url: str) -> dict[str, Any]:
         """
         Discover an A2A agent and return its agent card with capabilities.
 
@@ -150,13 +130,13 @@ class A2AClientToolProvider:
                 - error: Error message (if failed)
                 - url: The agent URL that was queried
         """
-        return self._run_async(self._async_discover_agent_card_tool(url))
+        return await self._discover_agent_card_tool(url)
 
-    async def _async_discover_agent_card_tool(self, url: str) -> dict[str, Any]:
+    async def _discover_agent_card_tool(self, url: str) -> dict[str, Any]:
         """Internal async implementation for discover_agent_card tool."""
         try:
             await self._ensure_discovered_known_agents()
-            agent_card = await self._async_discover_agent_card(url)
+            agent_card = await self._discover_agent_card(url)
             return {
                 "status": "success",
                 "agent_card": agent_card.model_dump(mode="python", exclude_none=True),
@@ -171,7 +151,7 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def list_discovered_agents(self) -> dict[str, Any]:
+    async def a2a_list_discovered_agents(self) -> dict[str, Any]:
         """
         List all discovered A2A agents and their capabilities.
 
@@ -181,9 +161,9 @@ class A2AClientToolProvider:
                 - agents: List of discovered agents with their details
                 - total_count: Total number of discovered agents
         """
-        return self._run_async(self._async_list_discovered_agents())
+        return await self._list_discovered_agents()
 
-    async def _async_list_discovered_agents(self) -> dict[str, Any]:
+    async def _list_discovered_agents(self) -> dict[str, Any]:
         """Internal async implementation for list_discovered_agents."""
         try:
             await self._ensure_discovered_known_agents()
@@ -205,7 +185,9 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def send_message(self, message_text: str, target_agent_url: str, message_id: str | None = None) -> dict[str, Any]:
+    async def a2a_send_message(
+        self, message_text: str, target_agent_url: str, message_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
 
@@ -222,9 +204,9 @@ class A2AClientToolProvider:
                 - message_id: The message ID used
                 - target_agent_url: The agent URL that was contacted
         """
-        return self._run_async(self._async_send_message(message_text, target_agent_url, message_id))
+        return await self._send_message(message_text, target_agent_url, message_id)
 
-    async def _async_send_message(
+    async def _send_message(
         self, message_text: str, target_agent_url: str, message_id: str | None = None
     ) -> dict[str, Any]:
         """Internal async implementation for send_message."""
@@ -240,7 +222,7 @@ class A2AClientToolProvider:
                 kind="message",
                 role=Role.user,
                 parts=[Part(TextPart(kind="text", text=message_text))],
-                messageId=message_id,
+                message_id=message_id,
             )
 
             request = SendMessageRequest(id=str(uuid4()), params=MessageSendParams(message=message))
@@ -263,19 +245,3 @@ class A2AClientToolProvider:
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
             }
-
-    def close(self):
-        """Close the HTTP client and clean up resources. Safe to call multiple times."""
-        if self._httpx_client is not None:
-            logger.debug("Closing HTTP client and cleaning up resources")
-            self._run_async(self._async_close())
-            self._httpx_client = None
-            self._discovered_agents.clear()
-            logger.info("A2AClientToolProvider resources cleaned up")
-        else:
-            logger.debug("A2AClientToolProvider already cleaned up, skipping")
-
-    async def _async_close(self):
-        """Internal async method to close the HTTP client."""
-        if self._httpx_client is not None:
-            await self._httpx_client.aclose()

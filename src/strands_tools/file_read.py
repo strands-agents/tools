@@ -106,6 +106,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -406,7 +407,7 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
         except Exception as e:
             console.print(
                 Panel(
-                    f"Warning: Error while globbing {pattern}: {e}",
+                    escape(f"Warning: Error while globbing {pattern}: {e}"),
                     title="[yellow]Warning",
                     border_style="yellow",
                 )
@@ -414,7 +415,7 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
             return []
 
     except Exception as e:
-        console.print(Panel(f"Error in find_files: {str(e)}", title="[red]Error", border_style="red"))
+        console.print(Panel(escape(f"Error in find_files: {str(e)}"), title="[red]Error", border_style="red"))
         return []
 
 
@@ -537,7 +538,7 @@ def read_file_lines(console: Console, file_path: str, start_line: int = 0, end_l
         # Create a preview panel
         line_range = f"{start_line + 1}-{end_line if end_line else len(all_lines)}"
         panel = Panel(
-            "".join(lines),
+            escape("".join(lines)),
             title=f"[bold green]Lines {line_range} from {os.path.basename(file_path)}",
             border_style="blue",
             expand=False,
@@ -546,7 +547,7 @@ def read_file_lines(console: Console, file_path: str, start_line: int = 0, end_l
         return lines
 
     except Exception as e:
-        error_panel = Panel(f"Error reading file: {str(e)}", title="[bold red]Error", border_style="red")
+        error_panel = Panel(escape(f"Error reading file: {str(e)}"), title="[bold red]Error", border_style="red")
         console.print(error_panel)
         raise
 
@@ -610,7 +611,7 @@ def read_file_chunk(console: Console, file_path: str, chunk_size: int, chunk_off
 
         # Create content panel
         content_panel = Panel(
-            content,
+            escape(content),
             title=f"[bold green]Content from {file_name}",
             border_style="blue",
             expand=False,
@@ -621,7 +622,7 @@ def read_file_chunk(console: Console, file_path: str, chunk_size: int, chunk_off
 
     except Exception as e:
         error_panel = Panel(
-            f"Error reading file chunk: {str(e)}",
+            escape(f"Error reading file chunk: {str(e)}"),
             title="[bold red]Error",
             border_style="red",
         )
@@ -691,7 +692,7 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
                 match_text = "\n".join(context_text)
                 # Create a panel for each match
                 panel = Panel(
-                    match_text,
+                    escape(match_text),
                     title=f"[bold green]Match at line {i + 1}",
                     border_style="blue",
                     expand=False,
@@ -702,7 +703,7 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
 
         # Print summary
         summary = Panel(
-            f"Found {total_matches} matches for pattern '{pattern}' in {os.path.basename(file_path)}",
+            escape(f"Found {total_matches} matches for pattern '{pattern}' in {os.path.basename(file_path)}"),
             title="[bold yellow]Search Summary",
             border_style="yellow",
             expand=False,
@@ -713,7 +714,7 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
 
     except Exception as e:
         error_panel = Panel(
-            f"Error searching file: {str(e)}",
+            escape(f"Error searching file: {str(e)}"),
             title="[bold red]Error",
             border_style="red",
         )
@@ -1032,7 +1033,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         if not matching_files:
             error_msg = f"No files found matching pattern(s): {', '.join(paths)}"
-            console.print(Panel(error_msg, title="[bold red]Error", border_style="red"))
+            console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
             return {
                 "toolUseId": tool_use_id,
                 "status": "error",
@@ -1055,7 +1056,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     except Exception as e:
                         console.print(
                             Panel(
-                                f"Error creating document block for {file_path}: {str(e)}",
+                                escape(f"Error creating document block for {file_path}: {str(e)}"),
                                 title="[bold yellow]Warning",
                                 border_style="yellow",
                             )
@@ -1074,7 +1075,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             except Exception as e:
                 error_msg = f"Error in document mode: {str(e)}"
-                console.print(Panel(error_msg, title="[bold red]Error", border_style="red"))
+                console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
                 return {
                     "toolUseId": tool_use_id,
                     "status": "error",
@@ -1105,7 +1106,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
             console.print(Panel(tree, title="[bold green]File Tree", border_style="blue"))
             console.print(
                 Panel(
-                    "\n".join(matching_files),
+                    escape("\n".join(matching_files)),
                     title="[bold green]File Paths",
                     border_style="blue",
                 )
@@ -1135,7 +1136,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         response_content.append({"text": f"Content of {file_path}:\n{content}"})
                     except Exception as e:
                         error_msg = f"Error reading file {file_path}: {str(e)}"
-                        console.print(Panel(error_msg, title="[bold red]Error", border_style="red"))
+                        console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
                         response_content.append({"text": error_msg})
 
                 elif mode == "preview":
@@ -1228,7 +1229,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             except Exception as e:
                 error_msg = f"Error processing file {file_path}: {str(e)}"
-                console.print(Panel(error_msg, title="[bold red]Error", border_style="red"))
+                console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
                 response_content.append({"text": error_msg})
 
         return {
@@ -1239,7 +1240,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     except Exception as e:
         error_msg = f"Error: {str(e)}"
-        console.print(Panel(error_msg, title="[bold red]Error", border_style="red"))
+        console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
         return {
             "toolUseId": tool_use_id,
             "status": "error",
