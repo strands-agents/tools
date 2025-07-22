@@ -2,6 +2,7 @@
 
 import sys
 from unittest import mock
+from unittest.mock import MagicMock, mock_open, patch
 
 sys.modules["pyautogui"] = mock.MagicMock()
 sys.modules["mouseinfo"] = mock.MagicMock()
@@ -9,7 +10,6 @@ sys.modules["cv2"] = mock.MagicMock()
 
 import platform
 import unittest
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -19,7 +19,8 @@ from src.strands_tools.use_computer import (
     close_application,
     extract_text_from_image,
     group_text_by_lines,
-    handle_analyze_screenshot,
+    handle_analyze_screenshot_pytesseract,
+    handle_sending_results_to_llm,
     open_application,
     use_computer,
 )
@@ -204,28 +205,69 @@ class TestScreenshotAndAnalysis:
     def computer(self):
         return UseComputerMethods()
 
-    def test_screenshot_creation(self, computer):
-        with (
-            patch("pyautogui.screenshot") as mock_screenshot,
-            patch("os.path.exists", return_value=True),
-            patch("os.makedirs"),
-            patch("datetime.datetime") as mock_datetime,
-        ):
-            mock_datetime.now.return_value.strftime.return_value = "20240101_120000"
-            mock_screenshot.return_value = MagicMock()
-            result = computer.screenshot()
-            assert "Screenshot saved to" in result
+    def test_analyze_screen(self, computer):
 
-    def test_analyze_screenshot_with_no_text(self):  # Add self parameter
+        mock_image_content = {"image": {"format": "png", "source": {"bytes": b"test image data"}}}
+
+        with (
+            patch("src.strands_tools.use_computer.handle_analyze_screenshot_pytesseract") as mock_analyze,
+            patch("src.strands_tools.use_computer.handle_sending_results_to_llm") as mock_send_results,
+            patch("os.path.exists", return_value=True),
+        ):
+            # Set up the return values
+            mock_analyze.return_value = {
+                "text_result": "Detected 1 text elements in screenshot",
+                "image_path": "test.png",
+                "should_delete": True,
+            }
+            mock_send_results.return_value = mock_image_content
+
+            # Call the analyze_screen method
+            result = computer.analyze_screen(screenshot_path="test.png")
+
+            # Verify the result format
+            assert result["status"] == "success"
+            assert len(result["content"]) == 2
+            assert result["content"][0]["text"] == "Detected 1 text elements in screenshot"
+            assert result["content"][1] == mock_image_content
+
+            # Verify the called functions
+            mock_analyze.assert_called_once_with("test.png", None, 0.5)
+            mock_send_results.assert_called_once_with("test.png")
+
+    def test_analyze_screen_with_region_and_confidence(self, computer):
+        with (
+            patch("src.strands_tools.use_computer.handle_analyze_screenshot_pytesseract") as mock_analyze,
+            patch("src.strands_tools.use_computer.handle_sending_results_to_llm") as mock_send_results,
+            patch("os.path.exists", return_value=True),
+            patch("src.strands_tools.use_computer.delete_screenshot") as mock_delete,
+        ):
+            # Set up the return values
+            mock_analyze.return_value = {
+                "text_result": "Analysis result text",
+                "image_path": "test.png",
+                "should_delete": True,
+            }
+            mock_send_results.return_value = {"image": {"format": "png", "source": {"bytes": b"image data"}}}
+
+            # Call the analyze_screen method with custom parameters
+            computer.analyze_screen(region=[0, 0, 100, 100], min_confidence=0.8)
+
+            # Verify the called functions with correct parameters
+            mock_analyze.assert_called_once_with(None, [0, 0, 100, 100], 0.8)
+            mock_send_results.assert_called_once_with("test.png")
+            mock_delete.assert_called_once_with("test.png")
+
+    def test_analyze_screen_pytesseract_with_no_text(self):
         with (
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=[]),
         ):
-            result = handle_analyze_screenshot("test.png", None)
+            result = handle_analyze_screenshot_pytesseract("test.png", None)
             assert "No text detected" in result["text_result"]
 
     @patch("os.path.exists", return_value=True)
-    def test_analyze_screenshot_with_text(self, mock_exists):
+    def test_analyze_screen_pytesseract_with_text(self, mock_exists):
         mock_text_data = [
             {
                 "text": "test",
@@ -234,8 +276,33 @@ class TestScreenshotAndAnalysis:
             }
         ]
         with patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data):
-            result = handle_analyze_screenshot("test.png", None)
+            result = handle_analyze_screenshot_pytesseract("test.png", None)
             assert "Detected 1 text elements" in result["text_result"]
+
+    def test_handle_sending_results_to_llm(self):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("builtins.open", mock_open(read_data=b"test image data")),
+            patch("PIL.Image.open") as mock_image_open,
+        ):
+            # Mock the PIL Image object
+            mock_img = MagicMock()
+            mock_img.format = "PNG"
+            mock_image_open.return_value.__enter__.return_value = mock_img
+
+            # Call the function
+            result = handle_sending_results_to_llm("test.png")
+
+            # Verify the result
+            assert "image" in result
+            assert result["image"]["format"] == "png"
+            assert "bytes" in result["image"]["source"]
+
+    def test_handle_sending_results_to_llm_nonexistent_file(self):
+        with patch("os.path.exists", return_value=False):
+            result = handle_sending_results_to_llm("nonexistent.png")
+            assert "text" in result
+            assert "not found" in result["text"]
 
 
 class TestApplicationManagement:
@@ -584,10 +651,10 @@ class TestFocusApplication:
             assert result is False
 
 
-class TestHandleAnalyzeScreenshot:
+class TestHandleAnalyzeScreenshotPytesseract:
     """Tests for screenshot analysis handling"""
 
-    def test_handle_analyze_screenshot_with_existing_path(self):
+    def test_handle_analyze_screenshot_pytesseract_with_existing_path(self):
         mock_text_data = [
             {
                 "text": "Sample Text",
@@ -600,19 +667,21 @@ class TestHandleAnalyzeScreenshot:
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data),
         ):
-            result = handle_analyze_screenshot("test.png", None)
+            result = handle_analyze_screenshot_pytesseract("test.png", None)
 
             assert "Detected 1 text elements" in result["text_result"]
             assert "Sample Text" in result["text_result"]
             assert "Confidence: 0.95" in result["text_result"]
+            assert result["image_path"] == "test.png"
+            assert result["should_delete"] is False
 
-    def test_handle_analyze_screenshot_nonexistent_path(self):
+    def test_handle_analyze_screenshot_pytesseract_nonexistent_path(self):
         with patch("os.path.exists", return_value=False):
             with pytest.raises(ValueError) as exc_info:
-                handle_analyze_screenshot("nonexistent.png", None)
+                handle_analyze_screenshot_pytesseract("nonexistent.png", None)
             assert "Screenshot not found at nonexistent.png" in str(exc_info.value)
 
-    def test_handle_analyze_screenshot_no_path_provided(self):
+    def test_handle_analyze_screenshot_pytesseract_no_path_provided(self):
         mock_text_data = [
             {
                 "text": "Auto Screenshot",
@@ -625,58 +694,59 @@ class TestHandleAnalyzeScreenshot:
 
         with (
             patch("os.path.exists", return_value=False),
-            patch("os.makedirs") as mock_makedirs,
             patch("pyautogui.screenshot", return_value=mock_screenshot),
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data),
             patch("datetime.datetime") as mock_datetime,
+            patch("src.strands_tools.use_computer.create_screenshot") as mock_create_screenshot,
         ):
             # Mock datetime.now().strftime()
             mock_datetime.now.return_value.strftime.return_value = "20240101_120000"
+            mock_create_screenshot.return_value = "screenshots/screenshot_20240101_120000.png"
 
-            result = handle_analyze_screenshot(None, None)
+            result = handle_analyze_screenshot_pytesseract(None, None)
 
-            mock_makedirs.assert_called_once_with("screenshots")
-            mock_screenshot.save.assert_called_once()
+            mock_create_screenshot.assert_called_once_with(None)
             assert "Detected 1 text elements" in result["text_result"]
             assert "Auto Screenshot" in result["text_result"]
+            assert result["should_delete"] is True
 
-    def test_handle_analyze_screenshot_with_region(self):
+    def test_handle_analyze_screenshot_pytesseract_with_region(self):
         mock_text_data = []
-        mock_screenshot = MagicMock()
 
         with (
             patch("os.path.exists", return_value=False),
             patch("os.makedirs"),
-            patch("pyautogui.screenshot", return_value=mock_screenshot) as mock_pyautogui_screenshot,
+            patch("src.strands_tools.use_computer.create_screenshot") as mock_create_screenshot,
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data),
             patch("datetime.datetime") as mock_datetime,
         ):
             mock_datetime.now.return_value.strftime.return_value = "20240101_120000"
+            mock_create_screenshot.return_value = "screenshots/screenshot_20240101_120000.png"
 
-            result = handle_analyze_screenshot(None, [0, 0, 100, 100])
+            result = handle_analyze_screenshot_pytesseract(None, [0, 0, 100, 100])
 
             # Verify screenshot was called with region
-            mock_pyautogui_screenshot.assert_called_once_with(region=[0, 0, 100, 100])
+            mock_create_screenshot.assert_called_once_with([0, 0, 100, 100])
             assert "No text detected" in result["text_result"]
 
-    def test_handle_analyze_screenshot_no_text_found(self):
+    def test_handle_analyze_screenshot_pytesseract_no_text_found(self):
         with (
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=[]),
         ):
-            result = handle_analyze_screenshot("test.png", None)
+            result = handle_analyze_screenshot_pytesseract("test.png", None)
             assert "No text detected in screenshot test.png" in result["text_result"]
 
-    def test_handle_analyze_screenshot_analysis_error(self):
+    def test_handle_analyze_screenshot_pytesseract_analysis_error(self):
         with (
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", side_effect=Exception("OCR Error")),
         ):
-            with pytest.raises(Exception) as excinfo:
-                handle_analyze_screenshot("test.png", None)
+            with pytest.raises(RuntimeError) as excinfo:
+                handle_analyze_screenshot_pytesseract("test.png", None)
             assert "Error analyzing screenshot: OCR Error" in str(excinfo.value)
 
-    def test_handle_analyze_screenshot_formatted_output(self):
+    def test_handle_analyze_screenshot_pytesseract_formatted_output(self):
         mock_text_data = [
             {
                 "text": "First",
@@ -694,7 +764,7 @@ class TestHandleAnalyzeScreenshot:
             patch("os.path.exists", return_value=True),
             patch("src.strands_tools.use_computer.extract_text_from_image", return_value=mock_text_data),
         ):
-            result = handle_analyze_screenshot("test.png", None)
+            result = handle_analyze_screenshot_pytesseract("test.png", None)
 
             # Check that both text elements are included with proper formatting
             assert "Detected 2 text elements" in result["text_result"]
@@ -801,23 +871,30 @@ class TestUseComputerEdgeCases:
 
             assert result == {"status": "success", "content": [{"text": "Mouse position: (100, 200)"}]}
 
-    def test_use_computer_screenshot_requires_focus(self, monkeypatch):
-        """Test use_computer calls focus for screenshot action when app_name provided"""
+    def test_use_computer_analyze_screen_requires_focus(self, monkeypatch):
+        """Test use_computer calls focus for analyze_screen action when app_name provided"""
         monkeypatch.setenv("BYPASS_TOOL_CONSENT", "true")
 
         with (
             patch("src.strands_tools.use_computer.focus_application", return_value=True) as mock_focus,
-            patch("src.strands_tools.use_computer.UseComputerMethods.screenshot") as mock_screenshot,
-            patch("builtins.print"),
+            patch("src.strands_tools.use_computer.UseComputerMethods.analyze_screen") as mock_analyze_screen,
         ):
-            mock_screenshot.return_value = "Screenshot saved to test.png"
+            mock_analyze_screen.return_value = {
+                "status": "success",
+                "content": [
+                    {"text": "Analysis results"},
+                    {"image": {"format": "png", "source": {"bytes": b"image data"}}},
+                ],
+            }
 
-            result = use_computer(action="screenshot", app_name="TestApp")
+            result = use_computer(action="analyze_screen", app_name="TestApp")
 
             mock_focus.assert_called_once_with("TestApp")
-            mock_screenshot.assert_called_once()
+            mock_analyze_screen.assert_called_once()
 
-            assert result == {"status": "success", "content": [{"text": "Screenshot saved to test.png"}]}
+            assert result["status"] == "success"
+            assert len(result["content"]) == 2
+            assert result["content"][0]["text"] == "Analysis results"
 
 
 # Only run this test if on mac, because the tool has some mac specific way of performing actions

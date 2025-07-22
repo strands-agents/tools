@@ -56,6 +56,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 - 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
 - 📰 **RSS Feed Manager** - Subscribe, fetch, and process RSS feeds with content filtering and persistent storage
+- 🖱️ **Computer Tool** - Automate desktop actions including mouse movements, keyboard input, screenshots, and application management
 
 ## 📦 Installation
 
@@ -68,7 +69,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser, rss]
+pip install strands-agents-tools[mem0_memory, use_browser, rss, use_computer]
 ```
 
 ### Development Install
@@ -132,6 +133,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
 | rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
+| use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 
 \* *These tools do not work on windows*
 
@@ -543,6 +545,33 @@ latest_news = agent.tool.rss(
     action="fetch",
     url="https://blog.example.org/feed",
     max_entries=3
+)
+```
+
+### Use Computer
+
+```python
+from strands import Agent
+from strands_tools import use_computer
+
+agent = Agent(tools=[use_computer])
+
+# Find mouse position
+result = agent.tool.use_computer(action="mouse_position")
+
+# Automate adding text
+result = agent.tool.use_computer(action="type", text="Hello, world!", app_name="Notepad")
+
+# Analyze current computer screen
+result = agent.tool.use_computer(action="analyze_screen")
+
+result = agent.tool.use_computer(action="open_app", app_name="Calculator")
+result = agent.tool.use_computer(action="close_app", app_name="Calendar")
+
+result = agent.tool.use_computer(
+    action="hotkey",
+    hotkey_str="command+ctrl+f",  # For macOS
+    app_name="Chrome"
 )
 ```
 

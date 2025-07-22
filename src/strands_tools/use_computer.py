@@ -217,15 +217,17 @@ class UseComputerMethods:
 
         return f"Pressed hotkey combination: {hotkey_str}"
 
-    def screenshot(self, region: Optional[List[int]] = None) -> str:
-        """Capture screen screenshot."""
-        filepath = create_screenshot(region)
-        return f"Screenshot saved to {filepath}"
-
-    def analyze_screenshot(
+    def analyze_screen(
         self, screenshot_path: Optional[str] = None, region: Optional[List[int]] = None, min_confidence: float = 0.5
     ) -> Dict:
-        analysis_results = handle_analyze_screenshot(screenshot_path, region, min_confidence)
+        """
+        Capture a screenshot and analyze it for text content.
+        Returns both the text analysis and the screenshot image for the agent.
+
+        This is a combined version of the screenshot and analyze_screenshot actions.
+        """
+        # Get text analysis results using Tesseract OCR
+        analysis_results = handle_analyze_screenshot_pytesseract(screenshot_path, region, min_confidence)
 
         # Prepare text analysis result
         text_result = analysis_results.get("text_result", "No text analysis available")
@@ -239,7 +241,6 @@ class UseComputerMethods:
         if should_delete and os.path.exists(image_path):
             delete_screenshot(image_path)
 
-        # Return a dictionary with both text analysis and image content
         return {
             "status": "success",
             "content": [
@@ -565,8 +566,10 @@ def delete_screenshot(filepath: str) -> None:
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
-    except Exception:
-        pass  # Silently ignore deletion errors
+    except Exception as e:
+        # Log the error but continue execution
+        logger.warning(f"Failed to delete screenshot file '{filepath}': {str(e)}")
+        # We don't want to fail the entire operation just because of a cleanup issue
 
 
 def handle_sending_results_to_llm(image_path: str) -> dict:
@@ -600,10 +603,10 @@ def handle_sending_results_to_llm(image_path: str) -> dict:
         return {"text": f"Error preparing image for LLM: {str(e)}"}
 
 
-def handle_analyze_screenshot(
+def handle_analyze_screenshot_pytesseract(
     screenshot_path: Optional[str], region: Optional[List[int]], min_confidence: float = 0.5
 ) -> dict:
-    """Extract text and coordinates from screenshot."""
+    """Extract text and coordinates from screenshot using Tesseract OCR."""
     # Check if screenshot_path was given then do not delete the screenshot
     if screenshot_path:
         if not os.path.exists(screenshot_path):
@@ -676,9 +679,7 @@ def use_computer(
             - key_press: Press specified key (requires app_name)
             - key_hold: Hold key combination (requires app_name)
             - hotkey: Press a hotkey combination (requires app_name)
-            - screenshot: Capture screen
-                (optionally in specified region or active window)(requires app_name when screenshotting an app)
-            - analyze_screenshot: Extract text and coordinates from screenshot
+            - analyze_screen: Capture screenshot and extract text in a single operation (recommended)
             - screen_size: Get screen dimensions
             - open_app: Open specified application
             - close_app: Close specified application
@@ -703,17 +704,8 @@ def use_computer(
 
     Returns:
         Dict: For most actions, returns a simple dictionary with status and text content.
-              For analyze_screenshot, returns both text analysis results and the image content
+              For analyze_screen, returns both text analysis results and the image content
               in a format that can be processed by the model.
-
-    Example Usage:
-        # Correct usage - with app_name for application interaction
-        use_computer(action="type", text="Hello world", app_name="Notepad")
-        use_computer(action="click", x=100, y=200, app_name="Chrome")
-
-        # Actions that don't require app_name
-        use_computer(action="screen_size")
-        use_computer(action="mouse_position")
     """
     all_params = locals()
     params = [f"{k}: {v}" for k, v in all_params.items() if v is not None and not (k == "min_confidence" and v == 0.5)]
@@ -743,6 +735,7 @@ def use_computer(
         "scroll",
         "scroll_to_bottom",
         "screenshot",
+        "analyze_screen",
     ]
     if action in actions_requiring_focus and app_name:
         focus_success = focus_application(app_name)
