@@ -192,10 +192,13 @@ def _create_custom_agents(
         if agent_tools and parent_agent and hasattr(parent_agent, "tool_registry"):
             # Filter tools to ensure they exist in parent agent's registry
             available_tools = parent_agent.tool_registry.registry.keys()
-            agent_tools = [tool for tool in agent_tools if tool in available_tools]
-            if len(agent_tools) != len(spec.get("tools", [])):
-                missing_tools = set(spec.get("tools", [])) - set(agent_tools)
+            filtered_tool_names = [tool for tool in agent_tools if tool in available_tools]
+            if len(filtered_tool_names) != len(spec.get("tools", [])):
+                missing_tools = set(spec.get("tools", [])) - set(filtered_tool_names)
                 logger.warning(f"Agent '{agent_name}' missing tools: {missing_tools}")
+
+            # Get actual tool objects from parent agent's registry
+            agent_tools = [parent_agent.tool_registry.registry[tool_name] for tool_name in filtered_tool_names]
 
         # Create agent
         swarm_agent = Agent(
