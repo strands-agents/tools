@@ -54,6 +54,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+- 🐘 **Query Postgres** – Query PostgreSQL with Natural Language
 
 ## 📦 Installation
 
@@ -128,7 +129,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
-
+| query_postgres | `agent.tool.query_postgres(query="SELECT name FROM users WHERE active = true")` | Run secure, read-only PostgreSQL queries for insights |
 \* *These tools do not work on windows*
 
 ## 💻 Usage Examples
@@ -453,6 +454,50 @@ response = agent("discover available agents and send a greeting message")
 # - send_message(message_text, target_agent_url) to communicate
 ```
 
+### Query Postgres
+```python
+import os
+from strands import Agent
+from strands.models import BedrockModel
+from strands_tools.query_postgres import  query_postgres
+
+# Show rich UI for tools in CLI
+os.environ["STRANDS_TOOL_CONSOLE_MODE"] = "enabled"
+
+model = BedrockModel(model_id="apac.anthropic.claude-sonnet-4-20250514-v1:0")
+
+# Initialize the agent with tools, model, and configuration
+agent = Agent(
+    tools=[query_postgres],
+    system_prompt="""
+You are a helpful business analysis tool that answers user questions by generating and executing SQL queries on a PostgreSQL database. 
+You only respond with SQL query results via the tool named `query_postgres`.
+
+### Database Schema
+List you schema here for best results.
+
+### Instructions
+- Use the `query_postgres` tool to run SQL queries.
+- You do not need to handle connection details — they are automatically managed via environment variables: `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGPORT`.
+- Limit SELECT results to a maximum of 100 rows unless otherwise specified.
+- Always be accurate with JOINs and field references based on the schema.
+- If a query returns multiple results, structure the output for readability.
+- Only return text content via `content: [{"text": "..."}]`.
+
+You are expected to translate user queries like:
+- "What is the average product price?"
+- "List top 5 customers by total order value"
+- "Show the number of orders per customer"
+
+into valid SQL and return the results cleanly.
+""",
+    model=model
+)
+
+agent("What is the average price of the products")
+```
+
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -607,6 +652,15 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
 | STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
 | STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
+### Query Postgres Tool
+| Environment Variable | Description                                     | Default    |
+|----------------------| ----------------------------------------------- |------------|
+| PGHOST               | Hostname or IP address of the PostgreSQL server | localhost  |
+| PGPORT               | Port number to connect to PostgreSQL            | 5432       |
+| PGDATABASE           | Name of the PostgreSQL database to connect to   | *Required* |
+| PGUSER               | **Read-only** user for executing queries        | *Required* |
+| PGPASSWORD           | Password for the PostgreSQL user                | *Required* |
 
 
 ## Contributing ❤️
