@@ -206,13 +206,13 @@ class TestScreenshotAndAnalysis:
         return UseComputerMethods()
 
     def test_analyze_screen(self, computer):
-
         mock_image_content = {"image": {"format": "png", "source": {"bytes": b"test image data"}}}
 
         with (
             patch("src.strands_tools.use_computer.handle_analyze_screenshot_pytesseract") as mock_analyze,
             patch("src.strands_tools.use_computer.handle_sending_results_to_llm") as mock_send_results,
             patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=1000),  # Mock file size to be small enough
         ):
             # Set up the return values
             mock_analyze.return_value = {
@@ -222,17 +222,28 @@ class TestScreenshotAndAnalysis:
             }
             mock_send_results.return_value = mock_image_content
 
-            # Call the analyze_screen method
+            # Call the analyze_screen method without send_screenshot (default behavior now returns only text)
             result = computer.analyze_screen(screenshot_path="test.png")
 
             # Verify the result format
             assert result["status"] == "success"
-            assert len(result["content"]) == 2
+            assert len(result["content"]) == 1
             assert result["content"][0]["text"] == "Detected 1 text elements in screenshot"
-            assert result["content"][1] == mock_image_content
 
-            # Verify the called functions
+            # Verify the called functions (should not call mock_send_results when send_screenshot=False)
             mock_analyze.assert_called_once_with("test.png", None, 0.5)
+
+            # Now test with send_screenshot=True to verify both results are returned
+            mock_analyze.reset_mock()
+            result_with_screenshot = computer.analyze_screen(screenshot_path="test.png", send_screenshot=True)
+
+            # Verify the result format with screenshot included
+            assert result_with_screenshot["status"] == "success"
+            assert len(result_with_screenshot["content"]) == 2
+            assert result_with_screenshot["content"][0]["text"] == "Detected 1 text elements in screenshot"
+            assert result_with_screenshot["content"][1] == mock_image_content
+
+            # Now send_results should be called
             mock_send_results.assert_called_once_with("test.png")
 
     def test_analyze_screen_with_region_and_confidence(self, computer):
@@ -240,7 +251,7 @@ class TestScreenshotAndAnalysis:
             patch("src.strands_tools.use_computer.handle_analyze_screenshot_pytesseract") as mock_analyze,
             patch("src.strands_tools.use_computer.handle_sending_results_to_llm") as mock_send_results,
             patch("os.path.exists", return_value=True),
-            patch("src.strands_tools.use_computer.delete_screenshot") as mock_delete,
+            patch("os.path.getsize", return_value=1000),  # Mock file size to be small enough
         ):
             # Set up the return values
             mock_analyze.return_value = {
@@ -250,13 +261,24 @@ class TestScreenshotAndAnalysis:
             }
             mock_send_results.return_value = {"image": {"format": "png", "source": {"bytes": b"image data"}}}
 
-            # Call the analyze_screen method with custom parameters
+            # Call the analyze_screen method with custom parameters but without send_screenshot
             computer.analyze_screen(region=[0, 0, 100, 100], min_confidence=0.8)
 
-            # Verify the called functions with correct parameters
+            # Verify analyze is called with the correct parameters
+            mock_analyze.assert_called_once_with(None, [0, 0, 100, 100], 0.8)
+
+            # handle_sending_results_to_llm should not be called when send_screenshot=False
+            mock_send_results.assert_not_called()
+
+            # Now test with send_screenshot=True
+            mock_analyze.reset_mock()
+            mock_send_results.reset_mock()
+
+            computer.analyze_screen(region=[0, 0, 100, 100], min_confidence=0.8, send_screenshot=True)
+
+            # Now verify that send_results is called
             mock_analyze.assert_called_once_with(None, [0, 0, 100, 100], 0.8)
             mock_send_results.assert_called_once_with("test.png")
-            mock_delete.assert_called_once_with("test.png")
 
     def test_analyze_screen_pytesseract_with_no_text(self):
         with (

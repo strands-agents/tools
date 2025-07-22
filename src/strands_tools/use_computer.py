@@ -1,3 +1,25 @@
+"""
+Cross-platform computer automation tool for controlling mouse, keyboard, and screen interactions.
+
+This module provides a comprehensive set of utilities for programmatically controlling
+a computer through various input methods (mouse, keyboard) and screen analysis capabilities.
+It's designed to work across multiple operating systems (Windows, macOS, Linux) with
+appropriate fallbacks and platform-specific optimizations.
+
+Features:
+- Mouse control: positioning, clicking, dragging
+- Keyboard input: typing, key presses, hotkeys
+- Screen analysis: OCR-based text extraction from screen regions
+- Application management: opening, closing, and focusing applications
+
+The module uses PyAutoGUI for most operations, with platform-specific enhancements
+for macOS (using Quartz), Windows, and Linux where needed. It includes comprehensive
+error handling, input validation, and user consent mechanisms.
+
+For OCR functionality, the module uses Tesseract OCR via the pytesseract library,
+with image preprocessing optimizations to improve text recognition accuracy.
+"""
+
 import inspect
 import logging
 import os
@@ -34,12 +56,39 @@ logger = logging.getLogger(__name__)
 
 
 class UseComputerMethods:
+    """
+    Core implementation of computer automation methods for mouse, keyboard, and screen interactions.
+
+    This class provides the underlying implementation for the use_computer tool,
+    with methods for controlling mouse movement, clicks, keyboard input, and
+    screen analysis. It handles platform-specific differences and includes
+    appropriate error handling and validation.
+
+    The class is designed with cross-platform compatibility in mind, with special
+    handling for macOS, Windows, and Linux where necessary. It uses PyAutoGUI
+    for most operations but falls back to platform-specific APIs when needed for
+    better reliability or functionality.
+    """
+
     def __init__(self):
+        """
+        Initialize the UseComputerMethods instance with safety settings.
+
+        Sets up PyAutoGUI with failsafe mode enabled (moving mouse to corner aborts)
+        and adds a small delay between actions for stability across platforms.
+        """
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.1  # Add small delay between actions for stability
 
     # Basic Computer Automation Actions
     def mouse_position(self):
+        """
+        Get the current mouse cursor position.
+
+        Returns:
+            str: String representation of current mouse coordinates in the format:
+                 "Mouse position: (x, y)"
+        """
         x, y = pyautogui.position()
         return f"Mouse position: ({x}, {y})"
 
@@ -218,13 +267,44 @@ class UseComputerMethods:
         return f"Pressed hotkey combination: {hotkey_str}"
 
     def analyze_screen(
-        self, screenshot_path: Optional[str] = None, region: Optional[List[int]] = None, min_confidence: float = 0.5
+        self,
+        screenshot_path: Optional[str] = None,
+        region: Optional[List[int]] = None,
+        min_confidence: float = 0.5,
+        send_screenshot: bool = False,
     ) -> Dict:
         """
-        Capture a screenshot and analyze it for text content.
-        Returns both the text analysis and the screenshot image for the agent.
+        Capture a screenshot and analyze it for text content using OCR.
 
-        This is a combined version of the screenshot and analyze_screenshot actions.
+        This method takes a screenshot of the current screen (or a specified region),
+        extracts text using OCR, and returns both the text analysis and optionally
+        the screenshot itself.
+
+        Args:
+            screenshot_path: Path to an existing screenshot file to analyze instead of
+                           capturing a new one. If None, a new screenshot is taken.
+            region: Optional list of [left, top, width, height] defining the screen
+                  region to capture. If None, the entire screen is captured.
+            min_confidence: Minimum confidence threshold (0.0-1.0) for OCR text detection.
+                          Higher values improve precision but may miss some text.
+            send_screenshot: Whether to include the actual screenshot image in the return value.
+                           Set to True if you want the screenshot to be sent to the model/agent
+                           for visual inspection. Set to False to only return the text analysis,
+                           which is useful for privacy or when bandwidth/tokens are a concern.
+
+        Returns:
+            Dict: Dictionary containing status and content with the following structure:
+                {
+                    "status": "success" or "error",
+                    "content": [
+                        {"text": "Text analysis results"},
+                        {"image": {...}}  # Only included if send_screenshot=True
+                    ]
+                }
+
+        Note:
+            Large screenshots (>5MB) will automatically disable send_screenshot to prevent
+            exceeding model context limits, regardless of the parameter value.
         """
         # Get text analysis results using Tesseract OCR
         analysis_results = handle_analyze_screenshot_pytesseract(screenshot_path, region, min_confidence)
@@ -232,25 +312,73 @@ class UseComputerMethods:
         # Prepare text analysis result
         text_result = analysis_results.get("text_result", "No text analysis available")
 
-        # Prepare image for the LLM
+        # Prepare image for the LLM only if send_screenshot is True
         image_path = analysis_results.get("image_path")
-        image_content = handle_sending_results_to_llm(image_path)
+        image_content = None
+
+        if send_screenshot:
+            # Check the file size first as a quick filter
+            if os.path.exists(image_path):
+                # File size check - consider base64 encoding overhead (approximately 33%)
+                # Base64 encoding increases size by ~33% (4/3) plus some additional overhead
+                raw_size = os.path.getsize(image_path)
+                estimated_encoded_size = int(raw_size * 1.37)  # Base64 size + buffer
+                logger.info(
+                    f"Raw image size: {raw_size/1024/1024:.2f}MB, \
+                    estimated encoded size: {estimated_encoded_size/1024/1024:.2f}MB"
+                )
+
+                if estimated_encoded_size > 5 * 1024 * 1024:
+                    logger.info(
+                        f"Image size after base64 encoding would exceed 5MB limit \
+                        ({estimated_encoded_size} bytes), disabling screenshot"
+                    )
+                    send_screenshot = False
+                else:
+                    # Only read and prepare the image if it's likely to be within size limits
+                    image_content = handle_sending_results_to_llm(image_path)
+
+                    # Get actual bytes length (this is the important check)
+                    if (
+                        "image" in image_content
+                        and "source" in image_content["image"]
+                        and "bytes" in image_content["image"]["source"]
+                    ):
+                        actual_bytes_length = len(image_content["image"]["source"]["bytes"])
+                        logger.info(f"Actual image bytes size: {actual_bytes_length/1024/1024:.2f}MB")
+                        if actual_bytes_length > 5 * 1024 * 1024:
+                            logger.info(
+                                f"Image bytes exceed 5MB limit ({actual_bytes_length} bytes), disabling screenshot"
+                            )
+                            send_screenshot = False
+                            image_content = {"text": "Image too large to display (exceeds 5MB limit)"}
 
         # Clean up if needed
         should_delete = analysis_results.get("should_delete", False)
         if should_delete and os.path.exists(image_path):
             delete_screenshot(image_path)
 
+        # Create content list, conditionally including image based on send_screenshot parameter
+        content_list = [{"text": text_result}]  # Always include text analysis results
+
+        # Add image content only if send_screenshot is True and we have valid image content
+        if send_screenshot and image_content:
+            logger.info("Adding screenshot to the content being returned")
+            content_list.append(image_content)
+
         return {
             "status": "success",
-            "content": [
-                {"text": text_result},  # Text analysis results
-                image_content,  # Image content for LLM
-            ],
+            "content": content_list,
         }
 
     def screen_size(self) -> str:
-        """Get screen dimensions."""
+        """
+        Get the screen dimensions of the primary display.
+
+        Returns:
+            str: String representation of screen dimensions in the format:
+                 "Screen size: widthxheight"
+        """
         width, height = pyautogui.size()
         return f"Screen size: {width}x{height}"
 
@@ -268,7 +396,21 @@ class UseComputerMethods:
     # I cannot find a way to double click using pyautoguis built in functions on macos
     # This function uses lower level mac functions to double click
     def _native_mac_double_click(self, x: int, y: int):
-        """Perform a true macOS native double-click using Quartz."""
+        """
+        Perform a native macOS double-click operation using Quartz APIs.
+
+        This method provides a more reliable double-click implementation for
+        macOS compared to PyAutoGUI's implementation, using the native Quartz
+        CoreGraphics framework to generate hardware-level mouse events.
+
+        Args:
+            x: X-coordinate for the double-click position
+            y: Y-coordinate for the double-click position
+
+        Note:
+            This is a private helper method used internally by the click method
+            when running on macOS and when a double-click is requested.
+        """
 
         for i in range(2):
             click_down = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, (x, y), kCGMouseButtonLeft)
@@ -295,7 +437,20 @@ class UseComputerMethods:
 
 
 def create_screenshot(region: Optional[List[int]] = None) -> str:
-    """Helper function to create and save a screenshot."""
+    """
+    Create and save a screenshot to disk.
+
+    Takes a screenshot of the entire screen or a specified region and saves it
+    to the 'screenshots' directory with a timestamped filename. Creates the
+    directory if it doesn't exist.
+
+    Args:
+        region: Optional list of [left, top, width, height] specifying screen region
+               to capture. If None, captures the entire screen.
+
+    Returns:
+        str: Path to the saved screenshot file.
+    """
     screenshots_dir = "screenshots"
     if not os.path.exists(screenshots_dir):
         os.makedirs(screenshots_dir)
@@ -315,7 +470,24 @@ def create_screenshot(region: Optional[List[int]] = None) -> str:
 
 # Helper function to sort the text extracted from the screenshots
 def group_text_by_lines(text_data: List[Dict[str, Any]], line_threshold: int = 10) -> List[List[Dict[str, Any]]]:
-    """Group text elements into lines based on y-coordinate proximity."""
+    """
+    Group extracted text elements into lines based on vertical proximity.
+
+    This function organizes OCR-extracted text elements into logical lines
+    by analyzing their y-coordinates. Text elements are considered part of
+    the same line if their vertical positions are within the specified threshold.
+    Elements in each line are then sorted horizontally (by x-coordinate) to
+    preserve proper reading order.
+
+    Args:
+        text_data: List of text elements with coordinate information.
+        line_threshold: Maximum vertical distance (in pixels) for two elements
+                      to be considered part of the same line. Default is 10 pixels.
+
+    Returns:
+        List of lists, where each inner list contains text elements belonging to
+        the same line, sorted from left to right.
+    """
     if not text_data:
         return []
 
@@ -473,7 +645,25 @@ def extract_text_from_image(image_path: str, min_confidence: float = 0.5) -> Lis
 
 
 def open_application(app_name: str) -> str:
-    """Helper function to open applications cross-platform."""
+    """
+    Launch an application cross-platform.
+
+    Attempts to open the specified application using platform-appropriate methods.
+    Includes support for common application name variations and aliases through
+    an internal mapping system.
+
+    Args:
+        app_name: Name of the application to open. Common variations are mapped
+                to their standard names (e.g., "chrome" to "Google Chrome").
+
+    Returns:
+        str: Success or error message detailing the result of the operation.
+
+    Platform Support:
+        - Windows: Uses the 'start' command
+        - macOS: Uses the 'open -a' command
+        - Linux: Attempts to run app_name directly as a command
+    """
     system = platform.system().lower()
 
     # Map common app name variations to their actual names
@@ -531,7 +721,23 @@ def close_application(app_name: str) -> str:
 
 
 def focus_application(app_name: str) -> bool:
-    """Focus on the specified application window."""
+    """
+    Focus on (bring to foreground) the specified application window.
+
+    Uses platform-specific methods to activate and bring the specified application
+    to the foreground, enabling subsequent interaction with its windows.
+
+    Args:
+        app_name: Name of the application to focus on.
+
+    Returns:
+        bool: True if the focus operation was successful, False otherwise.
+
+    Platform Support:
+        - macOS: Uses AppleScript's 'activate' command
+        - Windows: Uses PowerShell's AppActivate method
+        - Linux: Attempts to use wmctrl if available
+    """
     system = platform.system().lower()
 
     try:
@@ -562,7 +768,22 @@ def focus_application(app_name: str) -> bool:
 
 
 def delete_screenshot(filepath: str) -> None:
-    """Helper function to delete a screenshot file."""
+    """
+    Delete a screenshot file from disk.
+
+    Attempts to remove the specified file, handling errors gracefully without
+    interrupting program flow. Errors are logged as warnings.
+
+    Args:
+        filepath: Path to the screenshot file to be deleted.
+
+    Returns:
+        None
+
+    Note:
+        Errors during deletion are logged but do not raise exceptions to avoid
+        interrupting the main operation flow.
+    """
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
@@ -661,11 +882,15 @@ def use_computer(
     screenshot_path: Optional[str] = None,
     hotkey_str: Optional[str] = None,
     min_confidence: Optional[float] = 0.5,
+    send_screenshot: Optional[bool] = False,
 ) -> Dict:
     """
     Control computer using mouse, keyboard, and capture screenshots.
     IMPORTANT: When performing actions within an application (clicking, typing, etc.),
     always provide the app_name parameter to ensure proper focus on the target application.
+
+    NOTE ON SCREENSHOTS: Do NOT include send_screenshot=True unless the user has EXPLICITLY
+    requested to see the actual screenshot. By default, only text analysis is returned.
 
     Args:
         action (str): The action to perform. Must be one of:
@@ -701,6 +926,16 @@ def use_computer(
         screenshot_path (str, optional): Path to screenshot file for analysis
         hotkey_str (str, optional): Hotkey combination string (e.g., 'ctrl+c', 'alt+tab', 'ctrl+shift+esc')
         min_confidence (float, optional): Minimum confidence level for OCR text detection (default: 0.5)
+        send_screenshot (bool, optional): Whether to send the screenshot to the model (default: False).
+            IMPORTANT: Only set this to True when a user EXPLICITLY asks to see the screenshot.
+            Setting this parameter increases token usage significantly and may expose sensitive
+            information from the user's screen. Default is False which returns only text analysis.
+            Large screenshots (>5MB) will be automatically rejected to prevent context overflow.
+            Set to True to include the actual screenshot image in the return value,
+            allowing the agent to visually inspect the screen. Set to False to only
+            return the text analysis results, which is more privacy-conscious and uses
+            fewer tokens. Note: Large images (>5MB) will not be sent regardless of
+            this setting to prevent exceeding model context limits.
 
     Returns:
         Dict: For most actions, returns a simple dictionary with status and text content.
@@ -708,7 +943,11 @@ def use_computer(
               in a format that can be processed by the model.
     """
     all_params = locals()
-    params = [f"{k}: {v}" for k, v in all_params.items() if v is not None and not (k == "min_confidence" and v == 0.5)]
+    params = [
+        f"{k}: {v}"
+        for k, v in all_params.items()
+        if v is not None and not (k == "min_confidence" and v == 0.5) and not (k == "send_screenshot" and v is False)
+    ]
 
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
@@ -765,6 +1004,7 @@ def use_computer(
         "screenshot_path": screenshot_path,
         "hotkey_str": hotkey_str,
         "min_confidence": min_confidence,
+        "send_screenshot": send_screenshot,
     }
     # Remove None values
     method_params = {k: v for k, v in method_params.items() if v is not None}
