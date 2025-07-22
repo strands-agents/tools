@@ -74,31 +74,35 @@ Usage with Strands Agent:
 ```python
 from strands import Agent
 from strands_tools import nova_canvas
-#TODO 
-1. add one example for standard generation
-2. another for generation with extra parameters
-3. virutal try on garmen example
-agent = Agent(tools=[generate_image])
 
-# Basic usage with default parameters
-agent.tool.generate_image(prompt="A steampunk robot playing chess")
+agent = Agent(tools=[nova_canvas])
 
-# Advanced usage with Stable Diffusion
-agent.tool.generate_image(
-    prompt="A futuristic city with flying cars",
-    model_id="stability.sd3-5-large-v1:0",
-    aspect_ratio="5:4",
-    output_format="jpeg",
-    negative_prompt="bad lighting, harsh lighting, abstract, surreal, twisted, multiple levels",
+# Basic text-to-image generation
+agent.tool.nova_canvas(
+    task_type="TEXT_IMAGE",
+    text="A steampunk robot playing chess"
 )
 
-# Using another Stable Diffusion model
-agent.tool.generate_image(
-    prompt="A photograph of a cup of coffee from the side",
-    model_id="stability.stable-image-ultra-v1:1",
-    aspect_ratio="1:1",
-    output_format="png",
-    negative_prompt="blurry, distorted",
+# Advanced text-to-image with style and parameters
+agent.tool.nova_canvas(
+    task_type="TEXT_IMAGE",
+    text="A futuristic city with flying cars",
+    style="PHOTOREALISM",
+    width=1024,
+    height=768,
+    negative_text="bad lighting, harsh lighting, abstract",
+    cfg_scale=7.5,
+    quality="premium"
+)
+
+# Virtual try-on with garment
+agent.tool.nova_canvas(
+    task_type="VIRTUAL_TRY_ON",
+    image_path="person.jpg",
+    reference_image_path="shirt.jpg",
+    mask_type="GARMENT",
+    garment_class="SHORT_SLEEVE_SHIRT",
+    preserve_face="ON"
 )
 ```
 
