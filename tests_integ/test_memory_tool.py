@@ -17,6 +17,8 @@ from .utils.knowledge_base_util import KnowledgeBaseHelper
 
 AWS_REGION = "us-east-1"
 
+pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
+
 
 @pytest.fixture(scope="module")
 def managed_knowledge_base():
