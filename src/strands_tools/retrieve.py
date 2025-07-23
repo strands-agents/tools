@@ -40,16 +40,11 @@ results = agent.tool.retrieve(
     numberOfResults=5,
     score=0.7,
     knowledgeBaseId="custom-kb-id",
-    region="us-east-1"
-)
-
-# Search with filter
-results = agent.tool.retrieve(
-    text="security best practices",
+    region="us-east-1",
     retrieveFilter={
-        "and": [
-            {"eq": {"key": "category", "value": "security"}},
-            {"gte": {"key": "date", "value": "2023-01-01"}}
+        "andAll": [
+            {"equals": {"key": "category", "value": "security"}},
+            {"greaterThan": {"key": "year", "value": "2022"}}
         ]
     }
 )
