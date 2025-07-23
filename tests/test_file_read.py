@@ -63,6 +63,19 @@ def temp_test_dir():
         yield temp_dir
 
 
+@pytest.fixture
+def temp_hidden_dir():
+    """Create a temporary hidden directory for testing."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dir_with_hidden_dir = os.path.join(temp_dir, "some/.hidden")
+        os.makedirs(dir_with_hidden_dir)
+        # Optionally, create a file inside the hidden directory
+        hidden_file = os.path.join(dir_with_hidden_dir, "hidden.txt")
+        with open(hidden_file, "w") as f:
+            f.write("Hidden file content")
+        yield temp_dir
+
+
 def extract_result_text(result):
     """Extract the result text from the agent response."""
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
@@ -102,6 +115,19 @@ def test_file_read_tool_direct_find(temp_test_dir):
     assert "Found " in result["content"][0]["text"]
     assert "test1.txt" in result["content"][0]["text"]
     assert "test2.md" not in result["content"][0]["text"]  # Should not find the .md file
+
+
+def test_file_read_tool_find_skip_hidden_directories(temp_hidden_dir):
+    """Test direct invocation of the file_read tool to find files in hidden directories."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"path": os.path.join(temp_hidden_dir, "."), "mode": "find"},
+    }
+
+    result = file_read.file_read(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "No files found" in result["content"][0]["text"]
 
 
 def test_file_read_tool_direct_lines(temp_test_file):

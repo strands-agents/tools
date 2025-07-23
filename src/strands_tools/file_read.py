@@ -262,7 +262,7 @@ TOOL_SPEC = {
                 "path": {
                     "type": "string",
                     "description": (
-                        "Path(s) to file(s). For multiple files, use comma-separated list: "
+                        "Path(s) to file(s). Use patterns to find files. For multiple files, use comma-separated list: "
                         "'file1.txt,file2.md,data/*.json'"
                     ),
                 },
@@ -385,6 +385,8 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
                 matching_files = []
 
                 for root, _dirs, files in os.walk(pattern):
+                    # Skip hidden directories
+                    _dirs[:] = [d for d in _dirs if not d.startswith(".")]
                     if not recursive and root != pattern:
                         continue
 
