@@ -647,11 +647,15 @@ class TestFocusApplication:
         from src.strands_tools.use_computer import focus_application
 
         with patch("platform.system", return_value=system), patch("subprocess.run") as mock_run, patch("time.sleep"):
-            mock_run.return_value = MagicMock()  # Successful run
+            # Set up the mock to return an object with returncode=0
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result  # Successful run with returncode 0
+
             result = focus_application("TestApp")
 
             assert result is True
-            mock_run.assert_called_once_with(expected_command, check=True, capture_output=True)
+            mock_run.assert_called_once_with(expected_command, check=True, capture_output=True, timeout=2.0)
 
     @pytest.mark.parametrize("system", ["darwin", "windows", "linux"])
     def test_focus_application_failure(self, system):
@@ -846,7 +850,7 @@ class TestUseComputerEdgeCases:
 
             result = use_computer(action="click", x=100, y=200, app_name="TestApp")
 
-            mock_focus.assert_called_once_with("TestApp")
+            mock_focus.assert_called_once_with("TestApp", timeout=2.0)
             mock_click.assert_called_once()
             mock_logger.assert_called_with("Performing action: click in app: TestApp")
 
@@ -911,7 +915,7 @@ class TestUseComputerEdgeCases:
 
             result = use_computer(action="analyze_screen", app_name="TestApp")
 
-            mock_focus.assert_called_once_with("TestApp")
+            mock_focus.assert_called_once_with("TestApp", timeout=2.0)
             mock_analyze_screen.assert_called_once()
 
             assert result["status"] == "success"

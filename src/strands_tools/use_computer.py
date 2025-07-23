@@ -720,15 +720,17 @@ def close_application(app_name: str) -> str:
         return f"Error closing {app_name}: {str(e)}"
 
 
-def focus_application(app_name: str) -> bool:
+def focus_application(app_name: str, timeout: float = 2.0) -> bool:
     """
-    Focus on (bring to foreground) the specified application window.
+    Focus on (bring to foreground) the specified application window with timeout.
 
     Uses platform-specific methods to activate and bring the specified application
     to the foreground, enabling subsequent interaction with its windows.
 
     Args:
         app_name: Name of the application to focus on.
+        timeout: Maximum time in seconds to wait for focus operation (default: 2.0).
+                 If focusing takes longer than this, the function will return False.
 
     Returns:
         bool: True if the focus operation was successful, False otherwise.
@@ -739,29 +741,68 @@ def focus_application(app_name: str) -> bool:
         - Linux: Attempts to use wmctrl if available
     """
     system = platform.system().lower()
+    start_time = time.time()
 
     try:
         if system == "darwin":  # macOS
-            # Use AppleScript to bring app to front
+            # Use AppleScript to bring app to front with timeout
             script = f'tell application "{app_name}" to activate'
-            subprocess.run(["osascript", "-e", script], check=True, capture_output=True)
-            time.sleep(0.2)  # Brief pause for window to focus
-            return True
+
+            # Set up a process with timeout
+            try:
+                result = subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=timeout)
+                if result.returncode != 0:
+                    logger.warning(f"Focus application returned non-zero exit code: {result.returncode}")
+                    return False
+
+                # Brief pause for window to focus, but respect overall timeout
+                remaining_time = timeout - (time.time() - start_time)
+                if remaining_time > 0:
+                    time.sleep(min(0.2, remaining_time))
+                return True
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Focus operation timed out after {timeout} seconds for app: {app_name}")
+                return False
+
         elif system == "windows":
             # Use PowerShell to focus window
             script = (
                 f"Add-Type -AssemblyName Microsoft.VisualBasic; "
                 f"[Microsoft.VisualBasic.Interaction]::AppActivate('{app_name}')"
             )
-            subprocess.run(["powershell", "-Command", script], check=True, capture_output=True)
-            time.sleep(0.2)
-            return True
+            try:
+                result = subprocess.run(
+                    ["powershell", "-Command", script], check=True, capture_output=True, timeout=timeout
+                )
+                if result.returncode != 0:
+                    return False
+
+                # Brief pause for window to focus, but respect overall timeout
+                remaining_time = timeout - (time.time() - start_time)
+                if remaining_time > 0:
+                    time.sleep(min(0.2, remaining_time))
+                return True
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Focus operation timed out after {timeout} seconds for app: {app_name}")
+                return False
+
         elif system == "linux":
             # Use wmctrl if available
-            subprocess.run(["wmctrl", "-a", app_name], check=True, capture_output=True)
-            time.sleep(0.2)
-            return True
-    except Exception:
+            try:
+                result = subprocess.run(["wmctrl", "-a", app_name], check=True, capture_output=True, timeout=timeout)
+                if result.returncode != 0:
+                    return False
+
+                # Brief pause for window to focus, but respect overall timeout
+                remaining_time = timeout - (time.time() - start_time)
+                if remaining_time > 0:
+                    time.sleep(min(0.2, remaining_time))
+                return True
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Focus operation timed out after {timeout} seconds for app: {app_name}")
+                return False
+    except Exception as e:
+        logger.warning(f"Error focusing application {app_name}: {str(e)}")
         return False
 
     return False
@@ -883,6 +924,7 @@ def use_computer(
     hotkey_str: Optional[str] = None,
     min_confidence: Optional[float] = 0.5,
     send_screenshot: Optional[bool] = False,
+    focus_timeout: Optional[float] = 2.0,
 ) -> Dict:
     """
     Control computer using mouse, keyboard, and capture screenshots.
@@ -936,6 +978,10 @@ def use_computer(
             return the text analysis results, which is more privacy-conscious and uses
             fewer tokens. Note: Large images (>5MB) will not be sent regardless of
             this setting to prevent exceeding model context limits.
+        focus_timeout (float, optional): Maximum time in seconds to wait for application focus.
+            Default is 2.0 seconds. If focusing takes longer than this, the function will
+            proceed with the action anyway but will issue a warning. This is especially
+            useful for menu interactions which can sometimes get stuck.
 
     Returns:
         Dict: For most actions, returns a simple dictionary with status and text content.
@@ -946,7 +992,10 @@ def use_computer(
     params = [
         f"{k}: {v}"
         for k, v in all_params.items()
-        if v is not None and not (k == "min_confidence" and v == 0.5) and not (k == "send_screenshot" and v is False)
+        if v is not None
+        and not (k == "min_confidence" and v == 0.5)
+        and not (k == "send_screenshot" and v is False)
+        and not (k == "focus_timeout" and v == 2.0)
     ]
 
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
@@ -963,6 +1012,13 @@ def use_computer(
                 "status": "error",
                 "content": [{"text": error_message}],
             }
+
+    # Special handling for menu interactions - longer timeout for "File", "Edit", "View", etc.
+    if action == "click" and app_name and (y is not None and y < 50):
+        # Top menu bar typically is at the top of the screen, with y < 50
+        logger.info(f"Detected potential menu bar interaction at y={y}. Using extended focus timeout.")
+        focus_timeout = max(focus_timeout, 3.0)  # Use at least 3 seconds for menu interactions
+
     # Auto-focus on target app before performing actions (except for certain actions)
     actions_requiring_focus = [
         "click",
@@ -977,12 +1033,15 @@ def use_computer(
         "analyze_screen",
     ]
     if action in actions_requiring_focus and app_name:
-        focus_success = focus_application(app_name)
+        # Use the timeout parameter
+        focus_success = focus_application(app_name, timeout=focus_timeout)
         if not focus_success:
-            return {
-                "status": "warning",
-                "content": [{"text": f"Warning: Could not focus on {app_name}. Proceeding with action anyway."}],
-            }
+            warning_message = (
+                f"Warning: Could not focus on {app_name} within {focus_timeout} seconds. Proceeding with action anyway."
+            )
+            logger.warning(warning_message)
+            # For menu interactions, if focus fails, take a screenshot to help diagnose what's happening
+
     logger.info(f"Performing action: {action} in app: {app_name}")
 
     computer = UseComputerMethods()
