@@ -54,6 +54,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+- 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
 
 ## 📦 Installation
 
@@ -128,6 +129,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
+| diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
 
 \* *These tools do not work on windows*
 
@@ -451,6 +453,55 @@ response = agent("discover available agents and send a greeting message")
 # - discover_agent(url) to find agents
 # - list_discovered_agents() to see all discovered agents
 # - send_message(message_text, target_agent_url) to communicate
+```
+
+### Diagram
+
+```python
+from strands import Agent
+from strands_tools import diagram
+
+agent = Agent(tools=[diagram])
+
+# Create an AWS cloud architecture diagram
+result = agent.tool.diagram(
+    diagram_type="cloud",
+    nodes=[
+        {"id": "users", "type": "Users", "label": "End Users"},
+        {"id": "cloudfront", "type": "CloudFront", "label": "CDN"},
+        {"id": "s3", "type": "S3", "label": "Static Assets"},
+        {"id": "api", "type": "APIGateway", "label": "API Gateway"},
+        {"id": "lambda", "type": "Lambda", "label": "Backend Service"}
+    ],
+    edges=[
+        {"from": "users", "to": "cloudfront"},
+        {"from": "cloudfront", "to": "s3"},
+        {"from": "users", "to": "api"},
+        {"from": "api", "to": "lambda"}
+    ],
+    title="Web Application Architecture"
+)
+
+# Create a UML class diagram
+result = agent.tool.diagram(
+    diagram_type="class",
+    elements=[
+        {
+            "name": "User",
+            "attributes": ["+id: int", "-name: string", "#email: string"],
+            "methods": ["+login(): bool", "+logout(): void"]
+        },
+        {
+            "name": "Order",
+            "attributes": ["+id: int", "-items: List", "-total: float"],
+            "methods": ["+addItem(item): void", "+calculateTotal(): float"]
+        }
+    ],
+    relationships=[
+        {"from": "User", "to": "Order", "type": "association", "multiplicity": "1..*"}
+    ],
+    title="E-commerce Domain Model"
+)
 ```
 
 ## 🌍 Environment Variables Configuration

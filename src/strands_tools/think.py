@@ -44,8 +44,7 @@ Direct Tasks:
 2. Generate clear, structured insights
 3. Consider implications and connections
 4. Provide actionable conclusions
-5. DO NOT call the think tool again
-6. USE other tools.
+5. Use other available tools as needed for analysis
 """
 
         # Use custom thinking instructions if provided, otherwise use defaults
@@ -79,7 +78,7 @@ Please provide your analysis directly:
         """Process a single thinking cycle with optional model switching and custom thinking instructions."""
 
         logger.debug(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
-        self.console.print(f"🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
+        self.console.print(f"\n🧠 Thinking Cycle {cycle}/{total_cycles}: Processing cycle...")
 
         # Create cycle-specific prompt with custom thinking instructions
         prompt = self.create_thinking_prompt(thought, cycle, total_cycles, thinking_system_prompt)
@@ -101,13 +100,22 @@ Please provide your analysis directly:
             # If specific tools are provided, filter parent tools; otherwise inherit all tools from parent
             if specified_tools is not None:
                 # Filter parent agent tools to only include specified tool names
+                # ALWAYS exclude 'think' tool to prevent recursion
                 for tool_name in specified_tools:
+                    if tool_name == "think":
+                        logger.warning("Excluding 'think' tool from nested agent to prevent recursion")
+                        continue
                     if tool_name in parent_agent.tool_registry.registry:
                         filtered_tools.append(parent_agent.tool_registry.registry[tool_name])
                     else:
                         logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
             else:
-                filtered_tools = list(parent_agent.tool_registry.registry.values())
+                # Inherit all tools from parent EXCEPT the think tool to prevent recursion
+                for tool_name, tool_obj in parent_agent.tool_registry.registry.items():
+                    if tool_name == "think":
+                        logger.debug("Automatically excluding 'think' tool from nested agent to prevent recursion")
+                        continue
+                    filtered_tools.append(tool_obj)
 
         # Determine which model to use
         selected_model = None
@@ -198,8 +206,9 @@ def think(
     2. Each cycle uses the output from the previous cycle as a foundation for deeper analysis
     3. A specialized system prompt guides the thinking process toward specific expertise domains
     4. Each cycle's output is captured and included in the final comprehensive analysis
-    5. The tool avoids recursive self-calls and encourages the use of other tools when appropriate
-    6. Optionally uses different model providers for specialized thinking capabilities
+    5. Recursion prevention: The think tool is automatically excluded from nested agents
+    6. Other tools are available and encouraged for analysis within thinking cycles
+    7. Optionally uses different model providers for specialized thinking capabilities
 
     Model Selection Process:
     ----------------------
