@@ -40,7 +40,6 @@ def test_generate_video_store_to_s3(agent, s3_bucket):
     prompt = (
         f"Generate a 1-second video showing a robot waving its hand. "
         f"Store the result in S3 bucket {s3_bucket}. Start the video generation job now."
-        f""
     )
 
     reply = agent(prompt)
