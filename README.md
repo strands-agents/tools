@@ -55,6 +55,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 - 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
+- 📰 **RSS Feed Manager** - Subscribe, fetch, and process RSS feeds with content filtering and persistent storage
 
 ## 📦 Installation
 
@@ -67,7 +68,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser]
+pip install strands-agents-tools[mem0_memory, use_browser, rss]
 ```
 
 ### Development Install
@@ -130,6 +131,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
+| rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
 
 \* *These tools do not work on windows*
 
@@ -504,6 +506,46 @@ result = agent.tool.diagram(
 )
 ```
 
+### RSS Feed Management
+
+```python
+from strands import Agent
+from strands_tools import rss
+
+agent = Agent(tools=[rss])
+
+# Subscribe to a feed
+result = agent.tool.rss(
+    action="subscribe",
+    url="https://news.example.com/rss/technology"
+)
+
+# List all subscribed feeds
+feeds = agent.tool.rss(action="list")
+
+# Read entries from a specific feed
+entries = agent.tool.rss(
+    action="read",
+    feed_id="news_example_com_technology",
+    max_entries=5,
+    include_content=True
+)
+
+# Search across all feeds
+search_results = agent.tool.rss(
+    action="search",
+    query="machine learning",
+    max_entries=10
+)
+
+# Fetch feed content without subscribing
+latest_news = agent.tool.rss(
+    action="fetch",
+    url="https://blog.example.org/feed",
+    max_entries=3
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -659,6 +701,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
 | STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
 
+#### RSS Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
+| STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
+| STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
 
 ## Contributing ❤️
 
@@ -684,4 +734,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
