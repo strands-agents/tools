@@ -278,7 +278,10 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             retrievalQuery={"text": query},
             knowledgeBaseId=kb_id,
             retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": number_of_results},
+                "vectorSearchConfiguration": {
+                    "numberOfResults": number_of_results,
+                    "overrideSearchType": "HYBRID"
+                },
             },
         )
 
