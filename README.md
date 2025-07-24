@@ -207,7 +207,7 @@ agent.tool.dynamic_mcp_client(
     action="load_tools",
     connection_id="my_tools"
 )
-# Now you can call MCP tools directly as: agent.tool.mcp_my_tools_calculate(x=10, y=20)
+# Now you can call MCP tools directly as: agent.tool.calculate(x=10, y=20)
 ```
 
 ### Shell Commands
