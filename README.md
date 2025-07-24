@@ -206,9 +206,10 @@ response = agent.tool.http_request(
 
 ```python
 from strands import Agent
-from strands_tools import tavily
+from strands_tools import tavily_search, tavily_extract, tavily_crawl, tavily_map
 
-agent = Agent(tools=[tavily])
+agent = Agent(tools=[tavily_search, tavily_extract, tavily_crawl, tavily_map])
+
 
 # web search
 result = agent.tool.tavily_search(
@@ -232,19 +233,9 @@ result = agent.tool.tavily_crawl(
     include_images=True
 )
 
-# Basic website mapping (BETA)
-result = agent.tool.tavily_map(url="https://docs.example.com")
+# Basic website mapping
+result = agent.tool.tavily_map(url="www.tavily.com")
 
-# Advanced mapping with instructions and filtering
-result = agent.tool.tavily_map(
-    url="https://docs.example.com",
-    max_depth=2,
-    limit=50,
-    instructions="Find all documentation and tutorial pages",
-    select_paths=["/docs/.*", "/tutorials/.*"],
-    exclude_paths=["/internal/.*", "/admin/.*"],
-    categories=["Documentation"]
-)
 ```
 
 ### Python Code Execution
