@@ -11,7 +11,7 @@ implementation in the Strands SDK (see https://github.com/strands-agents/docs/bl
 
 Key differences from SDK's MCP implementation:
 - This tool enables DYNAMIC connections to new MCP servers at runtime
-- Can autonomously discover and load external tools from untrusted sources  
+- Can autonomously discover and load external tools from untrusted sources
 - Tools are loaded into the agent's registry and can be called directly
 - Connections persist across multiple tool invocations
 - Supports multiple concurrent connections to different MCP servers
@@ -32,6 +32,7 @@ from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 from strands import tool
 from strands.tools.mcp import MCPClient
+from strands.types.tools import AgentTool, ToolGenerator, ToolSpec, ToolUse
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +40,124 @@ logger = logging.getLogger(__name__)
 DEFAULT_MCP_TIMEOUT = 30.0
 try:
     import os
+
     DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
 except (ValueError, ImportError):
     DEFAULT_MCP_TIMEOUT = 30.0
 
 
+class MCPTool(AgentTool):
+    """Wrapper class for dynamically loaded MCP tools that extends AgentTool.
+
+    This class wraps MCP tools loaded through dynamic_mcp_client and ensures proper
+    connection management using the `with mcp_client:` context pattern used throughout
+    the dynamic MCP client. It handles both sync and async tool execution while
+    maintaining connection health and error handling.
+    """
+
+    def __init__(self, mcp_tool, connection_id: str):
+        """Initialize MCPTool wrapper.
+
+        Args:
+            mcp_tool: The underlying MCP tool instance from the SDK
+            connection_id: ID of the connection this tool belongs to
+        """
+        super().__init__()
+        self._mcp_tool = mcp_tool
+        self._connection_id = connection_id
+        logger.debug(f"MCPTool wrapper created for tool '{mcp_tool.tool_name}' on connection '{connection_id}'")
+
+    @property
+    def tool_name(self) -> str:
+        """Get the name of the tool."""
+        return self._mcp_tool.tool_name
+
+    @property
+    def tool_spec(self) -> ToolSpec:
+        """Get the specification of the tool."""
+        return self._mcp_tool.tool_spec
+
+    @property
+    def tool_type(self) -> str:
+        """Get the type of the tool."""
+        return "mcp_dynamic"
+
+    async def stream(self, tool_use: ToolUse, invocation_state: dict[str, Any], **kwargs: Any) -> ToolGenerator:
+        """Stream the MCP tool execution with proper connection management.
+
+        This method uses the same `with mcp_client:` context pattern as other
+        operations in dynamic_mcp_client to ensure proper connection management
+        and error handling.
+
+        Args:
+            tool_use: The tool use request containing tool ID and parameters.
+            invocation_state: Context for the tool invocation, including agent state.
+            **kwargs: Additional keyword arguments for future extensibility.
+
+        Yields:
+            Tool events with the last being the tool result.
+        """
+        logger.debug(
+            f"MCPTool executing tool '{self.tool_name}' on connection '{self._connection_id}' "
+            f"with tool_use_id '{tool_use['toolUseId']}'"
+        )
+
+        # Get connection info
+        config = _get_connection(self._connection_id)
+        if not config:
+            error_result = {
+                "toolUseId": tool_use["toolUseId"],
+                "status": "error",
+                "content": [{"text": f"Connection '{self._connection_id}' not found"}],
+            }
+            yield error_result
+            return
+
+        if not config.is_active:
+            error_result = {
+                "toolUseId": tool_use["toolUseId"],
+                "status": "error",
+                "content": [{"text": f"Connection '{self._connection_id}' is not active"}],
+            }
+            yield error_result
+            return
+
+        try:
+            # Use the same context pattern as other operations in dynamic_mcp_client
+            with config.mcp_client:
+                result = await config.mcp_client.call_tool_async(
+                    tool_use_id=tool_use["toolUseId"],
+                    name=self.tool_name,
+                    arguments=tool_use["input"],
+                )
+                yield result
+
+        except Exception as e:
+            logger.error(f"Error executing MCP tool '{self.tool_name}': {e}", exc_info=True)
+
+            # Mark connection as unhealthy if it fails
+            with _CONNECTION_LOCK:
+                config.is_active = False
+                config.last_error = str(e)
+
+            error_result = {
+                "toolUseId": tool_use["toolUseId"],
+                "status": "error",
+                "content": [{"text": f"Failed to execute tool '{self.tool_name}': {str(e)}"}],
+            }
+            yield error_result
+
+    def get_display_properties(self) -> dict[str, str]:
+        """Get properties to display in UI representations of this tool."""
+        base_props = super().get_display_properties()
+        base_props["Connection ID"] = self._connection_id
+        return base_props
+
+
 @dataclass
 class ConnectionInfo:
-    """Simplified connection information storage."""
+    """Information about an MCP connection."""
+
     connection_id: str
     mcp_client: MCPClient
     transport: str
@@ -100,18 +211,18 @@ def _create_transport_callable(transport: str, **params):
         if env:
             stdio_params["env"] = env
         return lambda: stdio_client(StdioServerParameters(**stdio_params))
-    
+
     elif transport == "sse":
         server_url = params.get("server_url")
         if not server_url:
             raise ValueError("server_url is required for SSE transport")
         return lambda: sse_client(server_url)
-    
+
     elif transport == "streamable_http":
         server_url = params.get("server_url")
         if not server_url:
             raise ValueError("server_url is required for streamable HTTP transport")
-        
+
         # Build streamable HTTP parameters
         http_params = {"url": server_url}
         if params.get("headers"):
@@ -124,9 +235,9 @@ def _create_transport_callable(transport: str, **params):
             http_params["terminate_on_close"] = params["terminate_on_close"]
         if params.get("auth"):
             http_params["auth"] = params["auth"]
-            
+
         return lambda: streamablehttp_client(**http_params)
-    
+
     else:
         raise ValueError(f"Unsupported transport: {transport}. Supported: stdio, sse, streamable_http")
 
@@ -159,13 +270,13 @@ def dynamic_mcp_client(
     ⚠️ SECURITY WARNING: This tool enables agents to autonomously connect to external
     MCP servers and dynamically load remote tools at runtime. This can pose significant
     security risks as agents may connect to malicious servers or execute untrusted code.
-    
+
     Key Security Considerations:
     - Agents can connect to ANY MCP server URL or command provided
     - External tools are loaded directly into the agent's tool registry
     - Loaded tools can execute arbitrary code with agent's permissions
     - Connections persist and can be reused across multiple operations
-    
+
     This is different from the static MCP server configuration in the Strands SDK
     (see https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/mcp-tools.md)
     which uses pre-configured, trusted MCP servers.
@@ -331,27 +442,33 @@ def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "content": [{"text": "connection_id is required for connect action"}]}
 
     transport = params.get("transport", "stdio")
-    
+
     # Check if connection already exists
     with _CONNECTION_LOCK:
         if connection_id in _connections and _connections[connection_id].is_active:
-            return {"status": "error", "content": [{"text": f"Connection '{connection_id}' already exists and is active"}]}
+            return {
+                "status": "error",
+                "content": [{"text": f"Connection '{connection_id}' already exists and is active"}],
+            }
 
     try:
         # Create transport callable using the SDK pattern
         params_copy = params.copy()
-        params_copy.pop('transport', None)  # Remove transport to avoid duplicate parameter
+        params_copy.pop("transport", None)  # Remove transport to avoid duplicate parameter
         transport_callable = _create_transport_callable(transport, **params_copy)
-        
+
         # Create MCPClient using SDK
         mcp_client = MCPClient(transport_callable)
-        
-        # Test connection by starting client and listing tools
-        mcp_client.start()
+
+        # Test the connection by listing tools using the context manager
+        # The context manager handles starting and stopping the client
         with mcp_client:
             tools = mcp_client.list_tools_sync()
             tool_count = len(tools)
-        
+
+        # At this point, the client has been initialized and tested
+        # The connection is ready for future use
+
         # Store connection info
         url = params.get("server_url", f"{params.get('command', '')} {' '.join(params.get('args', []))}")
         connection_info = ConnectionInfo(
@@ -360,9 +477,9 @@ def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
             transport=transport,
             url=url,
             register_time=time.time(),
-            is_active=True
+            is_active=True,
         )
-        
+
         with _CONNECTION_LOCK:
             _connections[connection_id] = connection_info
 
@@ -376,12 +493,14 @@ def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     except Exception as e:
+        logger.error(f"Connection failed: {e}", exc_info=True)
         return {"status": "error", "content": [{"text": f"Connection failed: {str(e)}"}]}
 
 
 def _disconnect_from_server(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Disconnect from an MCP server."""
+    """Disconnect from an MCP server and clean up loaded tools."""
     connection_id = params.get("connection_id")
+    agent = params.get("agent")
     error_result = _validate_connection(connection_id)
     if error_result:
         return error_result
@@ -390,13 +509,14 @@ def _disconnect_from_server(params: Dict[str, Any]) -> Dict[str, Any]:
         with _CONNECTION_LOCK:
             config = _connections[connection_id]
             loaded_tools = config.loaded_tool_names.copy()
-            
-            # Clean up client
-            if config.mcp_client:
-                config.mcp_client.stop(None, None, None)
-            
+
             # Remove connection
             del _connections[connection_id]
+
+        # Clean up loaded tools from agent if agent is provided
+        cleanup_result = {"cleaned_tools": [], "failed_tools": []}
+        if agent and loaded_tools:
+            cleanup_result = _clean_up_tools_from_agent(agent, connection_id, loaded_tools)
 
         result = {
             "status": "success",
@@ -404,9 +524,20 @@ def _disconnect_from_server(params: Dict[str, Any]) -> Dict[str, Any]:
             "connection_id": connection_id,
             "was_active": config.is_active,
         }
-        
-        if loaded_tools:
-            result["loaded_tools_info"] = f"Note: {len(loaded_tools)} tools loaded from this connection remain in the agent: {', '.join(loaded_tools)}"
+
+        if cleanup_result["cleaned_tools"]:
+            result["cleaned_tools"] = cleanup_result["cleaned_tools"]
+            result["cleaned_tools_count"] = len(cleanup_result["cleaned_tools"])
+
+        if cleanup_result["failed_tools"]:
+            result["failed_to_clean_tools"] = cleanup_result["failed_tools"]
+            result["failed_tools_count"] = len(cleanup_result["failed_tools"])
+
+        if loaded_tools and not agent:
+            result["loaded_tools_info"] = (
+                f"Note: No agent provided, {len(loaded_tools)} tools loaded could not be cleaned up: "
+                f"{', '.join(loaded_tools)}"
+            )
 
         return result
     except Exception as e:
@@ -418,21 +549,19 @@ def _list_active_connections(params: Dict[str, Any]) -> Dict[str, Any]:
     with _CONNECTION_LOCK:
         connections_info = []
         for conn_id, config in _connections.items():
-            connections_info.append({
-                "connection_id": conn_id,
-                "transport": config.transport,
-                "url": config.url,
-                "is_active": config.is_active,
-                "registered_at": config.register_time,
-                "last_error": config.last_error,
-                "loaded_tools_count": len(config.loaded_tool_names),
-            })
+            connections_info.append(
+                {
+                    "connection_id": conn_id,
+                    "transport": config.transport,
+                    "url": config.url,
+                    "is_active": config.is_active,
+                    "registered_at": config.register_time,
+                    "last_error": config.last_error,
+                    "loaded_tools_count": len(config.loaded_tool_names),
+                }
+            )
 
-        return {
-            "status": "success",
-            "total_connections": len(_connections),
-            "connections": connections_info
-        }
+        return {"status": "success", "total_connections": len(_connections), "connections": connections_info}
 
 
 def _list_server_tools(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -446,22 +575,19 @@ def _list_server_tools(params: Dict[str, Any]) -> Dict[str, Any]:
         config = _get_connection(connection_id)
         with config.mcp_client:
             tools = config.mcp_client.list_tools_sync()
-            
+
         tools_info = []
         for tool in tools:
             tool_spec = tool.tool_spec
-            tools_info.append({
-                "name": tool.tool_name,
-                "description": tool_spec.get("description", ""),
-                "input_schema": tool_spec.get("inputSchema", {}),
-            })
+            tools_info.append(
+                {
+                    "name": tool.tool_name,
+                    "description": tool_spec.get("description", ""),
+                    "input_schema": tool_spec.get("inputSchema", {}),
+                }
+            )
 
-        return {
-            "status": "success",
-            "connection_id": connection_id,
-            "tools_count": len(tools),
-            "tools": tools_info
-        }
+        return {"status": "success", "connection_id": connection_id, "tools_count": len(tools), "tools": tools_info}
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to list tools: {str(e)}"}]}
 
@@ -470,7 +596,7 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
     """Call a tool on a connected MCP server."""
     connection_id = params.get("connection_id")
     tool_name = params.get("tool_name")
-    
+
     if not tool_name:
         return {"status": "error", "content": [{"text": "tool_name is required for call_tool action"}]}
 
@@ -481,25 +607,23 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
     try:
         config = _get_connection(connection_id)
         tool_args = params.get("tool_args", {})
-        
+
         with config.mcp_client:
             # Use SDK's call_tool_sync which returns proper ToolResult
             result = config.mcp_client.call_tool_sync(
-                tool_use_id=f"dynamic_mcp_{connection_id}_{tool_name}",
-                name=tool_name,
-                arguments=tool_args
+                tool_use_id=f"dynamic_mcp_{connection_id}_{tool_name}", name=tool_name, arguments=tool_args
             )
-        
+
         # Handle both dict and object result formats (for testing compatibility)
-        if hasattr(result, 'status'):
+        if hasattr(result, "status"):
             # Object format (real SDK)
             status = result.status
             content = result.content
         else:
             # Dict format (for tests)
-            status = result.get('status', 'success')
-            content = result.get('content', [])
-        
+            status = result.get("status", "success")
+            content = result.get("content", [])
+
         return {
             "status": "success",
             "connection_id": connection_id,
@@ -514,11 +638,33 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "content": [{"text": f"Failed to call tool: {str(e)}"}]}
 
 
+def _clean_up_tools_from_agent(agent, connection_id: str, tool_names: List[str]) -> Dict[str, Any]:
+    """Clean up tools loaded from a specific connection from the agent's tool registry."""
+    if not agent or not hasattr(agent, "tool_registry") or not hasattr(agent.tool_registry, "unregister_tool"):
+        return {
+            "cleaned_tools": [],
+            "failed_tools": tool_names if tool_names else [],
+            "error": "Agent does not support tool unregistration",
+        }
+
+    cleaned_tools = []
+    failed_tools = []
+
+    for tool_name in tool_names:
+        try:
+            agent.tool_registry.unregister_tool(tool_name)
+            cleaned_tools.append(tool_name)
+        except Exception as e:
+            failed_tools.append(f"{tool_name} ({str(e)})")
+
+    return {"cleaned_tools": cleaned_tools, "failed_tools": failed_tools}
+
+
 def _load_tools_to_agent(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Load MCP tools into agent's tool registry."""
+    """Load MCP tools into agent's tool registry using MCPTool wrapper."""
     connection_id = params.get("connection_id")
     agent = params.get("agent")
-    
+
     if not agent:
         return {"status": "error", "content": [{"text": "agent instance is required for load_tools action"}]}
 
@@ -529,47 +675,35 @@ def _load_tools_to_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     # Check if agent has tool_registry
     if not hasattr(agent, "tool_registry") or not hasattr(agent.tool_registry, "register_tool"):
         return {
-            "status": "error", 
-            "content": [{"text": "Agent does not have a tool registry. Make sure you're using a compatible Strands agent."}]
+            "status": "error",
+            "content": [
+                {"text": "Agent does not have a tool registry. Make sure you're using a compatible Strands agent."}
+            ],
         }
 
     try:
         config = _get_connection(connection_id)
-        
+
         with config.mcp_client:
             # Use SDK's list_tools_sync which returns MCPAgentTool instances
             tools = config.mcp_client.list_tools_sync()
-        
+
         loaded_tools = []
         skipped_tools = []
-        
+
         for tool in tools:
             try:
-                # Create prefixed tool name for consistency with original implementation
-                prefixed_name = f"mcp_{connection_id}_{tool.tool_name}"
-                
-                # Create a simple wrapper to provide the prefixed name
-                class PrefixedTool:
-                    def __init__(self, original_tool, prefixed_name):
-                        self.original_tool = original_tool
-                        self.tool_name = prefixed_name
-                        self.name = prefixed_name
-                        
-                    def __getattr__(self, name):
-                        return getattr(self.original_tool, name)
-                        
-                    def invoke(self, *args, **kwargs):
-                        return self.original_tool.invoke(*args, **kwargs)
-                
-                prefixed_tool = PrefixedTool(tool, prefixed_name)
-                
-                # Register the prefixed tool with the agent
-                agent.tool_registry.register_tool(prefixed_tool)
-                loaded_tools.append(prefixed_name)
-                
+                # Wrap the MCP tool with our MCPTool class that handles context management
+                wrapped_tool = MCPTool(tool, connection_id)
+
+                # Register the wrapped tool with the agent
+                logger.info(f"Loading MCP tool [{tool.tool_name}] wrapped in MCPTool")
+                agent.tool_registry.register_tool(wrapped_tool)
+                loaded_tools.append(tool.tool_name)
+
             except Exception as e:
                 skipped_tools.append({"name": tool.tool_name, "error": str(e)})
-        
+
         # Update loaded tools list
         with _CONNECTION_LOCK:
             config.loaded_tool_names.extend(loaded_tools)
@@ -582,11 +716,11 @@ def _load_tools_to_agent(params: Dict[str, Any]) -> Dict[str, Any]:
             "tool_count": len(loaded_tools),  # Add this field for test compatibility
             "total_loaded_tools": len(config.loaded_tool_names),
         }
-        
+
         if skipped_tools:
             result["skipped_tools"] = skipped_tools
-            
+
         return result
-        
+
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to load tools: {str(e)}"}]}
