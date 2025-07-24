@@ -36,7 +36,7 @@ class KnowledgeBaseHelper:
         }
         self.resource_names = self.index
         self.created_resources = {}
-        self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "true").lower() == "true"
+        self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "false").lower() == "true"
 
     @staticmethod
     def get_boto_clients():

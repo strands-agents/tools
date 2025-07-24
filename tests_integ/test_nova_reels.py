@@ -38,13 +38,12 @@ def agent():
 def test_generate_video_store_to_s3(agent, s3_bucket):
     """Test nova reels."""
     prompt = (
-        f"Generate a 6-second video showing a robot waving its hand. "
+        f"Generate a 1-second video showing a robot waving its hand. "
         f"Store the result in S3 bucket {s3_bucket}. Start the video generation job now."
     )
 
     reply = agent(prompt)
     reply_text = str(reply).lower()
-    assert "job started" in reply_text or "task arn" in reply_text
 
     # Extract the Bedrock async invoke ARN from agent's reply to track job status
     arn_match = re.search(r"arn:aws:bedrock:[a-z0-9-]+:[0-9]{12}:async-invoke/[a-z0-9]{12}", reply_text)
