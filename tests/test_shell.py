@@ -51,14 +51,10 @@ def test_shell_tool_direct(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use dictionary similar to how the agent would call it
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": "echo test"}}
-
-    # Call the shell function directly
-    result = shell.shell(tool=tool_use)
+    # Call the shell function directly with new @tool decorator signature
+    result = shell.shell("echo test")
 
     # Verify the result has the expected structure
-    assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
     assert "Total commands: 1" in result["content"][0]["text"]
     assert "Successful: 1" in result["content"][0]["text"]
@@ -71,10 +67,22 @@ def test_shell_tool_direct(mock_get_user_input, mock_execute_commands):
     assert args[2] is False  # ignore_errors
 
 
+@patch("os.environ")
 @patch("strands_tools.shell.execute_commands")
 @patch("strands_tools.shell.get_user_input")
-def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands):
+def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands, mock_environ):
     """Test shell tool in non-interactive mode."""
+
+    # Mock execute_commands to return a successful result
+    def mock_env_get(key, default=""):
+        if key == "STRANDS_NON_INTERACTIVE":
+            return "true"
+        if key == "BYPASS_TOOL_CONSENT":
+            return "false"
+        return default
+
+    mock_environ.get.side_effect = mock_env_get
+
     # Mock execute_commands to return a successful result
     mock_execute_commands.return_value = [
         {
@@ -86,16 +94,12 @@ def test_shell_non_interactive_mode(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": "ls"}}
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell("ls")
 
-    # Call the shell function with non_interactive_mode=True
-    result = shell.shell(tool=tool_use, non_interactive_mode=True)
-
-    # Verify the result
     assert result["status"] == "success"
 
-    # Verify that get_user_input was not called (no confirmation needed)
+    # Verify that get_user_input was not called because the env var forces non-interactive mode
     mock_get_user_input.assert_not_called()
 
 
@@ -111,14 +115,8 @@ def test_shell_cancel_execution(mock_get_user_input, mock_execute_commands):
     if current_dev:
         os.environ.pop("BYPASS_TOOL_CONSENT")
 
-    # Create a tool use dictionary
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "dangerous_command"},
-    }
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell("dangerous_command")
 
     # Restore BYPASS_TOOL_CONSENT mode if it was set
     if current_dev:
@@ -155,14 +153,8 @@ def test_shell_multiple_commands(mock_get_user_input, mock_execute_commands):
         },
     ]
 
-    # Create a tool use dictionary with multiple commands
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": ["echo hello", "echo world"]},
-    }
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell(["echo hello", "echo world"])
 
     # Verify the result
     assert result["status"] == "success"
@@ -187,14 +179,8 @@ def test_shell_command_failure(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use dictionary
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "invalid_command"},
-    }
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell("invalid_command")
 
     # Verify the result
     assert result["status"] == "error"
@@ -217,14 +203,8 @@ def test_shell_ignore_errors(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use dictionary with ignore_errors=True
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "invalid_command", "ignore_errors": True},
-    }
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature and ignore_errors=True
+    result = shell.shell("invalid_command", ignore_errors=True)
 
     # Verify the result - status should be success due to ignore_errors
     assert result["status"] == "success"
@@ -241,11 +221,8 @@ def test_shell_exception_handling(mock_get_user_input, mock_execute_commands):
     # Make execute_commands raise an exception
     mock_execute_commands.side_effect = Exception("Test exception")
 
-    # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": "echo test"}}
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell("echo test")
 
     # Verify the result
     assert result["status"] == "error"
@@ -375,7 +352,7 @@ def test_command_executor_execute_with_pty(
         executor = shell.CommandExecutor(timeout=10)
 
         # Execute a command
-        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp")
+        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp", non_interactive_mode=False)
 
         # Verify the results
         assert exit_code == 0
@@ -404,6 +381,7 @@ def test_command_executor_execute_with_pty(
 
 @patch("os.execvp")
 @patch("os.chdir")
+@patch("os.getpgid")
 @patch("pty.fork")
 @patch("termios.tcgetattr")
 @patch("tty.setraw")
@@ -421,6 +399,7 @@ def test_command_executor_execute_with_pty_timeout(
     mock_setraw,
     mock_tcgetattr,
     mock_fork,
+    mock_getpgid,
     mock_chdir,
     mock_execvp,
 ):
@@ -428,6 +407,7 @@ def test_command_executor_execute_with_pty_timeout(
     # Mock setup
     mock_tcgetattr.return_value = "old_tty_settings"
     mock_fork.return_value = (123, 5)  # pid, fd
+    mock_getpgid.return_value = 123
 
     # Set up time mock to simulate passing the timeout
     mock_time.side_effect = [
@@ -437,7 +417,7 @@ def test_command_executor_execute_with_pty_timeout(
     ]  # Start time, check time (which exceeds timeout)
 
     # Mock sys.stdin
-    with patch("sys.stdin") as mock_stdin, patch("os.kill") as mock_kill:
+    with patch("sys.stdin") as mock_stdin, patch("os.killpg") as mock_killpg:
         mock_stdin.fileno.return_value = 0
 
         # Create the executor with a very short timeout
@@ -445,10 +425,10 @@ def test_command_executor_execute_with_pty_timeout(
 
         # Execute command - should time out
         with pytest.raises(TimeoutError):
-            executor.execute_with_pty("sleep 10", "/tmp")
+            executor.execute_with_pty("sleep 10", "/tmp", non_interactive_mode=False)
 
         # Verify kill was called with SIGTERM
-        mock_kill.assert_called_once_with(123, signal.SIGTERM)
+        mock_killpg.assert_called_once_with(123, signal.SIGTERM)
 
 
 @patch("os.execvp")
@@ -456,8 +436,9 @@ def test_command_executor_execute_with_pty_timeout(
 @patch("pty.fork")
 @patch("termios.tcgetattr")
 @patch("termios.tcsetattr")
+@patch("tty.setraw")
 def test_command_executor_execute_with_pty_tcsetattr_exception(
-    mock_tcsetattr, mock_tcgetattr, mock_fork, mock_chdir, mock_execvp
+    mock_setraw, mock_tcsetattr, mock_tcgetattr, mock_fork, mock_chdir, mock_execvp
 ):
     """Test the CommandExecutor execute_with_pty method with tcsetattr exception."""
     # Mock setup
@@ -473,7 +454,6 @@ def test_command_executor_execute_with_pty_tcsetattr_exception(
         patch("select.select") as mock_select,
         patch("os.read") as mock_read,
         patch("os.waitpid") as mock_waitpid,
-        patch("os.system") as mock_system,
     ):
         mock_stdin.fileno.return_value = 0
         mock_select.return_value = ([5], [], [])
@@ -484,10 +464,13 @@ def test_command_executor_execute_with_pty_tcsetattr_exception(
         executor = shell.CommandExecutor(timeout=10)
 
         # Execute command - should catch tcsetattr exception and call stty sane
-        exit_code, output, error = executor.execute_with_pty("echo test", "/tmp")
+        with pytest.raises(Exception, match="Test tcsetattr error"):
+            executor.execute_with_pty("echo test", "/tmp", non_interactive_mode=False)
 
-        # Verify stty sane was called to restore terminal
-        mock_system.assert_called_once_with("stty sane")
+        # Verify tty.setraw was attempted
+        mock_setraw.assert_called_once()
+        # Verify tcsetattr was called to restore (which then raised the error)
+        mock_tcsetattr.assert_called_once()
 
 
 @patch("strands_tools.shell.execute_single_command")
@@ -514,11 +497,7 @@ def test_execute_commands_parallel(mock_execute_single_command):
     # Execute commands in parallel
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify results
@@ -563,11 +542,7 @@ def test_execute_commands_parallel_with_error(mock_execute_single_command):
     # Execute commands in parallel with ignore_errors=False
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify only the first result is returned (second should be canceled)
@@ -599,11 +574,7 @@ def test_execute_commands_parallel_with_ignore_errors(mock_execute_single_comman
     # Execute commands in parallel with ignore_errors=True
     commands = ["cmd1", "cmd2"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=True,
-        ignore_errors=True,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=True, ignore_errors=True, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify both results are returned despite the first one failing
@@ -636,11 +607,7 @@ def test_execute_commands_sequential_with_cd(mock_execute_single_command):
     # Execute commands sequentially
     commands = ["cd /new/dir", "pwd"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=False,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=False, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify results
@@ -685,11 +652,7 @@ def test_execute_commands_sequential_with_error(mock_execute_single_command):
     # Execute commands sequentially with ignore_errors=False
     commands = ["cmd1", "cmd2", "cmd3"]
     results = shell.execute_commands(
-        commands=commands,
-        parallel=False,
-        ignore_errors=False,
-        work_dir="/tmp",
-        timeout=10,
+        commands=commands, parallel=False, ignore_errors=False, work_dir="/tmp", timeout=10, non_interactive_mode=False
     )
 
     # Verify only the first two commands were executed (stopped after error)
@@ -769,18 +732,12 @@ def test_shell_with_timeout(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use with timeout parameter
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "sleep 1", "timeout": 60},
-    }
-
-    # Call the shell function
-    shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature and timeout=60
+    shell.shell("sleep 1", timeout=60)
 
     # Verify execute_commands was called with the custom timeout
     mock_execute_commands.assert_called_once()
-    args, kwargs = mock_execute_commands.call_args
+    args, _kwargs = mock_execute_commands.call_args
     assert args[4] == 60  # timeout parameter
 
 
@@ -800,14 +757,8 @@ def test_shell_with_work_dir(mock_get_user_input, mock_execute_commands):
         }
     ]
 
-    # Create a tool use with work_dir parameter
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "pwd", "work_dir": "/custom/dir"},
-    }
-
-    # Call the shell function
-    shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature and work_dir="/custom/dir"
+    shell.shell("pwd", work_dir="/custom/dir")
 
     # Verify execute_commands was called with the custom work_dir
     mock_execute_commands.assert_called_once()
@@ -820,8 +771,16 @@ def test_shell_with_work_dir(mock_get_user_input, mock_execute_commands):
 @patch("strands_tools.shell.get_user_input")
 def test_shell_dev_mode(mock_get_user_input, mock_execute_commands, mock_environ):
     """Test shell tool in BYPASS_TOOL_CONSENT mode (skips confirmation)."""
-    # Set BYPASS_TOOL_CONSENT mode
-    mock_environ.get.return_value = "true"
+
+    # Configure mock to handle different environment variables appropriately
+    def mock_env_get(key, default=""):
+        if key == "BYPASS_TOOL_CONSENT":
+            return "true"
+        if key == "SHELL_DEFAULT_TIMEOUT":
+            return "900"
+        return default
+
+    mock_environ.get.side_effect = mock_env_get
 
     # Mock setup
     mock_execute_commands.return_value = [
@@ -834,11 +793,8 @@ def test_shell_dev_mode(mock_get_user_input, mock_execute_commands, mock_environ
         }
     ]
 
-    # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": "echo test"}}
-
-    # Call the shell function
-    result = shell.shell(tool=tool_use)
+    # Call the shell function with new @tool decorator signature
+    result = shell.shell("echo test")
 
     # Verify the result
     assert result["status"] == "success"
@@ -867,19 +823,12 @@ def test_shell_with_json_array_string(mock_execute_commands):
             "status": "success",
         },
     ]
-
-    # Create a tool use with a JSON array string
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": '["cmd1", "cmd2"]'},
-    }
-
-    # Call the shell function with non_interactive_mode to skip confirmation
-    shell.shell(tool=tool_use, non_interactive_mode=True)
+    # Call the shell function with new @tool decorator signature and non_interactive=True to skip confirmation
+    shell.shell('["cmd1", "cmd2"]', non_interactive=True)
 
     # Verify execute_commands was called with parsed array
     mock_execute_commands.assert_called_once()
-    args, kwargs = mock_execute_commands.call_args
+    args, _kwargs = mock_execute_commands.call_args
     assert args[0] == ["cmd1", "cmd2"]  # Parsed as array
 
 
@@ -897,18 +846,12 @@ def test_shell_with_invalid_json_array_string(mock_execute_commands):
         }
     ]
 
-    # Create a tool use with an invalid JSON array string
-    tool_use = {
-        "toolUseId": "test-tool-use-id",
-        "input": {"command": "[invalid json array]"},
-    }
-
-    # Call the shell function with non_interactive_mode
-    shell.shell(tool=tool_use, non_interactive_mode=True)
+    # Call the shell function with new @tool decorator signature and non_interactive=True
+    shell.shell("[invalid json array]", non_interactive=True)
 
     # Verify execute_commands was called with the original string (fallback)
     mock_execute_commands.assert_called_once()
-    args, kwargs = mock_execute_commands.call_args
+    args, _kwargs = mock_execute_commands.call_args
     assert args[0] == ["[invalid json array]"]  # Kept as string
 
 
@@ -927,16 +870,13 @@ def test_shell_with_complex_command_objects(mock_execute_commands):
         }
     ]
 
-    # Create a tool use with complex command object
+    # Call the shell function with new @tool decorator signature - complex command object
     command_obj = {"command": "git clone", "timeout": 120}
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"command": command_obj}}
-
-    # Call the shell function with non_interactive_mode
-    shell.shell(tool=tool_use, non_interactive_mode=True)
+    shell.shell(command_obj, non_interactive=True)
 
     # Verify execute_commands was called with the complex object
     mock_execute_commands.assert_called_once()
-    args, kwargs = mock_execute_commands.call_args
+    args, _kwargs = mock_execute_commands.call_args
     assert args[0] == [command_obj]
 
 
@@ -947,7 +887,7 @@ def test_execute_single_command():
         mock_execute.return_value = (0, "command output", "")
 
         # Test with string command
-        result = shell.execute_single_command("echo test", "/tmp", 10)
+        result = shell.execute_single_command("echo test", "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "echo test"
         assert result["exit_code"] == 0
         assert result["output"] == "command output"
@@ -955,13 +895,13 @@ def test_execute_single_command():
 
         # Test with dictionary command
         cmd_dict = {"command": "git status", "timeout": 30}
-        result = shell.execute_single_command(cmd_dict, "/tmp", 10)
+        result = shell.execute_single_command(cmd_dict, "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "git status"
         assert result["options"] == cmd_dict
 
         # Test with exception
         mock_execute.side_effect = Exception("Test error")
-        result = shell.execute_single_command("failing command", "/tmp", 10)
+        result = shell.execute_single_command("failing command", "/tmp", 10, non_interactive_mode=False)
         assert result["command"] == "failing command"
         assert result["status"] == "error"
         assert "Test error" in result["error"]
@@ -988,11 +928,8 @@ def test_shell_console_output(mock_console_util):
             }
         ]
 
-        # Create a tool use dictionary
-        tool_use = {"toolUseId": "test-id", "input": {"command": "echo test"}}
-
         # Call the shell function in interactive mode
-        shell.shell(tool=tool_use)
+        shell.shell("echo test")
 
         assert mock_console.print.call_count >= 3
 
@@ -1000,7 +937,7 @@ def test_shell_console_output(mock_console_util):
         mock_console.reset_mock()
 
         # Call with non_interactive_mode=True
-        shell.shell(tool=tool_use, non_interactive_mode=True)
+        shell.shell("echo test", non_interactive=True)
 
         # Verify console.print was not called for UI elements in non-interactive mode
         assert mock_console.print.call_count == 0
@@ -1020,12 +957,9 @@ def test_shell_exception_ui_output(mock_execute_commands, mock_get_user_input, m
     error_panel = Panel("Test content")
     mock_panel = MagicMock(return_value=error_panel)
 
-    # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-id", "input": {"command": "echo test"}}
-
     with patch("rich.panel.Panel", mock_panel):
         # Call the shell function
-        shell.shell(tool=tool_use)
+        shell.shell("echo test")
 
         # Verify console.print was called at least once
         assert mock_console.print.call_count >= 1
@@ -1034,7 +968,31 @@ def test_shell_exception_ui_output(mock_execute_commands, mock_get_user_input, m
         mock_console.reset_mock()
 
         # Call with non_interactive_mode=True
-        shell.shell(tool=tool_use, non_interactive_mode=True)
+        shell.shell("echo test", non_interactive=True)
 
         # Verify console.print was not called in non-interactive mode
         assert mock_console.print.call_count == 0
+
+
+@patch("strands_tools.shell.execute_commands")
+@patch("strands_tools.shell.get_user_input")
+def test_shell_non_interactive_parameter(mock_get_user_input, mock_execute_commands):
+    """Test shell tool with non_interactive parameter."""
+    # Mock execute_commands to return a successful result
+    mock_execute_commands.return_value = [
+        {
+            "command": "echo test",
+            "exit_code": 0,
+            "output": "test\n",
+            "error": "",
+            "status": "success",
+        }
+    ]
+
+    # Call the shell function with non_interactive=True
+    result = shell.shell("echo test", non_interactive=True)
+
+    assert result["status"] == "success"
+
+    # Verify that get_user_input was not called because non_interactive=True
+    mock_get_user_input.assert_not_called()

@@ -313,13 +313,60 @@ class PtyManager:
             input_handler.start()
 
     def _read_output(self) -> None:
-        """Read and process PTY output with improved prompt handling."""
+        """Read and process PTY output with improved error handling and file descriptor management."""
         buffer = ""
+        incomplete_bytes = b""  # Buffer for incomplete UTF-8 sequences
+
         while not self.stop_event.is_set():
             try:
-                r, _, _ = select.select([self.supervisor_fd], [], [], 0.1)
+                # Check if file descriptor is still valid
+                if self.supervisor_fd < 0:
+                    logger.debug("Invalid file descriptor, stopping output reader")
+                    break
+
+                # Use select with timeout to avoid blocking
+                try:
+                    r, _, _ = select.select([self.supervisor_fd], [], [], 0.1)
+                except (OSError, ValueError) as e:
+                    # File descriptor became invalid during select
+                    logger.debug(f"File descriptor error during select: {e}")
+                    break
+
                 if self.supervisor_fd in r:
-                    data = os.read(self.supervisor_fd, 1024).decode()
+                    try:
+                        raw_data = os.read(self.supervisor_fd, 1024)
+                    except (OSError, ValueError) as e:
+                        # Handle closed file descriptor or other OS errors
+                        if e.errno == 9:  # Bad file descriptor
+                            logger.debug("PTY closed, stopping output reader")
+                        else:
+                            logger.warning(f"Error reading from PTY: {e}")
+                        break
+
+                    if not raw_data:
+                        # EOF reached, PTY closed
+                        logger.debug("EOF reached, PTY closed")
+                        break
+
+                    # Combine with any incomplete bytes from previous read
+                    full_data = incomplete_bytes + raw_data
+
+                    try:
+                        # Try to decode the data
+                        data = full_data.decode("utf-8")
+                        incomplete_bytes = b""  # Clear incomplete buffer on success
+
+                    except UnicodeDecodeError as e:
+                        # Handle incomplete UTF-8 sequence at the end
+                        if e.start > 0:
+                            # We can decode part of the data
+                            data = full_data[: e.start].decode("utf-8")
+                            incomplete_bytes = full_data[e.start :]
+                        else:
+                            # Can't decode anything, save for next iteration
+                            incomplete_bytes = full_data
+                            continue
+
                     if data:
                         # Append to buffer
                         buffer += data
@@ -333,23 +380,65 @@ class PtyManager:
 
                             # Stream if callback exists
                             if self.callback:
-                                self.callback(cleaned)
+                                try:
+                                    self.callback(cleaned)
+                                except Exception as callback_error:
+                                    logger.warning(f"Error in output callback: {callback_error}")
 
                         # Handle remaining buffer (usually prompts)
                         if buffer:
                             cleaned = clean_ansi(buffer)
                             if self.callback:
-                                self.callback(cleaned)
+                                try:
+                                    self.callback(cleaned)
+                                except Exception as callback_error:
+                                    logger.warning(f"Error in output callback: {callback_error}")
 
-            except (OSError, IOError):
+            except (OSError, IOError) as e:
+                # Handle file descriptor errors gracefully
+                if hasattr(e, "errno") and e.errno == 9:  # Bad file descriptor
+                    logger.debug("PTY file descriptor closed, stopping reader")
+                    break
+                else:
+                    logger.warning(f"I/O error reading PTY output: {e}")
+                    # Don't break immediately, try to continue
+                    continue
+
+            except UnicodeDecodeError as e:
+                # This shouldn't happen anymore with our improved handling, but just in case
+                logger.warning(f"Unicode decode error: {e}")
+                incomplete_bytes = b""
+                continue
+
+            except Exception as e:
+                # Catch any other unexpected errors
+                logger.error(f"Unexpected error in _read_output: {e}")
                 break
 
-        # Handle any remaining buffer
+        # Clean shutdown - handle any remaining buffer
         if buffer:
-            cleaned = clean_ansi(buffer)
-            self.output_buffer.append(cleaned)
-            if self.callback:
-                self.callback(cleaned)
+            try:
+                cleaned = clean_ansi(buffer)
+                self.output_buffer.append(cleaned)
+                if self.callback:
+                    self.callback(cleaned)
+            except Exception as e:
+                logger.warning(f"Error processing final buffer: {e}")
+
+        # Handle any remaining incomplete bytes at shutdown
+        if incomplete_bytes:
+            try:
+                # Try to decode with error handling
+                final_data = incomplete_bytes.decode("utf-8", errors="replace")
+                if final_data:
+                    cleaned = clean_ansi(final_data)
+                    self.output_buffer.append(cleaned)
+                    if self.callback:
+                        self.callback(cleaned)
+            except Exception as e:
+                logger.warning(f"Failed to process remaining bytes at shutdown: {e}")
+
+        logger.debug("PTY output reader thread finished")
 
     def _handle_input(self) -> None:
         """Handle interactive user input with improved buffering."""
@@ -392,21 +481,56 @@ class PtyManager:
         return format_binary(clean)
 
     def stop(self) -> None:
-        """Stop PTY session and clean up."""
+        """Stop PTY session and clean up resources properly."""
+        logger.debug("Stopping PTY session...")
+
+        # Signal threads to stop
         self.stop_event.set()
 
+        # Clean up child process
         if self.pid > 0:
             try:
+                # Try graceful termination first
                 os.kill(self.pid, signal.SIGTERM)
-                os.waitpid(self.pid, 0)
-            except OSError:
-                pass
 
+                # Wait briefly for graceful shutdown
+                try:
+                    pid, status = os.waitpid(self.pid, os.WNOHANG)
+                    if pid == 0:  # Process still running
+                        # Give it a moment
+                        import time
+
+                        time.sleep(0.1)
+                        # Try again
+                        pid, status = os.waitpid(self.pid, os.WNOHANG)
+                        if pid == 0:
+                            # Force kill if still running
+                            logger.debug("Forcing process termination")
+                            os.kill(self.pid, signal.SIGKILL)
+                            os.waitpid(self.pid, 0)
+
+                except OSError as e:
+                    # Process might have already exited
+                    logger.debug(f"Process cleanup error (likely already exited): {e}")
+
+            except (OSError, ProcessLookupError) as e:
+                # Process doesn't exist or already terminated
+                logger.debug(f"Process termination error (likely already gone): {e}")
+
+            finally:
+                self.pid = -1
+
+        # Clean up file descriptor
         if self.supervisor_fd >= 0:
             try:
                 os.close(self.supervisor_fd)
-            except OSError:
-                pass
+                logger.debug("PTY supervisor file descriptor closed")
+            except OSError as e:
+                logger.debug(f"Error closing supervisor fd: {e}")
+            finally:
+                self.supervisor_fd = -1
+
+        logger.debug("PTY session cleanup completed")
 
 
 output_buffer: List[str] = []

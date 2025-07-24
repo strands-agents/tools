@@ -612,3 +612,49 @@ class TestIntegration:
 
             # Verify error logging with traceback
             mock_logger.error.assert_called_with("Custom swarm execution failed: Test error\nTest traceback")
+
+    def test_create_agents_tool_objects_retrieval(self, mock_parent_agent):
+        """Test that actual tool objects are retrieved from parent registry, not just names."""
+        # Create mock tool objects
+        mock_calculator_tool = MagicMock()
+        mock_file_read_tool = MagicMock()
+
+        # Update the parent agent's registry to return actual tool objects
+        mock_parent_agent.tool_registry.registry = {
+            "calculator": mock_calculator_tool,
+            "file_read": mock_file_read_tool,
+            "editor": MagicMock(),
+        }
+
+        agent_specs = [
+            {
+                "name": "test_agent",
+                "system_prompt": "Test agent.",
+                "tools": ["calculator", "file_read"],
+            }
+        ]
+
+        with patch("strands_tools.swarm.Agent") as MockAgent:
+            mock_agent_instance = MagicMock()
+            MockAgent.return_value = mock_agent_instance
+
+            agents = swarm_module._create_custom_agents(agent_specs=agent_specs, parent_agent=mock_parent_agent)
+
+            assert len(agents) == 1
+
+            # Verify Agent was called with actual tool objects, not tool names
+            call_kwargs = MockAgent.call_args.kwargs
+            tools_passed = call_kwargs["tools"]
+
+            # Should be actual tool objects, not strings
+            assert len(tools_passed) == 2
+            assert mock_calculator_tool in tools_passed
+            assert mock_file_read_tool in tools_passed
+
+            # Verify these are the actual mock objects, not strings
+            for tool in tools_passed:
+                assert not isinstance(tool, str), "Tool should be an object, not a string"
+
+            # Verify the specific objects we expect are present
+            assert tools_passed[0] == mock_calculator_tool
+            assert tools_passed[1] == mock_file_read_tool
