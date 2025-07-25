@@ -86,11 +86,16 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert "Connected to MCP server 'test_server'" in result["message"]
-        assert result["connection_id"] == "test_server"
-        assert result["transport"] == "stdio"
-        assert result["tools_count"] == 1
-        assert result["available_tools"] == ["test_tool"]
+        # Text message
+        assert "Connected to MCP server 'test_server'" in result["content"][0]["text"]
+
+        # Structured data
+        connection_data = result["content"][1]["json"]
+        assert "Connected to MCP server 'test_server'" in connection_data["message"]
+        assert connection_data["connection_id"] == "test_server"
+        assert connection_data["transport"] == "stdio"
+        assert connection_data["tools_count"] == 1
+        assert connection_data["available_tools"] == ["test_tool"]
 
         # Verify MCPClient was created correctly
         mock_client_class, mock_instance = mock_mcp_client
@@ -110,11 +115,16 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert "Connected to MCP server 'http_server'" in result["message"]
-        assert result["connection_id"] == "http_server"
-        assert result["transport"] == "streamable_http"
-        assert result["tools_count"] == 1
-        assert result["available_tools"] == ["test_tool"]
+        # Text message
+        assert "Connected to MCP server 'http_server'" in result["content"][0]["text"]
+
+        # Structured data
+        connection_data = result["content"][1]["json"]
+        assert "Connected to MCP server 'http_server'" in connection_data["message"]
+        assert connection_data["connection_id"] == "http_server"
+        assert connection_data["transport"] == "streamable_http"
+        assert connection_data["tools_count"] == 1
+        assert connection_data["available_tools"] == ["test_tool"]
 
         # Verify MCPClient was created correctly
         mock_client_class, mock_instance = mock_mcp_client
@@ -131,7 +141,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["transport"] == "streamable_http"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["transport"] == "streamable_http"
 
     def test_connect_streamable_http_missing_url(self):
         """Test connecting to streamable HTTP without server_url."""
@@ -154,7 +166,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "auth_http_server"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["connection_id"] == "auth_http_server"
 
     def test_connect_streamable_http_server_config(self, mock_mcp_client, mock_streamablehttp_client):
         """Test connecting using server_config with streamable HTTP parameters."""
@@ -172,7 +186,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "config_http_server"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["connection_id"] == "config_http_server"
 
     def test_connect_sse_transport(self, mock_mcp_client, mock_sse_client):
         """Test connecting to an MCP server via SSE transport."""
@@ -181,9 +197,11 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert "Connected to MCP server 'sse_server'" in result["message"]
-        assert result["connection_id"] == "sse_server"
-        assert result["transport"] == "sse"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert "Connected to MCP server 'sse_server'" in connection_data["message"]
+        assert connection_data["connection_id"] == "sse_server"
+        assert connection_data["transport"] == "sse"
 
     def test_connect_unsupported_transport(self):
         """Test connecting with an unsupported transport type."""
@@ -238,7 +256,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "test_server"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["connection_id"] == "test_server"
 
     def test_connect_with_environment_variables(self, mock_mcp_client, mock_stdio_client):
         """Test connecting with environment variables (parameters passed but not stored)."""
@@ -252,7 +272,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "test_server_with_env"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["connection_id"] == "test_server_with_env"
 
     def test_connect_with_env_in_server_config(self, mock_mcp_client, mock_stdio_client):
         """Test connecting with environment variables in server_config (parameters passed but not stored)."""
@@ -268,7 +290,9 @@ class TestMCPClientConnect:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "test_server_config_env"
+        # Access structured data from new ToolResult format
+        connection_data = result["content"][1]["json"]
+        assert connection_data["connection_id"] == "test_server_config_env"
 
     def test_connect_failure(self, mock_mcp_client):
         """Test handling connection failure."""
@@ -302,8 +326,13 @@ class TestMCPClientDisconnect:
         result = dynamic_mcp_client(action="disconnect", connection_id="test_server")
 
         assert result["status"] == "success"
-        assert "Disconnected from MCP server 'test_server'" in result["message"]
-        assert result["was_active"] is True
+        # Text message
+        assert "Disconnected from MCP server 'test_server'" in result["content"][0]["text"]
+
+        # Structured data
+        disconnect_data = result["content"][1]["json"]
+        assert "Disconnected from MCP server 'test_server'" in disconnect_data["message"]
+        assert disconnect_data["was_active"] is True
 
     def test_disconnect_nonexistent_connection(self):
         """Test disconnecting from a non-existent connection."""
@@ -334,9 +363,11 @@ class TestMCPClientDisconnect:
         result = dynamic_mcp_client(action="disconnect", connection_id="test_server")
 
         assert result["status"] == "success"
-        assert "loaded_tools_info" in result
-        assert "2 tools loaded" in result["loaded_tools_info"]
-        assert "tool1" in result["loaded_tools_info"]
+        # Access structured data from new ToolResult format
+        disconnect_data = result["content"][1]["json"]
+        assert "loaded_tools_info" in disconnect_data
+        assert "2 tools loaded" in disconnect_data["loaded_tools_info"]
+        assert "tool1" in disconnect_data["loaded_tools_info"]
 
 
 class TestMCPClientListConnections:
@@ -347,8 +378,13 @@ class TestMCPClientListConnections:
         result = dynamic_mcp_client(action="list_connections")
 
         assert result["status"] == "success"
-        assert result["total_connections"] == 0
-        assert result["connections"] == []
+        # Text message
+        assert "Found 0 MCP connections" in result["content"][0]["text"]
+
+        # Structured data
+        connections_data = result["content"][1]["json"]
+        assert connections_data["total_connections"] == 0
+        assert connections_data["connections"] == []
 
     def test_list_multiple_connections(
         self, mock_mcp_client, mock_stdio_client, mock_sse_client, mock_streamablehttp_client
@@ -374,27 +410,29 @@ class TestMCPClientListConnections:
         result = dynamic_mcp_client(action="list_connections")
 
         assert result["status"] == "success"
-        assert result["total_connections"] == 3
-        assert len(result["connections"]) == 3
+        # Access structured data from new ToolResult format
+        connections_data = result["content"][1]["json"]
+        assert connections_data["total_connections"] == 3
+        assert len(connections_data["connections"]) == 3
 
         # Verify connection details
-        conn_ids = [conn["connection_id"] for conn in result["connections"]]
+        conn_ids = [conn["connection_id"] for conn in connections_data["connections"]]
         assert "stdio_server" in conn_ids
         assert "sse_server" in conn_ids
         assert "http_server" in conn_ids
 
         # Check stdio connection
-        stdio_conn = next(c for c in result["connections"] if c["connection_id"] == "stdio_server")
+        stdio_conn = next(c for c in connections_data["connections"] if c["connection_id"] == "stdio_server")
         assert stdio_conn["transport"] == "stdio"
         assert stdio_conn["is_active"] is True
 
         # Check SSE connection
-        sse_conn = next(c for c in result["connections"] if c["connection_id"] == "sse_server")
+        sse_conn = next(c for c in connections_data["connections"] if c["connection_id"] == "sse_server")
         assert sse_conn["transport"] == "sse"
         assert sse_conn["url"] == "http://localhost:8080/mcp"
 
         # Check streamable HTTP connection
-        http_conn = next(c for c in result["connections"] if c["connection_id"] == "http_server")
+        http_conn = next(c for c in connections_data["connections"] if c["connection_id"] == "http_server")
         assert http_conn["transport"] == "streamable_http"
         assert http_conn["url"] == "https://example.com/mcp"
 
@@ -413,11 +451,16 @@ class TestMCPClientListTools:
         result = dynamic_mcp_client(action="list_tools", connection_id="test_server")
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "test_server"
-        assert result["tools_count"] == 1
-        assert len(result["tools"]) == 1
-        assert result["tools"][0]["name"] == "test_tool"
-        assert result["tools"][0]["description"] == "A test tool"
+        # Text message
+        assert "Found 1 tools on MCP server 'test_server'" in result["content"][0]["text"]
+
+        # Structured data
+        tools_data = result["content"][1]["json"]
+        assert tools_data["connection_id"] == "test_server"
+        assert tools_data["tools_count"] == 1
+        assert len(tools_data["tools"]) == 1
+        assert tools_data["tools"][0]["name"] == "test_tool"
+        assert tools_data["tools"][0]["description"] == "A test tool"
 
     def test_list_tools_nonexistent_connection(self):
         """Test listing tools from a non-existent connection."""
@@ -468,11 +511,8 @@ class TestMCPClientCallTool:
         )
 
         assert result["status"] == "success"
-        assert result["connection_id"] == "test_server"
-        assert result["tool_name"] == "test_tool"
-        assert result["tool_arguments"] == {"param": "value"}
-        assert result["tool_result"]["status"] == "success"
-        assert result["tool_result"]["content"][0]["text"] == "Tool executed successfully"
+        assert result["toolUseId"] == "test-id"
+        assert result["content"][0]["text"] == "Tool executed successfully"
 
     def test_call_tool_with_direct_params(self, mock_mcp_client, mock_stdio_client):
         """Test calling a tool with parameters passed directly - they should be explicitly provided in tool_args."""
@@ -490,9 +530,13 @@ class TestMCPClientCallTool:
         )
 
         assert result["status"] == "success"
-        # Tool arguments should contain the explicitly provided values
-        assert result["tool_arguments"]["param"] == "direct_value"
-        assert result["tool_arguments"]["another_param"] == 123
+        # Verify the SDK call was made with the correct arguments
+        _, mock_instance = mock_mcp_client
+        mock_instance.call_tool_sync.assert_called_with(
+            tool_use_id="dynamic_mcp_test_server_test_tool",
+            name="test_tool",
+            arguments={"param": "direct_value", "another_param": 123},
+        )
 
     def test_call_tool_missing_params(self):
         """Test calling a tool with missing parameters."""
@@ -545,9 +589,14 @@ class TestMCPClientLoadTools:
         result = dynamic_mcp_client(action="load_tools", connection_id="test_server", agent=mock_agent)
 
         assert result["status"] == "success"
-        assert "Loaded 1 tools" in result["message"]
-        assert result["loaded_tools"] == ["test_tool"]
-        assert result["tool_count"] == 1
+        # Text message
+        assert "Loaded 1 tools from MCP server 'test_server'" in result["content"][0]["text"]
+
+        # Structured data
+        load_data = result["content"][1]["json"]
+        assert "Loaded 1 tools" in load_data["message"]
+        assert load_data["loaded_tools"] == ["test_tool"]
+        assert load_data["tool_count"] == 1
 
         # Verify tool was registered as MCPTool wrapper
         mock_registry.register_tool.assert_called_once()
@@ -636,11 +685,13 @@ class TestMCPClientLoadTools:
         result = dynamic_mcp_client(action="load_tools", connection_id="test_server", agent=mock_agent)
 
         assert result["status"] == "success"
-        assert "Loaded 1 tools" in result["message"]
-        assert result["loaded_tools"] == ["tool1"]
-        assert "skipped_tools" in result
-        assert result["skipped_tools"][0]["name"] == "tool2"
-        assert "Registration failed" in result["skipped_tools"][0]["error"]
+        # Access structured data from new ToolResult format
+        load_data = result["content"][1]["json"]
+        assert "Loaded 1 tools" in load_data["message"]
+        assert load_data["loaded_tools"] == ["tool1"]
+        assert "skipped_tools" in load_data
+        assert load_data["skipped_tools"][0]["name"] == "tool2"
+        assert "Registration failed" in load_data["skipped_tools"][0]["error"]
 
 
 class TestMCPToolClass:
@@ -815,6 +866,43 @@ class TestMCPClientInvalidAction:
         assert "Available actions:" in result["content"][0]["text"]
 
 
+class TestBinaryDataHandling:
+    """Test binary data handling through direct tool calls."""
+
+    def test_call_server_tool_with_binary_data(self, mock_mcp_client, mock_stdio_client):
+        """Test calling a tool that returns binary data directly."""
+        # Mock the MCP client to return binary data
+        _, mock_instance = mock_mcp_client
+        mock_result = {
+            "status": "success",
+            "toolUseId": "test-tool-use-id",
+            "content": [
+                {"type": "text", "text": "Generated image"},
+                {"type": "image", "data": "[BASE64_DATA]iVBORw0KGgoAAAANSUhE..."},
+                {"type": "text", "text": "Raw bytes"},
+            ],
+        }
+        mock_instance.call_tool_sync.return_value = mock_result
+
+        # Connect first
+        dynamic_mcp_client(
+            action="connect", connection_id="binary_tool_test", transport="stdio", command="python", args=["server.py"]
+        )
+
+        # Call the tool that returns binary data
+        result = dynamic_mcp_client(
+            action="call_tool",
+            connection_id="binary_tool_test",
+            tool_name="generate_image",
+            tool_args={"width": 100, "height": 100},
+        )
+
+        # Verify the result - it should return the mock result directly
+        assert result["status"] == "success"
+        assert result["toolUseId"] == "test-tool-use-id"
+        assert len(result["content"]) == 3
+
+
 class TestMCPClientCleanup:
     """Test cleanup functionality for MCP client tools."""
 
@@ -845,8 +933,10 @@ class TestMCPClientCleanup:
 
         # Check the result
         assert result["status"] == "success"
-        assert "cleaned_tools" in result
-        assert len(result["cleaned_tools"]) == 2
+        # Access structured data from new ToolResult format
+        disconnect_data = result["content"][1]["json"]
+        assert "cleaned_tools" in disconnect_data
+        assert len(disconnect_data["cleaned_tools"]) == 2
         assert "test_connection" not in _connections
 
     def test_call_tool_cleans_up_on_connection_failure(self, mock_mcp_client):
@@ -898,12 +988,16 @@ class TestMCPClientIntegration:
         # 2. List connections
         list_result = dynamic_mcp_client(action="list_connections")
         assert list_result["status"] == "success"
-        assert list_result["total_connections"] == 1
+        # Access structured data from new ToolResult format
+        connections_data = list_result["content"][1]["json"]
+        assert connections_data["total_connections"] == 1
 
         # 3. List tools
         tools_result = dynamic_mcp_client(action="list_tools", connection_id="workflow_server")
         assert tools_result["status"] == "success"
-        assert tools_result["tools_count"] == 1
+        # Access structured data from new ToolResult format
+        tools_data = tools_result["content"][1]["json"]
+        assert tools_data["tools_count"] == 1
 
         # 4. Call a tool
         call_result = dynamic_mcp_client(
@@ -917,129 +1011,13 @@ class TestMCPClientIntegration:
 
         # 6. Verify connection is gone
         final_list = dynamic_mcp_client(action="list_connections")
-        assert final_list["total_connections"] == 0
+        final_connections_data = final_list["content"][1]["json"]
+        assert final_connections_data["total_connections"] == 0
 
 
-# TEMPORARILY DISABLED: The create_mcp_tool_wrapper function and related functionality
-# has been removed and replaced with direct SDK MCPAgentTool usage. These tests need
-# to be updated to reflect the new implementation.
-
-# class TestMCPToolWrapper:
-#     """Test the MCPToolWrapper class."""
-#
-#     def test_wrapper_creation(self):
-#         """Test creating a tool wrapper."""
-#         mock_client = MagicMock()
-#         tool_info = {
-#             "name": "test_tool",
-#             "description": "A test tool for unit testing",
-#             "inputSchema": {
-#                 "json": {
-#                     "type": "object",
-#                     "properties": {
-#                         "param1": {"type": "string", "description": "First parameter"},
-#                         "param2": {"type": "number", "description": "Second parameter"},
-#                     },
-#                     "required": ["param1"],
-#                 }
-#             },
-#         }
-#
-#         wrapper = create_mcp_tool_wrapper(
-#             connection_id="test_conn",
-#             tool_info=tool_info,
-#             mcp_client=mock_client,
-#             name_prefix=False,
-#         )
-#
-#         assert wrapper.name == "test_tool"
-#         assert wrapper.tool_name == "test_tool"
-#         assert wrapper.description == "A test tool for unit testing"
-#         assert wrapper.connection_id == "test_conn"
-#         assert wrapper.original_tool_name == "test_tool"
-#         assert wrapper.tool_type == "mcp"
-#         assert wrapper.supports_hot_reload is False
+# The MCPToolWrapper class functionality is now tested through the MCPTool class tests above
 
 
-class TestMCPToolWrapper:
-    """Test the MCPToolWrapper class - TEMPORARILY DISABLED."""
+# Configuration tests are handled within other test classes
 
-    def test_wrapper_creation(self):
-        """Test creating a tool wrapper - DISABLED: create_mcp_tool_wrapper no longer exists."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_with_name_prefix(self):
-        """Test creating a tool wrapper with name prefix - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_invoke_success(self):
-        """Test successfully invoking a wrapped tool - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_invoke_error(self):
-        """Test handling errors when invoking a wrapped tool - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_invoke_exception(self):
-        """Test handling exceptions when invoking a wrapped tool - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_display_properties(self):
-        """Test getting display properties from wrapper - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-
-class TestMCPClientConfiguration:
-    """Test MCP client configuration features - TEMPORARILY DISABLED."""
-
-    def test_environment_variable_timeout(self):
-        """Test that STRANDS_MCP_TIMEOUT environment variable is respected - DISABLED."""
-        pytest.skip("Test needs to be updated for new implementation")
-
-    def test_tool_use_id_format_verification(self):
-        """Verify tool use ID uses mcp_ prefix format - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-
-class TestMCPToolWrapperResultHandling:
-    """Test result processing in MCPToolWrapper - TEMPORARILY DISABLED."""
-
-    def test_wrapper_result_handling_list_content(self):
-        """Test wrapper handling list results with mixed content types - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_dict_with_content(self):
-        """Test wrapper handling dict results with 'content' key - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_dict_json_serializable(self):
-        """Test wrapper handling dict results that can be JSON serialized - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_dict_json_error(self):
-        """Test wrapper handling dict results that can't be JSON serialized - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_bytes_utf8(self):
-        """Test wrapper handling bytes results that can be decoded as UTF-8 - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_bytes_binary(self):
-        """Test wrapper handling binary bytes that can't be decoded as UTF-8 - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_none_result(self):
-        """Test wrapper handling None results - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_other_types(self):
-        """Test wrapper handling other data types (int, float, bool, etc.) - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_list_non_content(self):
-        """Test wrapper handling list results that aren't in content format - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
-
-    def test_wrapper_result_handling_list_serialization_error(self):
-        """Test wrapper handling list results that can't be JSON serialized - DISABLED."""
-        pytest.skip("create_mcp_tool_wrapper function has been removed")
+# Result handling is tested through MCPTool class tests above

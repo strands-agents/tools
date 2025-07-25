@@ -21,6 +21,7 @@ and implements a per-operation connection pattern for stability.
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from datetime import timedelta
@@ -37,13 +38,7 @@ from strands.types.tools import AgentTool, ToolGenerator, ToolSpec, ToolUse
 logger = logging.getLogger(__name__)
 
 # Default timeout for MCP operations - can be overridden via environment variable
-DEFAULT_MCP_TIMEOUT = 30.0
-try:
-    import os
-
-    DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
-except (ValueError, ImportError):
-    DEFAULT_MCP_TIMEOUT = 30.0
+DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
 
 
 class MCPTool(AgentTool):
@@ -483,13 +478,17 @@ def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
         with _CONNECTION_LOCK:
             _connections[connection_id] = connection_info
 
-        return {
-            "status": "success",
+        connection_result = {
             "message": f"Connected to MCP server '{connection_id}'",
             "connection_id": connection_id,
             "transport": transport,
             "tools_count": tool_count,
             "available_tools": [tool.tool_name for tool in tools],
+        }
+
+        return {
+            "status": "success",
+            "content": [{"text": f"Connected to MCP server '{connection_id}'"}, {"json": connection_result}],
         }
 
     except Exception as e:
@@ -518,28 +517,30 @@ def _disconnect_from_server(params: Dict[str, Any]) -> Dict[str, Any]:
         if agent and loaded_tools:
             cleanup_result = _clean_up_tools_from_agent(agent, connection_id, loaded_tools)
 
-        result = {
-            "status": "success",
+        disconnect_result = {
             "message": f"Disconnected from MCP server '{connection_id}'",
             "connection_id": connection_id,
             "was_active": config.is_active,
         }
 
         if cleanup_result["cleaned_tools"]:
-            result["cleaned_tools"] = cleanup_result["cleaned_tools"]
-            result["cleaned_tools_count"] = len(cleanup_result["cleaned_tools"])
+            disconnect_result["cleaned_tools"] = cleanup_result["cleaned_tools"]
+            disconnect_result["cleaned_tools_count"] = len(cleanup_result["cleaned_tools"])
 
         if cleanup_result["failed_tools"]:
-            result["failed_to_clean_tools"] = cleanup_result["failed_tools"]
-            result["failed_tools_count"] = len(cleanup_result["failed_tools"])
+            disconnect_result["failed_to_clean_tools"] = cleanup_result["failed_tools"]
+            disconnect_result["failed_tools_count"] = len(cleanup_result["failed_tools"])
 
         if loaded_tools and not agent:
-            result["loaded_tools_info"] = (
+            disconnect_result["loaded_tools_info"] = (
                 f"Note: No agent provided, {len(loaded_tools)} tools loaded could not be cleaned up: "
                 f"{', '.join(loaded_tools)}"
             )
 
-        return result
+        return {
+            "status": "success",
+            "content": [{"text": f"Disconnected from MCP server '{connection_id}'"}, {"json": disconnect_result}],
+        }
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Disconnect failed: {str(e)}"}]}
 
@@ -561,7 +562,12 @@ def _list_active_connections(params: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-        return {"status": "success", "total_connections": len(_connections), "connections": connections_info}
+        connections_result = {"total_connections": len(_connections), "connections": connections_info}
+
+        return {
+            "status": "success",
+            "content": [{"text": f"Found {len(_connections)} MCP connections"}, {"json": connections_result}],
+        }
 
 
 def _list_server_tools(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -587,7 +593,12 @@ def _list_server_tools(params: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-        return {"status": "success", "connection_id": connection_id, "tools_count": len(tools), "tools": tools_info}
+        tools_result = {"connection_id": connection_id, "tools_count": len(tools), "tools": tools_info}
+
+        return {
+            "status": "success",
+            "content": [{"text": f"Found {len(tools)} tools on MCP server '{connection_id}'"}, {"json": tools_result}],
+        }
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to list tools: {str(e)}"}]}
 
@@ -610,30 +621,9 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
 
         with config.mcp_client:
             # Use SDK's call_tool_sync which returns proper ToolResult
-            result = config.mcp_client.call_tool_sync(
+            return config.mcp_client.call_tool_sync(
                 tool_use_id=f"dynamic_mcp_{connection_id}_{tool_name}", name=tool_name, arguments=tool_args
             )
-
-        # Handle both dict and object result formats (for testing compatibility)
-        if hasattr(result, "status"):
-            # Object format (real SDK)
-            status = result.status
-            content = result.content
-        else:
-            # Dict format (for tests)
-            status = result.get("status", "success")
-            content = result.get("content", [])
-
-        return {
-            "status": "success",
-            "connection_id": connection_id,
-            "tool_name": tool_name,
-            "tool_arguments": tool_args,
-            "tool_result": {
-                "status": status,
-                "content": content,
-            },
-        }
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to call tool: {str(e)}"}]}
 
@@ -708,8 +698,7 @@ def _load_tools_to_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         with _CONNECTION_LOCK:
             config.loaded_tool_names.extend(loaded_tools)
 
-        result = {
-            "status": "success",
+        load_result = {
             "message": f"Loaded {len(loaded_tools)} tools from MCP server '{connection_id}'",
             "connection_id": connection_id,
             "loaded_tools": loaded_tools,
@@ -718,9 +707,15 @@ def _load_tools_to_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         }
 
         if skipped_tools:
-            result["skipped_tools"] = skipped_tools
+            load_result["skipped_tools"] = skipped_tools
 
-        return result
+        return {
+            "status": "success",
+            "content": [
+                {"text": f"Loaded {len(loaded_tools)} tools from MCP server '{connection_id}'"},
+                {"json": load_result},
+            ],
+        }
 
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to load tools: {str(e)}"}]}
