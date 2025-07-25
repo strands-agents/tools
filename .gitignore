@@ -14,3 +14,5 @@ repl_state/
 venv/
 *.egg-info
 .DS_Store
+.prompt
+.kiro
