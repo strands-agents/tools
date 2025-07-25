@@ -322,3 +322,48 @@ def test_format_results_non_string_content():
     assert "Document ID: test-doc-1" in formatted
     # Content should not be included since text is not a string
     assert "Content:" not in formatted
+
+
+def test_retrieve_with_valid_filter(mock_boto3_client):
+    """Test retrieve with valid filter structures."""
+    # Test with simple filter
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"text": "test query", "retrieveFilter": {"equals": {"key": "category", "value": "security"}}},
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Test with complex filter (orAll)
+    tool_use["input"]["retrieveFilter"] = {
+        "orAll": [
+            {"equals": {"key": "category", "value": "security"}},
+            {"equals": {"key": "type", "value": "document"}},
+        ]
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "success"
+
+
+def test_retrieve_with_invalid_filter(mock_boto3_client):
+    """Test retrieve with invalid filter structures."""
+    # Test with invalid operator
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"text": "test query", "retrieveFilter": {"invalid_op": {"key": "category"}}},
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "error"
+    assert "Invalid operator" in result["content"][0]["text"]
+
+    # Test with invalid orAll structure
+    tool_use["input"]["retrieveFilter"] = {
+        "andAll": [{"equals": {"key": "category", "value": "security"}}]  # Only one item
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "error"
+    assert "must contain at least 2 items" in result["content"][0]["text"]
