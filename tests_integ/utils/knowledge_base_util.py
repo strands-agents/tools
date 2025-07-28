@@ -122,20 +122,13 @@ class KnowledgeBaseHelper:
             collection_arn = collection_details["arn"]
         self.created_resources["collection_id"] = collection_id
 
-        # 3. IAM Role and Policies
+        # 3. IAM Role and Policies (create first to get ARN)
         try:
             role_res = client["iam"].get_role(RoleName=resources["role_name"])
             self.created_resources["role_arn"] = role_res["Role"]["Arn"]
         except ClientError as e:
             if e.response["Error"]["Code"] != "NoSuchEntity":
                 raise
-            iam_policy_doc = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {"Effect": "Allow", "Action": "bedrock:InvokeModel", "Resource": EMBEDDING_MODEL_ARN},
-                    {"Effect": "Allow", "Action": "aoss:APIAccessAll", "Resource": collection_arn},
-                ],
-            }
             assume_role_policy = {
                 "Version": "2012-10-17",
                 "Statement": [
@@ -146,14 +139,9 @@ class KnowledgeBaseHelper:
                 RoleName=resources["role_name"], AssumeRolePolicyDocument=json.dumps(assume_role_policy)
             )
             self.created_resources["role_arn"] = role_res["Role"]["Arn"]
-            client["iam"].put_role_policy(
-                RoleName=resources["role_name"],
-                PolicyName=resources["policy_name"],
-                PolicyDocument=json.dumps(iam_policy_doc),
-            )
-            time.sleep(15)
+            time.sleep(10)  # Wait for role to propagate
 
-        # 4. OpenSearch Data Access Policy
+        # 4. OpenSearch Data Access Policy (create before collection is active)
         try:
             user_arn = client["sts"].get_caller_identity()["Arn"]
             access_policy_doc = [
@@ -179,15 +167,32 @@ class KnowledgeBaseHelper:
         except ClientError as e:
             if e.response["Error"]["Code"] != "ConflictException":
                 raise
-
-        time.sleep(30) # Give the policy 30 seconds to take effect.
         # 5. Wait for OpenSearch Collection to be Active
         collection_details = self._wait_for_resource(
             lambda: client["opensearchserverless"].batch_get_collection(ids=[collection_id])["collectionDetails"][0],
             resource_name=f"OpenSearch Collection ({collection_id})",
         )
+        
+        # 6. Add IAM policy after collection is ready
+        try:
+            iam_policy_doc = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {"Effect": "Allow", "Action": "bedrock:InvokeModel", "Resource": EMBEDDING_MODEL_ARN},
+                    {"Effect": "Allow", "Action": "aoss:APIAccessAll", "Resource": collection_arn},
+                ],
+            }
+            client["iam"].put_role_policy(
+                RoleName=resources["role_name"],
+                PolicyName=resources["policy_name"],
+                PolicyDocument=json.dumps(iam_policy_doc),
+            )
+            time.sleep(30)  # Wait for policy to propagate
+        except ClientError as e:
+            if "EntityAlreadyExists" not in str(e):
+                raise
 
-        # 6. Create vector index
+        # 7. Create vector index
         collection_endpoint = collection_details["collectionEndpoint"]
         host = collection_endpoint.replace("https://", "")
         auth = AWSV4SignerAuth(boto3.Session().get_credentials(), AWS_REGION, "aoss")
@@ -225,7 +230,7 @@ class KnowledgeBaseHelper:
                         raise e
             time.sleep(10)
 
-        # 7. Knowledge Base
+        # 8. Knowledge Base
         kb_res = client["bedrock-agent"].create_knowledge_base(
             name=resources["kb_name"],
             roleArn=self.created_resources["role_arn"],
@@ -253,7 +258,7 @@ class KnowledgeBaseHelper:
             ],
             resource_name=f"Knowledge Base ({self.created_resources['kb_id']})",
         )
-        # 8. Data Source
+        # 9. Data Source
         ds_resource = client["bedrock-agent"].create_data_source(
             knowledgeBaseId=self.created_resources["kb_id"],
             name=resources["ds_name"],

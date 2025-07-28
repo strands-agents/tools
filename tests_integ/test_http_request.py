@@ -18,7 +18,7 @@ from strands_tools import http_request
 
 os.environ["BYPASS_TOOL_CONSENT"] = "true"
 
-pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
+# pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_get_http_request(agent, http_server):
     """Test GET request functionality using local test server."""
     port = http_server.test_port
     response = agent(f"Send a GET request to http://localhost:{port}/repo and show me the number of stars")
-    assert "stars" in str(response).lower() and "99999" in str(response).lower()
+    assert "stars" in str(response).lower() and ("99999" in str(response).lower() or "99,999" in str(response).lower())
 
 
 def test_post_http_request(agent, http_server):
