@@ -19,8 +19,6 @@ MIN_SCORE = "0.0"
 WAIT_SECS = 10
 MAX_POLLS = 12
 
-pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
-
 
 @pytest.fixture(scope="module")
 def kb_id() -> Generator[Any, Any, None]:
