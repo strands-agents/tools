@@ -52,6 +52,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 - 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
@@ -129,6 +130,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
@@ -150,6 +152,68 @@ agent = Agent(tools=[file_read, file_write, editor])
 agent.tool.file_read(path="config.json")
 agent.tool.file_write(path="output.txt", content="Hello, world!")
 agent.tool.editor(command="view", path="script.py")
+```
+
+### Dynamic MCP Client Integration
+
+⚠️ **SECURITY WARNING**: The Dynamic MCP Client allows agents to autonomously connect to external MCP servers and load remote tools at runtime. This poses significant security risks as agents can potentially connect to malicious servers and execute untrusted code. Use with extreme caution in production environments.
+
+This tool is different from the static MCP server implementation in the Strands SDK (see [MCP Tools Documentation](https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/mcp-tools.md)) which uses pre-configured, trusted MCP servers.
+
+```python
+from strands import Agent
+from strands_tools import mcp_client
+
+agent = Agent(tools=[mcp_client])
+
+# Connect to a custom MCP server via stdio
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="my_tools",
+    transport="stdio",
+    command="python",
+    args=["my_mcp_server.py"]
+)
+
+# List available tools on the server
+tools = agent.tool.mcp_client(
+    action="list_tools",
+    connection_id="my_tools"
+)
+
+# Call a tool from the MCP server
+result = agent.tool.mcp_client(
+    action="call_tool",
+    connection_id="my_tools",
+    tool_name="calculate",
+    tool_args={"x": 10, "y": 20}
+)
+
+# Connect to a SSE-based server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="web_server",
+    transport="sse",
+    server_url="http://localhost:8080/sse"
+)
+
+# Connect to a streamable HTTP server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="http_server",
+    transport="streamable_http",
+    server_url="https://api.example.com/mcp",
+    headers={"Authorization": "Bearer token"},
+    timeout=60
+)
+
+# Load MCP tools into agent's registry for direct access
+# ⚠️ WARNING: This loads external tools directly into the agent
+agent.tool.mcp_client(
+    action="load_tools",
+    connection_id="my_tools"
+)
+# Now you can call MCP tools directly as: agent.tool.calculate(x=10, y=20)
 ```
 
 ### Shell Commands
@@ -704,6 +768,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
+
+#### Dynamic MCP Client Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_MCP_TIMEOUT | Default timeout in seconds for MCP operations | 30.0 |
 
 #### File Read Tool
 
