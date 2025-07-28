@@ -18,8 +18,6 @@ from strands_tools import http_request
 
 os.environ["BYPASS_TOOL_CONSENT"] = "true"
 
-# pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
-
 
 @pytest.fixture
 def agent():
