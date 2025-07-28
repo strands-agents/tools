@@ -1,4 +1,4 @@
-"""Dynamic MCP Client Tool for Strands Agents.
+"""MCP Client Tool for Strands Agents.
 
 ⚠️ SECURITY WARNING: This tool allows agents to autonomously connect to external
 MCP servers and dynamically load remote tools. This poses security risks as agents
@@ -10,7 +10,7 @@ and loading remote tools at runtime. This is different from the static MCP serve
 implementation in the Strands SDK (see https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/mcp-tools.md).
 
 Key differences from SDK's MCP implementation:
-- This tool enables DYNAMIC connections to new MCP servers at runtime
+- This tool enables connections to new MCP servers at runtime
 - Can autonomously discover and load external tools from untrusted sources
 - Tools are loaded into the agent's registry and can be called directly
 - Connections persist across multiple tool invocations
@@ -44,7 +44,7 @@ DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
 class MCPTool(AgentTool):
     """Wrapper class for dynamically loaded MCP tools that extends AgentTool.
 
-    This class wraps MCP tools loaded through dynamic_mcp_client and ensures proper
+    This class wraps MCP tools loaded through mcp_client and ensures proper
     connection management using the `with mcp_client:` context pattern used throughout
     the dynamic MCP client. It handles both sync and async tool execution while
     maintaining connection health and error handling.
@@ -81,7 +81,7 @@ class MCPTool(AgentTool):
         """Stream the MCP tool execution with proper connection management.
 
         This method uses the same `with mcp_client:` context pattern as other
-        operations in dynamic_mcp_client to ensure proper connection management
+        operations in mcp_client to ensure proper connection management
         and error handling.
 
         Args:
@@ -118,7 +118,7 @@ class MCPTool(AgentTool):
             return
 
         try:
-            # Use the same context pattern as other operations in dynamic_mcp_client
+            # Use the same context pattern as other operations in mcp_client
             with config.mcp_client:
                 result = await config.mcp_client.call_tool_async(
                     tool_use_id=tool_use["toolUseId"],
@@ -238,7 +238,7 @@ def _create_transport_callable(transport: str, **params):
 
 
 @tool
-def dynamic_mcp_client(
+def mcp_client(
     action: str,
     server_config: Optional[Dict[str, Any]] = None,
     connection_id: Optional[str] = None,
@@ -260,7 +260,7 @@ def dynamic_mcp_client(
     agent: Optional[Any] = None,  # Agent instance passed by SDK
 ) -> Dict[str, Any]:
     """
-    Dynamic MCP client tool for autonomously connecting to external MCP servers.
+    MCP client tool for autonomously connecting to external MCP servers.
 
     ⚠️ SECURITY WARNING: This tool enables agents to autonomously connect to external
     MCP servers and dynamically load remote tools at runtime. This can pose significant
@@ -307,7 +307,7 @@ def dynamic_mcp_client(
 
     Examples:
         # Connect to custom stdio server with direct parameters
-        dynamic_mcp_client(
+        mcp_client(
             action="connect",
             connection_id="my_server",
             transport="stdio",
@@ -316,7 +316,7 @@ def dynamic_mcp_client(
         )
 
         # Connect to streamable HTTP server
-        dynamic_mcp_client(
+        mcp_client(
             action="connect",
             connection_id="http_server",
             transport="streamable_http",
@@ -326,7 +326,7 @@ def dynamic_mcp_client(
         )
 
         # Call a tool directly with parameters
-        dynamic_mcp_client(
+        mcp_client(
             action="call_tool",
             connection_id="my_server",
             tool_name="calculator",
@@ -426,8 +426,8 @@ def dynamic_mcp_client(
             }
 
     except Exception as e:
-        logger.error(f"Error in dynamic_mcp_client: {e}", exc_info=True)
-        return {"status": "error", "content": [{"text": f"Error in dynamic_mcp_client: {str(e)}"}]}
+        logger.error(f"Error in mcp_client: {e}", exc_info=True)
+        return {"status": "error", "content": [{"text": f"Error in mcp_client: {str(e)}"}]}
 
 
 def _connect_to_server(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -622,7 +622,7 @@ def _call_server_tool(params: Dict[str, Any]) -> Dict[str, Any]:
         with config.mcp_client:
             # Use SDK's call_tool_sync which returns proper ToolResult
             return config.mcp_client.call_tool_sync(
-                tool_use_id=f"dynamic_mcp_{connection_id}_{tool_name}", name=tool_name, arguments=tool_args
+                tool_use_id=f"mcp_{connection_id}_{tool_name}", name=tool_name, arguments=tool_args
             )
     except Exception as e:
         return {"status": "error", "content": [{"text": f"Failed to call tool: {str(e)}"}]}

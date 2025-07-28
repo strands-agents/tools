@@ -127,7 +127,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
-| dynamic_mcp_client | `agent.tool.dynamic_mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 
@@ -156,12 +156,12 @@ This tool is different from the static MCP server implementation in the Strands 
 
 ```python
 from strands import Agent
-from strands_tools import dynamic_mcp_client
+from strands_tools import mcp_client
 
-agent = Agent(tools=[dynamic_mcp_client])
+agent = Agent(tools=[mcp_client])
 
 # Connect to a custom MCP server via stdio
-agent.tool.dynamic_mcp_client(
+agent.tool.mcp_client(
     action="connect",
     connection_id="my_tools",
     transport="stdio",
@@ -170,13 +170,13 @@ agent.tool.dynamic_mcp_client(
 )
 
 # List available tools on the server
-tools = agent.tool.dynamic_mcp_client(
+tools = agent.tool.mcp_client(
     action="list_tools",
     connection_id="my_tools"
 )
 
 # Call a tool from the MCP server
-result = agent.tool.dynamic_mcp_client(
+result = agent.tool.mcp_client(
     action="call_tool",
     connection_id="my_tools",
     tool_name="calculate",
@@ -184,7 +184,7 @@ result = agent.tool.dynamic_mcp_client(
 )
 
 # Connect to a SSE-based server
-agent.tool.dynamic_mcp_client(
+agent.tool.mcp_client(
     action="connect",
     connection_id="web_server",
     transport="sse",
@@ -192,7 +192,7 @@ agent.tool.dynamic_mcp_client(
 )
 
 # Connect to a streamable HTTP server
-agent.tool.dynamic_mcp_client(
+agent.tool.mcp_client(
     action="connect",
     connection_id="http_server",
     transport="streamable_http",
@@ -203,7 +203,7 @@ agent.tool.dynamic_mcp_client(
 
 # Load MCP tools into agent's registry for direct access
 # ⚠️ WARNING: This loads external tools directly into the agent
-agent.tool.dynamic_mcp_client(
+agent.tool.mcp_client(
     action="load_tools",
     connection_id="my_tools"
 )

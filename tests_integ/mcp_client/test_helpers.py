@@ -120,8 +120,6 @@ def parse_tool_result(result):
     Agent calls return: {'toolUseId': ..., 'status': 'success', 'content': [{'text': '...'}]}
     Some tools may serialize complex data in the content[0]['text'] field.
     
-    NOTE: This function is DEPRECATED for dynamic_mcp_client as of the ToolResult format fix.
-    The dynamic_mcp_client now returns proper ToolResult format directly:
     - Text message in content[0]['text']
     - Structured data in content[1]['json']
     
@@ -129,7 +127,7 @@ def parse_tool_result(result):
     serialize their results, but should not be needed for properly implemented tools.
     
     Example:
-    - dynamic_mcp_client calls: Use results directly (no parsing needed)
+    - mcp_client calls: Use results directly (no parsing needed)
     - Other tools that serialize: May still need parse_tool_result()
     - Loaded MCP tools: Use results directly (no parsing needed)
     """

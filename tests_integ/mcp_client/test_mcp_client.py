@@ -2,7 +2,7 @@
 Integration tests for the Dynamic MCP Client tool.
 
 These tests use a MockMCP server (FastMCP) to validate end-to-end functionality 
-of the dynamic_mcp_client tool with Strands agents.
+of the mcp_client tool with Strands agents.
 """
 
 import os
@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 from strands import Agent
-from strands_tools import dynamic_mcp_client
+from strands_tools import mcp_client
 
 from .test_helpers import parse_tool_result, stdio_mcp_server, sse_mcp_server
 
@@ -25,7 +25,7 @@ def bypass_tool_consent():
 @pytest.fixture
 def agent():
     """Create an Agent instance configured with dynamic MCP client tool."""
-    return Agent(tools=[dynamic_mcp_client])
+    return Agent(tools=[mcp_client])
 
 
 class TestMCPClientBasicFunctionality:
@@ -33,7 +33,7 @@ class TestMCPClientBasicFunctionality:
 
     def test_list_connections_empty(self, agent):
         """Test listing connections when none exist."""
-        result = agent.tool.dynamic_mcp_client(action="list_connections")
+        result = agent.tool.mcp_client(action="list_connections")
         
         assert result["status"] == "success"
         # Text message
@@ -46,7 +46,7 @@ class TestMCPClientBasicFunctionality:
 
     def test_invalid_action(self, agent):
         """Test calling with an invalid action."""
-        result = agent.tool.dynamic_mcp_client(action="invalid_action", connection_id="test")
+        result = agent.tool.mcp_client(action="invalid_action", connection_id="test")
 
         assert result["status"] == "error"
         assert "Unknown action: invalid_action" in result["content"][0]["text"]
@@ -58,7 +58,7 @@ class TestStdioMCPServerIntegration:
     
     def test_stdio_server_basic_connection(self, agent, stdio_mcp_server):
         """Test basic connection to a stdio MCP server."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="stdio_test_server",
             transport="stdio", 
@@ -75,12 +75,12 @@ class TestStdioMCPServerIntegration:
         assert "echo_tool" in connection_data["available_tools"]
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="stdio_test_server")
+        agent.tool.mcp_client(action="disconnect", connection_id="stdio_test_server")
     
     def test_stdio_server_list_tools(self, agent, stdio_mcp_server):
         """Test listing tools from a stdio MCP server."""
         # Connect first
-        agent.tool.dynamic_mcp_client(
+        agent.tool.mcp_client(
             action="connect",
             connection_id="stdio_list_test",
             transport="stdio",
@@ -89,7 +89,7 @@ class TestStdioMCPServerIntegration:
         )
         
         # List tools
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="list_tools",
             connection_id="stdio_list_test"
         )
@@ -114,12 +114,12 @@ class TestStdioMCPServerIntegration:
         assert echo_tool["input_schema"]["json"]["type"] == "object"
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="stdio_list_test")
+        agent.tool.mcp_client(action="disconnect", connection_id="stdio_list_test")
     
     def test_stdio_server_call_tool(self, agent, stdio_mcp_server):
         """Test calling a tool on a stdio MCP server."""
         # Connect first
-        agent.tool.dynamic_mcp_client(
+        agent.tool.mcp_client(
             action="connect",
             connection_id="stdio_call_test",
             transport="stdio",
@@ -128,7 +128,7 @@ class TestStdioMCPServerIntegration:
         )
         
         # Call echo_tool
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="call_tool",
             connection_id="stdio_call_test",
             tool_name="echo_tool",
@@ -145,7 +145,7 @@ class TestStdioMCPServerIntegration:
         assert "Echo: integration test" in content[0]["text"]
         
         # Test add_numbers tool
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="call_tool",
             connection_id="stdio_call_test",
             tool_name="add_numbers",
@@ -157,11 +157,11 @@ class TestStdioMCPServerIntegration:
         assert result["toolUseId"] is not None
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="stdio_call_test")
+        agent.tool.mcp_client(action="disconnect", connection_id="stdio_call_test")
     
     def test_stdio_server_with_environment_variables(self, agent, stdio_mcp_server):
         """Test stdio server with custom environment variables."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="stdio_env_test",
             transport="stdio",
@@ -176,7 +176,7 @@ class TestStdioMCPServerIntegration:
         assert connection_data["connection_id"] == "stdio_env_test"
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="stdio_env_test")
+        agent.tool.mcp_client(action="disconnect", connection_id="stdio_env_test")
 
 
 class TestSSEMCPServerIntegration:
@@ -184,7 +184,7 @@ class TestSSEMCPServerIntegration:
     
     def test_sse_server_basic_connection(self, agent, sse_mcp_server):
         """Test basic connection to an SSE MCP server."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="sse_test_server",
             transport="sse",
@@ -200,12 +200,12 @@ class TestSSEMCPServerIntegration:
         assert "echo_tool" in connection_data["available_tools"]
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="sse_test_server")
+        agent.tool.mcp_client(action="disconnect", connection_id="sse_test_server")
     
     def test_sse_server_reliability(self, agent, sse_mcp_server):
         """Test SSE connection stability and basic operations."""
         # Connect
-        connect_result = agent.tool.dynamic_mcp_client(
+        connect_result = agent.tool.mcp_client(
             action="connect",
             connection_id="sse_reliability_test",
             transport="sse",
@@ -215,13 +215,13 @@ class TestSSEMCPServerIntegration:
         
         # Multiple operations to test stability
         for i in range(3):
-            list_result = agent.tool.dynamic_mcp_client(
+            list_result = agent.tool.mcp_client(
                 action="list_tools",
                 connection_id="sse_reliability_test"
             )
             assert list_result["status"] == "success"
             
-            call_result = agent.tool.dynamic_mcp_client(
+            call_result = agent.tool.mcp_client(
                 action="call_tool",
                 connection_id="sse_reliability_test", 
                 tool_name="echo_tool",
@@ -230,7 +230,7 @@ class TestSSEMCPServerIntegration:
             assert call_result["status"] == "success"
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(action="disconnect", connection_id="sse_reliability_test")
+        agent.tool.mcp_client(action="disconnect", connection_id="sse_reliability_test")
 
 
 class TestEndToEndWorkflows:
@@ -241,7 +241,7 @@ class TestEndToEndWorkflows:
         connection_id = "full_workflow_test"
         
         # 1. Connect
-        connect_result = agent.tool.dynamic_mcp_client(
+        connect_result = agent.tool.mcp_client(
             action="connect",
             connection_id=connection_id,
             transport="stdio",
@@ -251,7 +251,7 @@ class TestEndToEndWorkflows:
         assert connect_result["status"] == "success"
         
         # 2. List connections
-        list_conn_result = agent.tool.dynamic_mcp_client(action="list_connections")
+        list_conn_result = agent.tool.mcp_client(action="list_connections")
         assert list_conn_result["status"] == "success"
         # Access structured data from new ToolResult format
         connections_data = list_conn_result["content"][1]["json"]
@@ -266,7 +266,7 @@ class TestEndToEndWorkflows:
         assert our_conn["is_active"] is True
         
         # 3. List tools
-        list_tools_result = agent.tool.dynamic_mcp_client(
+        list_tools_result = agent.tool.mcp_client(
             action="list_tools",
             connection_id=connection_id
         )
@@ -276,7 +276,7 @@ class TestEndToEndWorkflows:
         assert tools_data["tools_count"] >= 2
         
         # 4. Call a tool
-        call_result = agent.tool.dynamic_mcp_client(
+        call_result = agent.tool.mcp_client(
             action="call_tool",
             connection_id=connection_id,
             tool_name="echo_tool",
@@ -285,7 +285,7 @@ class TestEndToEndWorkflows:
         assert call_result["status"] == "success"
         
         # 5. Load tools into agent
-        load_result = agent.tool.dynamic_mcp_client(
+        load_result = agent.tool.mcp_client(
             action="load_tools",
             connection_id=connection_id,
             agent=agent
@@ -297,7 +297,7 @@ class TestEndToEndWorkflows:
         assert "echo_tool" in load_data["loaded_tools"]
         
         # 6. Disconnect
-        disconnect_result = agent.tool.dynamic_mcp_client(
+        disconnect_result = agent.tool.mcp_client(
             action="disconnect",
             connection_id=connection_id,
             agent=agent  # Pass agent for tool cleanup
@@ -305,7 +305,7 @@ class TestEndToEndWorkflows:
         assert disconnect_result["status"] == "success"
         
         # 7. Verify connection is gone
-        final_list = agent.tool.dynamic_mcp_client(action="list_connections")
+        final_list = agent.tool.mcp_client(action="list_connections")
         final_connections_data = final_list["content"][1]["json"]
         remaining_connections = [
             c for c in final_connections_data["connections"] 
@@ -318,7 +318,7 @@ class TestEndToEndWorkflows:
         connection_id = "tool_loading_test"
         
         # Connect and load tools
-        agent.tool.dynamic_mcp_client(
+        agent.tool.mcp_client(
             action="connect",
             connection_id=connection_id,
             transport="stdio",
@@ -326,7 +326,7 @@ class TestEndToEndWorkflows:
             args=[stdio_mcp_server]
         )
         
-        load_result = agent.tool.dynamic_mcp_client(
+        load_result = agent.tool.mcp_client(
             action="load_tools",
             connection_id=connection_id,
             agent=agent
@@ -361,7 +361,7 @@ class TestEndToEndWorkflows:
             assert False, f"Loaded tools not accessible through agent.tool interface: {e}"
         
         # Cleanup
-        agent.tool.dynamic_mcp_client(
+        agent.tool.mcp_client(
             action="disconnect",
             connection_id=connection_id,
             agent=agent
@@ -373,7 +373,7 @@ class TestErrorHandlingAndReliability:
     
     def test_connection_to_nonexistent_server(self, agent):
         """Test connecting to a non-existent server."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="nonexistent_test",
             transport="stdio",
@@ -386,7 +386,7 @@ class TestErrorHandlingAndReliability:
     
     def test_invalid_server_url_http(self, agent):
         """Test connecting to invalid HTTP server URL."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="invalid_http_test",
             transport="streamable_http",
@@ -398,7 +398,7 @@ class TestErrorHandlingAndReliability:
     
     def test_invalid_server_url_sse(self, agent):
         """Test connecting to invalid SSE server URL."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="invalid_sse_test", 
             transport="sse",
@@ -411,7 +411,7 @@ class TestErrorHandlingAndReliability:
     def test_missing_required_parameters(self, agent):
         """Test error handling for missing required parameters."""
         # Missing connection_id for connect
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             transport="stdio",
             command="python"
@@ -420,7 +420,7 @@ class TestErrorHandlingAndReliability:
         assert "connection_id is required" in result["content"][0]["text"]
         
         # Missing server_url for HTTP
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="test",
             transport="streamable_http"
@@ -429,7 +429,7 @@ class TestErrorHandlingAndReliability:
         assert "server_url is required" in result["content"][0]["text"]
         
         # Missing tool_name for call_tool
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="call_tool",
             connection_id="test"
         )
@@ -439,7 +439,7 @@ class TestErrorHandlingAndReliability:
     def test_operations_on_nonexistent_connections(self, agent):
         """Test operations on connections that don't exist."""
         # Try to list tools from non-existent connection
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="list_tools",
             connection_id="nonexistent_connection"
         )
@@ -447,7 +447,7 @@ class TestErrorHandlingAndReliability:
         assert "Connection 'nonexistent_connection' not found" in result["content"][0]["text"]
         
         # Try to call tool on non-existent connection
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="call_tool",
             connection_id="nonexistent_connection",
             tool_name="test_tool"
@@ -456,7 +456,7 @@ class TestErrorHandlingAndReliability:
         assert "Connection 'nonexistent_connection' not found" in result["content"][0]["text"]
         
         # Try to disconnect from non-existent connection
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="disconnect",
             connection_id="nonexistent_connection"
         )
@@ -465,7 +465,7 @@ class TestErrorHandlingAndReliability:
 
     def test_load_tools_without_agent(self, agent):
         """Test load_tools action without providing agent instance."""
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="load_tools",
             connection_id="test_connection"
             # Note: agent parameter is not provided
@@ -480,7 +480,7 @@ class TestConfigurationAndParameterHandling:
     def test_transport_parameter_validation(self, agent):
         """Test validation of transport parameters."""
         # Test unsupported transport (should fail during connection)
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="test",
             transport="unsupported_transport"
@@ -491,7 +491,7 @@ class TestConfigurationAndParameterHandling:
     def test_server_config_vs_direct_parameters(self, agent):
         """Test that direct parameters override server_config."""
         # This should fail because command is missing, but it tests parameter precedence
-        result = agent.tool.dynamic_mcp_client(
+        result = agent.tool.mcp_client(
             action="connect",
             connection_id="test",
             server_config={"transport": "sse", "server_url": "http://example.com"},
