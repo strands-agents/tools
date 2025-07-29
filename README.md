@@ -52,8 +52,12 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
+- 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
+- 📰 **RSS Feed Manager** - Subscribe, fetch, and process RSS feeds with content filtering and persistent storage
+- 🖱️ **Computer Tool** - Automate desktop actions including mouse movements, keyboard input, screenshots, and application management
 
 ## 📦 Installation
 
@@ -66,7 +70,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser]
+pip install strands-agents-tools[mem0_memory, use_browser, rss, use_computer]
 ```
 
 ### Development Install
@@ -130,8 +134,12 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
+| diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
+| rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
+| use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 
 \* *These tools do not work on windows*
 
@@ -148,6 +156,68 @@ agent = Agent(tools=[file_read, file_write, editor])
 agent.tool.file_read(path="config.json")
 agent.tool.file_write(path="output.txt", content="Hello, world!")
 agent.tool.editor(command="view", path="script.py")
+```
+
+### Dynamic MCP Client Integration
+
+⚠️ **SECURITY WARNING**: The Dynamic MCP Client allows agents to autonomously connect to external MCP servers and load remote tools at runtime. This poses significant security risks as agents can potentially connect to malicious servers and execute untrusted code. Use with extreme caution in production environments.
+
+This tool is different from the static MCP server implementation in the Strands SDK (see [MCP Tools Documentation](https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/mcp-tools.md)) which uses pre-configured, trusted MCP servers.
+
+```python
+from strands import Agent
+from strands_tools import mcp_client
+
+agent = Agent(tools=[mcp_client])
+
+# Connect to a custom MCP server via stdio
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="my_tools",
+    transport="stdio",
+    command="python",
+    args=["my_mcp_server.py"]
+)
+
+# List available tools on the server
+tools = agent.tool.mcp_client(
+    action="list_tools",
+    connection_id="my_tools"
+)
+
+# Call a tool from the MCP server
+result = agent.tool.mcp_client(
+    action="call_tool",
+    connection_id="my_tools",
+    tool_name="calculate",
+    tool_args={"x": 10, "y": 20}
+)
+
+# Connect to a SSE-based server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="web_server",
+    transport="sse",
+    server_url="http://localhost:8080/sse"
+)
+
+# Connect to a streamable HTTP server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="http_server",
+    transport="streamable_http",
+    server_url="https://api.example.com/mcp",
+    headers={"Authorization": "Bearer token"},
+    timeout=60
+)
+
+# Load MCP tools into agent's registry for direct access
+# ⚠️ WARNING: This loads external tools directly into the agent
+agent.tool.mcp_client(
+    action="load_tools",
+    connection_id="my_tools"
+)
+# Now you can call MCP tools directly as: agent.tool.calculate(x=10, y=20)
 ```
 
 ### Shell Commands
@@ -271,6 +341,7 @@ processed.head()
 
 ### Code Interpreter
 
+```python
 from strands import Agent
 from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 
@@ -278,7 +349,7 @@ from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 bedrock_agent_core_code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
 agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
 
-# Create a session and execute code
+# Create a session
 agent.tool.code_interpreter({
     "action": {
         "type": "initSession",
@@ -287,14 +358,16 @@ agent.tool.code_interpreter({
     }
 })
 
+# Execute Python code
 agent.tool.code_interpreter({
     "action": {
         "type": "executeCode",
         "session_name": "analysis-session",
-        "code": "import pandas as pd\nprint('Hello from sandbox!')",
+        "code": "print('Hello from sandbox!')",
         "language": "python"
     }
 })
+```
 
 ### Swarm Intelligence
 
@@ -499,6 +572,122 @@ response = agent("discover available agents and send a greeting message")
 # - send_message(message_text, target_agent_url) to communicate
 ```
 
+### Diagram
+
+```python
+from strands import Agent
+from strands_tools import diagram
+
+agent = Agent(tools=[diagram])
+
+# Create an AWS cloud architecture diagram
+result = agent.tool.diagram(
+    diagram_type="cloud",
+    nodes=[
+        {"id": "users", "type": "Users", "label": "End Users"},
+        {"id": "cloudfront", "type": "CloudFront", "label": "CDN"},
+        {"id": "s3", "type": "S3", "label": "Static Assets"},
+        {"id": "api", "type": "APIGateway", "label": "API Gateway"},
+        {"id": "lambda", "type": "Lambda", "label": "Backend Service"}
+    ],
+    edges=[
+        {"from": "users", "to": "cloudfront"},
+        {"from": "cloudfront", "to": "s3"},
+        {"from": "users", "to": "api"},
+        {"from": "api", "to": "lambda"}
+    ],
+    title="Web Application Architecture"
+)
+
+# Create a UML class diagram
+result = agent.tool.diagram(
+    diagram_type="class",
+    elements=[
+        {
+            "name": "User",
+            "attributes": ["+id: int", "-name: string", "#email: string"],
+            "methods": ["+login(): bool", "+logout(): void"]
+        },
+        {
+            "name": "Order",
+            "attributes": ["+id: int", "-items: List", "-total: float"],
+            "methods": ["+addItem(item): void", "+calculateTotal(): float"]
+        }
+    ],
+    relationships=[
+        {"from": "User", "to": "Order", "type": "association", "multiplicity": "1..*"}
+    ],
+    title="E-commerce Domain Model"
+)
+```
+
+### RSS Feed Management
+
+```python
+from strands import Agent
+from strands_tools import rss
+
+agent = Agent(tools=[rss])
+
+# Subscribe to a feed
+result = agent.tool.rss(
+    action="subscribe",
+    url="https://news.example.com/rss/technology"
+)
+
+# List all subscribed feeds
+feeds = agent.tool.rss(action="list")
+
+# Read entries from a specific feed
+entries = agent.tool.rss(
+    action="read",
+    feed_id="news_example_com_technology",
+    max_entries=5,
+    include_content=True
+)
+
+# Search across all feeds
+search_results = agent.tool.rss(
+    action="search",
+    query="machine learning",
+    max_entries=10
+)
+
+# Fetch feed content without subscribing
+latest_news = agent.tool.rss(
+    action="fetch",
+    url="https://blog.example.org/feed",
+    max_entries=3
+)
+```
+
+### Use Computer
+
+```python
+from strands import Agent
+from strands_tools import use_computer
+
+agent = Agent(tools=[use_computer])
+
+# Find mouse position
+result = agent.tool.use_computer(action="mouse_position")
+
+# Automate adding text
+result = agent.tool.use_computer(action="type", text="Hello, world!", app_name="Notepad")
+
+# Analyze current computer screen
+result = agent.tool.use_computer(action="analyze_screen")
+
+result = agent.tool.use_computer(action="open_app", app_name="Calculator")
+result = agent.tool.use_computer(action="close_app", app_name="Calendar")
+
+result = agent.tool.use_computer(
+    action="hotkey",
+    hotkey_str="command+ctrl+f",  # For macOS
+    app_name="Chrome"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -636,6 +825,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
 
+#### Dynamic MCP Client Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_MCP_TIMEOUT | Default timeout in seconds for MCP operations | 30.0 |
+
 #### File Read Tool
 
 | Environment Variable | Description | Default |
@@ -660,6 +855,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_BROWSER_HEADLESS | Default headless setting for launching browsers | false |
 | STRANDS_BROWSER_WIDTH | Default width of the browser | 1280 |
 | STRANDS_BROWSER_HEIGHT | Default height of the browser | 800 |
+
+#### RSS Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
+| STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
+| STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
 
 
 ## Contributing ❤️
@@ -686,4 +889,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-

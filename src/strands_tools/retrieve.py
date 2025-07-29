@@ -40,7 +40,13 @@ results = agent.tool.retrieve(
     numberOfResults=5,
     score=0.7,
     knowledgeBaseId="custom-kb-id",
-    region="us-east-1"
+    region="us-east-1",
+    retrieveFilter={
+        "andAll": [
+            {"equals": {"key": "category", "value": "security"}},
+            {"greaterThan": {"key": "year", "value": "2022"}}
+        ]
+    }
 )
 ```
 
@@ -232,6 +238,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             region: AWS region where the knowledge base is located (default: us-west-2)
             score: Minimum relevance score threshold (default: 0.4)
             profile_name: Optional AWS profile name to use
+            retrieveFilter: Optional filter to apply to the retrieval results
 
     Returns:
         Dictionary containing status and response content in the format:
@@ -264,6 +271,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        retrieve_filter = tool_input.get("retrieveFilter")
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
@@ -273,13 +281,23 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         else:
             bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name)
 
+        # Default retrieval configuration
+        retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
+
+        if retrieve_filter:
+            try:
+                if _validate_filter(retrieve_filter):
+                    retrieval_config["vectorSearchConfiguration"]["filter"] = retrieve_filter
+            except ValueError as e:
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "error",
+                    "content": [{"text": str(e)}],
+                }
+
         # Perform retrieval
         response = bedrock_agent_runtime_client.retrieve(
-            retrievalQuery={"text": query},
-            knowledgeBaseId=kb_id,
-            retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": number_of_results},
-            },
+            retrievalQuery={"text": query}, knowledgeBaseId=kb_id, retrievalConfiguration=retrieval_config
         )
 
         # Get and filter results
@@ -305,3 +323,48 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": f"Error during retrieval: {str(e)}"}],
         }
+
+
+# A simple validator to check filter is in valid shape
+def _validate_filter(retrieve_filter):
+    """Validate the structure of a retrieveFilter."""
+    try:
+        if not isinstance(retrieve_filter, dict):
+            raise ValueError("retrieveFilter must be a dictionary")
+
+        # Valid operators according to AWS Bedrock documentation
+        valid_operators = [
+            "equals",
+            "greaterThan",
+            "greaterThanOrEquals",
+            "in",
+            "lessThan",
+            "lessThanOrEquals",
+            "listContains",
+            "notEquals",
+            "notIn",
+            "orAll",
+            "andAll",
+            "startsWith",
+            "stringContains",
+        ]
+
+        # Validate each operator in the filter
+        for key, value in retrieve_filter.items():
+            if key not in valid_operators:
+                raise ValueError(f"Invalid operator: {key}")
+
+            # Validate operator value structure
+            if key in ["orAll", "andAll"]:  # Both orAll and andAll require arrays
+                if not isinstance(value, list):
+                    raise ValueError(f"Value for '{key}' operator must be a list")
+                if len(value) < 2:  # Both require minimum 2 items
+                    raise ValueError(f"Value for '{key}' operator must contain at least 2 items")
+                for sub_filter in value:
+                    _validate_filter(sub_filter)
+            else:
+                if not isinstance(value, dict):
+                    raise ValueError(f"Value for '{key}' operator must be a dictionary")
+        return True
+    except Exception as e:
+        raise Exception(f"Unexpected error while validating retrieve filter: {str(e)}") from e

@@ -28,8 +28,13 @@ def test_load_tool_functionality(temporary_tool):
     tool_name, tool_path, tools_dir_str = temporary_tool
     agent = Agent(tools=[load_tool])
 
-    response = agent(f"Please load the Python tool from {tool_path} add_numbers and calculate 1 + 2.")
+    response = agent(f"""
+    Please load the Python tool from {tool_path} add_numbers and calculate 1 + 2.
+    If you are unable to load the tool, stop and immediately respond with `FAIL`
+    
+    If successful return exactly the following `SUM: _` where _ is replaced with the sum. For example `SUM: 27`,
+    else, return EXACTLY `FAIL` and nothing else. 
+    """)
 
-    response_text = str(response).lower()
-    assert "loaded" in response_text and "success" in response_text
-    assert "add_number" in response_text and "3" in response_text
+    assert 'add_numbers' in agent.tool_names
+    assert "sum: 3" in str(response).lower()

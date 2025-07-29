@@ -66,96 +66,13 @@ from rich.box import ROUNDED
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
-from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from strands import tool
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
-# Initialize logging and set paths
+# Initialize logging
 logger = logging.getLogger(__name__)
-TOOL_SPEC = {
-    "name": "shell",
-    "description": "Interactive shell with PTY support for real-time command execution and interaction. Features:\n\n"
-    "1. Command Formats:\n"
-    "   • Single Command (string):\n"
-    '     command: "ls -la"\n\n'
-    "   • Multiple Commands (array):\n"
-    '     command: ["cd /path", "git status"]\n\n'
-    "   • Detailed Command Objects:\n"
-    "     command: [{\n"
-    '       "command": "git clone repo",\n'
-    '       "timeout": 60,\n'
-    '       "work_dir": "/specific/path"\n'
-    "     }]\n\n"
-    "2. Execution Modes:\n"
-    "   • Sequential (default): Commands run in order\n"
-    "   • Parallel: Multiple commands execute simultaneously\n"
-    "   • Error Handling: Stop on error or continue with ignore_errors\n\n"
-    "3. Real-time Features:\n"
-    "   • Live Output: See command output as it happens\n"
-    "   • Interactive Input: Send input to running commands\n"
-    "   • PTY Support: Full terminal emulation\n"
-    "   • Timeout Control: Prevent hanging commands\n\n"
-    "4. Common Patterns:\n"
-    "   • Directory Operations:\n"
-    '     command: ["mkdir -p dir", "cd dir", "git init"]\n'
-    "   • Git Operations:\n"
-    '     command: {"command": "git pull", "work_dir": "/repo/path"}\n'
-    "   • Build Commands:\n"
-    '     command: "npm install", work_dir: "/app/path"\n\n'
-    "5. Best Practices:\n"
-    "   • Use arrays for multiple commands\n"
-    "   • Set appropriate timeouts\n"
-    "   • Specify work_dir when needed\n"
-    "   • Enable ignore_errors for resilient scripts\n"
-    "   • Use parallel execution for independent commands\n\n"
-    "Example Usage:\n"
-    "1. Simple command: \n"
-    '   {"command": "ls -la"}\n\n'
-    "2. Multiple commands:\n"
-    '   {"command": ["mkdir test", "cd test", "touch file.txt"]}\n\n'
-    "3. Parallel execution:\n"
-    '   {"command": ["task1", "task2"], "parallel": true}\n\n'
-    "4. With error handling:\n"
-    '   {"command": ["risky-command"], "ignore_errors": true}\n\n'
-    "5. Custom directory:\n"
-    '   {"command": "npm install", "work_dir": "/app/path"}',
-    "inputSchema": {
-        "json": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": ["string", "array"],
-                    "description": (
-                        "The shell command(s) to execute interactively. Can be a single command string or array of "
-                        "command objects"
-                    ),
-                    "items": {"type": ["string", "object"]},
-                },
-                "parallel": {
-                    "type": "boolean",
-                    "description": "Whether to execute multiple commands in parallel (default: False)",
-                },
-                "ignore_errors": {
-                    "type": "boolean",
-                    "description": "Continue execution even if some commands fail (default: False)",
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": (
-                        "Timeout in seconds for each command "
-                        "(default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)"
-                    ),
-                },
-                "work_dir": {
-                    "type": "string",
-                    "description": "Working directory for command execution (default: current)",
-                },
-            },
-            "required": ["command"],
-        }
-    },
-}
 
 
 def read_output(fd: int) -> str:
@@ -486,39 +403,112 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
     )
 
 
-def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
-    """Enhanced interactive shell tool with multi-command and parallel execution support."""
+@tool
+def shell(
+    command: Union[str, List[Union[str, Dict[str, Any]]]],
+    parallel: bool = False,
+    ignore_errors: bool = False,
+    timeout: int = None,
+    work_dir: str = None,
+    non_interactive: bool = False,
+) -> Dict[str, Any]:
+    """Interactive shell with PTY support for real-time command execution and interaction. Features:
+
+    1. Command Formats:
+       • Single Command (string):
+         command: "ls -la"
+
+       • Multiple Commands (array):
+         command: ["cd /path", "git status"]
+
+       • Detailed Command Objects:
+         command: [{
+           "command": "git clone repo",
+           "timeout": 60,
+           "work_dir": "/specific/path"
+         }]
+
+    2. Execution Modes:
+       • Sequential (default): Commands run in order
+       • Parallel: Multiple commands execute simultaneously
+       • Error Handling: Stop on error or continue with ignore_errors
+
+    3. Real-time Features:
+       • Live Output: See command output as it happens
+       • Interactive Input: Send input to running commands
+       • PTY Support: Full terminal emulation
+       • Timeout Control: Prevent hanging commands
+
+    4. Common Patterns:
+       • Directory Operations:
+         command: ["mkdir -p dir", "cd dir", "git init"]
+       • Git Operations:
+         command: {"command": "git pull", "work_dir": "/repo/path"}
+       • Build Commands:
+         command: "npm install", work_dir: "/app/path"
+
+    5. Best Practices:
+       • Use arrays for multiple commands
+       • Set appropriate timeouts
+       • Specify work_dir when needed
+       • Enable ignore_errors for resilient scripts
+       • Use parallel execution for independent commands
+
+    Example Usage:
+    1. Simple command:
+       {"command": "ls -la"}
+
+    2. Multiple commands:
+       {"command": ["mkdir test", "cd test", "touch file.txt"]}
+
+    3. Parallel execution:
+       {"command": ["task1", "task2"], "parallel": true}
+
+    4. With error handling:
+       {"command": ["risky-command"], "ignore_errors": true}
+
+    5. Custom directory:
+       {"command": "npm install", "work_dir": "/app/path"}
+
+    Args:
+        command: The shell command(s) to execute interactively. Can be a single command string or array of commands
+        parallel: Whether to execute multiple commands in parallel (default: False)
+        ignore_errors: Continue execution even if some commands fail (default: False)
+        timeout: Timeout in seconds for each command (default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)
+        work_dir: Working directory for command execution (default: current)
+        non_interactive: Run in non-interactive mode without user prompts (default: False)
+
+    Returns:
+        Dict containing status and response content
+    """
     console = console_util.create()
 
-    tool_use_id = tool.get("toolUseId", "default-id")
-    tool_input = tool.get("input", {})
-
     is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
-    # Here we keep both doors open,but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
-    non_interactive_mode = is_strands_non_interactive or kwargs.get("non_interactive_mode", False)
+    # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
+    non_interactive_mode = is_strands_non_interactive or non_interactive
 
-    # Extract and validate parameters
-    command_input = tool_input.get("command")
-    if command_input is None:
+    # Validate command parameter
+    if command is None:
         return {
-            "toolUseId": tool_use_id,
             "status": "error",
             "content": [{"text": "Command is required"}],
         }
 
     # Fix for array input: if the command is a string that looks like JSON array, parse it
-    if isinstance(command_input, str) and command_input.strip().startswith("[") and command_input.strip().endswith("]"):
+    if isinstance(command, str) and command.strip().startswith("[") and command.strip().endswith("]"):
         try:
-            command_input = json.loads(command_input)
+            command = json.loads(command)
         except json.JSONDecodeError:
             # If it fails to parse, keep it as a string
             pass
 
-    commands = normalize_commands(command_input)
-    parallel = bool(tool_input.get("parallel", False))
-    ignore_errors = bool(tool_input.get("ignore_errors", False))
-    timeout = int(tool_input.get("timeout", 900))
-    work_dir = tool_input.get("work_dir", os.getcwd())
+    commands = normalize_commands(command)
+
+    # Set defaults for parameters
+    if timeout is None:
+        timeout = int(os.environ.get("SHELL_DEFAULT_TIMEOUT", "900"))
+    if work_dir is None:
+        work_dir = os.getcwd()
 
     # Development mode check
     STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
@@ -549,7 +539,6 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
             return {
-                "toolUseId": tool_use_id,
                 "status": "error",
                 "content": [{"text": f"Command execution cancelled by user. Input: {confirm}"}],
             }
@@ -601,13 +590,7 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         status: Literal["success", "error"] = "success" if error_count == 0 or ignore_errors else "error"
 
-        # Convert content to the expected format
-        typed_content: List[ToolResultContent] = []
-        for item in content:
-            # Create a proper ToolResultContent object that satisfies type checking
-            typed_content.append({"text": item["text"]})  # Type assertion happens here
-
-        return {"toolUseId": tool_use_id, "status": status, "content": typed_content}
+        return {"status": status, "content": content}
 
     except Exception as e:
         if not non_interactive_mode:
@@ -620,7 +603,6 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
         return {
-            "toolUseId": tool_use_id,
             "status": "error",
             "content": [{"text": f"Interactive shell error: {str(e)}"}],
         }
