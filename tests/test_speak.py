@@ -5,6 +5,7 @@ Tests for the speak tool using the Agent interface.
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import speak
 
@@ -80,8 +81,15 @@ def test_speak_polly_mode(mock_run, mock_boto_client):
         assert result["status"] == "success"
         assert "Generated and played speech using Polly" in result["content"][0]["text"]
 
-        # Verify boto3 client was created correctly
-        mock_boto_client.assert_called_once_with("polly", region_name="us-west-2")
+        # Verify boto3 client was created correctly with user agent
+        mock_boto_client.assert_called_once()
+        args, kwargs = mock_boto_client.call_args
+        assert args[0] == "polly"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-speak"
 
         # Verify synthesize_speech was called with the right parameters
         mock_polly.synthesize_speech.assert_called_once_with(
@@ -128,8 +136,15 @@ def test_speak_polly_mode_no_play(mock_run, mock_boto_client):
         assert "Generated speech using Polly" in result["content"][0]["text"]
         assert "audio not played" in result["content"][0]["text"]
 
-        # Verify boto3 client was created correctly
-        mock_boto_client.assert_called_once_with("polly", region_name="us-west-2")
+        # Verify boto3 client was created correctly with user agent
+        mock_boto_client.assert_called_once()
+        args, kwargs = mock_boto_client.call_args
+        assert args[0] == "polly"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-speak"
 
         # Verify synthesize_speech was called with the right parameters
         mock_polly.synthesize_speech.assert_called_once_with(
@@ -165,6 +180,16 @@ def test_speak_polly_no_audio_stream(mock_boto_client):
 
     assert result["status"] == "error"
     assert "No AudioStream in response from Polly" in result["content"][0]["text"]
+
+    # Verify boto3 client was created correctly with user agent
+    mock_boto_client.assert_called_once()
+    args, kwargs = mock_boto_client.call_args
+    assert args[0] == "polly"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-speak"
 
 
 @patch("subprocess.run")

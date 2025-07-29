@@ -88,6 +88,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from rich.panel import Panel
 from strands import tool
 
@@ -140,7 +141,8 @@ class MemoryServiceClient:
             boto3.client: A boto3 client for the bedrock-agent service
         """
         if not self._agent_client:
-            self._agent_client = self.session.client("bedrock-agent", region_name=self.region)
+            config = BotocoreConfig(user_agent_extra="strands-agents-memory")
+            self._agent_client = self.session.client("bedrock-agent", region_name=self.region, config=config)
         return self._agent_client
 
     @property
@@ -152,7 +154,8 @@ class MemoryServiceClient:
             boto3.client: A boto3 client for the bedrock-agent-runtime service
         """
         if not self._runtime_client:
-            self._runtime_client = self.session.client("bedrock-agent-runtime", region_name=self.region)
+            config = BotocoreConfig(user_agent_extra="strands-agents-memory")
+            self._runtime_client = self.session.client("bedrock-agent-runtime", region_name=self.region, config=config)
         return self._runtime_client
 
     def _detect_data_source_type(self, kb_id: str):

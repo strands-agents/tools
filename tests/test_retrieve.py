@@ -7,6 +7,7 @@ from unittest import mock
 
 import boto3
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import retrieve
 
@@ -137,8 +138,16 @@ def test_retrieve_tool_direct(mock_boto3_client):
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
 
-    # Verify that boto3 client was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+    # Verify that boto3 client was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-agent-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-retrieve"
+
     mock_boto3_client.return_value.retrieve.assert_called_once_with(
         retrievalQuery={"text": "test query"},
         knowledgeBaseId="test-kb-id",
@@ -240,7 +249,16 @@ def test_retrieve_with_custom_profile(mock_boto3_client):
 
         # Verify session was created with correct profile
         mock_session.assert_called_once_with(profile_name="custom-profile")
-        mock_session_instance.client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+
+        # Verify client was called with correct parameters including user agent
+        mock_session_instance.client.assert_called_once()
+        args, kwargs = mock_session_instance.client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"
@@ -276,8 +294,15 @@ def test_retrieve_with_custom_region():
 
         result = retrieve.retrieve(tool=tool_use)
 
-        # Verify client was created with correct region
-        mock_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-east-1")
+        # Verify client was created with correct region and user agent
+        mock_client.assert_called_once()
+        args, kwargs = mock_client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-east-1"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"

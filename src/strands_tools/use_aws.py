@@ -51,6 +51,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ParamValidationError, ValidationError
 from botocore.response import StreamingBody
 from rich import box
@@ -110,7 +111,10 @@ def get_boto3_client(
         A boto3 client object for the specified service
     """
     session = boto3.Session(profile_name=profile_name)
-    return session.client(service_name=service_name, region_name=region_name)
+
+    config = BotocoreConfig(user_agent_extra="strands-agents-use-aws")
+
+    return session.client(service_name=service_name, region_name=region_name, config=config)
 
 
 def handle_streaming_body(response: Dict[str, Any]) -> Dict[str, Any]:

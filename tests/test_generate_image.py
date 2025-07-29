@@ -7,6 +7,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import generate_image
 
@@ -85,8 +86,16 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     # Call the generate_image function directly
     result = generate_image.generate_image(tool=tool_use)
 
-    # Verify the function was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-runtime", region_name="us-west-2")
+    # Verify the function was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-generate-image"
+
     mock_client_instance = mock_boto3_client.return_value
     mock_client_instance.invoke_model.assert_called_once()
 
