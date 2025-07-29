@@ -44,11 +44,13 @@ def test_semantic_write_read_edit_workflow(agent, tmp_path):
     assert initial_content in raw_content
 
     # 3. Replace text
-    edit_response = agent(f"In file `{file_path}`, replace 'Hello' with 'Hi'")
+    edit_response = agent(f"In file `{file_path}`, replace 'Hello' with 'Hi' - write/edit nothing else")
     assert "success" in str(edit_response).lower() or "replaced" in str(edit_response).lower()
 
     # 4. Verify
-    verify_response = agent(f"Show me the contents of `{file_path}`")
+    verify_response = agent(
+        f"Show me the contents of `{file_path}` - do not respond with anything but the exact content in the file"
+    )
     final_content = extract_code_content(verify_response)
     assert "Hi world" in final_content
     assert "Hello" not in final_content
@@ -68,19 +70,12 @@ def test_semantic_python_file_creation(agent, tmp_path):
     assert "def" in content and "print" in content and "Hello World" in content
 
     # 3. Modify the function
-    modify_response = agent(f"In `{file_path}`, change the print statement to say 'Hi there!' instead")
-    semantic_success = any(
-        phrase in str(modify_response).lower()
-        for phrase in [
-            "file has been updated",
-            "now prints 'hi there!'",
-            "updated successfully",
-            "replacement was successful",
-            "print statement to say 'hi there!'",
-            "prints 'Hello World'",
-        ]
-    )
-    assert semantic_success, str(modify_response)
+    modify_response = agent(f"""
+        In `{file_path}`, change the print statement to say 'Hi there!' instead.
+        If successful respond ONLY with 'PASS',
+        else, respond with ONLY with 'FAIL'
+    """)
+    assert 'PASS' in str(modify_response)
 
     # 4. Verify modification
     final_response = agent(f"Read `{file_path}` and show me the code")

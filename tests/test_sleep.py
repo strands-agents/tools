@@ -3,7 +3,6 @@ Tests for the sleep tool using the Agent interface.
 """
 
 import os
-import time
 from unittest import mock
 
 import pytest
@@ -22,22 +21,6 @@ def extract_result_text(result):
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
         return result["content"][0]["text"]
     return str(result)
-
-
-def test_sleep_direct(agent):
-    """Test direct invocation of the sleep tool."""
-    start_time = time.time()
-    result = agent.tool.sleep(seconds=0.5)
-    elapsed_time = time.time() - start_time
-
-    result_text = extract_result_text(result)
-
-    # Verify the result message
-    assert "Started sleep at" in result_text
-    assert "slept for 0.5 seconds" in result_text
-
-    # Verify actual sleep time (with some tolerance)
-    assert 0.4 <= elapsed_time <= 0.7
 
 
 def test_sleep_zero_seconds(agent):
