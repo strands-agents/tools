@@ -54,7 +54,6 @@ result = await agent.tool.tavily_map_async(url="www.tavily.com")
 
 Environment Variables:
 - TAVILY_API_KEY: Your Tavily API key (required)
-- TAVILY_BASE_URL: Your Tavily API base URL (optional, defaults to https://api.tavily.com)
 
 !!!!!!!!!!!!! IMPORTANT: !!!!!!!!!!!!!
 
@@ -857,12 +856,6 @@ async def tavily_search_async(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except aiohttp.ClientTimeout:
-        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
-    except aiohttp.ClientError:
-        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
-    except ValueError as e:
-        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_search_async: {str(e)}")
         return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
@@ -927,12 +920,6 @@ async def tavily_extract_async(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except aiohttp.ClientTimeout:
-        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
-    except aiohttp.ClientError:
-        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
-    except ValueError as e:
-        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_extract_async: {str(e)}")
         return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
@@ -1022,15 +1009,6 @@ async def tavily_crawl_async(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except aiohttp.ClientTimeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The crawl request took too long to complete."}],
-        }
-    except aiohttp.ClientError:
-        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
-    except ValueError as e:
-        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_crawl_async: {str(e)}")
         return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
@@ -1111,15 +1089,6 @@ async def tavily_map_async(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except aiohttp.ClientTimeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The mapping request took too long to complete."}],
-        }
-    except aiohttp.ClientError:
-        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
-    except ValueError as e:
-        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_map_async: {str(e)}")
         return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
