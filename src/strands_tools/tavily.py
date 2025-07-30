@@ -89,8 +89,7 @@ def _get_api_key() -> str:
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         raise ValueError(
-            "TAVILY_API_KEY environment variable is required. "
-            "Get your free API key at https://app.tavily.com"
+            "TAVILY_API_KEY environment variable is required. " "Get your free API key at https://app.tavily.com"
         )
     return api_key
 
@@ -101,19 +100,19 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
     results = data.get("results", [])
     answer = data.get("answer")
     images = data.get("images", None)
-    
+
     content = [f"Query: {query}"]
-    
+
     if answer:
         content.append(f"\nAnswer: {answer}")
-    
+
     if images:
         content.append(f"\nImages: {len(images)} found")
-    
+
     if results:
         content.append(f"\nResults: {len(results)} found")
         content.append("-" * 50)
-        
+
         for i, result in enumerate(results, 1):
             title = result.get("title", "No title")
             url = result.get("url", "No URL")
@@ -121,12 +120,12 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
             score = result.get("score", "No score")
             raw_content = result.get("raw_content", None)
             favicon = result.get("favicon", None)
-            
+
             content.append(f"\n[{i}] {title}")
             content.append(f"URL: {url}")
             content.append(f"Score: {score}")
             content.append(f"Content: {result_content}")
-            
+
             # Limit raw content to a preview
             if raw_content:
                 preview_length = 150
@@ -135,14 +134,14 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
                 else:
                     raw_preview = raw_content.strip()
                 content.append(f"Raw Content: {raw_preview}")
-            
+
             if favicon:
                 content.append(f"Favicon: {favicon}")
-                
+
             # Add separator between results
             if i < len(results):
                 content.append("")
-    
+
     return Panel("\n".join(content), title="[bold cyan]Tavily Search Results", border_style="cyan")
 
 
@@ -155,15 +154,15 @@ def format_extract_response(data: Dict[str, Any]) -> Panel:
 
     if results:
         content.append("-" * 50)
-        
+
         for i, result in enumerate(results, 1):
             url = result.get("url", "Unknown URL")
             raw_content = result.get("raw_content", None)
             images = result.get("images", None)
             favicon = result.get("favicon", None)
-            
+
             content.append(f"\n[{i}] {url}")
-            
+
             if raw_content:
                 preview_length = 150
                 if len(raw_content) > preview_length:
@@ -171,13 +170,13 @@ def format_extract_response(data: Dict[str, Any]) -> Panel:
                 else:
                     raw_preview = raw_content.strip()
                 content.append(f"Content: {raw_preview}")
-                
+
             if images:
                 content.append(f"Images: {len(images)} found")
-                
+
             if favicon:
                 content.append(f"Favicon: {favicon}")
-                
+
             # Add separator between results
             if i < len(results):
                 content.append("")
@@ -185,17 +184,17 @@ def format_extract_response(data: Dict[str, Any]) -> Panel:
     if failed_results:
         content.append(f"\nFailed extractions: {len(failed_results)}")
         content.append("-" * 30)
-        
+
         for i, failed in enumerate(failed_results, 1):
             url = failed.get("url", "Unknown URL")
             error = failed.get("error", "Unknown error")
             content.append(f"\n[{i}] {url}")
             content.append(f"Error: {error}")
-            
+
             # Add separator between failed results
             if i < len(failed_results):
                 content.append("")
-    
+
     return Panel("\n".join(content), title="[bold cyan]Tavily Extract Results", border_style="cyan")
 
 
@@ -204,24 +203,24 @@ def format_crawl_response(data: Dict[str, Any]) -> Panel:
     base_url = data.get("base_url", "Unknown base URL")
     results = data.get("results", [])
     response_time = data.get("response_time", "Unknown")
-    
+
     content = [f"Base URL: {base_url}"]
     content.append(f"Response Time: {response_time}s")
-    
+
     if results:
         content.append(f"\nPages Crawled: {len(results)}")
         content.append("-" * 50)
-        
+
         for i, result in enumerate(results, 1):
             url = result.get("url", "No URL")
             raw_content = result.get("raw_content", "")
             favicon = result.get("favicon", "")
-            
+
             content.append(f"\n[{i}] {url}")
-            
+
             if favicon:
                 content.append(f"Favicon: {favicon}")
-            
+
             # Limit content to a preview
             if raw_content:
                 preview_length = 100
@@ -230,13 +229,13 @@ def format_crawl_response(data: Dict[str, Any]) -> Panel:
                 else:
                     content_preview = raw_content.strip()
                 content.append(f"Content Preview: {content_preview}")
-            
+
             # Add separator between results
             if i < len(results):
                 content.append("")
     else:
         content.append("\nNo pages found during crawl.")
-    
+
     return Panel("\n".join(content), title="[bold cyan]]Tavily Crawl Results", border_style="cyan")
 
 
@@ -245,27 +244,28 @@ def format_map_response(data: Dict[str, Any]) -> Panel:
     base_url = data.get("base_url", "Unknown base URL")
     results = data.get("results", [])
     response_time = data.get("response_time", "Unknown")
-    
+
     content = [f"Base URL: {base_url}"]
     content.append(f"Response Time: {response_time}s")
-    
+
     if results:
         content.append(f"\nURLs Discovered: {len(results)}")
         content.append("-" * 50)
-        
+
         for i, url in enumerate(results, 1):
             content.append(f"[{i}] {url}")
-            
+
             # Add separator every 10 URLs for readability
             if i % 10 == 0 and i < len(results):
                 content.append("")
     else:
         content.append("\nNo URLs found during mapping.")
-    
+
     return Panel("\n".join(content), title="[bold cyan]Tavily Map Results", border_style="cyan")
 
 
 # Synchronous Tools
+
 
 @tool
 def tavily_search(
@@ -291,8 +291,8 @@ def tavily_search(
     """
     Search the web for real-time information using Tavily's AI-optimized search engine.
 
-    Tavily is a search engine specifically optimized for LLMs and AI agents. It handles all the 
-    complexity of searching, scraping, filtering, and extracting the most relevant information 
+    Tavily is a search engine specifically optimized for LLMs and AI agents. It handles all the
+    complexity of searching, scraping, filtering, and extracting the most relevant information
     from online sources in a single API call.
 
     Key Features:
@@ -338,32 +338,23 @@ def tavily_search(
     Returns:
         Dict containing search results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not query or not query.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "Query parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "Query parameter is required and cannot be empty"}]}
 
         # Validate max_results range
         if max_results is not None and not (0 <= max_results <= 20):
-            return {
-                "status": "error",
-                "content": [{"text": "max_results must be between 0 and 20"}]
-            }
+            return {"status": "error", "content": [{"text": "max_results must be between 0 and 20"}]}
 
         # Validate chunks_per_source range
         if chunks_per_source is not None and not (1 <= chunks_per_source <= 3):
-            return {
-                "status": "error",
-                "content": [{"text": "chunks_per_source must be between 1 and 3"}]
-            }
+            return {"status": "error", "content": [{"text": "chunks_per_source must be between 1 and 3"}]}
 
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "query": query,
@@ -383,61 +374,40 @@ def tavily_search(
             "include_favicon": include_favicon,
             "include_domains": include_domains,
             "exclude_domains": exclude_domains,
-            "country": country
+            "country": country,
         }
-        
+
         # Make API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         url = f"{TAVILY_API_BASE_URL}{TAVILY_SEARCH_ENDPOINT}"
-        
+
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making Tavily search request for query: {query}")
         response = requests.post(url, json=payload, headers=headers)
-        
+
         # Parse response
         try:
             data = response.json()
         except ValueError as e:
-            return {
-                "status": "error",
-                "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-            }
-    
+            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+
         # Format and display response
         panel = format_search_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except requests.exceptions.Timeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The API request took too long to complete."}]
-        }
+        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
     except requests.exceptions.ConnectionError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_search: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -450,7 +420,7 @@ def tavily_extract(
 ) -> Dict[str, Any]:
     """
     Extract clean, structured content from one or more web pages using Tavily's extraction service.
-    
+
     Tavily Extract provides high-quality content extraction with advanced processing to remove
     navigation, ads, and other noise, returning clean, readable content optimized for AI processing.
 
@@ -469,7 +439,7 @@ def tavily_extract(
     Output Formats:
     - markdown: Returns content formatted as markdown (recommended for AI)
     - text: Returns plain text content (may increase latency)
-    
+
     Args:
         urls: A single URL string or list of URL strings to extract content from
         extract_depth: The depth of the extraction process ("basic" or "advanced")
@@ -480,18 +450,15 @@ def tavily_extract(
     Returns:
         Dict containing extraction results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not urls:
-            return {
-                "status": "error",
-                "content": [{"text": "At least one URL must be provided"}]
-            }
+            return {"status": "error", "content": [{"text": "At least one URL must be provided"}]}
 
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "urls": urls,
@@ -500,17 +467,14 @@ def tavily_extract(
             "include_images": include_images,
             "include_favicon": include_favicon,
         }
-        
+
         # Make API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         url = f"{TAVILY_API_BASE_URL}{TAVILY_EXTRACT_ENDPOINT}"
 
         payload = {key: value for key, value in payload.items() if value is not None}
-        
+
         url_count = len(urls) if isinstance(urls, list) else 1
         logger.info(f"Making Tavily extract request for {url_count} URLs")
         response = requests.post(url, json=payload, headers=headers)
@@ -519,41 +483,23 @@ def tavily_extract(
         try:
             data = response.json()
         except ValueError as e:
-            return {
-                "status": "error",
-                "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-            }
+            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_extract_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except requests.exceptions.Timeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The API request took too long to complete."}]
-        }
+        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
     except requests.exceptions.ConnectionError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_extract: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -569,17 +515,23 @@ def tavily_crawl(
     exclude_domains: Optional[List[str]] = None,
     allow_external: Optional[bool] = None,
     include_images: Optional[bool] = None,
-    categories: Optional[List[Literal["Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"]]] = None,
+    categories: Optional[
+        List[
+            Literal[
+                "Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"
+            ]
+        ]
+    ] = None,
     extract_depth: Optional[Literal["basic", "advanced"]] = None,
     format: Optional[Literal["markdown", "text"]] = None,
     include_favicon: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
-    Crawl multiple pages from a website starting from a base URL using Tavily's crawling service (BETA).
-    
-    Tavily Crawl is a graph-based website traversal tool that can explore hundreds of paths in parallel 
-    with built-in extraction and intelligent discovery. This is a BETA feature that allows comprehensive
-    website exploration starting from a single URL.
+    Crawl multiple pages from a website starting from a base URL using Tavily's crawling service.
+
+    Tavily Crawl is a graph-based website traversal tool that can explore hundreds of paths in parallel
+    with built-in extraction and intelligent discovery. This allows comprehensive website exploration
+    starting from a single URL.
 
     Key Features:
     - Graph-based website traversal with parallel exploration
@@ -596,7 +548,7 @@ def tavily_crawl(
     Content Format:
     - markdown: Returns content formatted as markdown (recommended for AI)
     - text: Returns plain text content (may increase latency)
-    
+
     Args:
         url: The root URL to begin the crawl from. This should be a complete URL including protocol
         max_depth: Maximum depth of the crawl. Defines how far from the base URL the crawler can explore
@@ -618,37 +570,25 @@ def tavily_crawl(
     Returns:
         Dict containing crawl results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not url or not url.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "URL parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "URL parameter is required and cannot be empty"}]}
 
         # Validate numeric parameters
         if max_depth is not None and max_depth < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "max_depth must be at least 1"}]
-            }
+            return {"status": "error", "content": [{"text": "max_depth must be at least 1"}]}
 
         if max_breadth is not None and max_breadth < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "max_breadth must be at least 1"}]
-            }
+            return {"status": "error", "content": [{"text": "max_breadth must be at least 1"}]}
 
         if limit is not None and limit < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "limit must be at least 1"}]
-            }
-        
+            return {"status": "error", "content": [{"text": "limit must be at least 1"}]}
+
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "url": url,
@@ -667,59 +607,41 @@ def tavily_crawl(
             "exclude_domains": exclude_domains,
             "allow_external": allow_external,
         }
-        
+
         # Make API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         api_url = f"{TAVILY_API_BASE_URL}{TAVILY_CRAWL_ENDPOINT}"
-        
+
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making Tavily crawl request for URL: {url}")
-        response = requests.post(api_url, json=payload, headers=headers) 
-        
+        response = requests.post(api_url, json=payload, headers=headers)
+
         # Parse response
         try:
             data = response.json()
         except ValueError as e:
-            return {
-                "status": "error",
-                "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-            }
+            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_crawl_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except requests.exceptions.Timeout:
         return {
             "status": "error",
-            "content": [{"text": "Request timeout. The crawl request took too long to complete."}]
+            "content": [{"text": "Request timeout. The crawl request took too long to complete."}],
         }
     except requests.exceptions.ConnectionError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_crawl: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -734,13 +656,19 @@ def tavily_map(
     exclude_paths: Optional[List[str]] = None,
     exclude_domains: Optional[List[str]] = None,
     allow_external: Optional[bool] = None,
-    categories: Optional[List[Literal["Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"]]] = None,
+    categories: Optional[
+        List[
+            Literal[
+                "Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"
+            ]
+        ]
+    ] = None,
 ) -> Dict[str, Any]:
     """
     Map website structure starting from a base URL using Tavily's mapping service.
-    
-    Tavily Map traverses websites like a graph and can explore hundreds of paths in parallel 
-    with intelligent discovery to generate comprehensive site maps. This returns a list of 
+
+    Tavily Map traverses websites like a graph and can explore hundreds of paths in parallel
+    with intelligent discovery to generate comprehensive site maps. This returns a list of
     discovered URLs without content extraction.
 
     Key Features:
@@ -756,7 +684,7 @@ def tavily_map(
     - Understand website structure and organization
     - Find specific types of pages (documentation, blog posts, etc.)
     - Generate sitemaps for analysis
-    
+
     Args:
         url: The root URL to begin the mapping from. This should be a complete URL including protocol
         max_depth: Maximum depth of the mapping. Defines how far from the base URL the mapper can explore
@@ -773,37 +701,25 @@ def tavily_map(
     Returns:
         Dict containing map results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not url or not url.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "URL parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "URL parameter is required and cannot be empty"}]}
 
         # Validate numeric parameters
         if max_depth is not None and max_depth < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "max_depth must be at least 1"}]
-            }
+            return {"status": "error", "content": [{"text": "max_depth must be at least 1"}]}
 
         if max_breadth is not None and max_breadth < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "max_breadth must be at least 1"}]
-            }
+            return {"status": "error", "content": [{"text": "max_breadth must be at least 1"}]}
 
         if limit is not None and limit < 1:
-            return {
-                "status": "error",
-                "content": [{"text": "limit must be at least 1"}]
-            }
-        
+            return {"status": "error", "content": [{"text": "limit must be at least 1"}]}
+
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "url": url,
@@ -818,62 +734,45 @@ def tavily_map(
             "allow_external": allow_external,
             "categories": categories,
         }
-        
+
         # Make API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         api_url = f"{TAVILY_API_BASE_URL}{TAVILY_MAP_ENDPOINT}"
 
         payload = {key: value for key, value in payload.items() if value is not None}
-        
+
         logger.info(f"Making Tavily map request for URL: {url}")
-        response = requests.post(api_url, json=payload, headers=headers) 
-        
+        response = requests.post(api_url, json=payload, headers=headers)
+
         # Parse response
         try:
             data = response.json()
         except ValueError as e:
-            return {
-                "status": "error",
-                "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-            }
+            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_map_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except requests.exceptions.Timeout:
         return {
             "status": "error",
-            "content": [{"text": "Request timeout. The mapping request took too long to complete."}]
+            "content": [{"text": "Request timeout. The mapping request took too long to complete."}],
         }
     except requests.exceptions.ConnectionError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_map: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 # Asynchronous Tools
+
 
 @tool
 async def tavily_search_async(
@@ -905,18 +804,15 @@ async def tavily_search_async(
     Returns:
         Dict containing search results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not query or not query.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "Query parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "Query parameter is required and cannot be empty"}]}
 
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "query": query,
@@ -936,61 +832,40 @@ async def tavily_search_async(
             "include_favicon": include_favicon,
             "include_domains": include_domains,
             "exclude_domains": exclude_domains,
-            "country": country
+            "country": country,
         }
-        
+
         # Make async API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         url = f"{TAVILY_API_BASE_URL}{TAVILY_SEARCH_ENDPOINT}"
-        
+
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making async Tavily search request for query: {query}")
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as response:
                 try:
                     data = await response.json()
                 except Exception as e:
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-                    }
-    
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+
         # Format and display response
         panel = format_search_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except aiohttp.ClientTimeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The API request took too long to complete."}]
-        }
+        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
     except aiohttp.ClientError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_search_async: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -1002,26 +877,24 @@ async def tavily_extract_async(
     include_favicon: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
-    Async version of tavily_extract. Extract clean, structured content from one or more web pages using Tavily's extraction service.
-    
+    Async version of tavily_extract. Extract clean, structured content from one or more web pages using
+    Tavily's extraction service.
+
     This is the asynchronous version of the Tavily extract tool, using aiohttp for non-blocking HTTP requests.
     All parameters and functionality are identical to the synchronous version.
 
     Returns:
         Dict containing extraction results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not urls:
-            return {
-                "status": "error",
-                "content": [{"text": "At least one URL must be provided"}]
-            }
+            return {"status": "error", "content": [{"text": "At least one URL must be provided"}]}
 
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "urls": urls,
@@ -1030,60 +903,39 @@ async def tavily_extract_async(
             "include_images": include_images,
             "include_favicon": include_favicon,
         }
-        
+
         # Make async API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         url = f"{TAVILY_API_BASE_URL}{TAVILY_EXTRACT_ENDPOINT}"
 
         payload = {key: value for key, value in payload.items() if value is not None}
-        
+
         url_count = len(urls) if isinstance(urls, list) else 1
         logger.info(f"Making async Tavily extract request for {url_count} URLs")
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as response:
                 try:
                     data = await response.json()
                 except Exception as e:
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-                    }
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_extract_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except aiohttp.ClientTimeout:
-        return {
-            "status": "error",
-            "content": [{"text": "Request timeout. The API request took too long to complete."}]
-        }
+        return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
     except aiohttp.ClientError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_extract_async: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -1099,32 +951,36 @@ async def tavily_crawl_async(
     exclude_domains: Optional[List[str]] = None,
     allow_external: Optional[bool] = None,
     include_images: Optional[bool] = None,
-    categories: Optional[List[Literal["Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"]]] = None,
+    categories: Optional[
+        List[
+            Literal[
+                "Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"
+            ]
+        ]
+    ] = None,
     extract_depth: Optional[Literal["basic", "advanced"]] = None,
     format: Optional[Literal["markdown", "text"]] = None,
     include_favicon: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
-    Async version of tavily_crawl. Crawl multiple pages from a website starting from a base URL using Tavily's crawling service (BETA).
-    
+    Async version of tavily_crawl. Crawl multiple pages from a website starting from a base URL using
+    Tavily's crawling service.
+
     This is the asynchronous version of the Tavily crawl tool, using aiohttp for non-blocking HTTP requests.
     All parameters and functionality are identical to the synchronous version.
 
     Returns:
         Dict containing crawl results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not url or not url.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "URL parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "URL parameter is required and cannot be empty"}]}
 
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "url": url,
@@ -1143,59 +999,41 @@ async def tavily_crawl_async(
             "exclude_domains": exclude_domains,
             "allow_external": allow_external,
         }
-        
+
         # Make async API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         api_url = f"{TAVILY_API_BASE_URL}{TAVILY_CRAWL_ENDPOINT}"
-        
+
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making async Tavily crawl request for URL: {url}")
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(api_url, json=payload, headers=headers) as response:
                 try:
                     data = await response.json()
                 except Exception as e:
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-                    }
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_crawl_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except aiohttp.ClientTimeout:
         return {
             "status": "error",
-            "content": [{"text": "Request timeout. The crawl request took too long to complete."}]
+            "content": [{"text": "Request timeout. The crawl request took too long to complete."}],
         }
     except aiohttp.ClientError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_crawl_async: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        }
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
 
 
 @tool
@@ -1210,30 +1048,32 @@ async def tavily_map_async(
     exclude_paths: Optional[List[str]] = None,
     exclude_domains: Optional[List[str]] = None,
     allow_external: Optional[bool] = None,
-    categories: Optional[List[Literal["Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"]]] = None,
+    categories: Optional[
+        List[
+            Literal[
+                "Careers", "Blog", "Documentation", "About", "Pricing", "Community", "Developers", "Contact", "Media"
+            ]
+        ]
+    ] = None,
 ) -> Dict[str, Any]:
     """
     Async version of tavily_map. Map website structure starting from a base URL using Tavily's mapping service.
-    
+
     This is the asynchronous version of the Tavily map tool, using aiohttp for non-blocking HTTP requests.
     All parameters and functionality are identical to the synchronous version.
 
     Returns:
         Dict containing map results and metadata with status and content fields.
     """
-    
+
     try:
         # Validate parameters
         if not url or not url.strip():
-            return {
-                "status": "error",
-                "content": [{"text": "URL parameter is required and cannot be empty"}]
-            }
+            return {"status": "error", "content": [{"text": "URL parameter is required and cannot be empty"}]}
 
-        
         # Get API key
         api_key = _get_api_key()
-        
+
         # Build request payload
         payload = {
             "url": url,
@@ -1248,56 +1088,38 @@ async def tavily_map_async(
             "allow_external": allow_external,
             "categories": categories,
         }
-        
+
         # Make async API request
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         api_url = f"{TAVILY_API_BASE_URL}{TAVILY_MAP_ENDPOINT}"
 
         payload = {key: value for key, value in payload.items() if value is not None}
-        
+
         logger.info(f"Making async Tavily map request for URL: {url}")
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(api_url, json=payload, headers=headers) as response:
                 try:
                     data = await response.json()
                 except Exception as e:
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to parse API response: {str(e)}"}]
-                    }
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_map_response(data)
         console.print(panel)
 
-        return {
-            "status": "success",
-            "content": [{"text": str(data)}]
-        }
-        
+        return {"status": "success", "content": [{"text": str(data)}]}
+
     except aiohttp.ClientTimeout:
         return {
             "status": "error",
-            "content": [{"text": "Request timeout. The mapping request took too long to complete."}]
+            "content": [{"text": "Request timeout. The mapping request took too long to complete."}],
         }
     except aiohttp.ClientError:
-        return {
-            "status": "error",
-            "content": [{"text": "Connection error. Please check your internet connection."}]
-        }
+        return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
-        return {
-            "status": "error",
-            "content": [{"text": str(e)}]
-        }
+        return {"status": "error", "content": [{"text": str(e)}]}
     except Exception as e:
         logger.error(f"Unexpected error in tavily_map_async: {str(e)}")
-        return {
-            "status": "error",
-            "content": [{"text": f"Unexpected error: {str(e)}"}]
-        } 
+        return {"status": "error", "content": [{"text": f"Unexpected error: {str(e)}"}]}
