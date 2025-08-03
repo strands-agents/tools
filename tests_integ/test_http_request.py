@@ -50,7 +50,7 @@ def test_get_http_request(agent, http_server):
     """Test GET request functionality using local test server."""
     port = http_server.test_port
     response = agent(f"Send a GET request to http://localhost:{port}/repo and show me the number of stars")
-    assert "stars" in str(response).lower() and "99999" in str(response).lower()
+    assert "stars" in str(response).lower() and ("99999" in str(response).lower() or "99,999" in str(response).lower())
 
 
 def test_post_http_request(agent, http_server):
@@ -127,7 +127,7 @@ class LocalHttpRequestHandler(BaseHTTPRequestHandler):
 def _find_free_port() -> int:
     """Find and return an available port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
