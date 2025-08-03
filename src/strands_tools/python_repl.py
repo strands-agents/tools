@@ -70,10 +70,9 @@ TOOL_SPEC = {
     "IMPORTANT SAFETY FEATURES:\n"
     "1. User Confirmation: Requires explicit approval before executing code\n"
     "2. Code Preview: Shows syntax-highlighted code before execution\n"
-    "3. State Management: Maintains variables between executions, default controlled by PYTHON_REPL_RESET_STATE\n"
+    "3. State Management: Maintains variables between executions\n"
     "4. Error Handling: Captures and formats errors with suggestions\n"
-    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n"
-    "6. Interactive Control: Can enable/disable interactive PTY mode in PYTHON_REPL_INTERACTIVE environments\n\n"
+    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n\n"
     "Key Features:\n"
     "- Persistent state between executions\n"
     "- Interactive PTY support for real-time feedback\n"
@@ -544,8 +543,8 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
 
     code = tool_input["code"]
-    interactive = os.environ.get("PYTHON_REPL_INTERACTIVE", str(tool_input.get("interactive", True))).lower() == "true"
-    reset_state = os.environ.get("PYTHON_REPL_RESET_STATE", str(tool_input.get("reset_state", False))).lower() == "true"
+    interactive = tool_input.get("interactive", True)
+    reset_state = tool_input.get("reset_state", False)
 
     # Check for development mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
