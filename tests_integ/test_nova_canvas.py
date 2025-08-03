@@ -142,8 +142,8 @@ def test_virtual_try_on_mask_garment(agent, tmp_path):
     assert found_image is not None, "No image bytes found in result"
 
     # Save the empty living room with red couch image to temp directory
-    living_room_image_path = tmp_path / "human_standing.png"
-    with open(living_room_image_path, "wb") as f:
+    human_image_path = tmp_path / "human_standing.png"
+    with open(human_image_path, "wb") as f:
         f.write(found_image)
 
     # 2. Generate an image of a yellow couch
@@ -168,16 +168,16 @@ def test_virtual_try_on_mask_garment(agent, tmp_path):
     assert found_image is not None, "No image bytes found in result"
 
     # Save the couch image to temp directory
-    couch_image_path = tmp_path / "ai_hoodie_aws.png"
-    with open(couch_image_path, "wb") as f:
+    hoodie_image_path = tmp_path / "ai_hoodie_aws.png"
+    with open(hoodie_image_path, "wb") as f:
         f.write(found_image)
 
     # 3. Virtual try on the couch on the empty living room
     image_gen_result = agent.tool.nova_canvas(
         task_type="VIRTUAL_TRY_ON",
         model_id="amazon.nova-canvas-v1:0",
-        image_path=str(living_room_image_path),
-        reference_image_path=str(couch_image_path),
+        image_path=str(human_image_path),
+        reference_image_path=str(hoodie_image_path),
         mask_type="GARMENT",
         garment_class="UPPER_BODY",
         longSleeveStyle="SLEEVE_DOWN",
