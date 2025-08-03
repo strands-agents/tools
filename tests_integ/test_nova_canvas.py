@@ -119,7 +119,7 @@ def test_remove_background(agent, tmp_path):
 
 
 def test_virtual_try_on_mask_garment(agent, tmp_path):
-    # 1. Generate an image of an empty living room
+    # 1. Generate an image of a human standing
     prompt = "full body person with a warm, genuine smile  standing facing directly at the camera. \
             in a sunny neighberhood with green nature."
     image_gen_result = agent.tool.nova_canvas(
@@ -141,12 +141,12 @@ def test_virtual_try_on_mask_garment(agent, tmp_path):
             break
     assert found_image is not None, "No image bytes found in result"
 
-    # Save the empty living room with red couch image to temp directory
+    # Save the human standing to temp directory
     human_image_path = tmp_path / "human_standing.png"
     with open(human_image_path, "wb") as f:
         f.write(found_image)
 
-    # 2. Generate an image of a yellow couch
+    # 2. Generate an image of a vibrant tech hoodie with AWS written on it
     prompt = "Generate a vibrant tech hoodie with AWS written on it"
     image_gen_result = agent.tool.nova_canvas(
         text=prompt,
@@ -167,12 +167,12 @@ def test_virtual_try_on_mask_garment(agent, tmp_path):
             break
     assert found_image is not None, "No image bytes found in result"
 
-    # Save the couch image to temp directory
+    # Save the hoodie image to temp directory
     hoodie_image_path = tmp_path / "ai_hoodie_aws.png"
     with open(hoodie_image_path, "wb") as f:
         f.write(found_image)
 
-    # 3. Virtual try on the couch on the empty living room
+    # 3. Virtual try on the hoodie on human image generated
     image_gen_result = agent.tool.nova_canvas(
         task_type="VIRTUAL_TRY_ON",
         model_id="amazon.nova-canvas-v1:0",
@@ -238,12 +238,12 @@ def test_virtual_try_on_prompt_mask(agent, tmp_path):
             break
     assert found_image is not None, "No image bytes found in result"
 
-    # Save the empty living room with red couch image to temp directory
+    # Save the empty living room with purple couch image to temp directory
     living_room_image_path = tmp_path / "empty_room_purple_couch.png"
     with open(living_room_image_path, "wb") as f:
         f.write(found_image)
 
-    # 2. Generate an image of a yellow couch
+    # 2. Generate an image of a green couch
     prompt = "Generate a green couch with white background"
     image_gen_result = agent.tool.nova_canvas(
         text=prompt,
@@ -269,7 +269,8 @@ def test_virtual_try_on_prompt_mask(agent, tmp_path):
     with open(couch_image_path, "wb") as f:
         f.write(found_image)
 
-    # 3. Virtual try on the couch on the empty living room
+    # 3. Virtual try on to superimpose the green couch in place of the purple couch 
+    # in the living room with.
     image_gen_result = agent.tool.nova_canvas(
         task_type="VIRTUAL_TRY_ON",
         model_id="amazon.nova-canvas-v1:0",
