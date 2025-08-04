@@ -76,7 +76,6 @@ class A2AClientToolProvider:
                 streaming=False,  # Use non-streaming mode for simpler response handling
             )
             self._client_factory = ClientFactory(config)
-            logger.info("ClientFactory initialized")
         return self._client_factory
 
     async def _create_a2a_card_resolver(self, url: str) -> A2ACardResolver:
