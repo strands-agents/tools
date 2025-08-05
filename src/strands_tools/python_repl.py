@@ -117,10 +117,14 @@ class OutputCapture:
     def __init__(self) -> None:
         self.stdout = StringIO()
         self.stderr = StringIO()
-        self._stdout = sys.stdout
-        self._stderr = sys.stderr
+        self._stdout = None
+        self._stderr = None
 
     def __enter__(self) -> "OutputCapture":
+        # Store the current stdout/stderr (which might be another capture)
+        self._stdout = sys.stdout
+        self._stderr = sys.stderr
+        # Replace with our capture
         sys.stdout = self.stdout
         sys.stderr = self.stderr
         return self
@@ -131,6 +135,7 @@ class OutputCapture:
         exc_val: Optional[BaseException],
         traceback: Optional[types.TracebackType],
     ) -> None:
+        # Restore the previous stdout/stderr
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
@@ -252,6 +257,12 @@ repl_state = ReplState()
 
 def clean_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text."""
+    # ECMA-48 compliant ANSI escape sequence pattern
+    # Pattern breakdown:
+    # - \x1B: ESC character (0x1B)
+    # - (?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]): Two alternatives:
+    #   - [@-Z\\-_]: Fe sequences (two-character escape sequences)
+    #   - \[[0-?]*[ -/]*[@-~]: CSI sequences with parameter/intermediate/final bytes
     ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
     return ansi_escape.sub("", text)
 

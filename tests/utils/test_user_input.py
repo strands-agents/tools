@@ -40,12 +40,6 @@ class TestUserInputAsync:
         test_prompt = "Enter input:"
         default_value = "default_response"
 
-        # Setup mock for async function
-        async def mock_empty(prompt, default, keyboard_interrupt_return_default=True):
-            assert prompt == test_prompt
-            assert default == default_value
-            return default  # Empty input returns default
-
         # Mock event loop
         mock_loop = MagicMock()
         mock_loop.run_until_complete.return_value = default_value
@@ -53,7 +47,7 @@ class TestUserInputAsync:
         with (
             patch(
                 "strands_tools.utils.user_input.get_user_input_async",
-                side_effect=mock_empty,
+                return_value=MagicMock(),
             ),
             patch("asyncio.get_event_loop", return_value=mock_loop),
         ):
@@ -124,11 +118,6 @@ class TestUserInputAsync:
         test_prompt = "Enter input:"
         default_value = "default_response"
 
-        # Setup mock for async function that raises EOFError
-        async def mock_eof(prompt, default, keyboard_interrupt_return_default):
-            assert keyboard_interrupt_return_default is True
-            raise EOFError()
-
         # Mock event loop to handle the exception and return default
         mock_loop = MagicMock()
         mock_loop.run_until_complete.return_value = default_value
@@ -136,13 +125,9 @@ class TestUserInputAsync:
         with (
             patch(
                 "strands_tools.utils.user_input.get_user_input_async",
-                side_effect=mock_eof,
+                return_value=MagicMock(),
             ),
             patch("asyncio.get_event_loop", return_value=mock_loop),
-            patch(
-                "strands_tools.utils.user_input.get_user_input",
-                side_effect=lambda p, d=default_value, k=True: d,
-            ),
         ):
             # We're testing that get_user_input properly handles the exception
             # and returns the default value

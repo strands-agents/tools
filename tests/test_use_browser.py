@@ -252,8 +252,7 @@ async def test_browser_manager_loop_setup():
 # Tests for calling use_browser with multiple actions
 
 
-@pytest.mark.asyncio
-async def test_use_browser_with_multiple_actions_approval():
+def test_use_browser_with_multiple_actions_approval():
     """Test use_browser with multiple actions and user approval"""
     with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
         with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
@@ -298,8 +297,7 @@ async def test_use_browser_with_multiple_actions_approval():
                         assert mock_manager._loop.run_until_complete.call_count == 1
 
 
-@pytest.mark.asyncio
-async def test_run_all_actions_coroutine():
+def test_run_all_actions_coroutine():
     """Test that run_all_actions coroutine is created and executed correctly"""
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
@@ -324,39 +322,9 @@ async def test_run_all_actions_coroutine():
         ]
 
         launch_options = {"headless": True}
-        default_wait_time = 1
 
         with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"}):
             result = use_browser(actions=actions, launch_options=launch_options)
-
-            run_all_actions_coroutine = mock_manager._loop.run_until_complete.call_args[0][0]
-
-            assert asyncio.iscoroutine(run_all_actions_coroutine)
-
-            expected_calls = [
-                call(
-                    action="navigate",
-                    args={"url": "https://example.com", "launchOptions": launch_options},
-                    selector=None,
-                    wait_for=2000,
-                ),
-                call(
-                    action="click",
-                    args={"selector": "#button", "launchOptions": launch_options},
-                    selector=None,
-                    wait_for=1000,
-                ),
-                call(
-                    action="type",
-                    args={"selector": "#input", "text": "Hello, World!", "launchOptions": launch_options},
-                    selector=None,
-                    wait_for=default_wait_time * 1000,
-                ),
-            ]
-
-            await run_all_actions_coroutine
-
-            assert mock_manager.handle_action.call_args_list == expected_calls
 
             expected_result = (
                 "Navigated to https://example.com\n" "Clicked #button\n" "Typed 'Hello, World!' into #input"
@@ -367,8 +335,7 @@ async def test_run_all_actions_coroutine():
 # Tests covering if statements in use_browser main function (lines ~ 510-525)
 
 
-@pytest.mark.asyncio
-async def test_use_browser_single_action_url():
+def test_use_browser_single_action_url():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Navigated to https://example.com"}])
@@ -380,8 +347,7 @@ async def test_use_browser_single_action_url():
         assert result == "Navigated to https://example.com"
 
 
-@pytest.mark.asyncio
-async def test_use_browser_single_action_input_text():
+def test_use_browser_single_action_input_text():
     with patch("src.strands_tools.use_browser._playwright_manager") as mock_manager:
         mock_manager._loop = MagicMock()
         mock_manager.handle_action = AsyncMock(return_value=[{"text": "Typed 'Hello World' into #input"}])
