@@ -1046,3 +1046,252 @@ def test_markdown_conversion_non_html():
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
     assert '"message": "hello"' in result_text  # Should still be JSON (no conversion for non-HTML)
+
+
+@responses.activate
+def test_digest_auth():
+    """Test digest authentication."""
+    responses.add(
+        responses.GET,
+        "https://api.example.com/digest-auth",
+        json={"authenticated": True},
+        status=200,
+    )
+
+    tool_use = {
+        "toolUseId": "test-digest-auth-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/digest-auth",
+            "auth_type": "digest",
+            "digest_auth": {"username": "user", "password": "pass"},
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+
+
+@responses.activate
+def test_api_key_auth():
+    """Test API key authentication."""
+    responses.add(
+        responses.GET,
+        "https://api.example.com/protected",
+        json={"status": "authenticated"},
+        status=200,
+        match=[responses.matchers.header_matcher({"X-API-Key": "test-api-key"})],
+    )
+
+    tool_use = {
+        "toolUseId": "test-api-key-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/protected",
+            "auth_type": "api_key",
+            "auth_token": "test-api-key",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.headers["X-API-Key"] == "test-api-key"
+
+
+@responses.activate
+def test_custom_auth():
+    """Test custom authentication."""
+    responses.add(
+        responses.GET,
+        "https://api.example.com/custom",
+        json={"status": "authenticated"},
+        status=200,
+        match=[responses.matchers.header_matcher({"Authorization": "Custom token123"})],
+    )
+
+    tool_use = {
+        "toolUseId": "test-custom-auth-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/custom",
+            "auth_type": "custom",
+            "auth_token": "Custom token123",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.headers["Authorization"] == "Custom token123"
+
+
+def test_aws_auth_missing_credentials():
+    """Test AWS auth with missing credentials."""
+    tool_use = {
+        "toolUseId": "test-aws-missing-id",
+        "input": {
+            "method": "GET",
+            "url": "https://s3.amazonaws.com/test-bucket",
+            "auth_type": "aws_sig_v4",
+            "aws_auth": {"service": "s3"},
+        },
+    }
+
+    # Mock get_aws_credentials to raise an exception
+    with (
+        patch("strands_tools.http_request.get_aws_credentials", side_effect=ValueError("No AWS credentials found")),
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+    ):
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "AWS authentication error" in result["content"][0]["text"]
+
+
+def test_basic_auth_missing_config():
+    """Test basic auth with missing configuration."""
+    tool_use = {
+        "toolUseId": "test-basic-missing-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/basic",
+            "auth_type": "basic",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "basic_auth configuration required" in result["content"][0]["text"]
+
+
+@responses.activate
+def test_request_exception_handling():
+    """Test handling of request exceptions."""
+    import requests
+    
+    tool_use = {
+        "toolUseId": "test-exception-id",
+        "input": {
+            "method": "GET",
+            "url": "https://nonexistent.example.com",
+        },
+    }
+
+    # Mock session.request to raise an exception
+    with (
+        patch("requests.Session.request", side_effect=requests.exceptions.ConnectionError("Connection failed")),
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+    ):
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "Connection failed" in result["content"][0]["text"]
+
+
+@responses.activate
+def test_gitlab_api_auth(mock_env_vars):
+    """Test GitLab API authentication with Bearer token."""
+    responses.add(
+        responses.GET,
+        "https://gitlab.com/api/v4/user",
+        json={"username": "testuser"},
+        status=200,
+        match=[responses.matchers.header_matcher({"Authorization": "Bearer gitlab-token-5678"})],
+    )
+
+    tool_use = {
+        "toolUseId": "test-gitlab-id",
+        "input": {
+            "method": "GET",
+            "url": "https://gitlab.com/api/v4/user",
+            "auth_type": "Bearer",
+            "auth_env_var": "GITLAB_TOKEN",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.headers["Authorization"] == "Bearer gitlab-token-5678"
+
+
+@responses.activate
+def test_session_config():
+    """Test session configuration options."""
+    responses.add(
+        responses.GET,
+        "https://example.com/session-test",
+        json={"status": "success"},
+        status=200,
+    )
+
+    tool_use = {
+        "toolUseId": "test-session-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/session-test",
+            "session_config": {
+                "keep_alive": True,
+                "max_retries": 5,
+                "pool_size": 20,
+                "cookie_persistence": False,
+            },
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+
+
+@responses.activate
+def test_html_content_detection():
+    """Test HTML content detection for markdown conversion."""
+    html_with_doctype = "<!DOCTYPE html><html><body><h1>Test</h1></body></html>"
+    
+    responses.add(
+        responses.GET,
+        "https://example.com/doctype",
+        body=html_with_doctype,
+        status=200,
+        content_type="text/plain",  # Non-HTML content type but HTML content
+    )
+
+    tool_use = {
+        "toolUseId": "test-html-detection-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/doctype",
+            "convert_to_markdown": True,
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    result_text = extract_result_text(result)
+    assert result["status"] == "success"
+    # Should detect HTML content despite non-HTML content type
+    assert "Test" in result_text
+    assert "<html>" not in result_text  # Should be converted

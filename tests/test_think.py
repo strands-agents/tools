@@ -641,3 +641,258 @@ def test_think_tool_recursion_prevention_multiple_cycles():
         assert "Cycle 1/3" in result["content"][0]["text"]
         assert "Cycle 2/3" in result["content"][0]["text"]
         assert "Cycle 3/3" in result["content"][0]["text"]
+
+def test_think_with_complex_reasoning_scenarios():
+    """Test think tool with complex multi-step reasoning scenarios."""
+    tool_use = {
+        "toolUseId": "test-complex-reasoning",
+        "name": "think",
+        "input": {
+            "thought": "Analyze the economic implications of renewable energy adoption on traditional energy sectors",
+            "cycle_count": 4,
+            "system_prompt": "You are an expert economic analyst with deep knowledge of energy markets.",
+        },
+    }
+
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        mock_result = AgentResult(
+            message={"content": [{"text": "Complex economic analysis of renewable energy transition."}]},
+            stop_reason="end_turn",
+            metrics=None,
+            state=MagicMock(),
+        )
+        mock_agent.return_value = mock_result
+
+        tool_input = tool_use.get("input", {})
+        result = think.think(
+            thought=tool_input.get("thought"),
+            cycle_count=tool_input.get("cycle_count"),
+            system_prompt=tool_input.get("system_prompt"),
+            agent=None,
+        )
+
+        assert result["status"] == "success"
+        assert "Cycle 1/4" in result["content"][0]["text"]
+        assert "Cycle 4/4" in result["content"][0]["text"]
+        assert mock_agent.call_count == 4
+
+
+def test_think_with_agent_state_persistence():
+    """Test that agent state and context is properly maintained across cycles."""
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {"calculator": MagicMock()}
+    mock_parent_agent.trace_attributes = {"session_id": "test-session"}
+
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        mock_result = AgentResult(
+            message={"content": [{"text": "Analysis with state persistence."}]},
+            stop_reason="end_turn",
+            metrics=None,
+            state=MagicMock(),
+        )
+        mock_agent.return_value = mock_result
+
+        result = think.think(
+            thought="Test thought with state persistence",
+            cycle_count=2,
+            system_prompt="You are an expert analyst.",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+        # Verify that trace_attributes were passed to each agent creation
+        assert mock_agent_class.call_count == 2
+        for call in mock_agent_class.call_args_list:
+            call_kwargs = call.kwargs
+            assert call_kwargs["trace_attributes"] == {"session_id": "test-session"}
+
+
+def test_think_error_recovery():
+    """Test think tool error recovery and graceful degradation."""
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        # First cycle succeeds, second fails, third succeeds
+        mock_agent = mock_agent_class.return_value
+        mock_results = [
+            AgentResult(
+                message={"content": [{"text": "First cycle success."}]},
+                stop_reason="end_turn",
+                metrics=None,
+                state=MagicMock(),
+            ),
+            Exception("Second cycle failed"),
+            AgentResult(
+                message={"content": [{"text": "Third cycle recovery."}]},
+                stop_reason="end_turn",
+                metrics=None,
+                state=MagicMock(),
+            ),
+        ]
+        mock_agent.side_effect = mock_results
+
+        result = think.think(
+            thought="Test error recovery",
+            cycle_count=3,
+            system_prompt="You are an expert analyst.",
+            agent=None,
+        )
+
+        # Should return error status due to exception in second cycle
+        assert result["status"] == "error"
+        assert "Error in think tool" in result["content"][0]["text"]
+
+
+def test_think_with_large_cycle_count():
+    """Test think tool with large cycle count for performance."""
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        mock_result = AgentResult(
+            message={"content": [{"text": "Cycle analysis."}]},
+            stop_reason="end_turn",
+            metrics=None,
+            state=MagicMock(),
+        )
+        mock_agent.return_value = mock_result
+
+        result = think.think(
+            thought="Test with many cycles",
+            cycle_count=10,
+            system_prompt="You are an expert analyst.",
+            agent=None,
+        )
+
+        assert result["status"] == "success"
+        assert "Cycle 1/10" in result["content"][0]["text"]
+        assert "Cycle 10/10" in result["content"][0]["text"]
+        assert mock_agent.call_count == 10
+
+
+def test_think_with_custom_model_configuration():
+    """Test think tool with custom model configuration from parent agent."""
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {"calculator": MagicMock()}
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.model = MagicMock()
+    mock_parent_agent.model.model_id = "custom-model-id"
+
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        mock_result = AgentResult(
+            message={"content": [{"text": "Analysis with custom model."}]},
+            stop_reason="end_turn",
+            metrics=None,
+            state=MagicMock(),
+        )
+        mock_agent.return_value = mock_result
+
+        result = think.think(
+            thought="Test with custom model",
+            cycle_count=1,
+            system_prompt="You are an expert analyst.",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+        # Verify model was passed to agent creation
+        mock_agent_class.assert_called_once()
+        call_kwargs = mock_agent_class.call_args.kwargs
+        assert call_kwargs["model"] == mock_parent_agent.model
+
+
+def test_thought_processor_advanced_features():
+    """Test ThoughtProcessor with advanced prompt engineering features."""
+    mock_console = MagicMock()
+    processor = think.ThoughtProcessor(
+        {"system_prompt": "Advanced system prompt", "messages": []}, 
+        mock_console
+    )
+
+    # Test with complex thought and high cycle count
+    prompt = processor.create_thinking_prompt(
+        "Analyze the intersection of artificial intelligence, quantum computing, and biotechnology",
+        5,
+        8
+    )
+    
+    assert "Analyze the intersection of artificial intelligence" in prompt
+    assert "Current Cycle: 5/8" in prompt
+
+
+def test_think_with_callback_handler():
+    """Test think tool with callback handler from parent agent."""
+    mock_callback_handler = MagicMock()
+    mock_parent_agent = MagicMock()
+    mock_parent_agent.tool_registry.registry = {}
+    mock_parent_agent.trace_attributes = {}
+    mock_parent_agent.callback_handler = mock_callback_handler
+
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        mock_result = AgentResult(
+            message={"content": [{"text": "Analysis with callback handler."}]},
+            stop_reason="end_turn",
+            metrics=None,
+            state=MagicMock(),
+        )
+        mock_agent.return_value = mock_result
+
+        result = think.think(
+            thought="Test with callback handler",
+            cycle_count=1,
+            system_prompt="You are an expert analyst.",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+        # Verify callback_handler was passed to agent creation
+        mock_agent_class.assert_called_once()
+        call_kwargs = mock_agent_class.call_args.kwargs
+        assert call_kwargs["callback_handler"] == mock_callback_handler
+
+
+def test_think_reasoning_chain_validation():
+    """Test validation of reasoning chain across multiple cycles."""
+    with patch("strands_tools.think.Agent") as mock_agent_class:
+        mock_agent = mock_agent_class.return_value
+        
+        # Create different responses for each cycle to simulate reasoning chain
+        cycle_responses = [
+            AgentResult(
+                message={"content": [{"text": "Initial analysis: Problem identification"}]},
+                stop_reason="end_turn",
+                metrics=None,
+                state=MagicMock(),
+            ),
+            AgentResult(
+                message={"content": [{"text": "Deeper analysis: Root cause analysis"}]},
+                stop_reason="end_turn",
+                metrics=None,
+                state=MagicMock(),
+            ),
+            AgentResult(
+                message={"content": [{"text": "Final synthesis: Solution recommendations"}]},
+                stop_reason="end_turn",
+                metrics=None,
+                state=MagicMock(),
+            ),
+        ]
+        mock_agent.side_effect = cycle_responses
+
+        result = think.think(
+            thought="Complex problem requiring multi-step reasoning",
+            cycle_count=3,
+            system_prompt="You are an expert problem solver.",
+            agent=None,
+        )
+
+        assert result["status"] == "success"
+        result_text = result["content"][0]["text"]
+        
+        # Verify all cycles are present in the output
+        assert "Cycle 1/3" in result_text
+        assert "Initial analysis: Problem identification" in result_text
+        assert "Cycle 2/3" in result_text
+        assert "Root cause analysis" in result_text
+        assert "Cycle 3/3" in result_text
+        assert "Solution recommendations" in result_text
