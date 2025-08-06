@@ -19,12 +19,34 @@ Usage:
     agent = Agent(tools=[browser.browser])
 
     # Use the browser
-    agent.tool.browser({
-        "action": {
-            "type": "navigate",
-            "url": "https://example.com"
+    agent.tool.browser(
+        browser_input={
+            "action": {
+                "type": "init_session",
+                "description": "Example ession",
+                "session_name": "example-session"
+            }
         }
-    })
+    )
+
+    agent.tool.browser(
+        browser_input={
+            "action": {
+                "type": "navigate",
+                "url": "https://example.com",
+                "session_name": "example-session"
+            }
+        }
+    )
+
+    agent.tool.browser(
+        browser_input={
+            "action": {
+                "type": "close",
+                "session_name": "example-session"
+            }
+        }
+    )
     ```
 """
 
