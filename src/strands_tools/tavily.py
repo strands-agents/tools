@@ -46,11 +46,12 @@ Environment Variables:
 See the function docstrings for complete parameter documentation.
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, Dict, List, Literal, Optional, Union
 
-import requests
+import aiohttp
 from rich.console import Console
 from rich.panel import Panel
 from strands import tool
@@ -248,11 +249,11 @@ def format_map_response(data: Dict[str, Any]) -> Panel:
     return Panel("\n".join(content), title="[bold cyan]Tavily Map Results", border_style="cyan")
 
 
-# Synchronous Tools
+# Tavily Tools
 
 
 @tool
-def tavily_search(
+async def tavily_search(
     query: str,
     search_depth: Optional[Literal["basic", "advanced"]] = None,
     topic: Optional[Literal["general", "news"]] = None,
@@ -369,13 +370,13 @@ def tavily_search(
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making Tavily search request for query: {query}")
-        response = requests.post(url, json=payload, headers=headers)
 
-        # Parse response
-        try:
-            data = response.json()
-        except ValueError as e:
-            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_search_response(data)
@@ -383,9 +384,9 @@ def tavily_search(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except requests.exceptions.Timeout:
+    except asyncio.TimeoutError:
         return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
-    except requests.exceptions.ConnectionError:
+    except aiohttp.ClientError:
         return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
         return {"status": "error", "content": [{"text": str(e)}]}
@@ -395,7 +396,7 @@ def tavily_search(
 
 
 @tool
-def tavily_extract(
+async def tavily_extract(
     urls: Union[str, List[str]],
     extract_depth: Optional[Literal["basic", "advanced"]] = None,
     format: Optional[Literal["markdown", "text"]] = None,
@@ -461,13 +462,13 @@ def tavily_extract(
 
         url_count = len(urls) if isinstance(urls, list) else 1
         logger.info(f"Making Tavily extract request for {url_count} URLs")
-        response = requests.post(url, json=payload, headers=headers)
 
-        # Parse response
-        try:
-            data = response.json()
-        except ValueError as e:
-            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_extract_response(data)
@@ -475,9 +476,9 @@ def tavily_extract(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except requests.exceptions.Timeout:
+    except asyncio.TimeoutError:
         return {"status": "error", "content": [{"text": "Request timeout. The API request took too long to complete."}]}
-    except requests.exceptions.ConnectionError:
+    except aiohttp.ClientError:
         return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
         return {"status": "error", "content": [{"text": str(e)}]}
@@ -487,7 +488,7 @@ def tavily_extract(
 
 
 @tool
-def tavily_crawl(
+async def tavily_crawl(
     url: str,
     max_depth: Optional[int] = None,
     max_breadth: Optional[int] = None,
@@ -600,13 +601,13 @@ def tavily_crawl(
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making Tavily crawl request for URL: {url}")
-        response = requests.post(api_url, json=payload, headers=headers)
 
-        # Parse response
-        try:
-            data = response.json()
-        except ValueError as e:
-            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_crawl_response(data)
@@ -614,12 +615,12 @@ def tavily_crawl(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except requests.exceptions.Timeout:
+    except asyncio.TimeoutError:
         return {
             "status": "error",
             "content": [{"text": "Request timeout. The crawl request took too long to complete."}],
         }
-    except requests.exceptions.ConnectionError:
+    except aiohttp.ClientError:
         return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
         return {"status": "error", "content": [{"text": str(e)}]}
@@ -629,7 +630,7 @@ def tavily_crawl(
 
 
 @tool
-def tavily_map(
+async def tavily_map(
     url: str,
     max_depth: Optional[int] = None,
     max_breadth: Optional[int] = None,
@@ -727,13 +728,13 @@ def tavily_map(
         payload = {key: value for key, value in payload.items() if value is not None}
 
         logger.info(f"Making Tavily map request for URL: {url}")
-        response = requests.post(api_url, json=payload, headers=headers)
 
-        # Parse response
-        try:
-            data = response.json()
-        except ValueError as e:
-            return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, json=payload, headers=headers) as response:
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    return {"status": "error", "content": [{"text": f"Failed to parse API response: {str(e)}"}]}
 
         # Format and display response
         panel = format_map_response(data)
@@ -741,12 +742,12 @@ def tavily_map(
 
         return {"status": "success", "content": [{"text": str(data)}]}
 
-    except requests.exceptions.Timeout:
+    except asyncio.TimeoutError:
         return {
             "status": "error",
             "content": [{"text": "Request timeout. The mapping request took too long to complete."}],
         }
-    except requests.exceptions.ConnectionError:
+    except aiohttp.ClientError:
         return {"status": "error", "content": [{"text": "Connection error. Please check your internet connection."}]}
     except ValueError as e:
         return {"status": "error", "content": [{"text": str(e)}]}
