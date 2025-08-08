@@ -14,8 +14,8 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from a2a.client import A2ACardResolver, A2AClient
-from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMessageRequest, TextPart
+from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+from a2a.types import AgentCard, Message, Part, Role, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
 
@@ -43,6 +43,7 @@ class A2AClientToolProvider:
         self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}
         self._httpx_client: httpx.AsyncClient | None = None
+        self._client_factory: ClientFactory | None = None
         self._initial_discovery_done: bool = False
 
     @property
@@ -66,15 +67,19 @@ class A2AClientToolProvider:
             self._httpx_client = httpx.AsyncClient(timeout=self.timeout)
         return self._httpx_client
 
-    async def _create_a2a_client(self, url: str) -> A2AClient:
-        """Create a new A2A client for the given URL."""
-        httpx_client = await self._ensure_httpx_client()
-        agent_card = await self._discover_agent_card(url)
-        logger.info(f"A2AClient created for {url}")
-        return A2AClient(httpx_client=httpx_client, agent_card=agent_card)
+    async def _ensure_client_factory(self) -> ClientFactory:
+        """Ensure the ClientFactory is initialized."""
+        if self._client_factory is None:
+            httpx_client = await self._ensure_httpx_client()
+            config = ClientConfig(
+                httpx_client=httpx_client,
+                streaming=False,  # Use non-streaming mode for simpler response handling
+            )
+            self._client_factory = ClientFactory(config)
+        return self._client_factory
 
     async def _create_a2a_card_resolver(self, url: str) -> A2ACardResolver:
-        """Create a new A2A client for the given URL."""
+        """Create a new A2A card resolver for the given URL."""
         httpx_client = await self._ensure_httpx_client()
         logger.info(f"A2ACardResolver created for {url}")
         return A2ACardResolver(httpx_client=httpx_client, base_url=url)
@@ -213,7 +218,11 @@ class A2AClientToolProvider:
 
         try:
             await self._ensure_discovered_known_agents()
-            client = await self._create_a2a_client(target_agent_url)
+
+            # Get the agent card and create client using factory
+            agent_card = await self._discover_agent_card(target_agent_url)
+            client_factory = await self._ensure_client_factory()
+            client = client_factory.create(agent_card)
 
             if message_id is None:
                 message_id = uuid4().hex
@@ -225,14 +234,45 @@ class A2AClientToolProvider:
                 message_id=message_id,
             )
 
-            request = SendMessageRequest(id=str(uuid4()), params=MessageSendParams(message=message))
-
             logger.info(f"Sending message to {target_agent_url}")
-            response = await client.send_message(request)
 
+            # With streaming=False, this will yield exactly one result
+            async for event in client.send_message(message):
+                if isinstance(event, Message):
+                    # Direct message response
+                    return {
+                        "status": "success",
+                        "response": event.model_dump(mode="python", exclude_none=True),
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+                elif isinstance(event, tuple) and len(event) == 2:
+                    # (Task, UpdateEvent) tuple - extract the task
+                    task, update_event = event
+                    return {
+                        "status": "success",
+                        "response": {
+                            "task": task.model_dump(mode="python", exclude_none=True),
+                            "update": (
+                                update_event.model_dump(mode="python", exclude_none=True) if update_event else None
+                            ),
+                        },
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+                else:
+                    # Fallback for unexpected response types
+                    return {
+                        "status": "success",
+                        "response": {"raw_response": str(event)},
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+
+            # This should never be reached with streaming=False
             return {
-                "status": "success",
-                "response": response.model_dump(mode="python", exclude_none=True),
+                "status": "error",
+                "error": "No response received from agent",
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
             }

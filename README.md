@@ -103,7 +103,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
 | shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
-| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with content filtering, news search, and domain management |
+| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
 | tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
 | tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
 | tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
@@ -276,11 +276,15 @@ response = agent.tool.http_request(
 
 ```python
 from strands import Agent
-from strands_tools import tavily
+from strands_tools.tavily import (
+    tavily_search, tavily_extract, tavily_crawl, tavily_map
+)
 
-agent = Agent(tools=[tavily])
+# For async usage, call the corresponding *_async function with await.
+# Synchronous usage 
+agent = Agent(tools=[tavily_search, tavily_extract, tavily_crawl, tavily_map])
 
-# web search
+# Real-time web search
 result = agent.tool.tavily_search(
     query="Latest developments in renewable energy",
     search_depth="advanced",
@@ -289,8 +293,12 @@ result = agent.tool.tavily_search(
     include_raw_content=True
 )
 
-# Extract content from single URL
-result = agent.tool.tavily_extract(urls=["www.tavily.com", "www.apple.com"])
+# Extract content from multiple URLs
+result = agent.tool.tavily_extract(
+    urls=["www.tavily.com", "www.apple.com"],
+    extract_depth="advanced",
+    format="markdown"
+)
 
 # Advanced crawl with instructions and filtering
 result = agent.tool.tavily_crawl(
@@ -302,19 +310,9 @@ result = agent.tool.tavily_crawl(
     include_images=True
 )
 
-# Basic website mapping (BETA)
-result = agent.tool.tavily_map(url="https://docs.example.com")
+# Basic website mapping
+result = agent.tool.tavily_map(url="www.tavily.com")
 
-# Advanced mapping with instructions and filtering
-result = agent.tool.tavily_map(
-    url="https://docs.example.com",
-    max_depth=2,
-    limit=50,
-    instructions="Find all documentation and tutorial pages",
-    select_paths=["/docs/.*", "/tutorials/.*"],
-    exclude_paths=["/internal/.*", "/admin/.*"],
-    categories=["Documentation"]
-)
 ```
 
 ### Python Code Execution
