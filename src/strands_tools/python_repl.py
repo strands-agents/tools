@@ -8,6 +8,7 @@ This module provides a tool for running Python code through a Strands Agent, wit
 - Error handling and logging
 - State reset capabilities
 - User confirmation for code execution
+- Configurable security modes (normal by default, restricted when enabled)
 
 Usage with Strands Agent:
 ```python
@@ -32,23 +33,27 @@ agent.tool.python_repl(code="print('Fresh start')", reset_state=True)
 ```
 """
 
+import ast
 import fcntl
 import logging
 import os
 import pty
 import re
+import resource
 import select
 import signal
 import struct
 import sys
 import termios
 import threading
+import time
 import traceback
 import types
 from datetime import datetime
+from enum import Enum
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import dill
 from rich import box
@@ -72,7 +77,8 @@ TOOL_SPEC = {
     "2. Code Preview: Shows syntax-highlighted code before execution\n"
     "3. State Management: Maintains variables between executions\n"
     "4. Error Handling: Captures and formats errors with suggestions\n"
-    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n\n"
+    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n"
+    "6. Security Modes: Normal (default) and Restricted (enabled with PYTHON_REPL_RESTRICTED_MODE=true)\n\n"
     "Key Features:\n"
     "- Persistent state between executions\n"
     "- Interactive PTY support for real-time feedback\n"
@@ -109,6 +115,746 @@ TOOL_SPEC = {
         }
     },
 }
+
+
+class SecurityMode(Enum):
+    """Security modes for Python REPL execution."""
+
+    NORMAL = "normal"
+    RESTRICTED = "restricted"
+
+
+class SecurityViolation(Exception):
+    """Raised when code violates security policies."""
+
+    pass
+
+
+class ASTSecurityValidator:
+    """AST-based security validator for Python code."""
+
+    # Dangerous imports that should be blocked
+    DANGEROUS_IMPORTS = {
+        "os",
+        "sys",
+        "subprocess",
+        "socket",
+        "urllib",
+        "requests",
+        "http",
+        "ftplib",
+        "smtplib",
+        "poplib",
+        "imaplib",
+        "telnetlib",
+        "webbrowser",
+        "ctypes",
+        "imp",
+        "importlib",
+        "pkgutil",
+        "runpy",
+        "code",
+        "codeop",
+        "compile",
+        "eval",
+        "exec",
+        "shutil",
+        "tempfile",
+        "glob",
+        "platform",
+        "getpass",
+        "multiprocessing",
+        "threading",
+        "asyncio",
+        "concurrent",
+        "pickle",
+        "dill",
+        "marshal",
+        "shelve",
+        "dbm",
+        "sqlite3",
+        "pip",
+        "conda",
+        "setuptools",
+        "distutils",
+    }
+
+    # Dangerous built-in functions
+    DANGEROUS_BUILTINS = {
+        "eval",
+        "exec",
+        "compile",
+        "input",
+        "raw_input",
+        "file",
+        "execfile",
+        "reload",
+        "vars",
+        "globals",
+        "locals",
+        "dir",
+        "hasattr",
+        "getattr",
+        "setattr",
+        "delattr",
+        "callable",
+        "isinstance",
+        "issubclass",
+    }
+
+    # Dangerous attributes
+    DANGEROUS_ATTRIBUTES = {
+        "__builtins__",
+        "__globals__",
+        "__locals__",
+        "__dict__",
+        "__class__",
+        "__bases__",
+        "__mro__",
+        "__subclasses__",
+        "__init__",
+        "__new__",
+        "__del__",
+        "__getattribute__",
+        "__setattr__",
+        "__delattr__",
+        "__getattr__",
+        "__getitem__",
+        "__setitem__",
+        "__delitem__",
+        "__call__",
+        "__enter__",
+        "__exit__",
+    }
+
+    # Safe built-in functions that are allowed
+    SAFE_BUILTINS = {
+        "abs",
+        "all",
+        "any",
+        "bin",
+        "bool",
+        "bytearray",
+        "bytes",
+        "chr",
+        "complex",
+        "dict",
+        "divmod",
+        "enumerate",
+        "filter",
+        "float",
+        "format",
+        "frozenset",
+        "hex",
+        "id",
+        "int",
+        "iter",
+        "len",
+        "list",
+        "map",
+        "max",
+        "min",
+        "next",
+        "oct",
+        "open",  # Allowed with path restrictions
+        "__import__",  # Allowed to import modules, but restricted in usage
+        "ord",
+        "pow",
+        "print",
+        "range",
+        "repr",
+        "reversed",
+        "round",
+        "set",
+        "slice",
+        "sorted",
+        "str",
+        "sum",
+        "tuple",
+        "type",
+        "zip",
+    }
+
+    def __init__(self, timeout: int = 30, memory_limit_mb: int = 100):
+        """Initialize AST security validator.
+
+        Args:
+            timeout: Maximum execution time in seconds
+            memory_limit_mb: Maximum memory usage in MB
+        """
+        self.timeout = timeout
+        self.memory_limit = memory_limit_mb * 1024 * 1024  # Convert to bytes
+
+        # Configure allowed paths for file operations
+        self.allowed_paths = self._get_allowed_paths()
+
+        # Map modules to their security risks
+        self.danger_reasons = {
+            "os": "system access and file operations",
+            "sys": "system internals and interpreter access",
+            "subprocess": "process execution and shell commands",
+            "socket": "network access and communication",
+            "urllib": "network requests and web access",
+            "requests": "HTTP requests and web access",
+            "http": "HTTP server and client operations",
+            "ftplib": "FTP protocol access",
+            "smtplib": "email sending capabilities",
+            "poplib": "email retrieval capabilities",
+            "imaplib": "email server access",
+            "telnetlib": "remote terminal access",
+            "webbrowser": "web browser control",
+            "ctypes": "low-level system calls and memory access",
+            "imp": "dynamic module import capabilities",
+            "importlib": "advanced import system manipulation",
+            "pkgutil": "package utilities and import manipulation",
+            "runpy": "script execution capabilities",
+            "code": "interactive code execution",
+            "codeop": "code compilation utilities",
+            "compile": "dynamic code compilation",
+            "eval": "dynamic expression evaluation",
+            "exec": "dynamic code execution",
+            "shutil": "file and directory operations",
+            "tempfile": "temporary file creation",
+            "glob": "file pattern matching and filesystem access",
+            "platform": "system information disclosure",
+            "getpass": "user credential access",
+            "multiprocessing": "parallel process creation",
+            "threading": "concurrent execution capabilities",
+            "asyncio": "asynchronous execution framework",
+            "concurrent": "concurrent execution utilities",
+            "pickle": "unsafe object serialization",
+            "dill": "advanced object serialization",
+            "marshal": "low-level object serialization",
+            "shelve": "persistent object storage",
+            "dbm": "database file access",
+            "sqlite3": "database access",
+            "pip": "package installation capabilities",
+            "conda": "package and environment management",
+            "setuptools": "package installation and distribution",
+            "distutils": "package building and installation",
+        }
+
+        # Map built-ins to their security risks
+        self.builtin_reasons = {
+            "eval": "dynamic expression evaluation",
+            "exec": "dynamic code execution",
+            "compile": "code compilation and execution",
+            "open": "file system access",
+            "input": "user input collection",
+            "raw_input": "user input collection",
+            "file": "file system access",
+            "execfile": "file execution",
+            "reload": "module reloading and manipulation",
+            "vars": "variable namespace access",
+            "globals": "global namespace access",
+            "locals": "local namespace access",
+            "dir": "object introspection",
+            "hasattr": "attribute existence checking",
+            "getattr": "dynamic attribute access",
+            "setattr": "dynamic attribute modification",
+            "delattr": "attribute deletion",
+            "callable": "function call introspection",
+            "isinstance": "type checking and introspection",
+            "issubclass": "inheritance introspection",
+        }
+
+        # Map attributes to their security risks
+        self.attribute_reasons = {
+            "__builtins__": "built-in function access",
+            "__globals__": "global namespace access",
+            "__locals__": "local namespace access",
+            "__dict__": "object dictionary access",
+            "__class__": "class introspection",
+            "__bases__": "inheritance introspection",
+            "__mro__": "method resolution order access",
+            "__subclasses__": "subclass enumeration",
+            "__init__": "constructor access",
+            "__new__": "object creation control",
+            "__del__": "destructor access",
+            "__getattribute__": "attribute access control",
+            "__setattr__": "attribute modification control",
+            "__delattr__": "attribute deletion control",
+            "__getattr__": "missing attribute access",
+            "__getitem__": "item access control",
+            "__setitem__": "item modification control",
+            "__delitem__": "item deletion control",
+            "__call__": "callable object control",
+            "__enter__": "context manager entry",
+            "__exit__": "context manager exit",
+        }
+
+    def _get_allowed_paths(self) -> List[str]:
+        """Get list of allowed paths for file operations.
+
+        Returns:
+            List of allowed absolute paths
+        """
+        allowed_paths = []
+
+        # Add current working directory if allowed
+        allow_current = os.environ.get("PYTHON_REPL_ALLOW_CURRENT_DIR", "true").lower()
+        if allow_current in ("true", "1", "yes", "on"):
+            allowed_paths.append(os.getcwd())
+
+        # Add custom allowed paths from environment
+        custom_paths = os.environ.get("PYTHON_REPL_ALLOWED_PATHS", "")
+        if custom_paths:
+            for path in custom_paths.split(","):
+                path = path.strip()
+                if path:
+                    # Convert to absolute path and normalize
+                    abs_path = os.path.abspath(os.path.expanduser(path))
+                    if os.path.exists(abs_path) and os.path.isdir(abs_path):
+                        allowed_paths.append(abs_path)
+                    else:
+                        logger.warning(f"Allowed path does not exist or is not a directory: {abs_path}")
+
+        # Add some safe default temporary directories if no paths configured
+        if not allowed_paths:
+            temp_dirs = ["/tmp", "/var/tmp"]
+            for temp_dir in temp_dirs:
+                if os.path.exists(temp_dir) and os.path.isdir(temp_dir):
+                    allowed_paths.append(temp_dir)
+                    break
+
+        logger.debug(f"Allowed paths for file operations: {allowed_paths}")
+        return allowed_paths
+
+    def _is_path_allowed(self, file_path: str) -> bool:
+        """Check if a file path is within allowed directories.
+
+        Args:
+            file_path: Path to check
+
+        Returns:
+            True if path is allowed, False otherwise
+        """
+        if not self.allowed_paths:
+            return False
+
+        try:
+            # Convert to absolute path and resolve symlinks
+            abs_path = os.path.abspath(os.path.expanduser(file_path))
+            real_path = os.path.realpath(abs_path)
+
+            # Check if the path is within any allowed directory
+            for allowed_path in self.allowed_paths:
+                allowed_real = os.path.realpath(allowed_path)
+                # Check if the file path starts with the allowed path
+                if real_path.startswith(allowed_real + os.sep) or real_path == allowed_real:
+                    return True
+
+            return False
+
+        except (OSError, ValueError):
+            # If there's any error resolving the path, deny access
+            return False
+
+    def validate_code(self, code: str) -> None:
+        """Validate Python code using AST analysis.
+
+        Args:
+            code: Python code to validate
+
+        Raises:
+            SecurityViolation: If code violates security policies
+            SyntaxError: If code has syntax errors
+        """
+        try:
+            # Parse code into AST
+            tree = ast.parse(code)
+
+            # Walk through AST nodes and check for violations
+            for node in ast.walk(tree):
+                self._check_node(node)
+
+        except SyntaxError as e:
+            raise SyntaxError(f"Syntax error in code: {e}") from e
+        except SecurityViolation:
+            raise
+        except Exception as e:
+            raise SecurityViolation(f"Code analysis failed: {e}") from e
+
+    def _check_node(self, node: ast.AST) -> None:
+        """Check individual AST node for security violations.
+
+        Args:
+            node: AST node to check
+
+        Raises:
+            SecurityViolation: If node violates security policies
+        """
+        # Check imports
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            self._check_imports(node)
+
+        # Check function calls
+        elif isinstance(node, ast.Call):
+            self._check_function_call(node)
+
+        # Check attribute access
+        elif isinstance(node, ast.Attribute):
+            self._check_attribute_access(node)
+
+        # Check name access
+        elif isinstance(node, ast.Name):
+            self._check_name_access(node)
+
+        # Check for suspicious patterns
+        self._check_suspicious_patterns(node)
+
+    def _check_imports(self, node: Union[ast.Import, ast.ImportFrom]) -> None:
+        """Check import statements for dangerous modules.
+
+        Args:
+            node: Import AST node
+
+        Raises:
+            SecurityViolation: If importing dangerous module
+        """
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name.split(".")[0]
+                if module_name in self.DANGEROUS_IMPORTS:
+                    reason = self.danger_reasons.get(module_name, "potentially dangerous operations")
+                    raise SecurityViolation(
+                        f"Import of module '{module_name}' is blocked: {reason}. "
+                        f"This module is not allowed in restricted security mode."
+                    )
+
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                module_name = node.module.split(".")[0]
+                if module_name in self.DANGEROUS_IMPORTS:
+                    reason = self.danger_reasons.get(module_name, "potentially dangerous operations")
+                    raise SecurityViolation(
+                        f"Import from module '{module_name}' is blocked: {reason}. "
+                        f"This module is not allowed in restricted security mode."
+                    )
+
+    def _check_function_call(self, node: ast.Call) -> None:
+        """Check function calls for dangerous operations.
+
+        Args:
+            node: Call AST node
+
+        Raises:
+            SecurityViolation: If calling dangerous function
+        """
+        # Check direct function calls
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+
+            # Special handling for open() function to check file paths
+            if func_name == "open" and len(node.args) > 0:
+                self._check_file_access(node)
+                return
+
+            # Special handling for __import__() function to check module names
+            if func_name == "__import__" and len(node.args) > 0:
+                self._check_import_call(node)
+                return
+
+            if func_name in self.DANGEROUS_BUILTINS:
+                reason = self.builtin_reasons.get(func_name, "potentially dangerous operations")
+                raise SecurityViolation(
+                    f"Call to built-in function '{func_name}' is blocked: {reason}. "
+                    f"This function is not allowed in restricted security mode."
+                )
+
+        # Check method calls that might be dangerous
+        elif isinstance(node.func, ast.Attribute):
+            attr_name = node.func.attr
+            if attr_name in self.DANGEROUS_ATTRIBUTES:
+                reason = self.attribute_reasons.get(attr_name, "potentially dangerous operations")
+                raise SecurityViolation(
+                    f"Call to method '{attr_name}' is blocked: {reason}. "
+                    f"This method is not allowed in restricted security mode."
+                )
+
+    def _check_file_access(self, node: ast.Call) -> None:
+        """Check file access operations for path restrictions.
+
+        Args:
+            node: Call AST node for file operations
+
+        Raises:
+            SecurityViolation: If file access violates path restrictions
+        """
+        if not node.args:
+            return
+
+        # Get the file path argument
+        file_arg = node.args[0]
+
+        # Only check string literals for now (could be extended to variables)
+        if isinstance(file_arg, ast.Constant) and isinstance(file_arg.value, str):
+            file_path = file_arg.value
+
+            if not self._is_path_allowed(file_path):
+                allowed_paths_str = ", ".join(self.allowed_paths) if self.allowed_paths else "none"
+                raise SecurityViolation(
+                    f"File access to '{file_path}' is blocked: path is outside allowed directories. "
+                    f"Allowed paths: {allowed_paths_str}. "
+                    f"Configure PYTHON_REPL_ALLOWED_PATHS and PYTHON_REPL_ALLOW_CURRENT_DIR to modify restrictions."
+                )
+
+    def _check_import_call(self, node: ast.Call) -> None:
+        """Check __import__() function calls for dangerous modules.
+
+        Args:
+            node: Call AST node for __import__ operations
+
+        Raises:
+            SecurityViolation: If importing dangerous module
+        """
+        if not node.args:
+            return
+
+        # Get the module name argument
+        module_arg = node.args[0]
+
+        # Only check string literals for now (could be extended to variables)
+        if isinstance(module_arg, ast.Constant) and isinstance(module_arg.value, str):
+            module_name = module_arg.value.split(".")[0]  # Get top-level module
+
+            if module_name in self.DANGEROUS_IMPORTS:
+                reason = self.danger_reasons.get(module_name, "potentially dangerous operations")
+                raise SecurityViolation(
+                    f"Import of module '{module_name}' is blocked: {reason}. "
+                    f"This module is not allowed in restricted security mode."
+                )
+
+    def _check_attribute_access(self, node: ast.Attribute) -> None:
+        """Check attribute access for dangerous attributes.
+
+        Args:
+            node: Attribute AST node
+
+        Raises:
+            SecurityViolation: If accessing dangerous attribute
+        """
+        if node.attr in self.DANGEROUS_ATTRIBUTES:
+            reason = self.attribute_reasons.get(node.attr, "potentially dangerous operations")
+            raise SecurityViolation(
+                f"Access to attribute '{node.attr}' is blocked: {reason}. "
+                f"This attribute is not allowed in restricted security mode."
+            )
+
+    def _check_name_access(self, node: ast.Name) -> None:
+        """Check name access for dangerous built-ins.
+
+        Args:
+            node: Name AST node
+
+        Raises:
+            SecurityViolation: If accessing dangerous name
+        """
+        if isinstance(node.ctx, ast.Load) and node.id in self.DANGEROUS_BUILTINS:
+            reason = self.builtin_reasons.get(node.id, "potentially dangerous operations")
+            raise SecurityViolation(
+                f"Access to built-in '{node.id}' is blocked: {reason}. "
+                f"This built-in is not allowed in restricted security mode."
+            )
+
+    def _check_suspicious_patterns(self, node: ast.AST) -> None:
+        """Check for suspicious code patterns that could be dangerous.
+
+        Args:
+            node: AST node to check
+
+        Raises:
+            SecurityViolation: If suspicious pattern is detected
+        """
+        # Check for infinite loops
+        if isinstance(node, ast.While):
+            if isinstance(node.test, ast.Constant) and node.test.value is True:
+                raise SecurityViolation(
+                    "Infinite loop detected (while True): can cause system hang. " "Use bounded loops instead."
+                )
+            elif isinstance(node.test, ast.NameConstant) and node.test.value is True:
+                raise SecurityViolation(
+                    "Infinite loop detected (while True): can cause system hang. " "Use bounded loops instead."
+                )
+
+        # Check for excessively large ranges
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "range" and len(node.args) > 0:
+                # Check the last argument (stop value) for excessive size
+                last_arg = node.args[-1]
+                if isinstance(last_arg, ast.Constant) and isinstance(last_arg.value, int):
+                    if last_arg.value > 1000000:  # 1 million limit
+                        raise SecurityViolation(
+                            f"Large range detected ({last_arg.value:,}): can cause memory exhaustion. "
+                            f"Maximum allowed range is 1,000,000."
+                        )
+                elif isinstance(last_arg, ast.Num) and last_arg.n > 1000000:
+                    raise SecurityViolation(
+                        f"Large range detected ({last_arg.n:,}): can cause memory exhaustion. "
+                        f"Maximum allowed range is 1,000,000."
+                    )
+
+        # Check for deeply nested structures
+        elif isinstance(node, (ast.For, ast.While, ast.If, ast.With, ast.Try)):
+            # Count nesting depth starting from this node (depth = 1)
+            depth = self._get_nesting_depth(node, 1)
+            if depth > 10:  # Maximum nesting depth
+                raise SecurityViolation(
+                    f"Excessive nesting depth ({depth}): can cause stack overflow. "
+                    f"Maximum allowed nesting depth is 10."
+                )
+
+    def _get_nesting_depth(self, node: ast.AST, current_depth: int = 0) -> int:
+        """Calculate the maximum nesting depth from a given node.
+
+        Args:
+            node: Starting AST node
+            current_depth: Current depth level
+
+        Returns:
+            Maximum nesting depth found
+        """
+        max_depth = current_depth
+
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.For, ast.While, ast.If, ast.With, ast.Try, ast.FunctionDef, ast.ClassDef)):
+                child_depth = self._get_nesting_depth(child, current_depth + 1)
+                max_depth = max(max_depth, child_depth)
+
+        return max_depth
+
+    def create_safe_namespace(self, base_namespace: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a safe namespace with restricted built-ins.
+
+        Args:
+            base_namespace: Base namespace to filter
+
+        Returns:
+            Filtered namespace with only safe built-ins
+        """
+        # Start with base namespace
+        safe_namespace = base_namespace.copy()
+
+        # Create restricted __builtins__
+        safe_builtins = {}
+        import builtins
+
+        for name in self.SAFE_BUILTINS:
+            if hasattr(builtins, name):
+                safe_builtins[name] = getattr(builtins, name)
+
+        # Add safe namespace items
+        safe_namespace["__builtins__"] = safe_builtins
+        safe_namespace["__name__"] = "__main__"
+
+        return safe_namespace
+
+    def execute_with_limits(self, code: str, namespace: Dict[str, Any]) -> None:
+        """Execute code with resource limits.
+
+        Args:
+            code: Python code to execute
+            namespace: Execution namespace
+
+        Raises:
+            SecurityViolation: If execution violates limits
+        """
+        # Set memory limit
+        try:
+            current_soft, current_hard = resource.getrlimit(resource.RLIMIT_AS)
+            logger.debug(f"Current memory limits: soft={current_soft}, hard={current_hard}")
+
+            if self.memory_limit > current_hard and current_hard != resource.RLIM_INFINITY:
+                new_limit = min(self.memory_limit, current_hard)
+                logger.warning(
+                    f"Requested memory limit {self.memory_limit} exceeds system limit {current_hard}, using {new_limit}"
+                )
+                resource.setrlimit(resource.RLIMIT_AS, (new_limit, current_hard))
+            else:
+                resource.setrlimit(resource.RLIMIT_AS, (self.memory_limit, self.memory_limit))
+
+        except (OSError, ValueError) as e:
+            logger.warning(f"Could not set memory limit: {e}")
+
+        # Set CPU time limit
+        try:
+            resource.setrlimit(resource.RLIMIT_CPU, (self.timeout, self.timeout))
+        except (OSError, ValueError) as e:
+            logger.warning(f"Could not set CPU time limit: {e}")
+
+        # Execute with timeout
+        start_time = time.time()
+
+        try:
+            exec(code, namespace)
+        except MemoryError as e:
+            raise SecurityViolation(f"Code exceeded memory limit of {self.memory_limit // (1024 * 1024)}MB") from e
+        except KeyboardInterrupt as e:
+            raise SecurityViolation(f"Code execution timed out after {self.timeout} seconds") from e
+        except Exception as e:
+            # Check if it's a timeout
+            if time.time() - start_time > self.timeout:
+                raise SecurityViolation(f"Code execution timed out after {self.timeout} seconds") from e
+            raise
+
+
+class SecurityManager:
+    """Manages security modes for Python REPL."""
+
+    def __init__(self):
+        """Initialize security manager."""
+        self.mode = self._get_security_mode()
+        self.ast_validator = ASTSecurityValidator(
+            timeout=int(os.environ.get("PYTHON_REPL_TIMEOUT", "30")),
+            memory_limit_mb=int(os.environ.get("PYTHON_REPL_MEMORY_LIMIT_MB", "100")),
+        )
+
+        # Log security mode
+        logger.info(f"Python REPL security mode: {self.mode.value}")
+
+    def _get_security_mode(self) -> SecurityMode:
+        """Get security mode from environment variable.
+
+        Returns:
+            SecurityMode enum value
+        """
+        # Check if restricted mode is enabled via boolean flag
+        restricted_mode = os.environ.get("PYTHON_REPL_RESTRICTED_MODE", "false").lower()
+
+        if restricted_mode in ("true", "1", "yes", "on"):
+            return SecurityMode.RESTRICTED
+        else:
+            return SecurityMode.NORMAL
+
+    def validate_and_execute(self, code: str, namespace: Dict[str, Any]) -> None:
+        """Validate and execute code based on security mode.
+
+        Args:
+            code: Python code to execute
+            namespace: Execution namespace
+
+        Raises:
+            SecurityViolation: If code violates security policies
+            SyntaxError: If code has syntax errors
+        """
+        if self.mode == SecurityMode.NORMAL:
+            # Normal mode - execute without restrictions
+            exec(code, namespace)
+
+        elif self.mode == SecurityMode.RESTRICTED:
+            # Restricted mode - validate then execute with restrictions
+            self.ast_validator.validate_code(code)
+            safe_namespace = self.ast_validator.create_safe_namespace(namespace)
+            self.ast_validator.execute_with_limits(code, safe_namespace)
+
+            # Update original namespace with safe results
+            for key, value in safe_namespace.items():
+                if not key.startswith("__") and key not in ["__builtins__", "__name__"]:
+                    namespace[key] = value
+
+
+# Create global security manager
+security_manager = SecurityManager()
 
 
 class OutputCapture:
@@ -204,8 +950,8 @@ class ReplState:
             logger.error(f"Error saving state: {e}")
 
     def execute(self, code: str) -> None:
-        """Execute code and save state."""
-        exec(code, self._namespace)
+        """Execute code using security manager and save state."""
+        security_manager.validate_and_execute(code, self._namespace)
         self.save_state()
 
     def get_namespace(self) -> dict:
@@ -269,7 +1015,7 @@ class PtyManager:
         self.callback = callback
 
     def start(self, code: str) -> None:
-        """Start PTY session with code execution."""
+        """Start PTY session with code execution using security manager."""
         # Create PTY
         self.supervisor_fd, self.worker_fd = pty.openpty()
 
@@ -288,12 +1034,15 @@ class PtyManager:
                 os.dup2(self.worker_fd, 1)
                 os.dup2(self.worker_fd, 2)
 
-                # Execute in REPL namespace
+                # Execute using security manager with REPL namespace
                 namespace = repl_state.get_namespace()
-                exec(code, namespace)
+                security_manager.validate_and_execute(code, namespace)
 
                 os._exit(0)
 
+            except SecurityViolation as e:
+                logger.warning(f"Security violation: {e}")
+                os._exit(1)
             except Exception:
                 traceback.print_exc(file=sys.stderr)
                 os._exit(1)
@@ -567,6 +1316,13 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
         )
 
+        # Display security mode info
+        security_info = f"Security Mode: {security_manager.mode.value.upper()}"
+        if security_manager.mode == SecurityMode.RESTRICTED:
+            memory_mb = security_manager.ast_validator.memory_limit // (1024 * 1024)
+            security_info += f" (Timeout: {security_manager.ast_validator.timeout}s, Memory: {memory_mb}MB)"
+        console.print(f"[yellow]{security_info}[/]")
+
         # Add permissions check - only show confirmation dialog if not
         # in BYPASS_TOOL_CONSENT mode and not in non_interactive mode
         if not strands_dev and not non_interactive_mode:
@@ -674,6 +1430,29 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
             repl_state.clear_state()
             # Re-raise the exception after cleanup
             raise
+
+    except SecurityViolation as e:
+        # Handle security violations specifically
+        error_time = datetime.now()
+
+        console.print(
+            Panel(
+                f"[bold red]🔒 Security Violation:[/bold red]\n{str(e)}",
+                title="[bold red]Security Policy Violation[/]",
+                border_style="red",
+            )
+        )
+
+        # Log security violation
+        logger.warning(f"Security violation: {e}")
+
+        error_msg = f"[{error_time.isoformat()}] Security Violation: {str(e)}"
+
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": error_msg}],
+        }
 
     except Exception as e:
         error_tb = traceback.format_exc()

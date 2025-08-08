@@ -730,6 +730,11 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
+| PYTHON_REPL_RESTRICTED_MODE | Enable/disable restricted mode | false |
+| PYTHON_REPL_ALLOWED_PATHS | Comma-separated allowed directories | None |
+| PYTHON_REPL_ALLOW_CURRENT_DIR | Allow current directory access | true |
+| PYTHON_REPL_TIMEOUT | Execution timeout in seconds | 30 |
+| PYTHON_REPL_MEMORY_LIMIT_MB | Memory limit in MB | 100 |
 
 #### Shell Tool
 
