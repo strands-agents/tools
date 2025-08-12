@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_IDENTIFIER = "aws.browser.v1"
 
+
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 

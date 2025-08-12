@@ -705,7 +705,7 @@ class TestDiagramTool:
 
             result = diagram(diagram_type="graph", nodes=nodes, edges=edges)
 
-            mock_builder.assert_called_once_with(nodes, edges, "diagram", None)
+            mock_builder.assert_called_once_with(nodes, edges, "diagram", None, True)
             mock_instance.render.assert_called_once_with("graph", "png")
             assert "Created graph diagram" in result
 
@@ -721,7 +721,7 @@ class TestDiagramTool:
 
             result = diagram(diagram_type="cloud", nodes=nodes, edges=edges, title="AWS Architecture")
 
-            mock_builder.assert_called_once_with(nodes, edges, "AWS Architecture", None)
+            mock_builder.assert_called_once_with(nodes, edges, "AWS Architecture", None, True)
             mock_instance.render.assert_called_once_with("cloud", "png")
             assert "Created cloud diagram" in result
 
@@ -739,7 +739,7 @@ class TestDiagramTool:
 
             result = diagram(diagram_type="class", elements=elements, relationships=relationships, output_format="svg")
 
-            mock_builder.assert_called_once_with("class", elements, relationships, "diagram", None)
+            mock_builder.assert_called_once_with("class", elements, relationships, "diagram", None, True)
             mock_instance.render.assert_called_once_with("svg")
             assert "Created class UML diagram" in result
 
