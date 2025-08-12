@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import AgentCard, Message, Part, Role, TextPart, PushNotificationConfig
+from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
 
