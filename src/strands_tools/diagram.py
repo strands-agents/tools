@@ -157,11 +157,12 @@ COMMON_ALIASES = aws_registry.aliases
 class DiagramBuilder:
     """Unified diagram builder that handles all diagram types and formats"""
 
-    def __init__(self, nodes, edges=None, title="diagram", style=None):
+    def __init__(self, nodes, edges=None, title="diagram", style=None, open_diagram_flag=True):
         self.nodes = nodes
         self.edges = edges or []
         self.title = title
         self.style = style or {}
+        self.open_diagram_flag = open_diagram_flag
 
     def render(self, diagram_type: str, output_format: str) -> str:
         """Main render method that delegates to specific renderers"""
@@ -257,7 +258,8 @@ class DiagramBuilder:
                         from_node >> to_node
 
             output_file = f"{output_path}.{output_format}"
-            open_diagram(output_file)
+            if self.open_diagram_flag:
+                open_diagram(output_file)
             return output_file
         except Exception as e:
             logging.error(f"Failed to create cloud diagram: {e}")
@@ -287,7 +289,8 @@ class DiagramBuilder:
 
         output_path = save_diagram_to_directory(self.title, "")
         rendered_path = dot.render(filename=output_path, format=output_format, cleanup=False)
-        open_diagram(rendered_path)
+        if self.open_diagram_flag:
+            open_diagram(rendered_path)
         return rendered_path
 
     def _render_network(self, output_format: str) -> str:
@@ -348,7 +351,8 @@ class DiagramBuilder:
         output_path = save_diagram_to_directory(self.title, output_format)
         plt.savefig(output_path, bbox_inches="tight")
         plt.close()
-        open_diagram(output_path)
+        if self.open_diagram_flag:
+            open_diagram(output_path)
         return output_path
 
 
@@ -362,12 +366,14 @@ class UMLDiagramBuilder:
         relationships: List[Dict] = None,
         title: str = "UML_Diagram",
         style: Dict = None,
+        open_diagram_flag: bool = True,
     ):
         self.diagram_type = diagram_type.lower().replace(" ", "_").replace("-", "_")
         self.elements = elements
         self.relationships = relationships or []
         self.title = title
         self.style = style or {}
+        self.open_diagram_flag = open_diagram_flag
 
     def render(self, output_format: str = "png") -> str:
         """Render the UML diagram based on type"""
@@ -690,7 +696,8 @@ class UMLDiagramBuilder:
         plt.tight_layout()
         plt.savefig(output_path, bbox_inches="tight", dpi=300)
         plt.close()
-        open_diagram(output_path)
+        if self.open_diagram_flag:
+            open_diagram(output_path)
         return output_path
 
     # Simplified implementations for other UML types
@@ -994,7 +1001,8 @@ class UMLDiagramBuilder:
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
-        open_diagram(output_path)
+        if self.open_diagram_flag:
+            open_diagram(output_path)
         return output_path
 
     # Helper methods for UML diagrams
@@ -1029,7 +1037,8 @@ class UMLDiagramBuilder:
         """Save diagram and return file path"""
         output_path = save_diagram_to_directory(self.title, "")
         rendered_path = dot.render(filename=output_path, format=output_format, cleanup=False)
-        open_diagram(rendered_path)
+        if self.open_diagram_flag:
+            open_diagram(rendered_path)
         return rendered_path
 
 
@@ -1094,6 +1103,7 @@ def diagram(
     style: Dict[str, str] = None,
     elements: List[Dict[str, str]] = None,
     relationships: List[Dict[str, Union[str, int]]] = None,
+    open_diagram_flag: bool = True,
 ) -> str:
     """Create diagrams including AWS cloud diagrams and all 14 UML diagram types.
 
@@ -1110,6 +1120,7 @@ def diagram(
             - Example: "Generate mermaid code for a class diagram with User and Order classes"
         title: Title of the diagram
         style: Style parameters (e.g., {"rankdir": "LR"} for left-to-right layout)
+        open_diagram_flag: Whether to open the diagram after creation
 
     Note:
         For STATE MACHINE diagrams: Include an initial state (start point) and final state(s) (end points)
@@ -1153,13 +1164,13 @@ def diagram(
         if diagram_type in uml_types:
             if not elements:
                 return "Error: 'elements' parameter is required for UML diagrams"
-            builder = UMLDiagramBuilder(diagram_type, elements, relationships, title, style)
+            builder = UMLDiagramBuilder(diagram_type, elements, relationships, title, style, open_diagram_flag)
             output_path = builder.render(output_format)
             return f"Created {diagram_type} UML diagram: {output_path}"
         else:
             if not nodes:
                 return "Error: 'nodes' parameter is required for basic diagrams"
-            builder = DiagramBuilder(nodes, edges, title, style)
+            builder = DiagramBuilder(nodes, edges, title, style, open_diagram_flag)
             output_path = builder.render(diagram_type, output_format)
             return f"Created {diagram_type} diagram: {output_path}"
     except Exception as e:
