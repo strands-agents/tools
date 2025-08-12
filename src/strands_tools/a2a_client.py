@@ -6,6 +6,7 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
+- Push notification support for real-time task completion alerts
 """
 
 import asyncio
@@ -15,7 +16,7 @@ from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import AgentCard, Message, Part, Role, TextPart
+from a2a.types import AgentCard, Message, Part, Role, TextPart, PushNotificationConfig
 from strands import tool
 from strands.types.tools import AgentTool
 
@@ -31,13 +32,17 @@ class A2AClientToolProvider:
         self,
         known_agent_urls: list[str] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
+        webhook_url: str | None = None,
+        webhook_token: str | None = None,
     ):
         """
         Initialize A2A client tool provider.
 
         Args:
-            agent_urls: List of A2A agent URLs to use (defaults to None)
-            timeout: Timeout for HTTP operations in seconds (defaults to 30)
+            known_agent_urls: List of A2A agent URLs to use (defaults to None)
+            timeout: Timeout for HTTP operations in seconds (defaults to 300)
+            webhook_url: Optional webhook URL for push notifications
+            webhook_token: Optional authentication token for webhook notifications
         """
         self.timeout = timeout
         self._known_agent_urls: list[str] = known_agent_urls or []
@@ -45,6 +50,18 @@ class A2AClientToolProvider:
         self._httpx_client: httpx.AsyncClient | None = None
         self._client_factory: ClientFactory | None = None
         self._initial_discovery_done: bool = False
+        
+        # Push notification configuration
+        self.webhook_url = webhook_url
+        self.webhook_token = webhook_token
+        self._push_config: PushNotificationConfig | None = None
+        
+        if webhook_url and webhook_token:
+            self._push_config = PushNotificationConfig(
+                id=f"strands-webhook-{uuid4().hex[:8]}",
+                url=webhook_url,
+                token=webhook_token
+            )
 
     @property
     def tools(self) -> list[AgentTool]:
@@ -74,6 +91,7 @@ class A2AClientToolProvider:
             config = ClientConfig(
                 httpx_client=httpx_client,
                 streaming=False,  # Use non-streaming mode for simpler response handling
+                push_notification_configs=[self._push_config] if self._push_config else [],
             )
             self._client_factory = ClientFactory(config)
         return self._client_factory
