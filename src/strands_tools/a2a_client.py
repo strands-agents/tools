@@ -50,17 +50,15 @@ class A2AClientToolProvider:
         self._httpx_client: httpx.AsyncClient | None = None
         self._client_factory: ClientFactory | None = None
         self._initial_discovery_done: bool = False
-        
+
         # Push notification configuration
-        self.webhook_url = webhook_url
-        self.webhook_token = webhook_token
+        self._webhook_url = webhook_url
+        self._webhook_token = webhook_token
         self._push_config: PushNotificationConfig | None = None
-        
-        if webhook_url and webhook_token:
+
+        if self._webhook_url and self._webhook_token:
             self._push_config = PushNotificationConfig(
-                id=f"strands-webhook-{uuid4().hex[:8]}",
-                url=webhook_url,
-                token=webhook_token
+                id=f"strands-webhook-{uuid4().hex[:8]}", url=self._webhook_url, token=self._webhook_token
             )
 
     @property
