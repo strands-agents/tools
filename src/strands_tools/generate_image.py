@@ -68,6 +68,7 @@ import re
 from typing import Any
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
 
 STABLE_DIFFUSION_MODEL_ID = [
@@ -205,7 +206,8 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         negative_prompt = tool_input.get("negative_prompt", "bad lighting, harsh lighting")
 
         # Create a Bedrock Runtime client
-        client = boto3.client("bedrock-runtime", region_name=region)
+        config = BotocoreConfig(user_agent_extra="strands-agents-generate-image")
+        client = boto3.client("bedrock-runtime", region_name=region, config=config)
 
         # Initialize variables for later use
         base64_image_data = None

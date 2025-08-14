@@ -7,6 +7,7 @@ from unittest import mock
 
 import boto3
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import retrieve
 
@@ -137,8 +138,16 @@ def test_retrieve_tool_direct(mock_boto3_client):
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
 
-    # Verify that boto3 client was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+    # Verify that boto3 client was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-agent-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-retrieve"
+
     mock_boto3_client.return_value.retrieve.assert_called_once_with(
         retrievalQuery={"text": "test query"},
         knowledgeBaseId="test-kb-id",
@@ -240,7 +249,16 @@ def test_retrieve_with_custom_profile(mock_boto3_client):
 
         # Verify session was created with correct profile
         mock_session.assert_called_once_with(profile_name="custom-profile")
-        mock_session_instance.client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+
+        # Verify client was called with correct parameters including user agent
+        mock_session_instance.client.assert_called_once()
+        args, kwargs = mock_session_instance.client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"
@@ -276,8 +294,15 @@ def test_retrieve_with_custom_region():
 
         result = retrieve.retrieve(tool=tool_use)
 
-        # Verify client was created with correct region
-        mock_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-east-1")
+        # Verify client was created with correct region and user agent
+        mock_client.assert_called_once()
+        args, kwargs = mock_client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-east-1"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"
@@ -322,3 +347,48 @@ def test_format_results_non_string_content():
     assert "Document ID: test-doc-1" in formatted
     # Content should not be included since text is not a string
     assert "Content:" not in formatted
+
+
+def test_retrieve_with_valid_filter(mock_boto3_client):
+    """Test retrieve with valid filter structures."""
+    # Test with simple filter
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"text": "test query", "retrieveFilter": {"equals": {"key": "category", "value": "security"}}},
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Test with complex filter (orAll)
+    tool_use["input"]["retrieveFilter"] = {
+        "orAll": [
+            {"equals": {"key": "category", "value": "security"}},
+            {"equals": {"key": "type", "value": "document"}},
+        ]
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "success"
+
+
+def test_retrieve_with_invalid_filter(mock_boto3_client):
+    """Test retrieve with invalid filter structures."""
+    # Test with invalid operator
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"text": "test query", "retrieveFilter": {"invalid_op": {"key": "category"}}},
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "error"
+    assert "Invalid operator" in result["content"][0]["text"]
+
+    # Test with invalid orAll structure
+    tool_use["input"]["retrieveFilter"] = {
+        "andAll": [{"equals": {"key": "category", "value": "security"}}]  # Only one item
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+    assert result["status"] == "error"
+    assert "must contain at least 2 items" in result["content"][0]["text"]

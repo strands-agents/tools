@@ -16,11 +16,13 @@ from .browser import Browser
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_IDENTIFIER = "aws.browser.v1"
+
 
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 
-    def __init__(self, region: Optional[str] = None, session_timeout: int = 3600):
+    def __init__(self, region: Optional[str] = None, identifier: str = DEFAULT_IDENTIFIER, session_timeout: int = 3600):
         """
         Initialize the browser.
 
@@ -44,7 +46,7 @@ class AgentCoreBrowser(Browser):
 
         # Create new browser client for this session
         session_client = AgentCoreBrowserClient(region=self.region)
-        session_id = session_client.start(session_timeout_seconds=self.session_timeout)
+        session_id = session_client.start(identifier=self.identifier, session_timeout_seconds=self.session_timeout)
 
         logger.info(f"started Bedrock AgentCore browser session: {session_id}")
 
