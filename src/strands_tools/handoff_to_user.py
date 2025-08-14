@@ -179,7 +179,7 @@ def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
     else:
         # Wait for user input and continue
         try:
-            user_response = get_user_input("<bold>Your response:</bold> ").strip()
+            user_response = get_user_input(f"<bold>Agent requested user input:</bold> {message}\n<bold>Your response:</bold> ").strip()
 
             console.print()
 
