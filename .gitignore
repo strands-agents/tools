@@ -1,6 +1,8 @@
 build
 __pycache__*
 .coverage*
+coverage.xml
+htmlcov/
 .env
 .venv
 .mypy_cache

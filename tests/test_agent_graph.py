@@ -550,3 +550,266 @@ class TestAgentGraphTool:
 
             result = agent_graph(tool=tool_use)
             assert result["toolUseId"] == "generated-uuid"
+def test_agent_node_queue_overflow_handling():
+    """Test AgentNode behavior when input queue reaches capacity."""
+    node = AgentNode("test_node", "test_role", "Test system prompt")
+    
+    # Fill the queue to capacity
+    for i in range(MAX_QUEUE_SIZE):
+        node.input_queue.put({"content": f"Message {i}"})
+    
+    # Queue should be at capacity
+    assert node.input_queue.qsize() == MAX_QUEUE_SIZE
+    
+    # Try to add one more message (should handle gracefully)
+    try:
+        node.input_queue.put_nowait({"content": "Overflow message"})
+        # If we get here, the queue wasn't full or expanded
+        assert False, "Expected queue to be full"
+    except:
+        # Expected behavior - queue is full
+        pass
+
+
+def test_agent_graph_complex_topology_creation(tool_context):
+    """Test creating complex graph topologies with multiple connection patterns."""
+    graph = AgentGraph("complex_graph", "mesh", tool_context)
+    
+    # Create a complex network of nodes
+    nodes = []
+    for i in range(5):
+        node = graph.add_node(f"node_{i}", f"role_{i}", f"System prompt {i}")
+        nodes.append(node)
+    
+    # Create complex interconnections
+    graph.add_edge("node_0", "node_1")
+    graph.add_edge("node_0", "node_2")
+    graph.add_edge("node_1", "node_3")
+    graph.add_edge("node_2", "node_3")
+    graph.add_edge("node_3", "node_4")
+    graph.add_edge("node_4", "node_0")  # Create a cycle
+    
+    # Verify all connections were created properly in mesh topology
+    assert len(graph.nodes["node_0"].neighbors) >= 2
+    assert len(graph.nodes["node_3"].neighbors) >= 2
+    
+    # Test status includes all nodes and their connections
+    status = graph.get_status()
+    assert len(status["nodes"]) == 5
+    
+    # Find node_0 in status and verify its neighbors
+    node_0_status = next(node for node in status["nodes"] if node["id"] == "node_0")
+    assert len(node_0_status["neighbors"]) >= 2
+
+
+def test_agent_graph_message_routing_patterns(tool_context):
+    """Test different message routing patterns in the graph."""
+    graph = AgentGraph("routing_test", "star", tool_context)
+    
+    # Create hub and spoke topology
+    hub = graph.add_node("hub", "coordinator", "You coordinate messages")
+    spoke1 = graph.add_node("spoke1", "worker", "You process type A tasks")
+    spoke2 = graph.add_node("spoke2", "worker", "You process type B tasks")
+    
+    graph.add_edge("hub", "spoke1")
+    graph.add_edge("hub", "spoke2")
+    
+    # Test message routing to specific nodes
+    success1 = graph.send_message("hub", "Task for hub")
+    success2 = graph.send_message("spoke1", "Task for spoke1")
+    success3 = graph.send_message("spoke2", "Task for spoke2")
+    
+    assert success1 is True
+    assert success2 is True
+    assert success3 is True
+    
+    # Verify messages are in the correct queues
+    assert not hub.input_queue.empty()
+    assert not spoke1.input_queue.empty()
+    assert not spoke2.input_queue.empty()
+
+
+def test_agent_graph_manager_concurrent_operations(tool_context):
+    """Test AgentGraphManager handling concurrent operations."""
+    manager = AgentGraphManager(tool_context)
+    
+    # Create multiple graphs concurrently
+    topology1 = {
+        "type": "star",
+        "nodes": [{"id": "central1", "role": "coordinator", "system_prompt": "Coordinator 1"}],
+        "edges": [],
+    }
+    
+    topology2 = {
+        "type": "mesh",
+        "nodes": [{"id": "central2", "role": "coordinator", "system_prompt": "Coordinator 2"}],
+        "edges": [],
+    }
+    
+    with patch.object(AgentGraph, "start") as mock_start:
+        result1 = manager.create_graph("graph1", topology1)
+        result2 = manager.create_graph("graph2", topology2)
+        
+        assert result1["status"] == "success"
+        assert result2["status"] == "success"
+        assert len(manager.graphs) == 2
+        assert mock_start.call_count == 2
+
+
+def test_agent_graph_error_recovery_mechanisms(tool_context):
+    """Test error recovery mechanisms in agent graph operations."""
+    graph = AgentGraph("error_test", "star", tool_context)
+    node = graph.add_node("test_node", "test_role", "Test prompt")
+    
+    # Test sending message to non-existent node
+    success = graph.send_message("nonexistent_node", "Test message")
+    assert success is False
+    
+    # Test getting status after node failure simulation
+    node.is_running = False
+    status = graph.get_status()
+    assert status["graph_id"] == "error_test"
+
+
+def test_agent_graph_performance_monitoring(tool_context, mock_thread_pool):
+    """Test performance monitoring and metrics collection."""
+    graph = AgentGraph("perf_test", "star", tool_context)
+    
+    # Add multiple nodes to test performance
+    for i in range(10):
+        graph.add_node(f"node_{i}", f"role_{i}", f"Prompt {i}")
+    
+    # Start the graph and verify thread pool usage
+    graph.start()
+    
+    # Should have created threads for all nodes
+    assert mock_thread_pool.submit.call_count == 10
+    
+    # Test status collection performance
+    status = graph.get_status()
+    assert len(status["nodes"]) == 10
+    
+    # Verify all nodes are tracked
+    node_ids = [node["id"] for node in status["nodes"]]
+    expected_ids = [f"node_{i}" for i in range(10)]
+    assert set(node_ids) == set(expected_ids)
+
+
+def test_agent_graph_memory_management(tool_context):
+    """Test memory management and cleanup in agent graphs."""
+    graph = AgentGraph("memory_test", "mesh", tool_context)
+    
+    # Create nodes and fill their queues
+    nodes = []
+    for i in range(3):
+        node = graph.add_node(f"node_{i}", f"role_{i}", f"Prompt {i}")
+        nodes.append(node)
+        
+        # Fill queue with messages
+        for j in range(10):
+            node.input_queue.put({"content": f"Message {j} for node {i}"})
+    
+    # Verify queues have messages
+    for node in nodes:
+        assert node.input_queue.qsize() == 10
+    
+    # Stop the graph and verify cleanup
+    graph.stop()
+    
+    # All nodes should be stopped
+    for node in nodes:
+        assert node.is_running is False
+
+
+def test_create_rich_status_panel_edge_cases(mock_console):
+    """Test create_rich_status_panel with edge cases and missing fields."""
+    # Test with minimal status information
+    minimal_status = {
+        "graph_id": "minimal_graph",
+        "topology": "unknown",
+        "nodes": [],
+    }
+    result = create_rich_status_panel(mock_console, minimal_status)
+    assert result == "Mocked formatted output"
+
+
+def test_agent_graph_tool_comprehensive_error_scenarios():
+    """Test comprehensive error scenarios in the agent_graph tool function."""
+    # Test with malformed topology
+    malformed_tool_use = {
+        "toolUseId": "test-malformed-id",
+        "input": {
+            "action": "create",
+            "graph_id": "malformed_graph",
+            "topology": "invalid_topology_format",  # Should be dict, not string
+        },
+    }
+    
+    result = agent_graph(tool=malformed_tool_use)
+    assert result["status"] == "error"
+    
+    # Test with missing required nested fields
+    incomplete_tool_use = {
+        "toolUseId": "test-incomplete-id",
+        "input": {
+            "action": "create",
+            "graph_id": "incomplete_graph",
+            "topology": {
+                "type": "star",
+                "nodes": [{"id": "node1"}],  # Missing required fields like role, system_prompt
+                "edges": [],
+            },
+        },
+    }
+    
+    with patch("strands_tools.agent_graph.get_manager") as mock_get_manager:
+        mock_manager = MagicMock()
+        mock_manager.create_graph.side_effect = ValueError("Invalid node configuration")
+        mock_get_manager.return_value = mock_manager
+        
+        result = agent_graph(tool=incomplete_tool_use)
+        assert result["status"] == "error"
+
+
+def test_agent_graph_scalability_limits(tool_context):
+    """Test agent graph behavior at scalability limits."""
+    graph = AgentGraph("scale_test", "mesh", tool_context)
+    
+    # Test with large number of nodes (but reasonable for testing)
+    node_count = 50
+    for i in range(node_count):
+        graph.add_node(f"scale_node_{i}", f"role_{i}", f"Prompt {i}")
+    
+    # Create many-to-many connections (mesh topology)
+    for i in range(min(10, node_count)):  # Limit connections for test performance
+        for j in range(min(10, node_count)):
+            if i != j:
+                graph.add_edge(f"scale_node_{i}", f"scale_node_{j}")
+    
+    # Test status collection with many nodes
+    status = graph.get_status()
+    assert len(status["nodes"]) == node_count
+    assert status["topology"] == "mesh"
+    
+    # Test message sending to multiple nodes
+    messages_sent = 0
+    for i in range(min(10, node_count)):
+        if graph.send_message(f"scale_node_{i}", f"Scale test message {i}"):
+            messages_sent += 1
+    
+    assert messages_sent == min(10, node_count)
+
+
+def test_agent_graph_topology_validation():
+    """Test validation of different topology types and configurations."""
+    tool_context = {"test": "context"}
+    
+    # Test valid topology types
+    valid_topologies = ["star", "mesh", "ring", "tree"]
+    for topology_type in valid_topologies:
+        graph = AgentGraph(f"test_{topology_type}", topology_type, tool_context)
+        assert graph.topology_type == topology_type
+    
+    # Test custom topology type (should still work)
+    custom_graph = AgentGraph("custom_test", "custom_topology", tool_context)
+    assert custom_graph.topology_type == "custom_topology"

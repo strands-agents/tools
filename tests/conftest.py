@@ -159,3 +159,152 @@ def mock_slack_initialize_clients():
     with patch("strands_tools.slack.initialize_slack_clients") as mock_init:
         mock_init.return_value = (True, None)
         yield mock_init
+
+
+@pytest.fixture(autouse=True)
+def reset_workflow_global_state(request):
+    """
+    Comprehensive fixture to reset all workflow global state before each test.
+    
+    This fixture is automatically applied to all tests to prevent workflow tests
+    from interfering with each other when run in parallel or in sequence.
+    """
+    # Only reset workflow state for workflow-related tests
+    test_file = str(request.fspath)
+    if 'workflow' not in test_file.lower():
+        # Not a workflow test, skip the reset
+        yield
+        return
+    
+    # Import workflow module
+    try:
+        import strands_tools.workflow as workflow_module
+        import src.strands_tools.workflow as src_workflow_module
+    except ImportError:
+        yield
+        return
+    
+    # Aggressive cleanup of any existing state before test
+    for module in [workflow_module, src_workflow_module]:
+        try:
+            # Force cleanup any existing managers and their resources
+            if hasattr(module, '_manager') and module._manager:
+                try:
+                    if hasattr(module._manager, 'cleanup'):
+                        module._manager.cleanup()
+                    if hasattr(module._manager, '_executor'):
+                        module._manager._executor.shutdown(wait=False)
+                except:
+                    pass
+            
+            if hasattr(module, 'WorkflowManager') and hasattr(module.WorkflowManager, '_instance') and module.WorkflowManager._instance:
+                try:
+                    if hasattr(module.WorkflowManager._instance, 'cleanup'):
+                        module.WorkflowManager._instance.cleanup()
+                    # Force stop any observers
+                    if hasattr(module.WorkflowManager._instance, '_observer') and module.WorkflowManager._instance._observer:
+                        try:
+                            module.WorkflowManager._instance._observer.stop()
+                            module.WorkflowManager._instance._observer.join(timeout=0.1)
+                        except:
+                            pass
+                    # Force shutdown any executors
+                    if hasattr(module.WorkflowManager._instance, '_executor'):
+                        try:
+                            module.WorkflowManager._instance._executor.shutdown(wait=False)
+                        except:
+                            pass
+                except:
+                    pass
+        except:
+            pass
+    
+    # Reset all global state variables for both import paths
+    for module in [workflow_module, src_workflow_module]:
+        if hasattr(module, '_manager'):
+            module._manager = None
+        if hasattr(module, '_last_request_time'):
+            module._last_request_time = 0
+        
+        # Reset WorkflowManager class state if it exists
+        if hasattr(module, 'WorkflowManager'):
+            if hasattr(module.WorkflowManager, '_instance'):
+                module.WorkflowManager._instance = None
+            if hasattr(module.WorkflowManager, '_workflows'):
+                module.WorkflowManager._workflows = {}
+            if hasattr(module.WorkflowManager, '_observer'):
+                module.WorkflowManager._observer = None
+            if hasattr(module.WorkflowManager, '_watch_paths'):
+                module.WorkflowManager._watch_paths = set()
+        
+        # Reset TaskExecutor class state if it exists
+        if hasattr(module, 'TaskExecutor'):
+            # Force cleanup any class-level executors
+            try:
+                if hasattr(module.TaskExecutor, '_executor'):
+                    module.TaskExecutor._executor.shutdown(wait=False)
+                    module.TaskExecutor._executor = None
+            except:
+                pass
+    
+    yield
+    
+    # Aggressive cleanup after test
+    for module in [workflow_module, src_workflow_module]:
+        try:
+            # Cleanup any active managers
+            if hasattr(module, '_manager') and module._manager:
+                try:
+                    if hasattr(module._manager, 'cleanup'):
+                        module._manager.cleanup()
+                    if hasattr(module._manager, '_executor'):
+                        module._manager._executor.shutdown(wait=False)
+                except:
+                    pass
+            
+            if hasattr(module, 'WorkflowManager') and hasattr(module.WorkflowManager, '_instance') and module.WorkflowManager._instance:
+                try:
+                    if hasattr(module.WorkflowManager._instance, 'cleanup'):
+                        module.WorkflowManager._instance.cleanup()
+                    # Force stop any observers
+                    if hasattr(module.WorkflowManager._instance, '_observer') and module.WorkflowManager._instance._observer:
+                        try:
+                            module.WorkflowManager._instance._observer.stop()
+                            module.WorkflowManager._instance._observer.join(timeout=0.1)
+                        except:
+                            pass
+                    # Force shutdown any executors
+                    if hasattr(module.WorkflowManager._instance, '_executor'):
+                        try:
+                            module.WorkflowManager._instance._executor.shutdown(wait=False)
+                        except:
+                            pass
+                except:
+                    pass
+        except Exception:
+            pass
+        
+        # Reset state again after cleanup
+        if hasattr(module, '_manager'):
+            module._manager = None
+        if hasattr(module, '_last_request_time'):
+            module._last_request_time = 0
+        
+        if hasattr(module, 'WorkflowManager'):
+            if hasattr(module.WorkflowManager, '_instance'):
+                module.WorkflowManager._instance = None
+            if hasattr(module.WorkflowManager, '_workflows'):
+                module.WorkflowManager._workflows = {}
+            if hasattr(module.WorkflowManager, '_observer'):
+                module.WorkflowManager._observer = None
+            if hasattr(module.WorkflowManager, '_watch_paths'):
+                module.WorkflowManager._watch_paths = set()
+        
+        # Reset TaskExecutor class state if it exists
+        if hasattr(module, 'TaskExecutor'):
+            try:
+                if hasattr(module.TaskExecutor, '_executor'):
+                    module.TaskExecutor._executor.shutdown(wait=False)
+                    module.TaskExecutor._executor = None
+            except:
+                pass

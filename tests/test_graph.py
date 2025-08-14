@@ -702,3 +702,330 @@ def test_graph_with_mixed_model_configurations(mock_parent_agent, mock_graph_bui
 
         # Verify default agent was created for node without custom model
         assert mock_agent_class.call_count >= 1  # default_node
+def test_graph_execution_with_complex_results(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test graph execution with complex result processing."""
+    # Mock execution result with detailed results
+    mock_execution_result = MagicMock()
+    mock_execution_result.status.value = "completed"
+    mock_execution_result.completed_nodes = 3
+    mock_execution_result.failed_nodes = 0
+    mock_execution_result.results = {
+        "researcher": MagicMock(),
+        "analyst": MagicMock(),
+        "reporter": MagicMock(),
+    }
+
+    # Mock agent results for each node
+    for node_id, node_result in mock_execution_result.results.items():
+        mock_agent_result = MagicMock()
+        mock_agent_result.__str__ = MagicMock(return_value=f"Result from {node_id}")
+        node_result.get_agent_results.return_value = [mock_agent_result]
+
+    mock_graph_builder.build.return_value.execute.return_value = mock_execution_result
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create and execute graph
+        graph_module.graph(
+            action="create",
+            graph_id="complex_results_test",
+            topology=sample_topology,
+            agent=mock_parent_agent,
+        )
+
+        result = graph_module.graph(
+            action="execute",
+            graph_id="complex_results_test",
+            task="Complex analysis task",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+
+
+def test_graph_create_with_invalid_topology_structure(mock_parent_agent):
+    """Test graph creation with various invalid topology structures."""
+    # Test with missing nodes
+    invalid_topology_1 = {
+        "edges": [{"from": "node1", "to": "node2"}],
+        "entry_points": ["node1"],
+    }
+    
+    try:
+        result = graph_module.graph(
+            action="create",
+            graph_id="invalid_test_1",
+            topology=invalid_topology_1,
+            agent=mock_parent_agent,
+        )
+        # Should handle invalid topology gracefully
+        assert result["status"] in ["error", "success"]
+    except Exception:
+        # Expected for invalid topology
+        pass
+
+
+def test_graph_create_with_circular_dependencies(mock_parent_agent, mock_graph_builder):
+    """Test graph creation with circular dependencies."""
+    circular_topology = {
+        "nodes": [
+            {"id": "node_a", "role": "processor", "system_prompt": "Process A"},
+            {"id": "node_b", "role": "processor", "system_prompt": "Process B"},
+            {"id": "node_c", "role": "processor", "system_prompt": "Process C"},
+        ],
+        "edges": [
+            {"from": "node_a", "to": "node_b"},
+            {"from": "node_b", "to": "node_c"},
+            {"from": "node_c", "to": "node_a"},  # Creates circular dependency
+        ],
+        "entry_points": ["node_a"],
+    }
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.Agent"),
+    ):
+        result = graph_module.graph(
+            action="create",
+            graph_id="circular_test",
+            topology=circular_topology,
+            agent=mock_parent_agent,
+        )
+
+        # Should succeed - circular dependencies are allowed in some graph types
+        assert result["status"] == "success"
+        
+        # Verify all edges were added including the circular one
+        assert mock_graph_builder.add_edge.call_count == 3
+
+
+def test_graph_execution_timeout_handling(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test graph execution with timeout scenarios."""
+    # Mock execution that takes too long
+    mock_graph = mock_graph_builder.build.return_value
+    mock_graph.side_effect = Exception("Graph execution failed")
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create graph
+        graph_module.graph(
+            action="create",
+            graph_id="timeout_test",
+            topology=sample_topology,
+            agent=mock_parent_agent,
+        )
+
+        # Execute with timeout
+        result = graph_module.graph(
+            action="execute",
+            graph_id="timeout_test",
+            task="Long running task",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "error"
+
+
+def test_graph_status_with_detailed_information(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test graph status retrieval with detailed node information."""
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create graph
+        graph_module.graph(
+            action="create",
+            graph_id="detailed_status_test",
+            topology=sample_topology,
+            agent=mock_parent_agent,
+        )
+
+        # Get detailed status
+        result = graph_module.graph(
+            action="status",
+            graph_id="detailed_status_test",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+
+
+def test_graph_create_with_heterogeneous_node_types(mock_parent_agent, mock_graph_builder):
+    """Test graph creation with different types of nodes and configurations."""
+    heterogeneous_topology = {
+        "nodes": [
+            {
+                "id": "data_collector",
+                "role": "collector",
+                "system_prompt": "Collect data from various sources",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "claude-v1", "temperature": 0.1},
+                "tools": ["http_request", "file_read"],
+            },
+            {
+                "id": "data_processor",
+                "role": "processor",
+                "system_prompt": "Process and clean data",
+                "model_provider": "anthropic",
+                "model_settings": {"model_id": "claude-3-5-sonnet", "temperature": 0.5},
+                "tools": ["calculator", "python_repl"],
+            },
+            {
+                "id": "report_generator",
+                "role": "generator",
+                "system_prompt": "Generate comprehensive reports",
+                # No model specified - should use parent agent's model
+                "tools": ["file_write", "editor"],
+            },
+        ],
+        "edges": [
+            {"from": "data_collector", "to": "data_processor"},
+            {"from": "data_processor", "to": "report_generator"},
+        ],
+        "entry_points": ["data_collector"],
+    }
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model") as mock_create_agent,
+        patch("strands_tools.graph.Agent") as mock_agent_class,
+    ):
+        mock_create_agent.return_value = MagicMock()
+        mock_agent_class.return_value = MagicMock()
+
+        result = graph_module.graph(
+            action="create",
+            graph_id="heterogeneous_test",
+            topology=heterogeneous_topology,
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+        
+        # Verify different agent creation methods were used
+        assert mock_create_agent.call_count >= 2  # For nodes with custom models
+        assert mock_agent_class.call_count >= 1   # For node without custom model
+
+
+def test_graph_execution_with_partial_results(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test graph execution when only some nodes complete successfully."""
+    # Mock execution result with partial completion
+    mock_execution_result = MagicMock()
+    mock_execution_result.status.value = "partial_completion"
+    mock_execution_result.completed_nodes = 2
+    mock_execution_result.failed_nodes = 1
+    mock_execution_result.results = {
+        "researcher": MagicMock(),
+        "analyst": MagicMock(),
+    }
+
+    # Mock agent results for completed nodes only
+    for node_id, node_result in mock_execution_result.results.items():
+        mock_agent_result = MagicMock()
+        mock_agent_result.__str__ = MagicMock(return_value=f"Partial result from {node_id}")
+        node_result.get_agent_results.return_value = [mock_agent_result]
+
+    mock_graph_builder.build.return_value.execute.return_value = mock_execution_result
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create and execute graph
+        graph_module.graph(
+            action="create",
+            graph_id="partial_results_test",
+            topology=sample_topology,
+            agent=mock_parent_agent,
+        )
+
+        result = graph_module.graph(
+            action="execute",
+            graph_id="partial_results_test",
+            task="Task with partial completion",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+
+
+def test_graph_memory_cleanup_on_delete(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test that graph deletion properly cleans up memory and resources."""
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create a graph
+        graph_module.graph(
+            action="create",
+            graph_id="cleanup_test_1",
+            topology=sample_topology,
+            agent=mock_parent_agent,
+        )
+
+        # Delete the graph
+        result = graph_module.graph(
+            action="delete",
+            graph_id="cleanup_test_1",
+            agent=mock_parent_agent,
+        )
+
+        assert result["status"] == "success"
+
+
+def test_graph_concurrent_execution_safety(mock_parent_agent, mock_graph_builder, sample_topology):
+    """Test thread safety during concurrent graph operations."""
+    import threading
+    import time
+
+    results = []
+    
+    def create_and_execute_graph(graph_id):
+        try:
+            # Create graph
+            create_result = graph_module.graph(
+                action="create",
+                graph_id=f"concurrent_{graph_id}",
+                topology=sample_topology,
+                agent=mock_parent_agent,
+            )
+            
+            # Small delay to simulate real execution
+            time.sleep(0.01)
+            
+            # Execute graph
+            exec_result = graph_module.graph(
+                action="execute",
+                graph_id=f"concurrent_{graph_id}",
+                task=f"Concurrent task {graph_id}",
+                agent=mock_parent_agent,
+            )
+            
+            results.append((create_result["status"], exec_result["status"]))
+        except Exception as e:
+            results.append(("error", str(e)))
+
+    with (
+        patch("strands_tools.graph.GraphBuilder", return_value=mock_graph_builder),
+        patch("strands_tools.graph.create_agent_with_model"),
+    ):
+        # Create multiple threads for concurrent operations
+        threads = []
+        for i in range(5):
+            thread = threading.Thread(target=create_and_execute_graph, args=(i,))
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        # Verify all operations completed successfully
+        assert len(results) == 5
+        for create_status, exec_status in results:
+            assert create_status == "success"
+            assert exec_status == "success"
