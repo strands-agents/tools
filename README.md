@@ -785,6 +785,8 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
+| PYTHON_REPL_INTERACTIVE | Whether to enable interactive PTY mode | None |
+| PYTHON_REPL_RESET_STATE | Whether to reset the REPL state before execution | None |
 
 #### Shell Tool
 
