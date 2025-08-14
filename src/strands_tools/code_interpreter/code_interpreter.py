@@ -192,6 +192,22 @@ class CodeInterpreter(ABC):
 
     @tool
     def code_interpreter(self, code_interpreter_input: CodeInterpreterInput) -> Dict[str, Any]:
+        """
+        Execute code in isolated sandbox environments.
+
+        Usage with Strands Agent:
+        ```python
+        code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        agent = Agent(tools=[code_interpreter.code_interpreter])
+        ```
+
+        Args:
+            code_interpreter_input: Structured input containing the action to perform.
+
+        Returns:
+            Dict containing execution results.
+        """
+
         # Auto-start platform on first use
         if not self._started:
             self._start()
