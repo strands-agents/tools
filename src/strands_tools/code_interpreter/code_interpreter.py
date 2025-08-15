@@ -104,44 +104,52 @@ class CodeInterpreter(ABC):
         agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
 
         # Create a session
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "initSession",
-                "description": "Data analysis session",
-                "session_name": "analysis-session"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "initSession",
+                    "description": "Data analysis session",
+                    "session_name": "analysis-session"
+                }}
             }}
-        }})
+        )
 
         # Execute Python code
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "executeCode",
-                "session_name": "analysis-session",
-                "code": "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df.head())",
-                "language": "python"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCode",
+                    "session_name": "analysis-session",
+                    "code": "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df.head())",
+                    "language": "python"
+                }}
             }}
-        }})
+        )
 
         # Write files to the sandbox
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "writeFiles",
-                "session_name": "analysis-session",
-                "content": [
-                    {{"path": "config.json", "text": '{{"debug": true}}'}},
-                    {{"path": "script.py", "text": "print('Hello, World!')"}}
-                ]
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "writeFiles",
+                    "session_name": "analysis-session",
+                    "content": [
+                        {{"path": "config.json", "text": '{{"debug": true}}'}},
+                        {{"path": "script.py", "text": "print('Hello, World!')"}}
+                    ]
+                }}
             }}
-        }})
+        )
 
         # Execute shell commands
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "executeCommand",
-                "session_name": "analysis-session",
-                "command": "ls -la && python script.py"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCommand",
+                    "session_name": "analysis-session",
+                    "command": "ls -la && python script.py"
+                }}
             }}
-        }})
+        )
         ```
 
         Args:
@@ -184,6 +192,22 @@ class CodeInterpreter(ABC):
 
     @tool
     def code_interpreter(self, code_interpreter_input: CodeInterpreterInput) -> Dict[str, Any]:
+        """
+        Execute code in isolated sandbox environments.
+
+        Usage with Strands Agent:
+        ```python
+        code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        agent = Agent(tools=[code_interpreter.code_interpreter])
+        ```
+
+        Args:
+            code_interpreter_input: Structured input containing the action to perform.
+
+        Returns:
+            Dict containing execution results.
+        """
+
         # Auto-start platform on first use
         if not self._started:
             self._start()

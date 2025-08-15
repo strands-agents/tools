@@ -79,13 +79,37 @@ class Browser(ABC):
         browser = Browser()
         agent = Agent(tools=[browser.browser])
 
-        # Navigate to a page
-        agent.tool.browser({
-            "action": {
-                "type": "navigate",
-                "url": "https://example.com"
+        # Initialize a session
+        agent.tool.browser(
+            browser_input={
+                "action": {
+                    "type": "init_session",
+                    "description": "Example ession",
+                    "session_name": "example-session"
+                }
             }
-        })
+        )
+
+        # Navigate to a page
+        agent.tool.browser(
+            browser_input={
+                "action": {
+                    "type": "navigate",
+                    "url": "https://example.com",
+                    "session_name": "example-session"
+                }
+            }
+        )
+
+        # Close the browser
+        agent.tool.browser(
+            browser_input={
+                "action": {
+                    "type": "close",
+                    "session_name": "example-session"
+                }
+            }
+        )
         ```
 
         Args:

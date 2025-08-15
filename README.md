@@ -39,6 +39,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
 - 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
+- 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
@@ -103,6 +104,10 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
 | shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
+| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
+| tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
+| tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
+| tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
@@ -266,6 +271,49 @@ response = agent.tool.http_request(
     url="https://example.com/article",
     convert_to_markdown=True
 )
+```
+
+### Tavily Search, Extract, Crawl, and Map
+
+```python
+from strands import Agent
+from strands_tools.tavily import (
+    tavily_search, tavily_extract, tavily_crawl, tavily_map
+)
+
+# For async usage, call the corresponding *_async function with await.
+# Synchronous usage 
+agent = Agent(tools=[tavily_search, tavily_extract, tavily_crawl, tavily_map])
+
+# Real-time web search
+result = agent.tool.tavily_search(
+    query="Latest developments in renewable energy",
+    search_depth="advanced",
+    topic="news",
+    max_results=10,
+    include_raw_content=True
+)
+
+# Extract content from multiple URLs
+result = agent.tool.tavily_extract(
+    urls=["www.tavily.com", "www.apple.com"],
+    extract_depth="advanced",
+    format="markdown"
+)
+
+# Advanced crawl with instructions and filtering
+result = agent.tool.tavily_crawl(
+    url="www.tavily.com",
+    max_depth=2,
+    limit=50,
+    instructions="Find all API documentation and developer guides",
+    extract_depth="advanced",
+    include_images=True
+)
+
+# Basic website mapping
+result = agent.tool.tavily_map(url="www.tavily.com")
+
 ```
 
 ### Python Code Execution
@@ -682,6 +730,13 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
 
+#### Tavily Search, Extract, Crawl, and Map Tools
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| TAVILY_API_KEY | Tavily API key (required for all Tavily functionality) | None |
+- Visit https://www.tavily.com/ to create a free account and API key.
+
 #### Mem0 Memory Tool
 
 The Mem0 Memory Tool supports three different backend configurations:
@@ -730,6 +785,8 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
+| PYTHON_REPL_INTERACTIVE | Whether to enable interactive PTY mode | None |
+| PYTHON_REPL_RESET_STATE | Whether to reset the REPL state before execution | None |
 | PYTHON_REPL_RESTRICTED_MODE | Enable/disable restricted mode | false |
 | PYTHON_REPL_ALLOWED_PATHS | Comma-separated allowed directories | None |
 | PYTHON_REPL_ALLOW_CURRENT_DIR | Allow current directory access | true |

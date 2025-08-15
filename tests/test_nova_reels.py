@@ -4,6 +4,7 @@ import os
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import nova_reels
 
@@ -48,7 +49,7 @@ def sample_image_bytes():
 
 def test_nova_reels_create_text_to_video(mock_bedrock_client):
     """Test creating a text-to-video job."""
-    with patch("boto3.client", return_value=mock_bedrock_client):
+    with patch("boto3.client", return_value=mock_bedrock_client) as mock_boto3:
         result = nova_reels.nova_reels(
             action="create",
             text="A cinematic shot of a giraffe walking through a savanna at sunset",
@@ -60,7 +61,17 @@ def test_nova_reels_create_text_to_video(mock_bedrock_client):
         assert "Video generation job started successfully" in result["content"][0]["text"]
         assert "Task ARN:" in result["content"][1]["text"]
 
-        # Verify boto3 client was called with correct parameters
+        # Verify boto3 client was called with correct parameters including user agent
+        mock_boto3.assert_called_once()
+        args, kwargs = mock_boto3.call_args
+        assert args[0] == "bedrock-runtime"
+        assert kwargs["region_name"] == "us-east-1"  # Default region for nova_reels
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-nova-reels"
+
+        # Verify bedrock client was called with correct parameters
         mock_bedrock_client.start_async_invoke.assert_called_once()
         args = mock_bedrock_client.start_async_invoke.call_args[1]
         assert args["modelId"] == "amazon.nova-reel-v1:1"
@@ -177,8 +188,15 @@ def test_nova_reels_custom_region(mock_bedrock_client):
     with patch("boto3.client", return_value=mock_bedrock_client) as mock_boto3:
         nova_reels.nova_reels(action="list", max_results=5, region="us-west-2")
 
-        # Verify boto3 client was created with the right region
-        mock_boto3.assert_called_once_with("bedrock-runtime", region_name="us-west-2")
+        # Verify boto3 client was created with the right region and user agent
+        mock_boto3.assert_called_once()
+        args, kwargs = mock_boto3.call_args
+        assert args[0] == "bedrock-runtime"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-nova-reels"
 
 
 def test_nova_reels_region_from_env(mock_bedrock_client):
@@ -187,8 +205,15 @@ def test_nova_reels_region_from_env(mock_bedrock_client):
         with patch("boto3.client", return_value=mock_bedrock_client) as mock_boto3:
             nova_reels.nova_reels(action="list", max_results=5)
 
-            # Verify boto3 client was created with the right region
-            mock_boto3.assert_called_once_with("bedrock-runtime", region_name="eu-west-1")
+            # Verify boto3 client was created with the right region and user agent
+            mock_boto3.assert_called_once()
+            args, kwargs = mock_boto3.call_args
+            assert args[0] == "bedrock-runtime"
+            assert kwargs["region_name"] == "eu-west-1"
+            assert "config" in kwargs
+            config = kwargs["config"]
+            assert isinstance(config, BotocoreConfig)
+            assert config.user_agent_extra == "strands-agents-nova-reels"
 
 
 def test_nova_reels_missing_required_params():

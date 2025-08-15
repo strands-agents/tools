@@ -57,6 +57,7 @@ import os
 from typing import Any, Dict, List
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
 
 TOOL_SPEC = {
@@ -68,7 +69,7 @@ Key Features:
    - Vector-based similarity matching
    - Relevance scoring (0.0-1.0)
    - Score-based filtering
-   
+
 2. Advanced Configuration:
    - Custom result limits
    - Score thresholds
@@ -275,11 +276,14 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
+        config = BotocoreConfig(user_agent_extra="strands-agents-retrieve")
         if profile_name:
             session = boto3.Session(profile_name=profile_name)
-            bedrock_agent_runtime_client = session.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = session.client(
+                "bedrock-agent-runtime", region_name=region_name, config=config
+            )
         else:
-            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name, config=config)
 
         # Default retrieval configuration
         retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}

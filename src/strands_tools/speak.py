@@ -3,6 +3,7 @@ import subprocess
 from typing import Any
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -139,7 +140,8 @@ def speak(tool: ToolUse, **kwargs: Any) -> ToolResult:
             console.print(create_status_table(mode, text, voice_id, output_path, play_audio))
 
             # Create Polly client
-            polly_client = boto3.client("polly", region_name="us-west-2")
+            config = BotocoreConfig(user_agent_extra="strands-agents-speak")
+            polly_client = boto3.client("polly", region_name="us-west-2", config=config)
 
             with Progress(
                 SpinnerColumn(),
