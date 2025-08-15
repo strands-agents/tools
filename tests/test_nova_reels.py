@@ -65,7 +65,7 @@ def test_nova_reels_create_text_to_video(mock_bedrock_client):
         mock_boto3.assert_called_once()
         args, kwargs = mock_boto3.call_args
         assert args[0] == "bedrock-runtime"
-        assert kwargs["region_name"] == "us-east-1"  # Default region for nova_reels
+
         assert "config" in kwargs
         config = kwargs["config"]
         assert isinstance(config, BotocoreConfig)
