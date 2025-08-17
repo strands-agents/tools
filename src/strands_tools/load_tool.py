@@ -79,7 +79,6 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
 
     Tool Loading Process:
     -------------------
-    - First, checks if dynamic loading is permitted (hot_reload_tools=True)
     - Expands the path to handle user paths with tilde (~)
     - Validates that the file exists at the specified path
     - Uses the tool_registry's load_tool_from_filepath method to:
@@ -175,7 +174,6 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
 
     Notes:
         - The tool loading can be disabled via STRANDS_DISABLE_LOAD_TOOL=true environment variable
-        - The Agent instance must have hot_reload_tools=True to enable dynamic loading
         - Python files in the cwd()/tools/ directory are automatically hot reloaded without
           requiring explicit calls to load_tool
         - When using the load_tool function, ensure your tool files have proper docstrings as they are
@@ -187,8 +185,8 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
     current_agent = agent
 
     try:
-        # Check if dynamic tool loading is disabled via environment variable or agent.hot_reload_tools.
-        if not current_agent.hot_reload_tools or os.environ.get("STRANDS_DISABLE_LOAD_TOOL", "").lower() == "true":
+        # Check if dynamic tool loading is disabled via environment variable.
+        if os.environ.get("STRANDS_DISABLE_LOAD_TOOL", "").lower() == "true":
             logger.warning("Dynamic tool loading is disabled via STRANDS_DISABLE_LOAD_TOOL=true")
             return {"status": "error", "content": [{"text": "⚠️ Dynamic tool loading is disabled in production mode."}]}
 

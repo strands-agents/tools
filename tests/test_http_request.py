@@ -397,9 +397,9 @@ def test_custom_headers():
 @responses.activate
 def test_cancellation(monkeypatch):
     """Test request cancellation by user."""
-    # Temporarily override DEV environment variable for this test
-    original_env = os.environ.get("DEV")
-    monkeypatch.setenv("DEV", "false")  # Force DEV mode off
+    # Temporarily override BYPASS_TOOL_CONSENT environment variable for this test
+    original_env = os.environ.get("BYPASS_TOOL_CONSENT")
+    monkeypatch.setenv("BYPASS_TOOL_CONSENT", "false")  # Force BYPASS_TOOL_CONSENT mode off
 
     try:
         # Register a mock response even though we'll cancel before sending
@@ -435,9 +435,9 @@ def test_cancellation(monkeypatch):
     finally:
         # Restore original environment variable state
         if original_env is not None:
-            monkeypatch.setenv("DEV", original_env)
+            monkeypatch.setenv("BYPASS_TOOL_CONSENT", original_env)
         else:
-            monkeypatch.delenv("DEV", raising=False)
+            monkeypatch.delenv("BYPASS_TOOL_CONSENT", raising=False)
 
 
 @responses.activate
@@ -623,7 +623,7 @@ def test_verify_ssl_option():
 
 @responses.activate
 def test_dev_mode_no_confirmation():
-    """Test that in DEV mode, no confirmation is requested for modifying requests."""
+    """Test that in BYPASS_TOOL_CONSENT mode, no confirmation is requested for modifying requests."""
     # Set up mock POST response
     responses.add(
         responses.POST,
@@ -641,15 +641,15 @@ def test_dev_mode_no_confirmation():
         },
     }
 
-    # Set DEV environment variable
+    # Set BYPASS_TOOL_CONSENT environment variable
     original_env = os.environ.copy()
-    os.environ["DEV"] = "true"
+    os.environ["BYPASS_TOOL_CONSENT"] = "true"
 
     try:
-        # In DEV mode, get_user_input should not be called for confirmation
+        # In BYPASS_TOOL_CONSENT mode, get_user_input should not be called for confirmation
         with patch("strands_tools.http_request.get_user_input") as mock_input:
             # This will be called if the test fails
-            mock_input.side_effect = AssertionError("Should not ask for confirmation in DEV mode")
+            mock_input.side_effect = AssertionError("Should not ask for confirmation in BYPASS_TOOL_CONSENT mode")
             result = http_request.http_request(tool=tool_use)
 
         # Verify the result
@@ -961,3 +961,87 @@ def test_http_request_via_agent(agent):
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
     assert "success via agent" in result_text
+
+
+@responses.activate
+def test_markdown_conversion():
+    """Test HTML to markdown conversion functionality."""
+    # Mock HTML content
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Test Page</title>
+    </head>
+    <body>
+        <h1>Main Heading</h1>
+        <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
+        <ul>
+            <li>List item 1</li>
+            <li>List item 2</li>
+        </ul>
+        <a href="https://example.com">Link to example</a>
+    </body>
+    </html>
+    """
+
+    # Set up mock response with HTML content
+    responses.add(responses.GET, "https://example.com/article", body=html_content, status=200, content_type="text/html")
+
+    # Test without markdown conversion (should return HTML)
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {"input": {"method": "GET", "url": "https://example.com/article"}, "toolUseId": "test1"}
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    assert "<html>" in result_text  # Should contain HTML
+
+    # Test with markdown conversion (should convert to markdown if packages available)
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {
+                "input": {"method": "GET", "url": "https://example.com/article", "convert_to_markdown": True},
+                "toolUseId": "test2",
+            }
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    # Verify markdown conversion worked - HTML tags should be removed and text content preserved
+    assert "<html>" not in result_text  # HTML tags should be gone
+    assert "<h1>" not in result_text
+    assert "Main Heading" in result_text  # Text content should remain
+    assert "bold text" in result_text
+    assert "italic text" in result_text
+    assert "List item 1" in result_text
+    assert "List item 2" in result_text
+
+
+@responses.activate
+def test_markdown_conversion_non_html():
+    """Test that non-HTML content is not affected by markdown conversion."""
+    # Set up mock response with JSON content
+    responses.add(
+        responses.GET,
+        "https://example.com/api/data",
+        json={"message": "hello", "data": [1, 2, 3]},
+        status=200,
+    )
+
+    # Test with markdown conversion enabled on non-HTML content
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(
+            {
+                "input": {"method": "GET", "url": "https://example.com/api/data", "convert_to_markdown": True},
+                "toolUseId": "test3",
+            }
+        )
+
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
+    assert '"message": "hello"' in result_text  # Should still be JSON (no conversion for non-HTML)

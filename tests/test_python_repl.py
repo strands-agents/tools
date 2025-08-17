@@ -1,6 +1,4 @@
-"""
-Tests for the python_repl tool using the Agent interface.
-"""
+"""Tests for the python_repl tool using the Agent interface."""
 
 import os
 import sys
@@ -12,6 +10,10 @@ from unittest.mock import patch
 import dill
 import pytest
 from strands import Agent
+
+if os.name == "nt":
+    pytest.skip("skipping on windows until issue #17 is resolved", allow_module_level=True)
+
 from strands_tools import python_repl
 
 
@@ -282,15 +284,15 @@ class TestPythonRepl:
         assert "test_var" not in python_repl.repl_state.get_namespace()
 
     def test_dev_mode_bypass_confirmation(self, mock_console):
-        """Test that DEV mode bypasses the confirmation dialog."""
+        """Test that BYPASS_TOOL_CONSENT mode bypasses the confirmation dialog."""
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "dev_mode_test = 42", "interactive": False},
         }
 
-        # Set DEV environment variable to true
-        with patch.dict(os.environ, {"DEV": "true"}):
-            # We shouldn't need to mock get_user_input here since DEV mode should bypass it
+        # Set BYPASS_TOOL_CONSENT environment variable to true
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            # We shouldn't need to mock get_user_input here since BYPASS_TOOL_CONSENT mode should bypass it
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "success"
@@ -311,13 +313,19 @@ class TestPythonRepl:
 
     def test_user_rejection_cancels_execution(self, mock_console):
         """Test that user rejection properly cancels execution."""
+        # Clear REPL state to ensure clean test environment
+        python_repl.repl_state.clear_state()
+
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "should_not_execute = True", "interactive": False},
         }
 
-        # Mock user rejecting the execution
-        with patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]):
+        # Mock user rejecting the execution and ensure bypass conditions are disabled
+        with (
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "error"
@@ -326,13 +334,19 @@ class TestPythonRepl:
 
     def test_custom_rejection_message(self, mock_console):
         """Test that custom rejection message is included."""
+        # Clear REPL state to ensure clean test environment
+        python_repl.repl_state.clear_state()
+
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "print('Should not run')", "interactive": False},
         }
 
-        # Mock user providing custom rejection reason
-        with patch("strands_tools.python_repl.get_user_input", side_effect=["custom reason", ""]):
+        # Mock user providing custom rejection reason and ensure bypass conditions are disabled
+        with (
+            patch("strands_tools.python_repl.get_user_input", side_effect=["custom reason", ""]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
             result = python_repl.python_repl(tool=tool_use)
 
             assert result["status"] == "error"

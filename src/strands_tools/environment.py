@@ -71,8 +71,7 @@ from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolResultContent, ToolUse
 
-from strands_tools.utils import console_util
-from strands_tools.utils.user_input import get_user_input
+from strands_tools.utils import console_util, user_input
 
 TOOL_SPEC = {
     "name": "environment",
@@ -274,7 +273,9 @@ def format_operation_preview(
         title=f"[bold {risk_level[1]}]🔧 Environment Operation Preview[/bold {risk_level[1]}]",
         border_style=risk_level[1],
         box=box.ROUNDED,
-        subtitle="[dim]Dev Mode: " + ("✓" if os.environ.get("DEV", "").lower() == "true" else "✗") + "[/dim]",
+        subtitle="[dim]Dev Mode: "
+        + ("✓" if os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true" else "✗")
+        + "[/dim]",
     )
 
 
@@ -372,7 +373,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     How It Works:
     ------------
     1. The function processes the requested action (list, get, set, delete, validate)
-    2. For destructive actions, it requires user confirmation unless in DEV mode
+    2. For destructive actions, it requires user confirmation unless in BYPASS_TOOL_CONSENT mode
     3. Protected system variables are identified and cannot be modified
     4. Sensitive values (tokens, passwords, etc.) are automatically masked
     5. Rich output formatting provides clear visual feedback on operations
@@ -392,7 +393,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     - Sensitive values are masked in output by default
     - Destructive actions require explicit confirmation
     - Clear risk level indicators for all operations
-    - DEV mode controls for testing and automation
+    - BYPASS_TOOL_CONSENT mode controls for testing and automation
 
     Args:
         tool: The ToolUse object containing the action and parameters
@@ -410,7 +411,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - content: List of content objects with results or error messages
 
     Notes:
-        - The ENV var "DEV" can be set to "true" to bypass confirmation prompts
+        - The ENV var "BYPASS_TOOL_CONSENT" can be set to "true" to bypass confirmation prompts
         - Protected variables include PATH, PYTHONPATH, STRANDS_HOME, SHELL, USER, HOME
         - Sensitive variables are detected by keywords in their names (TOKEN, SECRET, etc.)
         - For security reasons, values of sensitive variables are masked in output
@@ -431,16 +432,16 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Get environment variables at runtime
     env_vars_masked_default = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").lower() == "true"
 
-    # Check for DEV mode
-    strands_dev = os.environ.get("DEV", "").lower() == "true"
+    # Check for BYPASS_TOOL_CONSENT mode
+    strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Actions that need confirmation
     dangerous_actions = {"set", "delete"}
     needs_confirmation = tool_input["action"] in dangerous_actions and not strands_dev
 
-    # Print DEV mode status for debugging
+    # Print BYPASS_TOOL_CONSENT mode status for debugging
     if strands_dev:
-        console.print("[bold green]Running in DEV mode - confirmation bypassed[/bold green]")
+        console.print("[bold green]Running in BYPASS_TOOL_CONSENT mode - confirmation bypassed[/bold green]")
 
     try:
         action = tool_input["action"]
@@ -584,17 +585,19 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
 
             # Ask for confirmation
-            confirm = get_user_input(
-                "\n<yellow><bold>Do you want to proceed with setting this environment variable?</bold> [y/*]</yellow>"
-            )
-            # For tests, 'y' should be recognized even with extra spaces or newlines
-            if confirm.strip().lower() != "y":
-                console.print(format_error_message("Operation cancelled by user"))
-                return {
-                    "toolUseId": tool_use_id,
-                    "status": "error",
-                    "content": [{"text": f"Operation cancelled by user, reason: {confirm}"}],
-                }
+            if needs_confirmation:
+                confirm = user_input.get_user_input(
+                    "\n<yellow><bold>Do you want to proceed with setting this environment variable?</bold> "
+                    "[y/*]</yellow>"
+                )
+                # For tests, 'y' should be recognized even with extra spaces or newlines
+                if confirm.strip().lower() != "y":
+                    console.print(format_error_message("Operation cancelled by user"))
+                    return {
+                        "toolUseId": tool_use_id,
+                        "status": "error",
+                        "content": [{"text": f"Operation cancelled by user, reason: {confirm}"}],
+                    }
 
             # Set the variable
             os.environ[name] = str(value)
@@ -706,7 +709,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
 
                 # Ask for confirmation
-                confirm = get_user_input(
+                confirm = user_input.get_user_input(
                     "\n<red><bold>Do you want to proceed with deleting this environment variable?</bold> [y/*]</red>"
                 )
                 # For tests, 'y' should be recognized even with extra spaces or newlines

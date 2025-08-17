@@ -1,5 +1,4 @@
-"""
-Tool for managing data in Bedrock Knowledge Base (store, delete, list, get, and retrieve)
+"""Tool for managing data in Bedrock Knowledge Base (store, delete, list, get, and retrieve)
 
 This module provides comprehensive Knowledge Base management capabilities for
 Amazon Bedrock Knowledge Bases. It handles all aspects of document management with
@@ -14,22 +13,30 @@ Key Features:
    • get: Retrieve specific documents by document ID
    • retrieve: Perform semantic search across all documents
 
-2. Safety Features:
+2. Data Source Support:
+   • Detects CUSTOM data source types
+   • Falls back to first available data source if no CUSTOM found
+   • Provides clear error messages for unsupported data source types
+   • Currently supports CUSTOM data sources for direct ingestion
+   • S3 and other data source types show clear error messages
+
+3. Safety Features:
    • User confirmation for mutative operations
    • Content previews before storage
    • Warning messages before deletion
-   • DEV mode for bypassing confirmations in tests
+   • BYPASS_TOOL_CONSENT mode for bypassing confirmations in tests
 
-3. Advanced Capabilities:
+4. Advanced Capabilities:
    • Automatic document ID generation
    • Structured content storage with metadata
    • Semantic search with relevance filtering
    • Rich output formatting
    • Pagination support
 
-4. Error Handling:
+5. Error Handling:
    • Knowledge Base ID validation
    • Parameter validation
+   • Data source type detection and validation
    • Graceful API error handling
    • Clear error messages
 
@@ -42,7 +49,7 @@ from strands_tools.memory import memory
 agent = Agent(tools=[memory])
 
 # Store content in Knowledge Base
-agent.memory(
+agent.tool.memory(
     action="store",
     content="Important information to remember",
     title="Meeting Notes",
@@ -50,7 +57,7 @@ agent.memory(
 )
 
 # Retrieve content using semantic search
-agent.memory(
+agent.tool.memory(
     action="retrieve",
     query="meeting information",
     min_score=0.7,
@@ -58,7 +65,7 @@ agent.memory(
 )
 
 # List all documents
-agent.memory(
+agent.tool.memory(
     action="list",
     max_results=50,
     STRANDS_KNOWLEDGE_BASE_ID="my1234kb"
@@ -81,6 +88,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from rich.panel import Panel
 from strands import tool
 
@@ -133,7 +141,8 @@ class MemoryServiceClient:
             boto3.client: A boto3 client for the bedrock-agent service
         """
         if not self._agent_client:
-            self._agent_client = self.session.client("bedrock-agent", region_name=self.region)
+            config = BotocoreConfig(user_agent_extra="strands-agents-memory")
+            self._agent_client = self.session.client("bedrock-agent", region_name=self.region, config=config)
         return self._agent_client
 
     @property
@@ -145,8 +154,60 @@ class MemoryServiceClient:
             boto3.client: A boto3 client for the bedrock-agent-runtime service
         """
         if not self._runtime_client:
-            self._runtime_client = self.session.client("bedrock-agent-runtime", region_name=self.region)
+            config = BotocoreConfig(user_agent_extra="strands-agents-memory")
+            self._runtime_client = self.session.client("bedrock-agent-runtime", region_name=self.region, config=config)
         return self._runtime_client
+
+    def _detect_data_source_type(self, kb_id: str):
+        """
+        Helper method to detect data source type for a knowledge base.
+
+        This method implements the same logic as store_in_kb tool:
+        1. Look for CUSTOM data source first (preferred)
+        2. Fall back to first available data source if no CUSTOM found
+        3. Log appropriate messages for debugging
+
+        Args:
+            kb_id: Knowledge Base ID
+
+        Returns:
+            Tuple of (data_source_id, source_type)
+
+        Raises:
+            ValueError: If no data sources are found
+        """
+        # Get data source details to determine the type
+        data_sources = self.agent_client.list_data_sources(knowledgeBaseId=kb_id)
+
+        if data_sources and not data_sources.get("dataSourceSummaries"):
+            raise ValueError(f"No data sources found for knowledge base {kb_id}")
+
+        # Look for CUSTOM data source first, then fallback
+        data_source_id = None
+        source_type = None
+
+        for ds in data_sources["dataSourceSummaries"]:
+            # Get the data source details to check its type
+            ds_detail = self.agent_client.get_data_source(knowledgeBaseId=kb_id, dataSourceId=ds["dataSourceId"])
+
+            # Check if this is a CUSTOM type data source
+            if ds_detail["dataSource"]["dataSourceConfiguration"]["type"] == "CUSTOM":
+                data_source_id = ds["dataSourceId"]
+                source_type = "CUSTOM"
+                logger.debug(f"Found CUSTOM data source: {data_source_id}")
+                break
+
+        # If no CUSTOM data source found, use the first available one but log a warning
+        if not data_source_id and data_sources["dataSourceSummaries"]:
+            data_source_id = data_sources["dataSourceSummaries"][0]["dataSourceId"]
+            ds_detail = self.agent_client.get_data_source(knowledgeBaseId=kb_id, dataSourceId=data_source_id)
+            source_type = ds_detail["dataSource"]["dataSourceConfiguration"]["type"]
+            logger.debug(f"No CUSTOM data source found. Using {source_type} data source: {data_source_id}")
+
+        if not data_source_id:
+            raise ValueError(f"No suitable data source found for knowledge base {kb_id}")
+
+        return data_source_id, source_type
 
     def get_data_source_id(self, kb_id: str) -> str:
         """
@@ -212,16 +273,22 @@ class MemoryServiceClient:
         Returns:
             Response from the get_knowledge_base_documents API call
         """
-        # Get the data source ID if not provided
-        if not data_source_id:
-            data_source_id = self.get_data_source_id(kb_id)
+        # Use helper method to detect data source type
+        data_source_id, source_type = self._detect_data_source_type(kb_id)
 
-        # Use the get_knowledge_base_documents method
-        get_request = {
-            "knowledgeBaseId": kb_id,
-            "dataSourceId": data_source_id,
-            "documentIdentifiers": [{"dataSourceType": "CUSTOM", "custom": {"id": document_id}}],
-        }
+        # Prepare get request based on the data source type
+        if source_type == "CUSTOM":
+            get_request = {
+                "knowledgeBaseId": kb_id,
+                "dataSourceId": data_source_id,
+                "documentIdentifiers": [{"dataSourceType": "CUSTOM", "custom": {"id": document_id}}],
+            }
+        elif source_type == "S3":
+            # For S3, we would need to construct the S3 URI identifier
+            # This is more complex and may require additional logic
+            raise ValueError("S3 data source type is not fully supported for document retrieval.")
+        else:
+            raise ValueError(f"Unsupported data source type: {source_type}")
 
         return self.agent_client.get_knowledge_base_documents(**get_request)
 
@@ -238,16 +305,12 @@ class MemoryServiceClient:
         Returns:
             Tuple of (response, document_id, document_title)
         """
-        # Get the data source ID if not provided
-        if not data_source_id:
-            data_source_id = self.get_data_source_id(kb_id)
-
         # Generate document ID with timestamp for traceability
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         doc_id = f"memory_{timestamp}_{str(uuid.uuid4())[:8]}"
 
         # Create a document title if not provided
-        doc_title = title or f"Peccy Memory {timestamp}"
+        doc_title = title or f"Strands Memory {timestamp}"
 
         # Package content with metadata for better organization
         content_with_metadata = {
@@ -256,34 +319,48 @@ class MemoryServiceClient:
             "content": content,
         }
 
-        # Prepare document for ingestion
-        ingest_request = {
-            "knowledgeBaseId": kb_id,
-            "dataSourceId": data_source_id,
-            "documents": [
-                {
-                    "content": {
-                        "dataSourceType": "CUSTOM",
-                        "custom": {
-                            "customDocumentIdentifier": {"id": doc_id},
-                            "inlineContent": {
-                                "textContent": {"data": json.dumps(content_with_metadata)},
-                                "type": "TEXT",
+        # Use helper method to detect data source type
+        data_source_id, source_type = self._detect_data_source_type(kb_id)
+
+        # Prepare document for ingestion based on the data source type
+        if source_type == "CUSTOM":
+            ingest_request = {
+                "knowledgeBaseId": kb_id,
+                "dataSourceId": data_source_id,
+                "documents": [
+                    {
+                        "content": {
+                            "dataSourceType": "CUSTOM",
+                            "custom": {
+                                "customDocumentIdentifier": {"id": doc_id},
+                                "inlineContent": {
+                                    "textContent": {"data": json.dumps(content_with_metadata)},
+                                    "type": "TEXT",
+                                },
+                                "sourceType": "IN_LINE",
                             },
-                            "sourceType": "IN_LINE",
-                        },
+                        }
                     }
-                }
-            ],
-        }
+                ],
+            }
+        elif source_type == "S3":
+            # S3 source types need a different ingestion approach
+            raise ValueError("S3 data source type is not supported for direct ingestion with this tool.")
+        else:
+            raise ValueError(f"Unsupported data source type: {source_type}")
 
         # Ingest document into knowledge base
         response = self.agent_client.ingest_knowledge_base_documents(**ingest_request)
+
+        # Log success
+        logger.debug(f"Successfully ingested document into knowledge base {kb_id}: {doc_id}")
+
         return response, doc_id, doc_title
 
     def delete_document(self, kb_id: str, data_source_id: str = None, document_id: str = None):
         """
         Delete a document from the knowledge base.
+        FIXED: Now handles multiple data source types like store_in_kb tool.
 
         Args:
             kb_id: Knowledge Base ID
@@ -293,16 +370,22 @@ class MemoryServiceClient:
         Returns:
             Response from the delete_knowledge_base_documents API call
         """
-        # Get the data source ID if not provided
-        if not data_source_id:
-            data_source_id = self.get_data_source_id(kb_id)
+        # Use helper method to detect data source type
+        data_source_id, source_type = self._detect_data_source_type(kb_id)
 
-        # Prepare delete request
-        delete_request = {
-            "knowledgeBaseId": kb_id,
-            "dataSourceId": data_source_id,
-            "documentIdentifiers": [{"dataSourceType": "CUSTOM", "custom": {"id": document_id}}],
-        }
+        # Prepare delete request based on the data source type
+        if source_type == "CUSTOM":
+            delete_request = {
+                "knowledgeBaseId": kb_id,
+                "dataSourceId": data_source_id,
+                "documentIdentifiers": [{"dataSourceType": "CUSTOM", "custom": {"id": document_id}}],
+            }
+        elif source_type == "S3":
+            # For S3, we would need to construct the S3 URI identifier
+            # This is more complex and may require additional logic
+            raise ValueError("S3 data source type is not fully supported for document deletion.")
+        else:
+            raise ValueError(f"Unsupported data source type: {source_type}")
 
         # Delete document from knowledge base
         return self.agent_client.delete_knowledge_base_documents(**delete_request)
@@ -561,6 +644,7 @@ def memory(
     max_results: int = None,
     next_token: Optional[str] = None,
     min_score: float = None,
+    region_name: str = None,
 ) -> Dict[str, Any]:
     """
     Manage content in a Bedrock Knowledge Base (store, delete, list, get, or retrieve).
@@ -568,7 +652,7 @@ def memory(
     This tool provides a user-friendly interface for managing knowledge base content
     with built-in safety measures for mutative operations. For operations that modify
     data (store, delete), users will be shown a preview and asked for explicit confirmation
-    before changes are made, unless the DEV environment variable is set to "true".
+    before changes are made, unless the BYPASS_TOOL_CONSENT environment variable is set to "true".
 
     Args:
         action: The action to perform ('store', 'delete', 'list', 'get', or 'retrieve').
@@ -582,12 +666,14 @@ def memory(
         next_token: Token for pagination in 'list' or 'retrieve' action (optional).
         query: The search query for semantic search (required for 'retrieve' action).
         min_score: Minimum relevance score threshold (0.0-1.0) for 'retrieve' action. Default is 0.4.
+        region_name: Optional AWS region name. If not provided, will use the AWS_REGION env variable.
+            If AWS_REGION is not specified, it will default to us-west-2.
 
     Returns:
         A dictionary containing the result of the operation.
 
     Notes:
-        - Store and delete operations require user confirmation (unless in DEV mode)
+        - Store and delete operations require user confirmation (unless in BYPASS_TOOL_CONSENT mode)
         - Content previews are shown before storage to verify accuracy
         - Warning messages are provided before document deletion
         - Operation can be cancelled by the user during confirmation
@@ -597,7 +683,7 @@ def memory(
     console = console_util.create()
 
     # Initialize the client and formatter using factory functions
-    client = get_memory_service_client()
+    client = get_memory_service_client(region=region_name)
     formatter = get_memory_formatter()
 
     # Get environment variables at runtime
@@ -648,7 +734,7 @@ def memory(
 
     # Define mutative actions that need confirmation
     mutative_actions = {"store", "delete"}
-    strands_dev = os.environ.get("DEV", "").lower() == "true"
+    strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
     needs_confirmation = action in mutative_actions and not strands_dev
 
     # Show confirmation dialog for mutative operations

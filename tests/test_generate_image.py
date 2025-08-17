@@ -7,6 +7,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import generate_image
 
@@ -31,7 +32,7 @@ def mock_boto3_client():
         # Set up mock response
         mock_body = MagicMock()
         mock_body.read.return_value = json.dumps(
-            {"artifacts": [{"base64": base64.b64encode(b"mock_image_data").decode("utf-8")}]}
+            {"images": [base64.b64encode(b"mock_image_data").decode("utf-8")]}
         ).encode("utf-8")
 
         mock_client_instance = MagicMock()
@@ -76,17 +77,25 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
         "input": {
             "prompt": "A cute robot",
             "seed": 123,
-            "steps": 30,
-            "cfg_scale": 10,
-            "style_preset": "photographic",
+            "aspect_ratio": "5:4",
+            "output_format": "png",
+            "negative_prompt": "blurry, low resolution, pixelated, grainy, unrealistic",
         },
     }
 
     # Call the generate_image function directly
     result = generate_image.generate_image(tool=tool_use)
 
-    # Verify the function was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-runtime", region_name="us-west-2")
+    # Verify the function was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-generate-image"
+
     mock_client_instance = mock_boto3_client.return_value
     mock_client_instance.invoke_model.assert_called_once()
 
@@ -94,11 +103,11 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     args, kwargs = mock_client_instance.invoke_model.call_args
     request_body = json.loads(kwargs["body"])
 
-    assert request_body["text_prompts"][0]["text"] == "A cute robot"
+    assert request_body["prompt"] == "A cute robot"
     assert request_body["seed"] == 123
-    assert request_body["steps"] == 30
-    assert request_body["cfg_scale"] == 10
-    assert request_body["style_preset"] == "photographic"
+    assert request_body["aspect_ratio"] == "5:4"
+    assert request_body["output_format"] == "png"
+    assert request_body["negative_prompt"] == "blurry, low resolution, pixelated, grainy, unrealistic"
 
     # Verify directory creation
     mock_os_makedirs.assert_called_once()
@@ -128,9 +137,9 @@ def test_generate_image_default_params(mock_boto3_client, mock_os_path_exists, m
     request_body = json.loads(kwargs["body"])
 
     assert request_body["seed"] == 42  # From our mocked random.randint
-    assert request_body["steps"] == 30
-    assert request_body["cfg_scale"] == 10
-    assert request_body["style_preset"] == "photographic"
+    assert request_body["aspect_ratio"] == "1:1"
+    assert request_body["output_format"] == "jpeg"
+    assert request_body["negative_prompt"] == "bad lighting, harsh lighting"
 
     assert result["status"] == "success"
 

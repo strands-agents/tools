@@ -1,19 +1,17 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "strands-agents-tools"
-version = "0.1.1"
+dynamic = ["version"]
 description = "A collection of specialized tools for Strands Agents"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
-authors = [
-    {name = "AWS", email = "opensource@amazon.com"},
-]
+license = { text = "Apache-2.0" }
+authors = [{ name = "AWS", email = "opensource@amazon.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -26,11 +24,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "strands-agents>=0.1.0,<1.0.0",
+    "strands-agents>=1.0.0",
     "rich>=14.0.0,<15.0.0",
     "sympy>=1.12.0,<2.0.0",
     "prompt_toolkit>=3.0.51,<4.0.0",
-    "colorama>=0.4.6,<0.5.0",
     "aws_requests_auth>=0.4.3,<0.5.0",
     "PyJWT>=2.10.1,<3.0.0",
     "dill>=0.4.0,<0.5.0",
@@ -38,8 +35,13 @@ dependencies = [
     "tenacity>=9.1.2,<10.0.0",
     "watchdog>=6.0.0,<7.0.0",
     "slack_bolt>=1.23.0,<2.0.0",
-    "mem0ai>=0.1.99,<1.0.0",
-    "opensearch-py>=2.8.0,<3.0.0",
+    "markdownify>=1.0.0,<2.0.0",
+    "readabilipy>=0.2.0,<1.0.0",
+    "requests>=2.28.0,<3.0.0",
+    "aiohttp>=3.8.0,<4.0.0",
+    # Note: Always want the latest tzdata
+    "tzdata ; platform_system == 'Windows'",
+    "botocore>=1.39.7,<2.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -47,6 +49,10 @@ packages = ["src/strands_tools"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.version]
+# Tells Hatch to use your version control system (git) to determine the version.
+source = "vcs"
 
 [project.urls]
 Homepage = "https://github.com/strands-agents/tools"
@@ -61,85 +67,104 @@ dev = [
     "pre-commit>=3.2.0,<4.2.0",
     "pytest>=8.0.0,<9.0.0",
     "ruff>=0.4.4,<0.5.0",
-    "responses>=0.6.1,<1.0.0"
+    "responses>=0.6.1,<1.0.0",
+    "mem0ai>=0.1.104,<1.0.0",
+    "opensearch-py>=2.8.0,<3.0.0",
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
     "sphinx-rtd-theme>=1.0.0,<2.0.0",
     "sphinx-autodoc-typehints>=1.12.0,<2.0.0",
 ]
+mem0_memory = [
+    # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
+    "mem0ai>=0.1.99,<1.0.0",
+    "opensearch-py>=2.8.0,<3.0.0",
+]
+local_chromium_browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
+agent_core_browser = [
+    "nest-asyncio>=1.5.0,<2.0.0",
+    "playwright>=1.42.0,<2.0.0",
+    "bedrock-agentcore==0.1.0"
+]
+agent_core_code_interpreter = [
+    "bedrock-agentcore==0.1.0"
+]
+a2a_client = ["a2a-sdk[sql]>=0.3.0,<0.4.0"]
+diagram = [
+    "matplotlib>=3.5.0,<4.0.0",
+    "graphviz>=0.20.0,<1.0.0",
+    "networkx>=2.8.0,<4.0.0",
+    "diagrams>=0.23.0,<1.0.0",
+]
+rss = ["feedparser>=6.0.10,<7.0.0", "html2text>=2020.1.16,<2021.0.0"]
+use_computer = [
+    "opencv-python>=4.5.0,<5.0.0",
+    "psutil>=5.8.0,<6.0.0",
+    "pyautogui>=0.9.53,<1.0.0",
+    "pytesseract>=0.3.8,<1.0.0"
+]
 
 [tool.hatch.envs.hatch-static-analysis]
+features = ["mem0_memory", "local_chromium_browser", "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer"]
 dependencies = [
-  "strands-agents>=0.1.0,<1.0.0",
-  "mypy>=0.981,<1.0.0",
-  "ruff>=0.4.4,<0.5.0",
+    "strands-agents>=1.0.0",
+    "mypy>=0.981,<1.0.0",
+    "ruff>=0.4.4,<0.5.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
-format-check = [
-    "ruff format --check"
-]
-format-fix = [
-    "ruff format"
-]
+format-check = ["ruff format --check"]
+format-fix = ["ruff format"]
 lint-check = [
     "ruff check",
     # A lot of mypy errors right now - need to take a look but
     # don't want to block contributions based on these failures
     # "mypy -p src"
 ]
-lint-fix = [
-    "ruff check --fix"
-]
+lint-fix = ["ruff check --fix"]
 
 [tool.hatch.envs.hatch-test]
+features = ["mem0_memory", "local_chromium_browser",  "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",
     "pytest-cov>=4.1.0,<5.0.0",
     "pytest-xdist>=3.0.0,<4.0.0",
-    "responses>=0.6.1,<1.0.0"
+    "responses>=0.6.1,<1.0.0",
+    "pytest_asyncio>=0.23.0,<1.0.0",
 ]
-extra-args = [
-    "-n",
-    "auto",
-    '-vv'
-]
+extra-args = ["-n", "auto", '-vv']
 
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.13", "3.12", "3.11", "3.10"]
 
 
 [tool.hatch.envs.hatch-test.scripts]
-run = [
-    "pytest{env:HATCH_TEST_ARGS:} {args}"
-]
+run = ["pytest{env:HATCH_TEST_ARGS:} {args}"]
 run-cov = [
-    "pytest{env:HATCH_TEST_ARGS:} --cov --cov-config=pyproject.toml {args}"
+    "pytest{env:HATCH_TEST_ARGS:} --cov --cov-config=pyproject.toml {args}",
 ]
 cov-combine = []
 cov-report = []
 
-
 [tool.hatch.envs.default.scripts]
 list = [
-    "echo 'Scripts commands available for default env:'; hatch env show --json | jq --raw-output '.default.scripts | keys[]'"
+    "echo 'Scripts commands available for default env:'; hatch env show --json | jq --raw-output '.default.scripts | keys[]'",
 ]
-format = [
-  "hatch fmt --formatter",
-]
-test-format = [
-    "hatch fmt --formatter --check",
-]
-lint = [
-    "hatch fmt --linter"
-]
-test-lint = [
-    "hatch fmt --linter --check"
-]
-test = [
-    "hatch test --cover --cov-report html --cov-report xml {args}"
+format = ["hatch fmt --formatter"]
+test-format = ["hatch fmt --formatter --check"]
+lint = ["hatch fmt --linter"]
+test-lint = ["hatch fmt --linter --check"]
+test = ["hatch test --cover --cov-report html --cov-report xml {args}"]
+test-integ = ["hatch test tests_integ {args}"]
+prepare = [
+    "hatch run format",
+    "hatch run lint",
+    "hatch run test-lint",
+    "hatch run test"
 ]
 
 [tool.mypy]
@@ -160,14 +185,14 @@ ignore_missing_imports = false
 
 [tool.ruff]
 line-length = 120
-include = ["src/**/*.py", "tests/**/*.py"]
+include = ["src/**/*.py", "tests/**/*.py", "tests-integ/**/*.py"]
 
 [tool.ruff.lint]
 select = [
-  "E", # pycodestyle
-  "F", # pyflakes
-  "I", # isort
-  "B", # flake8-bugbear
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
+    "B", # flake8-bugbear
 ]
 
 [tool.coverage.run]
@@ -183,11 +208,13 @@ directory = "build/coverage/html"
 [tool.coverage.xml]
 output = "build/coverage/coverage.xml"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 tag_format = "v$version"
 bump_message = "chore(release): bump version $current_version -> $new_version"
-version_files = [
-    "pyproject.toml:version",
-]
+version_files = ["pyproject.toml:version"]
 update_changelog_on_bump = true

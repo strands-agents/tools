@@ -91,10 +91,10 @@ def test_file_write_cancel(mock_user_input, temp_file):
     # Mock user cancelling the write
     mock_user_input.side_effect = ["n", "User changed their mind"]
 
-    # Ensure DEV mode is disabled to force confirmation
-    current_dev = os.environ.get("DEV", None)
+    # Ensure BYPASS_TOOL_CONSENT mode is disabled to force confirmation
+    current_dev = os.environ.get("BYPASS_TOOL_CONSENT", None)
     if current_dev:
-        os.environ.pop("DEV")
+        os.environ.pop("BYPASS_TOOL_CONSENT")
 
     tool_use = {
         "toolUseId": "test-tool-use-id",
@@ -111,9 +111,9 @@ def test_file_write_cancel(mock_user_input, temp_file):
     # Verify file was not created
     assert not os.path.exists(temp_file)
 
-    # Restore DEV mode if it was set
+    # Restore BYPASS_TOOL_CONSENT mode if it was set
     if current_dev:
-        os.environ["DEV"] = current_dev
+        os.environ["BYPASS_TOOL_CONSENT"] = current_dev
 
 
 @patch("strands_tools.file_write.get_user_input")
@@ -148,8 +148,6 @@ def test_file_write_error_handling(mock_user_input, temp_file):
     # This should fail on most systems
     if os.name == "posix":  # Unix/Linux/Mac
         invalid_path = "/root/test_no_permission.txt"
-    elif os.name == "nt":  # Windows
-        invalid_path = "C:\\Windows\\System32\\config\\nopermission.txt"
     else:
         # Fallback - create a path that's too long
         invalid_path = os.path.join(temp_file, "a" * 1000 + ".txt")
@@ -167,15 +165,15 @@ def test_file_write_error_handling(mock_user_input, temp_file):
 
 
 @patch("strands_tools.file_write.get_user_input")
-@patch.dict("os.environ", {"DEV": "true"})
+@patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
 def test_file_write_dev_mode(mock_user_input, temp_file):
-    """Test file_write in DEV mode (skipping confirmation)."""
-    # Mock should not be called in DEV mode
+    """Test file_write in BYPASS_TOOL_CONSENT mode (skipping confirmation)."""
+    # Mock should not be called in BYPASS_TOOL_CONSENT mode
     mock_user_input.return_value = "should not be called"
 
     tool_use = {
         "toolUseId": "test-tool-use-id",
-        "input": {"path": temp_file, "content": "DEV mode test"},
+        "input": {"path": temp_file, "content": "BYPASS_TOOL_CONSENT mode test"},
     }
 
     result = file_write.file_write(tool=tool_use)
@@ -184,16 +182,16 @@ def test_file_write_dev_mode(mock_user_input, temp_file):
     assert result["status"] == "success"
     assert os.path.exists(temp_file)
     with open(temp_file, "r") as f:
-        assert f.read() == "DEV mode test"
+        assert f.read() == "BYPASS_TOOL_CONSENT mode test"
 
     # Verify user input was not called
     mock_user_input.assert_not_called()
 
 
 def test_file_write_via_agent(agent, temp_file):
-    """Test file_write via the agent interface with DEV mode to bypass user input."""
-    # For agent testing, we need to use the DEV environment to bypass user input
-    os.environ["DEV"] = "true"
+    """Test file_write via the agent interface with BYPASS_TOOL_CONSENT mode to bypass user input."""
+    # For agent testing, we need to use the BYPASS_TOOL_CONSENT environment to bypass user input
+    os.environ["BYPASS_TOOL_CONSENT"] = "true"
     try:
         # Use the agent to write a file
         result = agent.tool.file_write(path=temp_file, content="Testing via agent")
@@ -208,8 +206,8 @@ def test_file_write_via_agent(agent, temp_file):
             assert f.read() == "Testing via agent"
     finally:
         # Restore the environment
-        if "DEV" in os.environ:
-            del os.environ["DEV"]
+        if "BYPASS_TOOL_CONSENT" in os.environ:
+            del os.environ["BYPASS_TOOL_CONSENT"]
 
 
 @patch("strands_tools.file_write.get_user_input")
@@ -218,10 +216,10 @@ def test_file_write_alternative_rejection(mock_user_input, temp_file):
     # Mock user providing an alternative rejection (not just 'n')
     mock_user_input.return_value = "I need to review this more"
 
-    # Ensure DEV mode is disabled to force confirmation
-    current_dev = os.environ.get("DEV", None)
+    # Ensure BYPASS_TOOL_CONSENT mode is disabled to force confirmation
+    current_dev = os.environ.get("BYPASS_TOOL_CONSENT", None)
     if current_dev:
-        os.environ.pop("DEV")
+        os.environ.pop("BYPASS_TOOL_CONSENT")
 
     tool_use = {
         "toolUseId": "test-tool-use-id",
@@ -235,9 +233,9 @@ def test_file_write_alternative_rejection(mock_user_input, temp_file):
     assert "cancelled" in result["content"][0]["text"].lower()
     assert "review this more" in result["content"][0]["text"]
 
-    # Restore DEV mode if it was set
+    # Restore BYPASS_TOOL_CONSENT mode if it was set
     if current_dev:
-        os.environ["DEV"] = current_dev
+        os.environ["BYPASS_TOOL_CONSENT"] = current_dev
     assert "cancelled" in result["content"][0]["text"]
     assert "I need to review this more" in result["content"][0]["text"]
 

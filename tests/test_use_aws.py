@@ -6,6 +6,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands_tools import use_aws
 from strands_tools.utils import data_util, user_input
@@ -236,7 +237,7 @@ def test_use_aws_mutative_operation_confirm(
     mock_user_input.return_value = "y"
 
     # Configure environment variable
-    with patch.dict("os.environ", {"DEV": "false"}):
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
         tool_use = {
             "toolUseId": "test-tool-use-id",
             "input": {
@@ -267,7 +268,7 @@ def test_use_aws_mutative_operation_cancel(
     mock_user_input.return_value = "n"
 
     # Configure environment variable
-    with patch.dict("os.environ", {"DEV": "false"}):
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
         tool_use = {
             "toolUseId": "test-tool-use-id",
             "input": {
@@ -341,7 +342,17 @@ def test_get_boto3_client():
         use_aws.get_boto3_client("s3", "us-east-1", "test-profile")
 
         mock_session_class.assert_called_once_with(profile_name="test-profile")
-        mock_session.client.assert_called_once_with(service_name="s3", region_name="us-east-1")
+
+        # Verify the client was called with the correct arguments
+        mock_session.client.assert_called_once()
+        args, kwargs = mock_session.client.call_args
+
+        assert kwargs["service_name"] == "s3"
+        assert kwargs["region_name"] == "us-east-1"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-use-aws"
 
 
 def test_handle_streaming_body_non_json():

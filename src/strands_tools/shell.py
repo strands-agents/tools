@@ -38,6 +38,13 @@ result = agent.tool.shell(
 # Execute commands in parallel
 result = agent.tool.shell(command=["task1", "task2"], parallel=True)
 ```
+
+Configuration:
+- STRANDS_NON_INTERACTIVE (environment variable): Set to "true" to run the tool
+  in a non-interactive mode, suppressing all user prompts for confirmation.
+- BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
+  user confirmation prompt, even in an otherwise interactive session.
+
 """
 
 import json
@@ -59,96 +66,13 @@ from rich.box import ROUNDED
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
-from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from strands import tool
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
-# Initialize logging and set paths
+# Initialize logging
 logger = logging.getLogger(__name__)
-TOOL_SPEC = {
-    "name": "shell",
-    "description": "Interactive shell with PTY support for real-time command execution and interaction. Features:\n\n"
-    "1. Command Formats:\n"
-    "   • Single Command (string):\n"
-    '     command: "ls -la"\n\n'
-    "   • Multiple Commands (array):\n"
-    '     command: ["cd /path", "git status"]\n\n'
-    "   • Detailed Command Objects:\n"
-    "     command: [{\n"
-    '       "command": "git clone repo",\n'
-    '       "timeout": 60,\n'
-    '       "work_dir": "/specific/path"\n'
-    "     }]\n\n"
-    "2. Execution Modes:\n"
-    "   • Sequential (default): Commands run in order\n"
-    "   • Parallel: Multiple commands execute simultaneously\n"
-    "   • Error Handling: Stop on error or continue with ignore_errors\n\n"
-    "3. Real-time Features:\n"
-    "   • Live Output: See command output as it happens\n"
-    "   • Interactive Input: Send input to running commands\n"
-    "   • PTY Support: Full terminal emulation\n"
-    "   • Timeout Control: Prevent hanging commands\n\n"
-    "4. Common Patterns:\n"
-    "   • Directory Operations:\n"
-    '     command: ["mkdir -p dir", "cd dir", "git init"]\n'
-    "   • Git Operations:\n"
-    '     command: {"command": "git pull", "work_dir": "/repo/path"}\n'
-    "   • Build Commands:\n"
-    '     command: "npm install", work_dir: "/app/path"\n\n'
-    "5. Best Practices:\n"
-    "   • Use arrays for multiple commands\n"
-    "   • Set appropriate timeouts\n"
-    "   • Specify work_dir when needed\n"
-    "   • Enable ignore_errors for resilient scripts\n"
-    "   • Use parallel execution for independent commands\n\n"
-    "Example Usage:\n"
-    "1. Simple command: \n"
-    '   {"command": "ls -la"}\n\n'
-    "2. Multiple commands:\n"
-    '   {"command": ["mkdir test", "cd test", "touch file.txt"]}\n\n'
-    "3. Parallel execution:\n"
-    '   {"command": ["task1", "task2"], "parallel": true}\n\n'
-    "4. With error handling:\n"
-    '   {"command": ["risky-command"], "ignore_errors": true}\n\n'
-    "5. Custom directory:\n"
-    '   {"command": "npm install", "work_dir": "/app/path"}',
-    "inputSchema": {
-        "json": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": ["string", "array"],
-                    "description": (
-                        "The shell command(s) to execute interactively. Can be a single command string or array of "
-                        "command objects"
-                    ),
-                    "items": {"type": ["string", "object"]},
-                },
-                "parallel": {
-                    "type": "boolean",
-                    "description": "Whether to execute multiple commands in parallel (default: False)",
-                },
-                "ignore_errors": {
-                    "type": "boolean",
-                    "description": "Continue execution even if some commands fail (default: False)",
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": (
-                        "Timeout in seconds for each command "
-                        "(default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)"
-                    ),
-                },
-                "work_dir": {
-                    "type": "string",
-                    "description": "Working directory for command execution (default: current)",
-                },
-            },
-            "required": ["command"],
-        }
-    },
-}
 
 
 def read_output(fd: int) -> str:
@@ -184,17 +108,18 @@ class CommandExecutor:
         self.exit_code = None
         self.error = None
 
-    def execute_with_pty(self, command: str, cwd: str) -> Tuple[int, str, str]:
+    def execute_with_pty(self, command: str, cwd: str, non_interactive_mode: bool) -> Tuple[int, str, str]:
         """Execute command with PTY and timeout support."""
         output = []
         start_time = time.time()
-
+        old_tty = None
+        pid = -1
         # Save original terminal settings
-        try:
-            old_tty = termios.tcgetattr(sys.stdin)
-        except BaseException:
-            old_tty = None
-
+        if not non_interactive_mode:
+            try:
+                old_tty = termios.tcgetattr(sys.stdin)
+            except BaseException:
+                non_interactive_mode = True
         try:
             # Fork a new PTY
             pid, fd = pty.fork()
@@ -207,21 +132,25 @@ class CommandExecutor:
                     logger.debug(f"Error in child: {e}")
                     sys.exit(1)
             else:  # Parent process
-                try:
-                    if old_tty:
-                        tty.setraw(sys.stdin.fileno())
-                except Exception as e:
-                    logger.debug(f"Warning: Could not set raw mode: {e}")
-
+                if not non_interactive_mode and old_tty:
+                    tty.setraw(sys.stdin.fileno())
                 while True:
                     if time.time() - start_time > self.timeout:
-                        os.kill(pid, signal.SIGTERM)
+                        try:
+                            # This kill entire group, not just parent shell.
+                            os.killpg(os.getpgid(pid), signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
                         raise TimeoutError(f"Command timed out after {self.timeout} seconds")
 
+                    fds_to_watch = [fd]
+                    if not non_interactive_mode:
+                        fds_to_watch.append(sys.stdin)
+
                     try:
-                        readable, writable, exceptional = select.select([fd, sys.stdin], [], [], 0.1)
-                    except (select.error, TypeError) as select_error:
-                        logger.debug(f"Warning: select() failed: {select_error}")
+                        readable, _, _ = select.select(fds_to_watch, [], [], 0.1)
+                    except (select.error, ValueError):
+                        logger.debug("select() failed, assuming process ended.")
                         break
 
                     if fd in readable:
@@ -235,41 +164,43 @@ class CommandExecutor:
                         except OSError:
                             break
 
-                    if sys.stdin in readable:
+                    # Handle interactive input from user
+                    if not non_interactive_mode and sys.stdin in readable:
                         try:
-                            stdin_data: bytes = os.read(sys.stdin.fileno(), 1024)
-                            os.write(fd, stdin_data)  # bytes to bytes is fine
+                            stdin_data = os.read(sys.stdin.fileno(), 1024)
+                            os.write(fd, stdin_data)
                         except OSError:
                             break
-
                 try:
                     _, status = os.waitpid(pid, 0)
-                    exit_code = os.WEXITSTATUS(status)
-                except OSError as e:
-                    logger.debug(f"Error waiting for process: {e}")
-                    exit_code = 1
+                    if os.WIFEXITED(status):
+                        exit_code = os.WEXITSTATUS(status)
+                    else:
+                        exit_code = -1  # Process was terminated by a signal
+                except OSError:
+                    exit_code = -1  # waitpid failed
 
+                # In non_interactive_mode, we should not print the live output to the console.
+                # The captured output is returned for the agent to process.
                 return exit_code, "".join(output), ""
 
         finally:
-            if old_tty:
-                try:
-                    termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
-                    current_tty = termios.tcgetattr(sys.stdin)
-                    if current_tty != old_tty:
-                        logger.debug("Warning: Terminal settings not fully restored!")
-                except Exception as restore_error:
-                    logger.debug(f"Error restoring terminal settings: {restore_error}")
-                    os.system("stty sane")
+            # Restore terminal settings only if they were saved and changed.
+            if not non_interactive_mode and old_tty:
+                termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
 
 
-def execute_single_command(command: Union[str, Dict], work_dir: str, timeout: int) -> Dict[str, Any]:
+def execute_single_command(
+    command: Union[str, Dict], work_dir: str, timeout: int, non_interactive_mode: bool
+) -> Dict[str, Any]:
     """Execute a single command and return its results."""
     cmd_str, cmd_opts = validate_command(command)
     executor = CommandExecutor(timeout=timeout)
 
     try:
-        exit_code, output, error = executor.execute_with_pty(cmd_str, work_dir)
+        exit_code, output, error = executor.execute_with_pty(
+            cmd_str, work_dir, non_interactive_mode=non_interactive_mode
+        )
 
         result = {
             "command": cmd_str,
@@ -329,6 +260,7 @@ def execute_commands(
     ignore_errors: bool,
     work_dir: str,
     timeout: int,
+    non_interactive_mode: bool,
 ) -> List[Dict[str, Any]]:
     """Execute multiple commands either sequentially or in parallel."""
     results = []
@@ -337,7 +269,10 @@ def execute_commands(
     if parallel:
         # For parallel execution, use the initial work_dir for all commands
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(execute_single_command, cmd, work_dir, timeout) for cmd in commands]
+            futures = [
+                executor.submit(execute_single_command, cmd, work_dir, timeout, non_interactive_mode)
+                for cmd in commands
+            ]
 
             for future in as_completed(futures):
                 result = future.result()
@@ -354,7 +289,9 @@ def execute_commands(
             cmd_str = cmd if isinstance(cmd, str) else cmd.get("command", "")
 
             # Execute in current context directory
-            result = execute_single_command(cmd, context.current_dir, timeout)
+            result = execute_single_command(
+                cmd, context.current_dir, timeout, non_interactive_mode=non_interactive_mode
+            )
             results.append(result)
 
             # Update context if command was successful
@@ -371,14 +308,9 @@ def normalize_commands(
     command: Union[str, List[Union[str, Dict[Any, Any]]], Dict[Any, Any]],
 ) -> List[Union[str, Dict]]:
     """Convert command input into a normalized list of commands."""
-    if isinstance(command, str):
-        return [command]
-    if isinstance(command, list):  # Changed from elif to if to avoid unreachable code warning
+    if isinstance(command, list):
         return command
-    if isinstance(command, dict):  # Explicit check for dict type
-        return [command]
-    # Fallback case (though all cases should be handled above)
-    return [str(command)]  # type: ignore # Convert to string as last resort
+    return [command]
 
 
 def format_command_preview(command: Union[str, Dict], parallel: bool, ignore_errors: bool, work_dir: str) -> Panel:
@@ -471,41 +403,115 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
     )
 
 
-def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
-    """Enhanced interactive shell tool with multi-command and parallel execution support."""
+@tool
+def shell(
+    command: Union[str, List[Union[str, Dict[str, Any]]]],
+    parallel: bool = False,
+    ignore_errors: bool = False,
+    timeout: int = None,
+    work_dir: str = None,
+    non_interactive: bool = False,
+) -> Dict[str, Any]:
+    """Interactive shell with PTY support for real-time command execution and interaction. Features:
+
+    1. Command Formats:
+       • Single Command (string):
+         command: "ls -la"
+
+       • Multiple Commands (array):
+         command: ["cd /path", "git status"]
+
+       • Detailed Command Objects:
+         command: [{
+           "command": "git clone repo",
+           "timeout": 60,
+           "work_dir": "/specific/path"
+         }]
+
+    2. Execution Modes:
+       • Sequential (default): Commands run in order
+       • Parallel: Multiple commands execute simultaneously
+       • Error Handling: Stop on error or continue with ignore_errors
+
+    3. Real-time Features:
+       • Live Output: See command output as it happens
+       • Interactive Input: Send input to running commands
+       • PTY Support: Full terminal emulation
+       • Timeout Control: Prevent hanging commands
+
+    4. Common Patterns:
+       • Directory Operations:
+         command: ["mkdir -p dir", "cd dir", "git init"]
+       • Git Operations:
+         command: {"command": "git pull", "work_dir": "/repo/path"}
+       • Build Commands:
+         command: "npm install", work_dir: "/app/path"
+
+    5. Best Practices:
+       • Use arrays for multiple commands
+       • Set appropriate timeouts
+       • Specify work_dir when needed
+       • Enable ignore_errors for resilient scripts
+       • Use parallel execution for independent commands
+
+    Example Usage:
+    1. Simple command:
+       {"command": "ls -la"}
+
+    2. Multiple commands:
+       {"command": ["mkdir test", "cd test", "touch file.txt"]}
+
+    3. Parallel execution:
+       {"command": ["task1", "task2"], "parallel": true}
+
+    4. With error handling:
+       {"command": ["risky-command"], "ignore_errors": true}
+
+    5. Custom directory:
+       {"command": "npm install", "work_dir": "/app/path"}
+
+    Args:
+        command: The shell command(s) to execute interactively. Can be a single command string or array of commands
+        parallel: Whether to execute multiple commands in parallel (default: False)
+        ignore_errors: Continue execution even if some commands fail (default: False)
+        timeout: Timeout in seconds for each command (default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)
+        work_dir: Working directory for command execution (default: current)
+        non_interactive: Run in non-interactive mode without user prompts (default: False)
+
+    Returns:
+        Dict containing status and response content
+    """
     console = console_util.create()
 
-    tool_use_id = tool.get("toolUseId", "default-id")
-    tool_input = tool.get("input", {})
+    is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+    # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
+    non_interactive_mode = is_strands_non_interactive or non_interactive
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
-
-    # Extract and validate parameters
-    command_input = tool_input.get("command")
-    if command_input is None:
+    # Validate command parameter
+    if command is None:
         return {
-            "toolUseId": tool_use_id,
             "status": "error",
             "content": [{"text": "Command is required"}],
         }
 
     # Fix for array input: if the command is a string that looks like JSON array, parse it
-    if isinstance(command_input, str) and command_input.strip().startswith("[") and command_input.strip().endswith("]"):
+    if isinstance(command, str) and command.strip().startswith("[") and command.strip().endswith("]"):
         try:
-            command_input = json.loads(command_input)
+            command = json.loads(command)
         except json.JSONDecodeError:
             # If it fails to parse, keep it as a string
             pass
 
-    commands = normalize_commands(command_input)
-    parallel = bool(tool_input.get("parallel", False))
-    ignore_errors = bool(tool_input.get("ignore_errors", False))
-    timeout = int(tool_input.get("timeout", 900))
-    work_dir = tool_input.get("work_dir", os.getcwd())
+    commands = normalize_commands(command)
+
+    # Set defaults for parameters
+    if timeout is None:
+        timeout = int(os.environ.get("SHELL_DEFAULT_TIMEOUT", "900"))
+    if work_dir is None:
+        work_dir = os.getcwd()
 
     # Development mode check
-    STRANDS_DEV = os.environ.get("DEV", "").lower() == "true"
+    STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     # Only show UI elements in interactive mode
     if not non_interactive_mode:
@@ -520,7 +526,7 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if i < len(commands) - 1:
                 console.print()
 
-    if not STRANDS_DEV and not non_interactive_mode:
+    if not STRANDS_BYPASS_TOOL_CONSENT and not non_interactive_mode:
         console.print()  # Empty line for spacing
         confirm = get_user_input("<yellow><bold>Do you want to proceed with execution?</bold> [y/*]</yellow>")
         if confirm.lower() != "y":
@@ -533,7 +539,6 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
             return {
-                "toolUseId": tool_use_id,
                 "status": "error",
                 "content": [{"text": f"Command execution cancelled by user. Input: {confirm}"}],
             }
@@ -542,7 +547,9 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
         if not non_interactive_mode:
             console.print("\n[bold green]⏳ Starting Command Execution...[/bold green]\n")
 
-        results = execute_commands(commands, parallel, ignore_errors, work_dir, timeout)
+        results = execute_commands(
+            commands, parallel, ignore_errors, work_dir, timeout, non_interactive_mode=non_interactive_mode
+        )
 
         if not non_interactive_mode:
             console.print("\n[bold green]✅ Command Execution Complete[/bold green]\n")
@@ -583,13 +590,7 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         status: Literal["success", "error"] = "success" if error_count == 0 or ignore_errors else "error"
 
-        # Convert content to the expected format
-        typed_content: List[ToolResultContent] = []
-        for item in content:
-            # Create a proper ToolResultContent object that satisfies type checking
-            typed_content.append({"text": item["text"]})  # Type assertion happens here
-
-        return {"toolUseId": tool_use_id, "status": status, "content": typed_content}
+        return {"status": status, "content": content}
 
     except Exception as e:
         if not non_interactive_mode:
@@ -602,7 +603,6 @@ def shell(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
         return {
-            "toolUseId": tool_use_id,
             "status": "error",
             "content": [{"text": f"Interactive shell error: {str(e)}"}],
         }

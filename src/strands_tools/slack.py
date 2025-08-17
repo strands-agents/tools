@@ -351,12 +351,15 @@ class SocketModeHandler:
             return
 
         tools = list(self.agent.tool_registry.registry.values())
+        trace_attributes = self.agent.trace_attributes
 
         agent = Agent(
+            model=self.agent.model,
             messages=[],
             system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
             tools=tools,
-            callback_handler=None,
+            callback_handler=self.agent.callback_handler,
+            trace_attributes=trace_attributes,
         )
 
         channel_id = event.get("channel")
@@ -384,11 +387,13 @@ class SocketModeHandler:
                 logger.info(f"Skipping message - does not contain tag: {listen_only_tag}")
                 return
 
-            # Process with agent
-            response = agent(
-                f"[Channel: {channel_id}] User {user} says: {text}",
-                system_prompt=f"{SLACK_SYSTEM_PROMPT}\n\nEvent Context:\nCurrent: {json.dumps(event)}{event_context}",
+            # Refresh the system prompt with latest context handled from Slack events
+            agent.system_prompt = (
+                f"{SLACK_SYSTEM_PROMPT}\n\nEvent Context:\nCurrent: {json.dumps(event)}{event_context}"
             )
+
+            # Process with agent
+            response = agent(f"[Channel: {channel_id}] User {user} says: {text}")
 
             # If we have a valid response, send it back to Slack
             if response and str(response).strip():
@@ -435,7 +440,13 @@ class SocketModeHandler:
         if client and self.agent:
             tools = list(self.agent.tool_registry.registry.values())
 
-            agent = Agent(messages=[], system_prompt=SLACK_SYSTEM_PROMPT, tools=tools, callback_handler=None)
+            agent = Agent(
+                model=self.agent.model,
+                messages=[],
+                system_prompt=SLACK_SYSTEM_PROMPT,
+                tools=tools,
+                callback_handler=self.agent.callback_handler,
+            )
 
             channel_id = event.get("channel")
             actions = event.get("actions", [])
@@ -445,10 +456,8 @@ class SocketModeHandler:
             interaction_text = f"Interactive event from user {event.get('user')}. Actions: {actions}"
 
             try:
-                response = agent(
-                    interaction_text,
-                    system_prompt=f"{SLACK_SYSTEM_PROMPT}\n\nInteractive Context:\n{json.dumps(event, indent=2)}",
-                )
+                agent.system_prompt = f"{SLACK_SYSTEM_PROMPT}\n\nInteractive Context:\n{json.dumps(event, indent=2)}"
+                response = agent(interaction_text)
 
                 # Only send a response if auto-reply is enabled
                 if os.getenv("STRANDS_SLACK_AUTO_REPLY", "false").lower() == "true":
@@ -529,8 +538,7 @@ socket_handler = SocketModeHandler()
 
 @tool
 def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
-    """
-    Comprehensive Slack integration for messaging, events, and interactions.
+    """Slack integration for messaging, events, and interactions.
 
     This tool provides complete access to Slack's API methods and real-time
     event handling through a unified interface. It enables Strands agents to
@@ -666,8 +674,7 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
 
 @tool
 def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
-    """
-    Send a message to a Slack channel.
+    """Send a message to a Slack channel.
 
     This is a simplified interface for the most common Slack operation: sending messages.
     It wraps the Slack API's chat_postMessage method with a more direct interface,
