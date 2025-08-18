@@ -44,6 +44,7 @@ def interpreter():
 def test_initialization(interpreter):
     """Test AgentCoreCodeInterpreter initialization."""
     assert interpreter.region == "us-west-2"
+    assert interpreter.identifier == "aws.codeinterpreter.v1"  # Should use default identifier
     assert interpreter._sessions == {}
     assert not interpreter._started
 
@@ -55,6 +56,97 @@ def test_initialization_with_default_region():
         interpreter = AgentCoreCodeInterpreter()
         assert interpreter.region == "us-east-1"
         mock_resolve.assert_called_once_with(None)
+
+
+def test_constructor_custom_identifier_initialization():
+    """Test initialization with custom identifier."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        custom_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        
+        assert interpreter.region == "us-west-2"
+        assert interpreter.identifier == custom_id
+        assert interpreter._sessions == {}
+        assert not interpreter._started
+
+
+def test_constructor_default_identifier_fallback():
+    """Test default identifier when none provided."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        
+        assert interpreter.region == "us-west-2"
+        assert interpreter.identifier == "aws.codeinterpreter.v1"
+        assert interpreter._sessions == {}
+        assert not interpreter._started
+
+
+def test_constructor_backward_compatibility_region_only():
+    """Test backward compatibility with existing constructor calls (region only)."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-east-1"
+        # This is how existing code would call the constructor
+        interpreter = AgentCoreCodeInterpreter("us-east-1")
+        
+        assert interpreter.region == "us-east-1"
+        assert interpreter.identifier == "aws.codeinterpreter.v1"
+        assert interpreter._sessions == {}
+        assert not interpreter._started
+
+
+def test_constructor_backward_compatibility_no_params():
+    """Test backward compatibility with existing constructor calls (no parameters)."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-east-1"
+        # This is how existing code would call the constructor
+        interpreter = AgentCoreCodeInterpreter()
+        
+        assert interpreter.region == "us-east-1"
+        assert interpreter.identifier == "aws.codeinterpreter.v1"
+        assert interpreter._sessions == {}
+        assert not interpreter._started
+
+
+def test_constructor_instance_variable_storage_scenarios():
+    """Test that instance variable is set correctly in all scenarios."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        
+        # Scenario 1: Custom identifier provided
+        custom_id = "test.codeinterpreter.v1"
+        interpreter1 = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        assert hasattr(interpreter1, 'identifier')
+        assert interpreter1.identifier == custom_id
+        
+        # Scenario 2: None identifier provided (explicit None)
+        interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", identifier=None)
+        assert hasattr(interpreter2, 'identifier')
+        assert interpreter2.identifier == "aws.codeinterpreter.v1"
+        
+        # Scenario 3: Empty string identifier provided
+        interpreter3 = AgentCoreCodeInterpreter(region="us-west-2", identifier="")
+        assert hasattr(interpreter3, 'identifier')
+        assert interpreter3.identifier == "aws.codeinterpreter.v1"
+        
+        # Scenario 4: No identifier parameter provided
+        interpreter4 = AgentCoreCodeInterpreter(region="us-west-2")
+        assert hasattr(interpreter4, 'identifier')
+        assert interpreter4.identifier == "aws.codeinterpreter.v1"
+
+
+def test_constructor_custom_identifier_with_arn_format():
+    """Test initialization with ARN-formatted custom identifier."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        arn_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/my-custom-interpreter"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=arn_id)
+        
+        assert interpreter.region == "us-west-2"
+        assert interpreter.identifier == arn_id
+        assert interpreter._sessions == {}
+        assert not interpreter._started
 
 
 def test_cleanup_platform_when_not_initialized(interpreter):
