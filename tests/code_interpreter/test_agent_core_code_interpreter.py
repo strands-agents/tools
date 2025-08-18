@@ -220,6 +220,188 @@ def test_init_session_success(mock_client_class, interpreter, mock_client):
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_init_session_with_custom_identifier(mock_client_class, mock_client):
+    """Test session initialization with custom identifier passes identifier to client.start()."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client_class.return_value = mock_client
+        
+        # Create interpreter with custom identifier
+        custom_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        
+        action = InitSessionAction(type="initSession", description="Test session", session_name="custom-session")
+        
+        result = interpreter.init_session(action)
+        
+        assert result["status"] == "success"
+        assert result["content"][0]["json"]["sessionName"] == "custom-session"
+        assert result["content"][0]["json"]["description"] == "Test session"
+        assert result["content"][0]["json"]["sessionId"] == "test-session-id-123"
+        
+        # Verify client was created and started with custom identifier
+        mock_client_class.assert_called_once_with(region="us-west-2")
+        mock_client.start.assert_called_once_with(identifier=custom_id)
+        
+        # Verify session was stored
+        assert "custom-session" in interpreter._sessions
+        session_info = interpreter._sessions["custom-session"]
+        assert isinstance(session_info, SessionInfo)
+        assert session_info.session_id == "test-session-id-123"
+        assert session_info.description == "Test session"
+        assert session_info.client == mock_client
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_init_session_with_default_identifier(mock_client_class, mock_client):
+    """Test session initialization uses default identifier when none provided."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client_class.return_value = mock_client
+        
+        # Create interpreter without custom identifier (should use default)
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        
+        action = InitSessionAction(type="initSession", description="Test session", session_name="default-session")
+        
+        result = interpreter.init_session(action)
+        
+        assert result["status"] == "success"
+        assert result["content"][0]["json"]["sessionName"] == "default-session"
+        assert result["content"][0]["json"]["description"] == "Test session"
+        assert result["content"][0]["json"]["sessionId"] == "test-session-id-123"
+        
+        # Verify client was created and started with default identifier
+        mock_client_class.assert_called_once_with(region="us-west-2")
+        mock_client.start.assert_called_once_with(identifier="aws.codeinterpreter.v1")
+        
+        # Verify session was stored
+        assert "default-session" in interpreter._sessions
+        session_info = interpreter._sessions["default-session"]
+        assert isinstance(session_info, SessionInfo)
+        assert session_info.session_id == "test-session-id-123"
+        assert session_info.description == "Test session"
+        assert session_info.client == mock_client
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.logger")
+def test_init_session_logging_includes_identifier(mock_logger, mock_client_class, mock_client):
+    """Test that session initialization logging includes identifier information."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client_class.return_value = mock_client
+        
+        # Test with custom identifier
+        custom_id = "test.codeinterpreter.v1"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        
+        action = InitSessionAction(type="initSession", description="Test session", session_name="log-test-session")
+        
+        result = interpreter.init_session(action)
+        
+        assert result["status"] == "success"
+        
+        # Verify logging calls include identifier information
+        mock_logger.info.assert_any_call(f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {custom_id}")
+        mock_logger.info.assert_any_call(f"Initialized session: log-test-session (ID: test-session-id-123) with identifier: {custom_id}")
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.logger")
+def test_init_session_logging_includes_default_identifier(mock_logger, mock_client_class, mock_client):
+    """Test that session initialization logging includes default identifier when none provided."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client_class.return_value = mock_client
+        
+        # Test with default identifier (none provided)
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        
+        action = InitSessionAction(type="initSession", description="Test session", session_name="log-default-session")
+        
+        result = interpreter.init_session(action)
+        
+        assert result["status"] == "success"
+        
+        # Verify logging calls include default identifier information
+        default_id = "aws.codeinterpreter.v1"
+        mock_logger.info.assert_any_call(f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {default_id}")
+        mock_logger.info.assert_any_call(f"Initialized session: log-default-session (ID: test-session-id-123) with identifier: {default_id}")
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.logger")
+def test_init_session_error_logging_includes_identifier(mock_logger, mock_client_class, mock_client):
+    """Test that session initialization error logging includes identifier information."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client.start.side_effect = Exception("Start failed")
+        mock_client_class.return_value = mock_client
+        
+        # Test with custom identifier
+        custom_id = "error.codeinterpreter.v1"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        
+        action = InitSessionAction(type="initSession", description="Test session", session_name="error-session")
+        
+        result = interpreter.init_session(action)
+        
+        assert result["status"] == "error"
+        assert f"Failed to initialize session 'error-session' with identifier '{custom_id}': Start failed" in result["content"][0]["text"]
+        
+        # Verify error logging includes identifier information
+        mock_logger.error.assert_called_once_with(f"Failed to initialize session 'error-session' with identifier: {custom_id}. Error: Start failed")
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_init_session_multiple_identifiers_verification(mock_client_class, mock_client):
+    """Test that different interpreter instances with different identifiers work correctly."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_client_class.return_value = mock_client
+        
+        # Create first interpreter with custom identifier
+        custom_id1 = "first.codeinterpreter.v1"
+        interpreter1 = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id1)
+        
+        # Create second interpreter with different custom identifier
+        custom_id2 = "second.codeinterpreter.v1"
+        interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id2)
+        
+        # Create third interpreter with default identifier
+        interpreter3 = AgentCoreCodeInterpreter(region="us-west-2")
+        
+        # Test first interpreter
+        action1 = InitSessionAction(type="initSession", description="First session", session_name="session1")
+        result1 = interpreter1.init_session(action1)
+        assert result1["status"] == "success"
+        
+        # Test second interpreter
+        action2 = InitSessionAction(type="initSession", description="Second session", session_name="session2")
+        result2 = interpreter2.init_session(action2)
+        assert result2["status"] == "success"
+        
+        # Test third interpreter
+        action3 = InitSessionAction(type="initSession", description="Third session", session_name="session3")
+        result3 = interpreter3.init_session(action3)
+        assert result3["status"] == "success"
+        
+        # Verify each interpreter used its correct identifier
+        assert mock_client.start.call_count == 3
+        call_args_list = mock_client.start.call_args_list
+        
+        # First call should use custom_id1
+        assert call_args_list[0] == ((), {"identifier": custom_id1})
+        
+        # Second call should use custom_id2
+        assert call_args_list[1] == ((), {"identifier": custom_id2})
+        
+        # Third call should use default identifier
+        assert call_args_list[2] == ((), {"identifier": "aws.codeinterpreter.v1"})
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
 def test_init_session_already_exists(mock_client_class, interpreter, mock_client):
     """Test session initialization when session already exists."""
     # Pre-populate a session
@@ -245,8 +427,10 @@ def test_init_session_client_start_exception(mock_client_class, interpreter, moc
 
     action = InitSessionAction(type="initSession", description="Test session", session_name="fail-session")
 
-    with pytest.raises(Exception, match="Start failed"):
-        interpreter.init_session(action)
+    result = interpreter.init_session(action)
+    
+    assert result["status"] == "error"
+    assert "Failed to initialize session 'fail-session' with identifier 'aws.codeinterpreter.v1': Start failed" in result["content"][0]["text"]
 
 
 def test_list_local_sessions_empty(interpreter):
