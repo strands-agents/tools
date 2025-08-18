@@ -47,11 +47,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
     
     This class provides a code interpreter interface using AWS Bedrock AgentCore services.
     It supports executing Python, JavaScript, and TypeScript code in isolated sandbox
-    environments with custom code interpreter identifiers/ARNs.
+    environments with custom code interpreter identifiers.
     
     The class maintains session state and provides methods for code execution, file
     operations, and session management. It supports both default AWS code interpreter
-    environments and custom environments specified by ARN.
+    environments and custom environments specified by identifier.
     
     Examples:
         Basic usage with default identifier:
@@ -59,12 +59,12 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         >>> interpreter = AgentCoreCodeInterpreter(region="us-west-2")
         >>> # Uses default identifier: "aws.codeinterpreter.v1"
         
-        Using a custom code interpreter ARN:
+        Using a custom code interpreter identifier:
         
-        >>> custom_arn = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+        >>> custom_id = "my-custom-interpreter-abc123"
         >>> interpreter = AgentCoreCodeInterpreter(
         ...     region="us-west-2", 
-        ...     identifier=custom_arn
+        ...     identifier=custom_id
         ... )
         
         Environment-specific usage:
@@ -72,18 +72,18 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         >>> # For testing environments
         >>> test_interpreter = AgentCoreCodeInterpreter(
         ...     region="us-east-1",
-        ...     identifier="test.codeinterpreter.v1"
+        ...     identifier="test-interpreter-xyz789"
         ... )
         
         >>> # For production environments  
         >>> prod_interpreter = AgentCoreCodeInterpreter(
         ...     region="us-west-2",
-        ...     identifier="arn:aws:bedrock:us-west-2:prod-account:code-interpreter/prod"
+        ...     identifier="prod-interpreter-def456"
         ... )
     
     Attributes:
         region (str): The AWS region where the code interpreter service is hosted.
-        identifier (str): The code interpreter identifier/ARN being used for sessions.
+        identifier (str): The code interpreter identifier being used for sessions.
     """
 
     def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None) -> None:
@@ -94,14 +94,18 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             region (Optional[str]): AWS region for the sandbox service. If not provided,
                 the region will be resolved from AWS configuration (environment variables,
                 AWS config files, or instance metadata). Defaults to None.
-            identifier (Optional[str]): Custom code interpreter identifier or ARN to use
+            identifier (Optional[str]): Custom code interpreter identifier to use
                 for code execution sessions. This allows you to specify custom code
                 interpreter environments instead of the default AWS-provided one.
                 
                 Valid formats include:
                 - Default identifier: "aws.codeinterpreter.v1" (used when None)
-                - Custom identifier: "custom.codeinterpreter.v1"  
-                - Full ARN: "arn:aws:bedrock:region:account:code-interpreter/name"
+                - Custom identifier: "my-custom-interpreter-abc123"
+                - Environment-specific: "test-interpreter-xyz789"
+                
+                Note: Use the code interpreter ID, not the full ARN. The AWS service
+                expects the identifier portion only (e.g., "my-interpreter-123" rather
+                than "arn:aws:bedrock-agentcore:region:account:code-interpreter-custom/my-interpreter-123").
                 
                 If not provided, defaults to "aws.codeinterpreter.v1" for backward
                 compatibility. Defaults to None.
@@ -149,7 +153,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         """
         Initialize a new Bedrock AgentCore sandbox session.
         
-        Creates a new code interpreter session using the configured identifier/ARN.
+        Creates a new code interpreter session using the configured identifier.
         The session will use the identifier specified during class initialization,
         or the default "aws.codeinterpreter.v1" if none was provided.
         

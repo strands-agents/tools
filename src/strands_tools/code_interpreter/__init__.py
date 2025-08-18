@@ -5,12 +5,12 @@ This package contains the Strands-specific implementations of the Bedrock AgentC
 tools using the @tool decorator with Pydantic models and inheritance-based architecture.
 
 The AgentCoreCodeInterpreter class supports both default AWS code interpreter environments
-and custom environments specified by identifier/ARN, allowing for flexible deployment
+and custom environments specified by identifier, allowing for flexible deployment
 across different AWS accounts, regions, and custom code interpreter configurations.
 
 Key Features:
     - Support for Python, JavaScript, and TypeScript code execution
-    - Custom code interpreter identifier/ARN support
+    - Custom code interpreter identifier support
     - Session-based code execution with file operations
     - Full backward compatibility with existing implementations
     - Comprehensive error handling and logging
@@ -24,7 +24,7 @@ Example:
     >>> # Custom identifier usage
     >>> custom_interpreter = AgentCoreCodeInterpreter(
     ...     region="us-west-2",
-    ...     identifier="arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+    ...     identifier="my-custom-interpreter-abc123"
     ... )
 """
 

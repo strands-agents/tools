@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def custom_identifier_interpreter() -> AgentCoreCodeInterpreter:
     """Create a real AgentCoreCodeInterpreter with custom identifier."""
-    custom_arn = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/test-custom"
-    return AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_arn)
+    custom_id = "test-custom-interpreter-abc123"
+    return AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
 
 
 @pytest.fixture
@@ -100,11 +100,11 @@ class TestCustomIdentifierEndToEnd:
         # Create interpreters with different custom identifiers
         interpreter1 = AgentCoreCodeInterpreter(
             region="us-west-2", 
-            identifier="arn:aws:bedrock:us-west-2:123456789012:code-interpreter/test-1"
+            identifier="test-interpreter-1-abc123"
         )
         interpreter2 = AgentCoreCodeInterpreter(
             region="us-west-2", 
-            identifier="arn:aws:bedrock:us-west-2:123456789012:code-interpreter/test-2"
+            identifier="test-interpreter-2-def456"
         )
 
         # Create sessions with each interpreter
@@ -421,28 +421,28 @@ class TestIdentifierValidationAndEdgeCases:
 
     def test_special_characters_in_identifier(self):
         """Test handling of special characters in identifiers."""
-        special_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/test-with-special-chars_123"
+        special_id = "test-interpreter-with-special-chars_123"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=special_id)
         assert interpreter.identifier == special_id
 
     @skip_if_github_action.mark
-    def test_arn_format_identifier_end_to_end(self):
-        """Test end-to-end functionality with ARN-formatted identifier."""
-        arn_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/integration-test"
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=arn_id)
+    def test_complex_identifier_end_to_end(self):
+        """Test end-to-end functionality with complex identifier format."""
+        complex_id = "integration-test-interpreter-xyz789"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=complex_id)
 
         result = interpreter.code_interpreter(
             code_interpreter_input={
                 "action": {
                     "type": "initSession",
-                    "description": "ARN format test session",
-                    "session_name": "arn-test-session"
+                    "description": "Complex identifier test session",
+                    "session_name": "complex-test-session"
                 }
             }
         )
 
-        # This test will likely fail with real AWS calls due to invalid ARN,
+        # This test will likely fail with real AWS calls due to non-existent identifier,
         # but it tests that the identifier is passed through correctly
         # The specific error will depend on AWS validation
         # For now, we just verify the identifier was stored correctly
-        assert interpreter.identifier == arn_id
+        assert interpreter.identifier == complex_id

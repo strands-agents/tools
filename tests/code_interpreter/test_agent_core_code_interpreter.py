@@ -62,7 +62,7 @@ def test_constructor_custom_identifier_initialization():
     """Test initialization with custom identifier."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
-        custom_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+        custom_id = "custom-interpreter-def456"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
         
         assert interpreter.region == "us-west-2"
@@ -136,15 +136,15 @@ def test_constructor_instance_variable_storage_scenarios():
         assert interpreter4.identifier == "aws.codeinterpreter.v1"
 
 
-def test_constructor_custom_identifier_with_arn_format():
-    """Test initialization with ARN-formatted custom identifier."""
+def test_constructor_custom_identifier_with_complex_format():
+    """Test initialization with complex custom identifier."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
-        arn_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/my-custom-interpreter"
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=arn_id)
+        complex_id = "my-custom-interpreter-abc123-prod"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=complex_id)
         
         assert interpreter.region == "us-west-2"
-        assert interpreter.identifier == arn_id
+        assert interpreter.identifier == complex_id
         assert interpreter._sessions == {}
         assert not interpreter._started
 
@@ -227,7 +227,7 @@ def test_init_session_with_custom_identifier(mock_client_class, mock_client):
         mock_client_class.return_value = mock_client
         
         # Create interpreter with custom identifier
-        custom_id = "arn:aws:bedrock:us-west-2:123456789012:code-interpreter/custom"
+        custom_id = "my-custom-interpreter-abc123"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
         
         action = InitSessionAction(type="initSession", description="Test session", session_name="custom-session")
