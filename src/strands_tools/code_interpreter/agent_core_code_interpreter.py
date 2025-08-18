@@ -212,7 +212,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         except Exception as e:
             logger.error(f"Failed to initialize session '{session_name}' with identifier: {self.identifier}. Error: {str(e)}")
-            return {"status": "error", "content": [{"text": f"Failed to initialize session '{session_name}' with identifier '{self.identifier}': {str(e)}"}]}
+            return {"status": "error", "content": [{"text": f"Failed to initialize session '{session_name}': {str(e)}"}]}
 
     def list_local_sessions(self) -> Dict[str, Any]:
         """List all sessions created by this Bedrock AgentCoreplatform instance."""

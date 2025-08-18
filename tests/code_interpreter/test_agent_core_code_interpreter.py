@@ -348,7 +348,7 @@ def test_init_session_error_logging_includes_identifier(mock_logger, mock_client
         result = interpreter.init_session(action)
         
         assert result["status"] == "error"
-        assert f"Failed to initialize session 'error-session' with identifier '{custom_id}': Start failed" in result["content"][0]["text"]
+        assert "Failed to initialize session 'error-session': Start failed" in result["content"][0]["text"]
         
         # Verify error logging includes identifier information
         mock_logger.error.assert_called_once_with(f"Failed to initialize session 'error-session' with identifier: {custom_id}. Error: Start failed")
@@ -430,7 +430,7 @@ def test_init_session_client_start_exception(mock_client_class, interpreter, moc
     result = interpreter.init_session(action)
     
     assert result["status"] == "error"
-    assert "Failed to initialize session 'fail-session' with identifier 'aws.codeinterpreter.v1': Start failed" in result["content"][0]["text"]
+    assert "Failed to initialize session 'fail-session': Start failed" in result["content"][0]["text"]
 
 
 def test_list_local_sessions_empty(interpreter):
