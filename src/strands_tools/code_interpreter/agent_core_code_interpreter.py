@@ -74,7 +74,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
     def init_session(self, action: InitSessionAction) -> Dict[str, Any]:
         """Initialize a new Bedrock AgentCoresandbox session."""
 
-        logger.info(f"Initializing Bedrock AgentCoresandbox session: {action.description}")
+        logger.info(f"Initializing Bedrock AgentCoresandbox session: {action.description} with identifier: {self.identifier}")
 
         session_name = action.session_name
 
@@ -82,35 +82,40 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name in self._sessions:
             return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
 
-        # Create new sandbox client
-        client = BedrockAgentCoreCodeInterpreterClient(
-            region=self.region,
-        )
+        try:
+            # Create new sandbox client
+            client = BedrockAgentCoreCodeInterpreterClient(
+                region=self.region,
+            )
 
-        # Start the session
-        client.start()
+            # Start the session with custom identifier
+            client.start(identifier=self.identifier)
 
-        # Store session info
-        self._sessions[session_name] = SessionInfo(
-            session_id=client.session_id, description=action.description, client=client
-        )
+            # Store session info
+            self._sessions[session_name] = SessionInfo(
+                session_id=client.session_id, description=action.description, client=client
+            )
 
-        logger.info(f"Initialized session: {session_name} (ID: {client.session_id})")
+            logger.info(f"Initialized session: {session_name} (ID: {client.session_id}) with identifier: {self.identifier}")
 
-        response = {
-            "status": "success",
-            "content": [
-                {
-                    "json": {
-                        "sessionName": session_name,
-                        "description": action.description,
-                        "sessionId": client.session_id,
+            response = {
+                "status": "success",
+                "content": [
+                    {
+                        "json": {
+                            "sessionName": session_name,
+                            "description": action.description,
+                            "sessionId": client.session_id,
+                        }
                     }
-                }
-            ],
-        }
+                ],
+            }
 
-        return self._create_tool_result(response)
+            return self._create_tool_result(response)
+
+        except Exception as e:
+            logger.error(f"Failed to initialize session '{session_name}' with identifier: {self.identifier}. Error: {str(e)}")
+            return {"status": "error", "content": [{"text": f"Failed to initialize session '{session_name}' with identifier '{self.identifier}': {str(e)}"}]}
 
     def list_local_sessions(self) -> Dict[str, Any]:
         """List all sessions created by this Bedrock AgentCoreplatform instance."""
