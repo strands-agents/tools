@@ -32,15 +32,18 @@ class SessionInfo:
 class AgentCoreCodeInterpreter(CodeInterpreter):
     """Bedrock AgentCore implementation of the CodeInterpreter."""
 
-    def __init__(self, region: Optional[str] = None):
+    def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None):
         """
-        Initialize the Bedrock AgentCorecode interpreter.
+        Initialize the Bedrock AgentCore code interpreter.
 
         Args:
             region: AWS region for the sandbox service
+            identifier: Custom code interpreter identifier/ARN. 
+                       If not provided, defaults to "aws.codeinterpreter.v1"
         """
         super().__init__()
         self.region = resolve_region(region)
+        self.identifier = identifier or "aws.codeinterpreter.v1"
         self._sessions: Dict[str, SessionInfo] = {}
 
     def start_platform(self) -> None:
