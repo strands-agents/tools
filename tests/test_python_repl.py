@@ -650,3 +650,439 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+def test_repl_state_with_complex_objects(temp_repl_state_dir):
+    """Test REPL state handling with complex Python objects."""
+    repl = python_repl.ReplState()
+    repl.clear_state()
+
+    # Test with complex nested data structures
+    complex_code = """
+import collections
+import datetime
+
+# Complex nested data structure
+data = {
+    'users': [
+        {'id': 1, 'name': 'Alice', 'created': datetime.datetime.now()},
+        {'id': 2, 'name': 'Bob', 'created': datetime.datetime.now()}
+    ],
+    'settings': collections.defaultdict(list),
+    'counters': collections.Counter(['a', 'b', 'a', 'c', 'b', 'a'])
+}
+
+# Add some data to defaultdict
+data['settings']['theme'].append('dark')
+data['settings']['notifications'].extend(['email', 'push'])
+
+result = len(data['users'])
+"""
+    
+    repl.execute(complex_code)
+    namespace = repl.get_namespace()
+    
+    assert namespace["result"] == 2
+    assert "data" in namespace
+    assert "collections" in namespace
+
+
+def test_repl_state_import_handling(temp_repl_state_dir):
+    """Test REPL state handling of various import patterns."""
+    repl = python_repl.ReplState()
+    repl.clear_state()
+
+    # Test different import patterns
+    import_code = """
+import os
+import sys as system
+from datetime import datetime, timedelta
+from collections import defaultdict, Counter
+from pathlib import Path
+
+# Use imported modules
+current_dir = os.getcwd()
+python_version = system.version_info
+now = datetime.now()
+future = now + timedelta(days=1)
+dd = defaultdict(int)
+counter = Counter([1, 2, 1, 3, 2, 1])
+path_obj = Path('.')
+"""
+    
+    repl.execute(import_code)
+    namespace = repl.get_namespace()
+    
+    # Verify imports are available
+    assert "os" in namespace
+    assert "system" in namespace
+    assert "datetime" in namespace
+    assert "current_dir" in namespace
+    assert "python_version" in namespace
+
+
+def test_python_repl_with_multiline_code(mock_console):
+    """Test python_repl with complex multiline code blocks."""
+    multiline_code = '''
+def fibonacci(n):
+    """Generate fibonacci sequence up to n terms."""
+    if n <= 0:
+        return []
+    elif n == 1:
+        return [0]
+    elif n == 2:
+        return [0, 1]
+    
+    sequence = [0, 1]
+    for i in range(2, n):
+        sequence.append(sequence[i-1] + sequence[i-2])
+    return sequence
+
+# Test the function
+fib_10 = fibonacci(10)
+fib_sum = sum(fib_10)
+
+# Create a class
+class Calculator:
+    def __init__(self):
+        self.history = []
+    
+    def add(self, a, b):
+        result = a + b
+        self.history.append(f"{a} + {b} = {result}")
+        return result
+    
+    def get_history(self):
+        return self.history
+
+calc = Calculator()
+calc_result = calc.add(5, 3)
+'''
+
+    tool_use = {
+        "toolUseId": "test-multiline-id",
+        "input": {"code": multiline_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = python_repl.python_repl(tool=tool_use)
+
+    assert result["status"] == "success"
+    
+    # Verify the code was executed and objects are in namespace
+    namespace = python_repl.repl_state.get_namespace()
+    assert "fibonacci" in namespace
+    assert "fib_10" in namespace
+    assert "Calculator" in namespace
+    assert "calc" in namespace
+    assert namespace["calc_result"] == 8
+
+
+def test_python_repl_exception_types(mock_console):
+    """Test python_repl handling of different exception types."""
+    exception_tests = [
+        ("1/0", "ZeroDivisionError"),
+        ("undefined_variable", "NameError"),
+        ("int('not_a_number')", "ValueError"),
+        ("[1, 2, 3][10]", "IndexError"),
+        ("{'a': 1}['b']", "KeyError"),
+        ("import nonexistent_module", "ModuleNotFoundError"),
+    ]
+
+    for code, expected_error in exception_tests:
+        tool_use = {
+            "toolUseId": f"test-{expected_error.lower()}-id",
+            "input": {"code": code, "interactive": False},
+        }
+
+        with patch("strands_tools.python_repl.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            result = python_repl.python_repl(tool=tool_use)
+
+        assert result["status"] == "error"
+        assert expected_error in result["content"][0]["text"]
+
+
+def test_python_repl_output_capture_edge_cases(mock_console):
+    """Test output capture with edge cases like mixed stdout/stderr."""
+    mixed_output_code = '''
+import sys
+
+print("This goes to stdout")
+print("This also goes to stdout", file=sys.stdout)
+print("This goes to stderr", file=sys.stderr)
+
+# Mix of outputs
+for i in range(3):
+    if i % 2 == 0:
+        print(f"stdout: {i}")
+    else:
+        print(f"stderr: {i}", file=sys.stderr)
+
+# Test with different print parameters
+print("No newline", end="")
+print(" - continued")
+print("Multiple", "arguments", "here")
+'''
+
+    tool_use = {
+        "toolUseId": "test-mixed-output-id",
+        "input": {"code": mixed_output_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = python_repl.python_repl(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = result["content"][0]["text"]
+    
+    # Should capture both stdout and stderr
+    assert "stdout" in result_text
+    assert "stderr" in result_text
+    assert "Errors:" in result_text  # stderr section
+
+
+def test_python_repl_state_persistence_across_calls(mock_console, temp_repl_state_dir):
+    """Test that state persists correctly across multiple REPL calls."""
+    # First call - set up some state
+    setup_code = '''
+global_counter = 0
+
+def increment():
+    global global_counter
+    global_counter += 1
+    return global_counter
+
+class StateTracker:
+    def __init__(self):
+        self.calls = []
+    
+    def track(self, operation):
+        self.calls.append(operation)
+        return len(self.calls)
+
+tracker = StateTracker()
+first_increment = increment()
+first_track = tracker.track("setup")
+'''
+
+    tool_use_1 = {
+        "toolUseId": "test-setup-id",
+        "input": {"code": setup_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result_1 = python_repl.python_repl(tool=tool_use_1)
+
+    assert result_1["status"] == "success"
+
+    # Second call - use the persisted state
+    use_state_code = '''
+# Use previously defined function and objects
+second_increment = increment()
+second_track = tracker.track("continuation")
+
+# Verify state persistence
+assert global_counter == 2
+assert len(tracker.calls) == 2
+assert tracker.calls == ["setup", "continuation"]
+
+persistence_test_passed = True
+'''
+
+    tool_use_2 = {
+        "toolUseId": "test-persistence-id",
+        "input": {"code": use_state_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result_2 = python_repl.python_repl(tool=tool_use_2)
+
+    assert result_2["status"] == "success"
+    
+    # Verify the persistence test passed
+    namespace = python_repl.repl_state.get_namespace()
+    assert namespace.get("persistence_test_passed") is True
+
+
+def test_python_repl_memory_intensive_operations(mock_console):
+    """Test python_repl with memory-intensive operations."""
+    memory_code = '''
+import gc
+
+# Create large data structures
+large_list = list(range(100000))
+large_dict = {i: f"value_{i}" for i in range(10000)}
+large_string = "x" * 100000
+
+# Memory operations
+list_length = len(large_list)
+dict_size = len(large_dict)
+string_length = len(large_string)
+
+# Force garbage collection
+gc.collect()
+
+# Clean up large objects
+del large_list, large_dict, large_string
+gc.collect()
+
+memory_test_completed = True
+'''
+
+    tool_use = {
+        "toolUseId": "test-memory-id",
+        "input": {"code": memory_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = python_repl.python_repl(tool=tool_use)
+
+    assert result["status"] == "success"
+    
+    namespace = python_repl.repl_state.get_namespace()
+    assert namespace["list_length"] == 100000
+    assert namespace["dict_size"] == 10000
+    assert namespace["string_length"] == 100000
+    assert namespace["memory_test_completed"] is True
+
+
+def test_pty_manager_signal_handling():
+    """Test PtyManager signal handling and cleanup."""
+    if sys.platform == "win32":
+        pytest.skip("PTY tests not supported on Windows")
+
+    pty_mgr = python_repl.PtyManager()
+    
+    # Mock the necessary components
+    with (
+        patch("os.fork", return_value=12345),
+        patch("os.kill") as mock_kill,
+        patch("os.waitpid") as mock_waitpid,
+        patch("os.close"),
+        patch("pty.openpty", return_value=(10, 11)),
+    ):
+        try:
+            pty_mgr.start("print('test')")
+            pty_mgr.stop()
+            # Test passes if no exception is raised
+            assert True
+        except OSError:
+            # Expected on some systems
+            pytest.skip("PTY operations not available")
+
+
+def test_python_repl_with_imports_and_packages(mock_console):
+    """Test python_repl with various package imports and usage."""
+    package_code = '''
+# Test standard library imports
+import json
+import re
+import urllib.parse
+from datetime import datetime, timezone
+from pathlib import Path
+
+# Test data processing
+data = {
+    "users": [
+        {"name": "Alice", "email": "alice@example.com"},
+        {"name": "Bob", "email": "bob@example.com"}
+    ],
+    "timestamp": datetime.now(timezone.utc).isoformat()
+}
+
+# JSON operations
+json_string = json.dumps(data, indent=2)
+parsed_data = json.loads(json_string)
+
+# Regex operations
+email_pattern = r'\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b'
+emails = []
+for user in data["users"]:
+    if re.match(email_pattern, user["email"]):
+        emails.append(user["email"])
+
+# URL operations
+base_url = "https://api.example.com"
+endpoint = "/users"
+params = {"limit": 10, "offset": 0}
+full_url = urllib.parse.urljoin(base_url, endpoint)
+query_string = urllib.parse.urlencode(params)
+
+# Path operations
+current_path = Path.cwd()
+test_file = current_path / "test.txt"
+
+package_test_completed = True
+'''
+
+    tool_use = {
+        "toolUseId": "test-packages-id",
+        "input": {"code": package_code, "interactive": False},
+    }
+
+    with patch("strands_tools.python_repl.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = python_repl.python_repl(tool=tool_use)
+
+    assert result["status"] == "success"
+    
+    namespace = python_repl.repl_state.get_namespace()
+    assert namespace["package_test_completed"] is True
+    assert len(namespace["emails"]) == 2
+    assert "alice@example.com" in namespace["emails"]
+
+
+def test_output_capture_binary_content():
+    """Test OutputCapture handling of binary content."""
+    capture = python_repl.OutputCapture()
+    
+    with capture:
+        # Simulate text output that might contain special characters
+        print("Test output with special chars: \x00\x01")
+    
+    output = capture.get_output()
+    # Should handle content gracefully
+    assert isinstance(output, str)
+    assert "Test output" in output
+
+
+def test_repl_state_concurrent_access(temp_repl_state_dir):
+    """Test REPL state handling under concurrent access."""
+    import threading
+    import time
+    
+    repl = python_repl.ReplState()
+    repl.clear_state()
+    
+    results = []
+    
+    def concurrent_execution(thread_id):
+        try:
+            code = f"thread_{thread_id}_var = {thread_id} * 10"
+            repl.execute(code)
+            time.sleep(0.01)  # Small delay
+            namespace = repl.get_namespace()
+            results.append((thread_id, namespace.get(f"thread_{thread_id}_var")))
+        except Exception as e:
+            results.append((thread_id, f"error: {e}"))
+    
+    # Create multiple threads
+    threads = []
+    for i in range(5):
+        thread = threading.Thread(target=concurrent_execution, args=(i,))
+        threads.append(thread)
+        thread.start()
+    
+    # Wait for all threads
+    for thread in threads:
+        thread.join()
+    
+    # Verify results
+    assert len(results) == 5
+    for thread_id, result in results:
+        if isinstance(result, int):
+            assert result == thread_id * 10

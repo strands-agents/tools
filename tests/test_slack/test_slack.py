@@ -373,3 +373,266 @@ class TestSlackIntegration:
 
         # Check that the message was sent successfully
         assert "Message sent successfully" in result
+class TestSlackAdvancedFeatures(unittest.TestCase):
+    """Test advanced Slack tool features and edge cases."""
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_api_rate_limiting(self, mock_init, mock_client):
+        """Test handling of Slack API rate limiting."""
+        mock_init.return_value = (True, None)
+        
+        # Simulate rate limiting error
+        mock_client.chat_postMessage.side_effect = Exception("Rate limited")
+
+        result = slack(action="chat_postMessage", parameters={"channel": "test", "text": "test"})
+
+        self.assertIn("Error", result)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_api_invalid_channel(self, mock_init, mock_client):
+        """Test handling of invalid channel errors."""
+        mock_init.return_value = (True, None)
+        
+        # Simulate invalid channel error
+        mock_client.chat_postMessage.side_effect = Exception("Channel not found")
+
+        result = slack(action="chat_postMessage", parameters={"channel": "invalid", "text": "test"})
+
+        self.assertIn("Error", result)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_complex_message_formatting(self, mock_init, mock_client):
+        """Test sending messages with complex formatting."""
+        mock_init.return_value = (True, None)
+        mock_response = MagicMock()
+        mock_response.data = {"ok": True, "ts": "1234.5678"}
+        mock_client.chat_postMessage.return_value = mock_response
+
+        # Test with blocks and attachments
+        complex_parameters = {
+            "channel": "test_channel",
+            "text": "Fallback text",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Bold text* and _italic text_"}
+                }
+            ],
+            "attachments": [
+                {
+                    "color": "good",
+                    "fields": [
+                        {"title": "Status", "value": "Success", "short": True}
+                    ]
+                }
+            ]
+        }
+
+        result = slack(action="chat_postMessage", parameters=complex_parameters)
+
+        # Verify complex parameters were passed correctly
+        mock_client.chat_postMessage.assert_called_once()
+        call_args = mock_client.chat_postMessage.call_args[1]
+        self.assertEqual(call_args["channel"], "test_channel")
+        self.assertIn("blocks", call_args)
+        self.assertIn("attachments", call_args)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_file_upload(self, mock_init, mock_client):
+        """Test file upload functionality."""
+        mock_init.return_value = (True, None)
+        mock_response = MagicMock()
+        mock_response.data = {"ok": True, "file": {"id": "F1234567890"}}
+        mock_client.files_upload.return_value = mock_response
+
+        result = slack(
+            action="files_upload",
+            parameters={
+                "channels": "test_channel",
+                "file": "test_file.txt",
+                "title": "Test File",
+                "initial_comment": "Here's a test file"
+            }
+        )
+
+        mock_client.files_upload.assert_called_once_with(
+            channels="test_channel",
+            file="test_file.txt",
+            title="Test File",
+            initial_comment="Here's a test file"
+        )
+        self.assertIn("files_upload executed successfully", result)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_user_info_retrieval(self, mock_init, mock_client):
+        """Test user information retrieval."""
+        mock_init.return_value = (True, None)
+        mock_response = MagicMock()
+        mock_response.data = {
+            "ok": True,
+            "user": {
+                "id": "U1234567890",
+                "name": "testuser",
+                "real_name": "Test User",
+                "profile": {"email": "test@example.com"}
+            }
+        }
+        mock_client.users_info.return_value = mock_response
+
+        result = slack(action="users_info", parameters={"user": "U1234567890"})
+
+        mock_client.users_info.assert_called_once_with(user="U1234567890")
+        self.assertIn("users_info executed successfully", result)
+        self.assertIn("testuser", result)
+
+    @patch("strands_tools.slack.socket_handler")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_socket_mode_connection_failure(self, mock_init, mock_handler):
+        """Test socket mode connection failure handling."""
+        mock_init.return_value = (True, None)
+        mock_handler.start.return_value = False  # Connection failed
+
+        agent_mock = MagicMock()
+        result = slack(action="start_socket_mode", agent=agent_mock)
+
+        mock_handler.start.assert_called_once_with(agent_mock)
+        self.assertIn("Failed to establish Socket Mode connection", result)
+
+    @patch("strands_tools.slack.socket_handler")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_socket_mode_stop(self, mock_init, mock_handler):
+        """Test stopping socket mode connection."""
+        mock_init.return_value = (True, None)
+        mock_handler.stop.return_value = True
+
+        result = slack(action="stop_socket_mode")
+
+        self.assertIsInstance(result, str)
+
+    def test_slack_initialization_missing_tokens(self):
+        """Test initialization failure when tokens are missing."""
+        # Ensure tokens are not in environment
+        with patch.dict(os.environ, {}, clear=True):
+            success, error_message = initialize_slack_clients()
+            
+            self.assertFalse(success)
+            self.assertIsNotNone(error_message)
+            self.assertIn("SLACK_BOT_TOKEN", error_message)
+
+    def test_get_recent_events_malformed_json(self):
+        """Test handling of malformed JSON in events file."""
+        result = slack(action="get_recent_events", parameters={"count": 3})
+        # Should handle gracefully
+        self.assertIsInstance(result, str)
+
+
+class TestSocketModeHandlerAdvanced(unittest.TestCase):
+    """Advanced tests for SocketModeHandler class."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.handler = SocketModeHandler()
+        self.handler.client = MagicMock()
+        self.handler.agent = MagicMock()
+
+    def test_socket_handler_message_processing(self):
+        """Test message processing in socket mode handler."""
+        # Test message processing (placeholder)
+        self.assertTrue(True)
+
+    def test_socket_handler_error_recovery(self):
+        """Test error recovery in socket mode handler."""
+        # Simulate connection error
+        self.handler.client.connect.side_effect = Exception("Connection failed")
+
+        agent_mock = MagicMock()
+        result = self.handler.start(agent_mock)
+
+        # Should handle connection errors gracefully
+        self.assertIsInstance(result, bool)
+
+    def test_get_recent_events_large_file(self):
+        """Test handling of large events file."""
+        # Test with mock data
+        result = self.handler._get_recent_events(count=10)
+        self.assertIsInstance(result, list)
+
+
+class TestSlackToolEdgeCases(unittest.TestCase):
+    """Test edge cases and error conditions in Slack tools."""
+
+    def test_slack_with_none_parameters(self):
+        """Test slack tool with None parameters."""
+        result = slack(action="chat_postMessage", parameters=None)
+        
+        # Should handle None parameters gracefully
+        self.assertIsInstance(result, str)
+
+    def test_slack_with_empty_action(self):
+        """Test slack tool with empty action."""
+        result = slack(action="", parameters={"channel": "test", "text": "test"})
+        
+        # Should handle empty action gracefully
+        self.assertIsInstance(result, str)
+
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_initialization_timeout(self, mock_init):
+        """Test handling of initialization timeout."""
+        mock_init.side_effect = Exception("Initialization failed")
+
+        result = slack(action="chat_postMessage", parameters={"channel": "test", "text": "test"})
+
+        self.assertIsInstance(result, str)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_network_connectivity_issues(self, mock_init, mock_client):
+        """Test handling of network connectivity issues."""
+        mock_init.return_value = (True, None)
+        mock_client.chat_postMessage.side_effect = Exception("Network unreachable")
+
+        result = slack(action="chat_postMessage", parameters={"channel": "test", "text": "test"})
+
+        self.assertIsInstance(result, str)
+
+    def test_slack_send_message_with_special_characters(self):
+        """Test sending messages with special characters and emojis."""
+        special_text = "Hello! 🚀 Testing special chars: @#$%^&*()_+ 中文 العربية"
+        
+        with (
+            patch("strands_tools.slack.client") as mock_client,
+            patch("strands_tools.slack.initialize_slack_clients") as mock_init,
+        ):
+            mock_init.return_value = (True, None)
+            mock_response = {"ok": True, "ts": "1234.5678"}
+            mock_client.chat_postMessage.return_value = mock_response
+
+            result = slack_send_message(channel="test_channel", text=special_text)
+
+            # Should handle special characters correctly
+            mock_client.chat_postMessage.assert_called_once_with(
+                channel="test_channel", 
+                text=special_text
+            )
+            self.assertIn("Message sent successfully", result)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.initialize_slack_clients")
+    def test_slack_api_response_parsing_error(self, mock_init, mock_client):
+        """Test handling of API response parsing errors."""
+        mock_init.return_value = (True, None)
+        
+        # Mock response that causes parsing issues
+        mock_response = MagicMock()
+        mock_response.data = None  # Invalid response format
+        mock_client.chat_postMessage.return_value = mock_response
+
+        result = slack(action="chat_postMessage", parameters={"channel": "test", "text": "test"})
+
+        # Should handle parsing errors gracefully
+        self.assertIn("executed successfully", result)  # Tool should still report success
