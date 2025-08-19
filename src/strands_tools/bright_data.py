@@ -153,14 +153,6 @@ TOOL_SPEC = {
                     "type": "boolean",
                     "description": "Return parsed JSON instead of HTML/Markdown",
                 },
-                "hotel_dates": {
-                    "type": "string",
-                    "description": "Check-in and check-out dates (format: YYYY-MM-DD,YYYY-MM-DD)",
-                },
-                "hotel_occupancy": {
-                    "type": "integer",
-                    "description": "Number of guests (1-4)",
-                },
                 "source_type": {
                     "type": "string",
                     "description": "Type of data source for web_data_feed"
@@ -305,8 +297,6 @@ class BrightDataClient:
         location: Optional[str] = None,
         device: Optional[str] = None,
         return_json: bool = False,
-        hotel_dates: Optional[str] = None,
-        hotel_occupancy: Optional[int] = None,
     ) -> str:
         """
         Search using Google, Bing, or Yandex with advanced parameters and return results in Markdown.
@@ -326,9 +316,6 @@ class BrightDataClient:
             device (Optional[str]): Device type (mobile, ios, android, ipad, android_tablet)
             return_json (bool): Return parsed JSON instead of HTML/Markdown
 
-            # Hotel search parameters
-            hotel_dates (Optional[str]): Check-in and check-out dates (format: YYYY-MM-DD,YYYY-MM-DD)
-            hotel_occupancy (Optional[int]): Number of guests (1-4)
 
         Returns:
             str: Search results as Markdown or JSON
@@ -389,11 +376,6 @@ class BrightDataClient:
             if return_json:
                 params.append("brd_json=1")
 
-            if hotel_dates:
-                params.append(f"hotel_dates={self.encode_query(hotel_dates)}")
-
-            if hotel_occupancy:
-                params.append(f"hotel_occupancy={hotel_occupancy}")
 
             if params:
                 search_url += "&" + "&".join(params)
@@ -581,8 +563,6 @@ def bright_data(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 location=tool_input.get("location"),
                 device=tool_input.get("device"),
                 return_json=tool_input.get("return_json", False),
-                hotel_dates=tool_input.get("hotel_dates"),
-                hotel_occupancy=tool_input.get("hotel_occupancy"),
             )
 
             return ToolResult(toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=content)])
