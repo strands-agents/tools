@@ -171,7 +171,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 invalid identifier, or other configuration problems.
         """
 
-        logger.info(f"Initializing Bedrock AgentCoresandbox session: {action.description} with identifier: {self.identifier}")
+        logger.info(
+            f"Initializing Bedrock AgentCoresandbox session: {action.description} with identifier: {self.identifier}"
+        )
 
         session_name = action.session_name
 
@@ -193,7 +195,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 session_id=client.session_id, description=action.description, client=client
             )
 
-            logger.info(f"Initialized session: {session_name} (ID: {client.session_id}) with identifier: {self.identifier}")
+            logger.info(
+                f"Initialized session: {session_name} (ID: {client.session_id}) with identifier: {self.identifier}"
+            )
 
             response = {
                 "status": "success",
@@ -211,8 +215,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             return self._create_tool_result(response)
 
         except Exception as e:
-            logger.error(f"Failed to initialize session '{session_name}' with identifier: {self.identifier}. Error: {str(e)}")
-            return {"status": "error", "content": [{"text": f"Failed to initialize session '{session_name}': {str(e)}"}]}
+            logger.error(
+                f"Failed to initialize session '{session_name}' with identifier: {self.identifier}. Error: {str(e)}"
+            )
+            return {
+                "status": "error", 
+                "content": [{"text": f"Failed to initialize session '{session_name}': {str(e)}"}]
+            }
 
     def list_local_sessions(self) -> Dict[str, Any]:
         """List all sessions created by this Bedrock AgentCoreplatform instance."""

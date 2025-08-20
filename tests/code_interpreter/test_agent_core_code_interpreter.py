@@ -303,8 +303,12 @@ def test_init_session_logging_includes_identifier(mock_logger, mock_client_class
         assert result["status"] == "success"
         
         # Verify logging calls include identifier information
-        mock_logger.info.assert_any_call(f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {custom_id}")
-        mock_logger.info.assert_any_call(f"Initialized session: log-test-session (ID: test-session-id-123) with identifier: {custom_id}")
+        mock_logger.info.assert_any_call(
+            f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {custom_id}"
+        )
+        mock_logger.info.assert_any_call(
+            f"Initialized session: log-test-session (ID: test-session-id-123) with identifier: {custom_id}"
+        )
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
@@ -326,8 +330,12 @@ def test_init_session_logging_includes_default_identifier(mock_logger, mock_clie
         
         # Verify logging calls include default identifier information
         default_id = "aws.codeinterpreter.v1"
-        mock_logger.info.assert_any_call(f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {default_id}")
-        mock_logger.info.assert_any_call(f"Initialized session: log-default-session (ID: test-session-id-123) with identifier: {default_id}")
+        mock_logger.info.assert_any_call(
+            f"Initializing Bedrock AgentCoresandbox session: Test session with identifier: {default_id}"
+        )
+        mock_logger.info.assert_any_call(
+            f"Initialized session: log-default-session (ID: test-session-id-123) with identifier: {default_id}"
+        )
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
@@ -351,7 +359,9 @@ def test_init_session_error_logging_includes_identifier(mock_logger, mock_client
         assert "Failed to initialize session 'error-session': Start failed" in result["content"][0]["text"]
         
         # Verify error logging includes identifier information
-        mock_logger.error.assert_called_once_with(f"Failed to initialize session 'error-session' with identifier: {custom_id}. Error: Start failed")
+        mock_logger.error.assert_called_once_with(
+            f"Failed to initialize session 'error-session' with identifier: {custom_id}. Error: Start failed"
+        )
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
