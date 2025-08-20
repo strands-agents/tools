@@ -150,13 +150,16 @@ class Mem0ServiceClient:
     """Client for interacting with Mem0 service."""
 
     DEFAULT_CONFIG = {
-        "embedder": {"provider": "aws_bedrock", "config": {"model": "amazon.titan-embed-text-v2:0"}},
+        "embedder": {
+            "provider": os.environ.get("MEM0_EMBEDDER_PROVIDER", "aws_bedrock"),
+            "config": {"model": os.environ.get("MEM0_EMBEDDER_MODEL", "amazon.titan-embed-text-v2:0")},
+        },
         "llm": {
-            "provider": "aws_bedrock",
+            "provider": os.environ.get("MEM0_LLM_PROVIDER", "aws_bedrock"),
             "config": {
-                "model": "anthropic.claude-3-5-haiku-20241022-v1:0",
-                "temperature": 0.1,
-                "max_tokens": 2000,
+                "model": os.environ.get("MEM0_LLM_MODEL", "anthropic.claude-3-5-haiku-20241022-v1:0"),
+                "temperature": float(os.environ.get("MEM0_LLM_TEMPERATURE", 0.1)),
+                "max_tokens": int(os.environ.get("MEM0_LLM_MAX_TOKENS", 2000)),
             },
         },
         "vector_store": {
