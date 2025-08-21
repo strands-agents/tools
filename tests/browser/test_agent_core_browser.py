@@ -36,6 +36,18 @@ def test_bedrock_browser_default_identifier():
     assert browser.identifier == "aws.browser.v1"
 
 
+def test_bedrock_browser_none_identifier():
+    """Test AgentCoreBrowser uses default identifier when None provided."""
+    browser = AgentCoreBrowser(identifier=None)
+    assert browser.identifier == "aws.browser.v1"
+
+
+def test_bedrock_browser_empty_string_identifier():
+    """Test AgentCoreBrowser uses default identifier when empty string provided."""
+    browser = AgentCoreBrowser(identifier="")
+    assert browser.identifier == "aws.browser.v1"
+
+
 @pytest.mark.asyncio
 async def test_bedrock_browser_create_browser_session_no_playwright():
     """Test creating session browser without playwright initialized."""

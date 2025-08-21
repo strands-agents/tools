@@ -16,24 +16,23 @@ from .browser import Browser
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_IDENTIFIER = "aws.browser.v1"
-
 
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 
-    def __init__(self, region: Optional[str] = None, identifier: str = DEFAULT_IDENTIFIER, session_timeout: int = 3600):
+    def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None, session_timeout: int = 3600):
         """
         Initialize the browser.
 
         Args:
             region: AWS region for the browser service
-            identifier: Browser identifier to use for sessions (default: "aws.browser.v1")
+            identifier: Browser identifier to use for sessions. If not provided,
+                defaults to "aws.browser.v1" for backward compatibility.
             session_timeout: Session timeout in seconds (default: 3600)
         """
         super().__init__()
         self.region = resolve_region(region)
-        self.identifier = identifier
+        self.identifier = identifier or "aws.browser.v1"
         self.session_timeout = session_timeout
         self._client_dict: Dict[str, AgentCoreBrowserClient] = {}
 
