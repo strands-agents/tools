@@ -23,6 +23,25 @@ def test_bedrock_browser_with_custom_params():
     assert browser.session_timeout == 7200
 
 
+def test_bedrock_browser_identifier_assignment():
+    """Test AgentCoreBrowser identifier parameter assignment."""
+    # Test default identifier
+    browser_default = AgentCoreBrowser()
+    assert hasattr(browser_default, "identifier")
+    assert browser_default.identifier == "aws.browser.v1"
+
+    # Test custom identifier
+    custom_identifier = "my.custom.browser.v2"
+    browser_custom = AgentCoreBrowser(identifier=custom_identifier)
+    assert browser_custom.identifier == custom_identifier
+
+    # Test identifier with other parameters
+    browser_all_params = AgentCoreBrowser(region="us-west-2", identifier="test.browser.v1", session_timeout=3600)
+    assert browser_all_params.identifier == "test.browser.v1"
+    assert browser_all_params.region == "us-west-2"
+    assert browser_all_params.session_timeout == 3600
+
+
 @pytest.mark.asyncio
 async def test_bedrock_browser_create_browser_session_no_playwright():
     """Test creating session browser without playwright initialized."""
