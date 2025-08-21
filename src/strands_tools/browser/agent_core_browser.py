@@ -28,10 +28,12 @@ class AgentCoreBrowser(Browser):
 
         Args:
             region: AWS region for the browser service
+            identifier: Browser service identifier
             session_timeout: Session timeout in seconds (default: 3600)
         """
         super().__init__()
         self.region = resolve_region(region)
+        self.identifier = identifier
         self.session_timeout = session_timeout
         self._client_dict: Dict[str, AgentCoreBrowserClient] = {}
 
