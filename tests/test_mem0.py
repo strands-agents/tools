@@ -54,7 +54,18 @@ def extract_result_text(result):
     return str(result)
 
 
-@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch.dict(
+    os.environ,
+    {
+        "MEM0_LLM_PROVIDER": "openai",
+        "MEM0_LLM_MODEL": "gpt-4o",
+        "MEM0_LLM_TEMPERATURE": "0.2",
+        "MEM0_LLM_MAX_TOKENS": "4000",
+        "MEM0_EMBEDDER_PROVIDER": "openai",
+        "MEM0_EMBEDDER_MODEL": "text-embedding-3-large",
+        "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+    },
+)
 @patch("strands_tools.mem0_memory.Mem0Memory")
 @patch("strands_tools.mem0_memory.boto3.Session")
 def test_store_memory(mock_boto3_session, mock_mem0_memory, mock_tool):

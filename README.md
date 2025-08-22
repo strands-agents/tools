@@ -759,12 +759,19 @@ The Mem0 Memory Tool supports three different backend configurations:
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
+| MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
+| MEM0_LLM_MODEL | LLM model for memory processing | anthropic.claude-3-5-haiku-20241022-v1:0 | All modes |
+| MEM0_LLM_TEMPERATURE | LLM temperature (0.0-2.0) | 0.1 | All modes |
+| MEM0_LLM_MAX_TOKENS | LLM maximum tokens | 2000 | All modes |
+| MEM0_EMBEDDER_PROVIDER | Embedder provider for vector embeddings | aws_bedrock | All modes |
+| MEM0_EMBEDDER_MODEL | Embedder model for vector embeddings | amazon.titan-embed-text-v2:0 | All modes |
+
 
 **Note**:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
-
+- LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
 #### Memory Tool
 
 | Environment Variable | Description | Default |
