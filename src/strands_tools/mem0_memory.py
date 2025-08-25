@@ -204,12 +204,34 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
+        if os.environ.get("NEPTUNE_ANALYTICS_HOST"):
+            logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
+            config = self._configure_neptune_analytics_backend(config)
+
         if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
             return self._initialize_opensearch_client(config)
 
         logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
         return self._initialize_faiss_client(config)
+
+    def _configure_neptune_analytics_backend(self, config: Optional[Dict] = None) -> Dict:
+        """Initialize a Mem0 client with Neptune Analytics graph backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An configuration dict with graph backend.
+        """
+        config = config or {}
+        return config['graph_store'] = {
+            "provider": "neptune",
+            "config": {
+                "endpoint": f"neptune-graph://{os.environ.get("NEPTUNE_ANALYTICS_HOST")}"
+            }
+        }
+
 
     def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Mem0Memory:
         """Initialize a Mem0 client with OpenSearch backend.
