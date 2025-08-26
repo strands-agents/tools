@@ -228,7 +228,7 @@ class Mem0ServiceClient:
         config['graph_store'] = {
             "provider": "neptune",
             "config": {
-                "endpoint": f"neptune-graph://{os.environ.get("NEPTUNE_ANALYTICS_HOST")}"
+                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_HOST')}"
             }
         }
         return config
