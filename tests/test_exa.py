@@ -7,6 +7,7 @@ import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from strands_tools import exa
 
 
@@ -43,11 +44,11 @@ def mock_aiohttp_response():
                         "neuralSearch": 0.005,
                         "contentText": 0,
                         "contentHighlight": 0,
-                        "contentSummary": 0
-                    }
+                        "contentSummary": 0,
+                    },
                 }
-            ]
-        }
+            ],
+        },
     }
     return mock_response
 
@@ -69,27 +70,17 @@ def mock_contents_response():
             }
         ],
         "context": "Formatted context string...",
-        "statuses": [
-            {
-                "id": "https://arxiv.org/pdf/2307.06435.pdf",
-                "status": "success",
-                "error": None
-            }
-        ],
+        "statuses": [{"id": "https://arxiv.org/pdf/2307.06435.pdf", "status": "success", "error": None}],
         "costDollars": {
             "total": 0.001,
             "breakDown": [
                 {
                     "search": 0,
                     "contents": 0.001,
-                    "breakdown": {
-                        "contentText": 0.001,
-                        "contentHighlight": 0,
-                        "contentSummary": 0
-                    }
+                    "breakdown": {"contentText": 0.001, "contentHighlight": 0, "contentSummary": 0},
                 }
-            ]
-        }
+            ],
+        },
     }
 
 
@@ -266,13 +257,11 @@ def test_format_search_response():
                 "author": "Test Author",
                 "publishedDate": "2023-11-16T01:36:32.547Z",
                 "text": "This is test content for the search result...",
-                "summary": "Test summary"
+                "summary": "Test summary",
             }
         ],
         "context": "Formatted context string",
-        "costDollars": {
-            "total": 0.005
-        }
+        "costDollars": {"total": 0.005},
     }
 
     panel = exa.format_search_response(data)
@@ -290,20 +279,12 @@ def test_format_contents_response():
                 "title": "Test Content",
                 "url": "https://example.com",
                 "text": "This is test content...",
-                "summary": "Test summary"
+                "summary": "Test summary",
             }
         ],
-        "statuses": [
-            {
-                "id": "https://example.com",
-                "status": "success",
-                "error": None
-            }
-        ],
+        "statuses": [{"id": "https://example.com", "status": "success", "error": None}],
         "context": "Formatted context string",
-        "costDollars": {
-            "total": 0.001
-        }
+        "costDollars": {"total": 0.001},
     }
 
     panel = exa.format_contents_response(data)
@@ -318,18 +299,9 @@ def test_format_contents_response_with_errors():
         "requestId": "test-request-789",
         "results": [],
         "statuses": [
-            {
-                "id": "https://example.com",
-                "status": "error",
-                "error": {
-                    "tag": "CRAWL_NOT_FOUND",
-                    "httpStatusCode": 404
-                }
-            }
+            {"id": "https://example.com", "status": "error", "error": {"tag": "CRAWL_NOT_FOUND", "httpStatusCode": 404}}
         ],
-        "costDollars": {
-            "total": 0.001
-        }
+        "costDollars": {"total": 0.001},
     }
 
     panel = exa.format_contents_response(data)

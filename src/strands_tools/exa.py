@@ -67,8 +67,7 @@ def _get_api_key() -> str:
     api_key = os.getenv("EXA_API_KEY")
     if not api_key:
         raise ValueError(
-            "EXA_API_KEY environment variable is required. "
-            "Get your free API key at https://dashboard.exa.ai/api-keys"
+            "EXA_API_KEY environment variable is required. Get your free API key at https://dashboard.exa.ai/api-keys"
         )
     return api_key
 
@@ -84,7 +83,7 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
 
     content = [f"Request ID: {request_id}"]
     content.append(f"Search Type: {search_type} (resolved: {resolved_search_type})")
-    
+
     if cost:
         total_cost = cost.get("total", 0)
         content.append(f"Cost: ${total_cost:.4f}")
@@ -137,14 +136,14 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
     cost = data.get("costDollars", {})
 
     content = [f"Request ID: {request_id}"]
-    
+
     if cost:
         total_cost = cost.get("total", 0)
         content.append(f"Cost: ${total_cost:.4f}")
 
     successful_results = len([s for s in statuses if s.get("status") == "success"])
     failed_results = len([s for s in statuses if s.get("status") == "error"])
-    
+
     content.append(f"Successfully retrieved: {successful_results} URLs")
     if failed_results > 0:
         content.append(f"Failed retrievals: {failed_results} URLs")
@@ -182,7 +181,7 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
                 content.append("")
 
     if failed_results > 0:
-        content.append(f"\nFailed retrievals:")
+        content.append("\nFailed retrievals:")
         for status in statuses:
             if status.get("status") == "error":
                 error_url = status.get("id", "Unknown URL")
@@ -203,7 +202,9 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 async def exa_search(
     query: str,
     type: Optional[Literal["keyword", "neural", "fast", "auto"]] = "auto",
-    category: Optional[Literal["company", "news", "pdf", "github", "personal site", "linkedin profile", "financial report"]] = None,
+    category: Optional[
+        Literal["company", "news", "pdf", "github", "personal site", "linkedin profile", "financial report"]
+    ] = None,
     user_location: Optional[str] = None,
     num_results: Optional[int] = None,
     include_domains: Optional[List[str]] = None,
@@ -228,8 +229,8 @@ async def exa_search(
     """
     Search the web intelligently using Exa's neural and keyword search capabilities.
 
-    Exa provides advanced web search optimized for LLMs and AI agents. The "auto" mode (default) 
-    intelligently combines neural embeddings-based search with traditional keyword search to find 
+    Exa provides advanced web search optimized for LLMs and AI agents. The "auto" mode (default)
+    intelligently combines neural embeddings-based search with traditional keyword search to find
     the most relevant results for your query.
 
     Key Features:
@@ -256,10 +257,10 @@ async def exa_search(
     - financial report: Financial and earnings reports
 
     Args:
-        query: The search query string. Examples: "Latest developments in artificial intelligence", 
+        query: The search query string. Examples: "Latest developments in artificial intelligence",
             "Best project management tools"
         type: Search type - "auto" (default, recommended), "neural", "keyword", or "fast"
-        category: Optional data category - use sparingly as general search works best. 
+        category: Optional data category - use sparingly as general search works best.
             Use "company" when specifically looking for company information
         user_location: Two-letter ISO country code (e.g., "US", "UK") for geo-localized results
         num_results: Number of results to return (max 100, default 10)
@@ -328,16 +329,34 @@ async def exa_search(
         if start_published_date is not None:
             try:
                 from datetime import datetime
-                datetime.fromisoformat(start_published_date.replace('Z', '+00:00'))
+
+                datetime.fromisoformat(start_published_date.replace("Z", "+00:00"))
             except ValueError:
-                return {"status": "error", "content": [{"text": "Invalid date format for start_published_date. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.sssZ)"}]}
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": "Invalid date format for start_published_date. Use ISO 8601 format "
+                            "(YYYY-MM-DDTHH:MM:SS.sssZ)"
+                        }
+                    ],
+                }
 
         if end_published_date is not None:
             try:
                 from datetime import datetime
-                datetime.fromisoformat(end_published_date.replace('Z', '+00:00'))
+
+                datetime.fromisoformat(end_published_date.replace("Z", "+00:00"))
             except ValueError:
-                return {"status": "error", "content": [{"text": "Invalid date format for end_published_date. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.sssZ)"}]}
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": "Invalid date format for end_published_date. Use ISO 8601 format "
+                            "(YYYY-MM-DDTHH:MM:SS.sssZ)"
+                        }
+                    ],
+                }
 
         # Get API key
         api_key = _get_api_key()
@@ -429,7 +448,7 @@ async def exa_get_contents(
     """
     Get full page contents, summaries, and metadata for a list of URLs using Exa.
 
-    This endpoint provides instant results from Exa's cache with automatic live crawling as fallback 
+    This endpoint provides instant results from Exa's cache with automatic live crawling as fallback
     for uncached pages. It's perfect for extracting content from specific URLs you already know about.
 
     Key Features:
