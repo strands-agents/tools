@@ -225,12 +225,13 @@ class Mem0ServiceClient:
             An configuration dict with graph backend.
         """
         config = config or {}
-        return config['graph_store'] = {
+        config['graph_store'] = {
             "provider": "neptune",
             "config": {
                 "endpoint": f"neptune-graph://{os.environ.get("NEPTUNE_ANALYTICS_HOST")}"
             }
         }
+        return config
 
 
     def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Mem0Memory:
