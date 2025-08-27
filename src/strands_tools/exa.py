@@ -108,14 +108,9 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
             if summary:
                 content.append(f"Summary: {summary}")
 
-            # Limit text to a preview
+            # Add full text content (length controlled by API maxCharacters parameter)
             if text:
-                preview_length = 200
-                if len(text) > preview_length:
-                    text_preview = text[:preview_length].strip() + "..."
-                else:
-                    text_preview = text.strip()
-                content.append(f"Content: {text_preview}")
+                content.append(f"Content: {text.strip()}")
 
             # Add separator between results
             if i < len(results):
@@ -167,14 +162,9 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
             if subpages:
                 content.append(f"Subpages: {len(subpages)} found")
 
-            # Limit content to a preview
+            # Add full text content (length controlled by API maxCharacters parameter)
             if text:
-                preview_length = 150
-                if len(text) > preview_length:
-                    content_preview = text[:preview_length].strip() + "..."
-                else:
-                    content_preview = text.strip()
-                content.append(f"Content: {content_preview}")
+                content.append(f"Content: {text.strip()}")
 
             # Add separator between results
             if i < len(results):
@@ -274,7 +264,8 @@ async def exa_search(
         exclude_text: List of strings that must not be present in webpage text (max 1 string, up to 5 words)
         context: Format results for LLM context - True/False or object with maxCharacters
         moderation: Enable content moderation to filter unsafe content
-        text: Include full page text - True/False or object with maxCharacters and includeHtmlTags
+        text: Include full page text - True/False or object with maxCharacters and includeHtmlTags.
+            Use maxCharacters to control text length instead of relying on default limits
         summary: Generate summaries - object with query and optional schema for structured output
         livecrawl: Live crawling options - "never", "fallback", "always", "preferred"
         livecrawl_timeout: Timeout for live crawling in milliseconds (default 10000)
@@ -300,11 +291,12 @@ async def exa_search(
         text=True
     )
 
-    # Search with domain filtering
+    # Search with domain filtering and content options
     result = await exa_search(
         query="JavaScript frameworks comparison",
         include_domains=["github.com", "stackoverflow.com"],
         num_results=5,
+        text={"maxCharacters": 500},
         summary={"query": "Key features and differences"}
     )
 
@@ -470,7 +462,7 @@ async def exa_get_contents(
         text: Text extraction options:
             - True: Extract full text with default settings
             - False: Disable text extraction
-            - Object: Advanced options with maxCharacters and includeHtmlTags
+            - Object: Advanced options with maxCharacters (controls text length) and includeHtmlTags
         summary: Summary generation options:
             - query: Custom query for summary generation
             - schema: JSON schema for structured summary output
