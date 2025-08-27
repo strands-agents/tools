@@ -204,7 +204,7 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
-        if os.environ.get("NEPTUNE_ANALYTICS_HOST"):
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             config = self._configure_neptune_analytics_backend(config)
 
@@ -228,7 +228,7 @@ class Mem0ServiceClient:
         config['graph_store'] = {
             "provider": "neptune",
             "config": {
-                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_HOST')}"
+                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"
             }
         }
         return config
