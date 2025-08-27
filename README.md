@@ -846,7 +846,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
-| NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER | Neptune Analytics Host URL | None | Neptune Analytics |
+| NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER | Neptune Analytics Graph Identifier | None | Neptune Analytics |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
 | MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
 | MEM0_LLM_MODEL | LLM model for memory processing | anthropic.claude-3-5-haiku-20241022-v1:0 | All modes |
