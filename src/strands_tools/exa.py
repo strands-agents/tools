@@ -26,7 +26,7 @@ agent = Agent(tools=[exa])
 result = agent.tool.exa_search(query="Best project management tools", text=True)
 
 # Get contents from specific URLs
-result = agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True)
+result = agent.tool.exa_get_contents(urls=["https://strandsagents.com/"], text=True)
 ```
 
 !!!!!!!!!!!!! IMPORTANT: !!!!!!!!!!!!!
@@ -486,13 +486,13 @@ async def exa_get_contents(
     --------
     # Simple content retrieval
     result = await exa_get_contents(
-        urls=["https://example.com/article"],
+        urls=["https://strandsagents.com/"],
         text=True
     )
 
     # Advanced content extraction with summary
     result = await exa_get_contents(
-        urls=["https://example.com/blog-post"],
+        urls=["https://en.wikipedia.org/wiki/Artificial_intelligence"],
         text={"maxCharacters": 5000, "includeHtmlTags": False},
         summary={"query": "key points and conclusions"},
         subpages=2,
@@ -501,7 +501,7 @@ async def exa_get_contents(
 
     # Structured content analysis
     result = await exa_get_contents(
-        urls=["https://example.com/report"],
+        urls=["https://arxiv.org/abs/2303.08774"],
         summary={
             "query": "main findings and recommendations",
             "schema": {
