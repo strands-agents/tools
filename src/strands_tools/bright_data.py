@@ -62,133 +62,15 @@ import os
 import time
 from typing import Any, Dict, Optional
 from urllib.parse import quote
-
 import requests
-from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from strands_tools.utils import console_util
+from strands import tool
 
 logger = logging.getLogger(__name__)
 
-console = Console()
-
-TOOL_SPEC = {
-    "name": "bright_data",
-    "description": (
-        "Web scraping and data extraction tool powered by Bright Data.\n\n"
-        "Features:\n"
-        "1. Scrape webpage content as Markdown\n"
-        "2. Take screenshots of webpages\n"
-        "3. Search using Google, Bing, or Yandex with advanced parameters\n"
-        "4. Extract structured data from various websites (LinkedIn, Amazon, Instagram, etc.)\n\n"
-        "Actions:\n"
-        "- scrape_as_markdown: Scrape webpage content as Markdown\n"
-        "- get_screenshot: Take screenshot of a webpage\n"
-        "- search_engine: Perform search queries using various search engines\n"
-        "- web_data_feed: Extract structured data from websites\n\n"
-        "Note: This tool requires a valid Bright Data API key."
-    ),
-    "inputSchema": {
-        "json": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "description": (
-                        "Action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)"
-                    ),
-                    "enum": ["scrape_as_markdown", "get_screenshot", "search_engine", "web_data_feed"],
-                },
-                "url": {
-                    "type": "string",
-                    "description": "URL to scrape or extract data from (required for"
-                    + "scrape_as_markdown, get_screenshot, web_data_feed)",
-                },
-                "output_path": {
-                    "type": "string",
-                    "description": "Path to save the screenshot (required for get_screenshot)",
-                },
-                "zone": {
-                    "type": "string",
-                    "description": "Bright Data zone to use (optional, overrides default zone)",
-                },
-                "query": {
-                    "type": "string",
-                    "description": "Search query (required for search_engine)",
-                },
-                "engine": {
-                    "type": "string",
-                    "description": "Search engine to use: google, bing, or yandex (default: google)",
-                },
-                "language": {
-                    "type": "string",
-                    "description": "Two-letter language code (hl parameter for Google)",
-                },
-                "country_code": {
-                    "type": "string",
-                    "description": "Two-letter country code (gl parameter for Google)",
-                },
-                "search_type": {
-                    "type": "string",
-                    "description": "Type of search (images, shopping, news, etc.)",
-                },
-                "start": {
-                    "type": "integer",
-                    "description": "Results pagination offset (0=first page, 10=second page)",
-                },
-                "num_results": {
-                    "type": "integer",
-                    "description": "Number of results to return (default 10)",
-                },
-                "location": {
-                    "type": "string",
-                    "description": "Location for search results (uule parameter)",
-                },
-                "device": {
-                    "type": "string",
-                    "description": "Device type (mobile, ios, android, ipad, android_tablet)",
-                },
-                "return_json": {
-                    "type": "boolean",
-                    "description": "Return parsed JSON instead of HTML/Markdown",
-                },
-                "source_type": {
-                    "type": "string",
-                    "description": "Type of data source for web_data_feed"
-                    + "(e.g., 'linkedin_person_profile', 'amazon_product')",
-                },
-                "num_of_reviews": {
-                    "type": "integer",
-                    "description": "Number of reviews to retrieve (only for facebook_company_reviews)",
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Maximum time in seconds to wait for data retrieval (default: 600)",
-                },
-                "polling_interval": {
-                    "type": "integer",
-                    "description": "Time in seconds between polling attempts (default: 1)",
-                },
-            },
-            "required": ["action"],
-            "allOf": [
-                {
-                    "if": {
-                        "properties": {"action": {"enum": ["scrape_as_markdown", "get_screenshot", "web_data_feed"]}}
-                    },
-                    "then": {"required": ["url"]},
-                },
-                {"if": {"properties": {"action": {"enum": ["get_screenshot"]}}}, "then": {"required": ["output_path"]}},
-                {"if": {"properties": {"action": {"enum": ["search_engine"]}}}, "then": {"required": ["query"]}},
-                {
-                    "if": {"properties": {"action": {"enum": ["web_data_feed"]}}},
-                    "then": {"required": ["source_type", "url"]},
-                },
-            ],
-        }
-    },
-}
+console = console_util.create()
 
 
 class BrightDataClient:
@@ -490,7 +372,27 @@ class BrightDataClient:
         raise TimeoutError(f"Timeout after {max_attempts} seconds waiting for {source_type} data")
 
 
-def bright_data(tool: ToolUse, **kwargs: Any) -> ToolResult:
+@tool
+def bright_data(
+    action: str,
+    url: Optional[str] = None,
+    output_path: Optional[str] = None,
+    zone: Optional[str] = None,
+    query: Optional[str] = None,
+    engine: str = "google",
+    language: Optional[str] = None,
+    country_code: Optional[str] = None,
+    search_type: Optional[str] = None,
+    start: Optional[int] = None,
+    num_results: int = 10,
+    location: Optional[str] = None,
+    device: Optional[str] = None,
+    return_json: bool = False,
+    source_type: Optional[str] = None,
+    num_of_reviews: Optional[int] = None,
+    timeout: int = 600,
+    polling_interval: int = 1,
+) -> str:
     """
     Web scraping and data extraction tool powered by Bright Data.
 
@@ -499,91 +401,77 @@ def bright_data(tool: ToolUse, **kwargs: Any) -> ToolResult:
     search queries, and extracting structured data from various websites.
 
     Args:
-        tool: ToolUse object containing the following input fields:
-            - action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
-            - url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
-            - output_path: Path to save the screenshot (for get_screenshot)
-            - zone: Override default Bright Data zone (optional)
-            - query: Search query (for search_engine)
-            - engine: Search engine to use (google, bing, yandex)
-            - [Various search parameters for search_engine]
-            - source_type: Type of data source for web_data_feed
-            - [Various parameters for web_data_feed]
-        **kwargs: Additional keyword arguments
+    action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
+    url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
+    output_path: Path to save the screenshot (for get_screenshot)
+    zone: Override default Bright Data zone (optional)
+    query: Search query (for search_engine)
+    engine: Search engine to use (google, bing, yandex, default: google)
+    language: Two-letter language code for search results (hl parameter for Google)
+    country_code: Two-letter country code for search results (gl parameter for Google)
+    search_type: Type of search (images, shopping, news, etc.)
+    start: Results pagination offset (0=first page, 10=second page)
+    num_results: Number of results to return (default: 10)
+    location: Location for search results (uule parameter)
+    device: Device type (mobile, ios, android, ipad, android_tablet)
+    return_json: Return parsed JSON instead of HTML/Markdown (default: False)
+    source_type: Type of data source for web_data_feed (e.g., 'linkedin_person_profile', 'amazon_product')
+    num_of_reviews: Number of reviews to retrieve (only for facebook_company_reviews)
+    timeout: Maximum time in seconds to wait for data retrieval (default: 600)
+    polling_interval: Time in seconds between polling attempts (default: 1)
 
     Returns:
-        ToolResult containing status and response content
+        str: Response content from the requested operation
     """
     try:
-        tool_input = tool.get("input", {})
-        tool_use_id = tool.get("toolUseId", "default-id")
-
-        if not tool_input.get("action"):
+        if not action:
             raise ValueError("action parameter is required")
 
         client = BrightDataClient(verbose=True)
 
-        action = tool_input["action"]
-
         if action == "scrape_as_markdown":
-            if not tool_input.get("url"):
+            if not url:
                 raise ValueError("url is required for scrape_as_markdown action")
-
-            content = client.scrape_as_markdown(tool_input["url"], tool_input.get("zone"))
-
-            return ToolResult(toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=content)])
+            return client.scrape_as_markdown(url, zone)
 
         elif action == "get_screenshot":
-            if not tool_input.get("url"):
+            if not url:
                 raise ValueError("url is required for get_screenshot action")
-            if not tool_input.get("output_path"):
+            if not output_path:
                 raise ValueError("output_path is required for get_screenshot action")
-
-            output_path = client.get_screenshot(tool_input["url"], tool_input["output_path"], tool_input.get("zone"))
-
-            return ToolResult(
-                toolUseId=tool_use_id,
-                status="success",
-                content=[ToolResultContent(text=f"Screenshot saved to {output_path}")],
-            )
+            output_path_result = client.get_screenshot(url, output_path, zone)
+            return f"Screenshot saved to {output_path_result}"
 
         elif action == "search_engine":
-            if not tool_input.get("query"):
+            if not query:
                 raise ValueError("query is required for search_engine action")
-
-            content = client.search_engine(
-                query=tool_input["query"],
-                engine=tool_input.get("engine", "google"),
-                zone=tool_input.get("zone"),
-                language=tool_input.get("language"),
-                country_code=tool_input.get("country_code"),
-                search_type=tool_input.get("search_type"),
-                start=tool_input.get("start"),
-                num_results=tool_input.get("num_results", 10),
-                location=tool_input.get("location"),
-                device=tool_input.get("device"),
-                return_json=tool_input.get("return_json", False),
+            return client.search_engine(
+                query=query,
+                engine=engine,
+                zone=zone,
+                language=language,
+                country_code=country_code,
+                search_type=search_type,
+                start=start,
+                num_results=num_results,
+                location=location,
+                device=device,
+                return_json=return_json,
             )
-
-            return ToolResult(toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=content)])
 
         elif action == "web_data_feed":
-            if not tool_input.get("url"):
+            if not url:
                 raise ValueError("url is required for web_data_feed action")
-            if not tool_input.get("source_type"):
+            if not source_type:
                 raise ValueError("source_type is required for web_data_feed action")
-
             data = client.web_data_feed(
-                source_type=tool_input["source_type"],
-                url=tool_input["url"],
-                num_of_reviews=tool_input.get("num_of_reviews"),
-                timeout=tool_input.get("timeout", 600),
-                polling_interval=tool_input.get("polling_interval", 1),
+                source_type=source_type,
+                url=url,
+                num_of_reviews=num_of_reviews,
+                timeout=timeout,
+                polling_interval=polling_interval,
             )
-
-            return ToolResult(
-                toolUseId=tool_use_id, status="success", content=[ToolResultContent(text=json.dumps(data, indent=2))]
-            )
+            return json.dumps(data, indent=2)
 
         else:
             raise ValueError(f"Invalid action: {action}")
@@ -591,8 +479,8 @@ def bright_data(tool: ToolUse, **kwargs: Any) -> ToolResult:
     except Exception as e:
         error_panel = Panel(
             Text(str(e), style="red"),
-            title="❌ Bright Data Operation Error",
+            title="Bright Data Operation Error",
             border_style="red",
         )
         console.print(error_panel)
-        return ToolResult(toolUseId=tool_use_id, status="error", content=[ToolResultContent(text=f"Error: {str(e)}")])
+        raise
