@@ -779,6 +779,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | BRIGHTDATA_API_KEY | Bright Data API Key | None |
+| BRIGHTDATA_ZONE | Bright Data Web Unlocker Zone | web_unlocker1 |
 
 #### Memory Tool
 

@@ -24,6 +24,19 @@ Key Features:
    • Clear error messages
    • Timeout management for web_data_feed
 
+Setup Requirements:
+------------------
+1. Create a Bright Data account
+2. Create a Web Unlocker zone in your Bright Data control panel
+3. Set environment variables in your .env file:
+   BRIGHTDATA_API_KEY=your_api_key_here  # Required
+   BRIGHTDATA_ZONE=your_zone_name_here    # Optional, defaults to "web_unlocker1"
+4. DO NOT use Datacenter/Residential proxy zones - they will be blocked
+
+Example .env configuration:
+   BRIGHTDATA_API_KEY=brd_abc123xyz789
+   BRIGHTDATA_ZONE=web_unlocker_12345
+
 Usage Examples:
 --------------
 ```python
@@ -79,7 +92,7 @@ class BrightDataClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        zone: str = "unlocker",
+        zone: str = "web_unlocker1",
         verbose: bool = False,
     ) -> None:
         """
@@ -128,7 +141,9 @@ class BrightDataClient:
 
         Args:
             url (str): URL to scrape
-            zone (Optional[str]): Override default zone
+            zone: Override default Web Unlocker zone name (optional). 
+            Must be a Web Unlocker zone - datacenter/residential zones will fail.
+            Default: "web_unlocker"
 
         Returns:
             str: Scraped content as Markdown
@@ -186,7 +201,9 @@ class BrightDataClient:
         Args:
             query (str): Search query
             engine (str): Search engine - 'google', 'bing', or 'yandex'
-            zone (Optional[str]): Override default zone
+            zone: Override default Web Unlocker zone name (optional). 
+            Must be a Web Unlocker zone - datacenter/residential zones will fail.
+            Default: "web_unlocker"
 
             # Google SERP specific parameters
             language (Optional[str]): Two-letter language code (hl parameter)
@@ -404,7 +421,9 @@ def bright_data(
     action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
     url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
     output_path: Path to save the screenshot (for get_screenshot)
-    zone: Override default Bright Data zone (optional)
+    zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment 
+          variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to 
+          configure your specific Web Unlocker zone name (e.g., BRIGHTDATA_ZONE=web_unlocker_12345)
     query: Search query (for search_engine)
     engine: Search engine to use (google, bing, yandex, default: google)
     language: Two-letter language code for search results (hl parameter for Google)
@@ -427,8 +446,10 @@ def bright_data(
         if not action:
             raise ValueError("action parameter is required")
 
-        client = BrightDataClient(verbose=True)
+        if zone is None:
+            zone = os.environ.get("BRIGHTDATA_ZONE", "web_unlocker1")
 
+        client = BrightDataClient(verbose=True, zone=zone)
         if action == "scrape_as_markdown":
             if not url:
                 raise ValueError("url is required for scrape_as_markdown action")
