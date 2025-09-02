@@ -358,7 +358,7 @@ def editor(
             elif command in {"str_replace", "pattern_replace"}:
                 old = old_str if command == "str_replace" else pattern
                 new = new_str
-                if not old or not new:
+                if not old or new is None:
                     param_name = "old_str" if command == "str_replace" else "pattern"
                     raise ValueError(f"Both {param_name} and new_str are required for {command} command")
                 language = detect_language(path)
@@ -515,7 +515,7 @@ def editor(
             result = f"File {path} created successfully"
 
         elif command == "str_replace":
-            if not old_str or not new_str:
+            if not old_str or new_str is None:
                 raise ValueError("Both old_str and new_str are required for str_replace command")
 
             # Check content history first
@@ -551,7 +551,7 @@ def editor(
             )
 
         elif command == "pattern_replace":
-            if not pattern or not new_str:
+            if not pattern or new_str is None:
                 raise ValueError("Both pattern and new_str are required for pattern_replace command")
 
             # Validate pattern
