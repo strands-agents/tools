@@ -38,6 +38,7 @@ def kb_id() -> Generator[Any, Any, None]:
     },
     clear=False,
 )
+@pytest.mark.skip("KB retrieval takes longer in some cases, test is flaky")
 def test_retrieve_semantic_search(kb_id):
     text = (
         "Python is a high-level programming language known for its simplicity. "
