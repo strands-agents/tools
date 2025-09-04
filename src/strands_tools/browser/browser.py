@@ -238,9 +238,19 @@ class Browser(ABC):
 
         try:
             # Create new browser instance for this session
-            session_browser = await self.create_browser_session()
-            session_context = await session_browser.new_context()
-            session_page = await session_context.new_page()
+            session = await self.create_browser_session()
+
+            if isinstance(session, PlaywrightBrowser):
+                # Normal non-persistent case
+                session_browser = session
+                session_context = await session_browser.new_context()
+                session_page = await session_context.new_page()
+
+            else:
+                # Persistent context case
+                session_context = session
+                session_browser = session_context.browser
+                session_page = await session_context.new_page()
 
             # Create and store session object
             session = BrowserSession(
