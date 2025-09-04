@@ -22,7 +22,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SessionInfo:
-    """Information about a code interpreter session."""
+    """
+    Information about a code interpreter session.
+    
+    This dataclass stores the essential information for managing active code
+    interpreter sessions, including the session identifier, description, and
+    the underlying Bedrock client instance.
+    
+    Attributes:
+        session_id (str): Unique identifier for the session assigned by AWS Bedrock.
+        description (str): Human-readable description of the session purpose.
+        client (BedrockAgentCoreCodeInterpreterClient): The underlying Bedrock client
+            instance used for code execution and file operations in this session.
+    """
 
     session_id: str
     description: str
@@ -30,17 +42,86 @@ class SessionInfo:
 
 
 class AgentCoreCodeInterpreter(CodeInterpreter):
-    """Bedrock AgentCore implementation of the CodeInterpreter."""
+    """
+    Bedrock AgentCore implementation of the CodeInterpreter.
+    
+    This class provides a code interpreter interface using AWS Bedrock AgentCore services.
+    It supports executing Python, JavaScript, and TypeScript code in isolated sandbox
+    environments with custom code interpreter identifiers.
+    
+    The class maintains session state and provides methods for code execution, file
+    operations, and session management. It supports both default AWS code interpreter
+    environments and custom environments specified by identifier.
+    
+    Examples:
+        Basic usage with default identifier:
+        
+        >>> interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        >>> # Uses default identifier: "aws.codeinterpreter.v1"
+        
+        Using a custom code interpreter identifier:
+        
+        >>> custom_id = "my-custom-interpreter-abc123"
+        >>> interpreter = AgentCoreCodeInterpreter(
+        ...     region="us-west-2", 
+        ...     identifier=custom_id
+        ... )
+        
+        Environment-specific usage:
+        
+        >>> # For testing environments
+        >>> test_interpreter = AgentCoreCodeInterpreter(
+        ...     region="us-east-1",
+        ...     identifier="test-interpreter-xyz789"
+        ... )
+        
+        >>> # For production environments  
+        >>> prod_interpreter = AgentCoreCodeInterpreter(
+        ...     region="us-west-2",
+        ...     identifier="prod-interpreter-def456"
+        ... )
+    
+    Attributes:
+        region (str): The AWS region where the code interpreter service is hosted.
+        identifier (str): The code interpreter identifier being used for sessions.
+    """
 
-    def __init__(self, region: Optional[str] = None):
+    def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None) -> None:
         """
-        Initialize the Bedrock AgentCorecode interpreter.
+        Initialize the Bedrock AgentCore code interpreter.
 
         Args:
-            region: AWS region for the sandbox service
+            region (Optional[str]): AWS region for the sandbox service. If not provided,
+                the region will be resolved from AWS configuration (environment variables,
+                AWS config files, or instance metadata). Defaults to None.
+            identifier (Optional[str]): Custom code interpreter identifier to use
+                for code execution sessions. This allows you to specify custom code
+                interpreter environments instead of the default AWS-provided one.
+                
+                Valid formats include:
+                - Default identifier: "aws.codeinterpreter.v1" (used when None)
+                - Custom identifier: "my-custom-interpreter-abc123"
+                - Environment-specific: "test-interpreter-xyz789"
+                
+                Note: Use the code interpreter ID, not the full ARN. The AWS service
+                expects the identifier portion only (e.g., "my-interpreter-123" rather
+                than "arn:aws:bedrock-agentcore:region:account:code-interpreter-custom/my-interpreter-123").
+                
+                If not provided, defaults to "aws.codeinterpreter.v1" for backward
+                compatibility. Defaults to None.
+                
+        Note:
+            This constructor maintains full backward compatibility. Existing code
+            that doesn't specify the identifier parameter will continue to work
+            unchanged with the default AWS code interpreter environment.
+            
+        Raises:
+            Exception: If there are issues with AWS region resolution or client
+                initialization during session creation.
         """
         super().__init__()
         self.region = resolve_region(region)
+        self.identifier = identifier or "aws.codeinterpreter.v1"
         self._sessions: Dict[str, SessionInfo] = {}
 
     def start_platform(self) -> None:
@@ -69,9 +150,30 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         logger.info("Bedrock AgentCoreplatform cleanup completed")
 
     def init_session(self, action: InitSessionAction) -> Dict[str, Any]:
-        """Initialize a new Bedrock AgentCoresandbox session."""
+        """
+        Initialize a new Bedrock AgentCore sandbox session.
+        
+        Creates a new code interpreter session using the configured identifier.
+        The session will use the identifier specified during class initialization,
+        or the default "aws.codeinterpreter.v1" if none was provided.
+        
+        Args:
+            action (InitSessionAction): Action containing session initialization parameters
+                including session_name and description.
+                
+        Returns:
+            Dict[str, Any]: Response dictionary containing session information on success
+                or error details on failure. Success response includes sessionName,
+                description, and sessionId.
+                
+        Raises:
+            Exception: If session initialization fails due to AWS service issues,
+                invalid identifier, or other configuration problems.
+        """
 
-        logger.info(f"Initializing Bedrock AgentCoresandbox session: {action.description}")
+        logger.info(
+            f"Initializing Bedrock AgentCoresandbox session: {action.description} with identifier: {self.identifier}"
+        )
 
         session_name = action.session_name
 
@@ -79,35 +181,47 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name in self._sessions:
             return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
 
-        # Create new sandbox client
-        client = BedrockAgentCoreCodeInterpreterClient(
-            region=self.region,
-        )
+        try:
+            # Create new sandbox client
+            client = BedrockAgentCoreCodeInterpreterClient(
+                region=self.region,
+            )
 
-        # Start the session
-        client.start()
+            # Start the session with custom identifier
+            client.start(identifier=self.identifier)
 
-        # Store session info
-        self._sessions[session_name] = SessionInfo(
-            session_id=client.session_id, description=action.description, client=client
-        )
+            # Store session info
+            self._sessions[session_name] = SessionInfo(
+                session_id=client.session_id, description=action.description, client=client
+            )
 
-        logger.info(f"Initialized session: {session_name} (ID: {client.session_id})")
+            logger.info(
+                f"Initialized session: {session_name} (ID: {client.session_id}) with identifier: {self.identifier}"
+            )
 
-        response = {
-            "status": "success",
-            "content": [
-                {
-                    "json": {
-                        "sessionName": session_name,
-                        "description": action.description,
-                        "sessionId": client.session_id,
+            response = {
+                "status": "success",
+                "content": [
+                    {
+                        "json": {
+                            "sessionName": session_name,
+                            "description": action.description,
+                            "sessionId": client.session_id,
+                        }
                     }
-                }
-            ],
-        }
+                ],
+            }
 
-        return self._create_tool_result(response)
+            return self._create_tool_result(response)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to initialize session '{session_name}' with identifier: {self.identifier}. Error: {str(e)}"
+            )
+            return {
+                "status": "error", 
+                "content": [{"text": f"Failed to initialize session '{session_name}': {str(e)}"}]
+            }
 
     def list_local_sessions(self) -> Dict[str, Any]:
         """List all sessions created by this Bedrock AgentCoreplatform instance."""

@@ -23,23 +23,29 @@ def test_bedrock_browser_with_custom_params():
     assert browser.session_timeout == 7200
 
 
-def test_bedrock_browser_identifier_assignment():
-    """Test AgentCoreBrowser identifier parameter assignment."""
-    # Test default identifier
-    browser_default = AgentCoreBrowser()
-    assert hasattr(browser_default, "identifier")
-    assert browser_default.identifier == "aws.browser.v1"
+def test_bedrock_browser_with_custom_identifier():
+    """Test AgentCoreBrowser initialization with custom identifier."""
+    custom_identifier = "my-custom-browser-abc123"
+    browser = AgentCoreBrowser(identifier=custom_identifier)
+    assert browser.identifier == custom_identifier
 
-    # Test custom identifier
-    custom_identifier = "my.custom.browser.v2"
-    browser_custom = AgentCoreBrowser(identifier=custom_identifier)
-    assert browser_custom.identifier == custom_identifier
 
-    # Test identifier with other parameters
-    browser_all_params = AgentCoreBrowser(region="us-west-2", identifier="test.browser.v1", session_timeout=3600)
-    assert browser_all_params.identifier == "test.browser.v1"
-    assert browser_all_params.region == "us-west-2"
-    assert browser_all_params.session_timeout == 3600
+def test_bedrock_browser_default_identifier():
+    """Test AgentCoreBrowser uses default identifier when none provided."""
+    browser = AgentCoreBrowser()
+    assert browser.identifier == "aws.browser.v1"
+
+
+def test_bedrock_browser_none_identifier():
+    """Test AgentCoreBrowser uses default identifier when None provided."""
+    browser = AgentCoreBrowser(identifier=None)
+    assert browser.identifier == "aws.browser.v1"
+
+
+def test_bedrock_browser_empty_string_identifier():
+    """Test AgentCoreBrowser uses default identifier when empty string provided."""
+    browser = AgentCoreBrowser(identifier="")
+    assert browser.identifier == "aws.browser.v1"
 
 
 @pytest.mark.asyncio
