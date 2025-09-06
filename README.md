@@ -39,7 +39,6 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
 - 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
-- 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
@@ -104,12 +103,6 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
 | shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
-| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
-| tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
-| tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
-| tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
-| exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) that combines neural and keyword search for optimal results |
-| exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
@@ -273,114 +266,6 @@ response = agent.tool.http_request(
     url="https://example.com/article",
     convert_to_markdown=True
 )
-```
-
-### Tavily Search, Extract, Crawl, and Map
-
-```python
-from strands import Agent
-from strands_tools.tavily import (
-    tavily_search, tavily_extract, tavily_crawl, tavily_map
-)
-
-# For async usage, call the corresponding *_async function with await.
-# Synchronous usage 
-agent = Agent(tools=[tavily_search, tavily_extract, tavily_crawl, tavily_map])
-
-# Real-time web search
-result = agent.tool.tavily_search(
-    query="Latest developments in renewable energy",
-    search_depth="advanced",
-    topic="news",
-    max_results=10,
-    include_raw_content=True
-)
-
-# Extract content from multiple URLs
-result = agent.tool.tavily_extract(
-    urls=["www.tavily.com", "www.apple.com"],
-    extract_depth="advanced",
-    format="markdown"
-)
-
-# Advanced crawl with instructions and filtering
-result = agent.tool.tavily_crawl(
-    url="www.tavily.com",
-    max_depth=2,
-    limit=50,
-    instructions="Find all API documentation and developer guides",
-    extract_depth="advanced",
-    include_images=True
-)
-
-# Basic website mapping
-result = agent.tool.tavily_map(url="www.tavily.com")
-
-```
-
-### Exa Search and Contents
-
-```python
-from strands import Agent
-from strands_tools.exa import exa_search, exa_get_contents
-
-agent = Agent(tools=[exa_search, exa_get_contents])
-
-# Basic search (auto mode is default and recommended)
-result = agent.tool.exa_search(
-    query="Best project management software",
-    text=True
-)
-
-# Company-specific search when needed
-result = agent.tool.exa_search(
-    query="Anthropic AI safety research",
-    category="company",
-    include_domains=["anthropic.com"],
-    num_results=5,
-    summary={"query": "key research areas and findings"}
-)
-
-# News search with date filtering
-result = agent.tool.exa_search(
-    query="AI regulation policy updates",
-    category="news",
-    start_published_date="2024-01-01T00:00:00.000Z",
-    text=True
-)
-
-# Get detailed content from specific URLs
-result = agent.tool.exa_get_contents(
-    urls=[
-        "https://example.com/blog-post",
-        "https://github.com/microsoft/semantic-kernel"
-    ],
-    text={"maxCharacters": 5000, "includeHtmlTags": False},
-    summary={
-        "query": "main points and practical applications"
-    },
-    subpages=2,
-    extras={"links": 5, "imageLinks": 2}
-)
-
-# Structured summary with JSON schema
-result = agent.tool.exa_get_contents(
-    urls=["https://example.com/article"],
-    summary={
-        "query": "main findings and recommendations",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "main_points": {"type": "string", "description": "Key points from the article"},
-                "recommendations": {"type": "string", "description": "Suggested actions or advice"},
-                "conclusion": {"type": "string", "description": "Overall conclusion"},
-                "relevance": {"type": "string", "description": "Why this matters"}
-            },
-            "required": ["main_points", "conclusion"]
-        }
-    }
-)
-
 ```
 
 ### Python Code Execution
@@ -797,20 +682,6 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
 
-#### Tavily Search, Extract, Crawl, and Map Tools
-
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| TAVILY_API_KEY | Tavily API key (required for all Tavily functionality) | None |
-- Visit https://www.tavily.com/ to create a free account and API key.
-
-#### Exa Search and Contents Tools
-
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| EXA_API_KEY | Exa API key (required for all Exa functionality) | None |
-- Visit https://dashboard.exa.ai/api-keys to create a free account and API key.
-
 #### Mem0 Memory Tool
 
 The Mem0 Memory Tool supports three different backend configurations:
@@ -833,19 +704,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
-| MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
-| MEM0_LLM_MODEL | LLM model for memory processing | anthropic.claude-3-5-haiku-20241022-v1:0 | All modes |
-| MEM0_LLM_TEMPERATURE | LLM temperature (0.0-2.0) | 0.1 | All modes |
-| MEM0_LLM_MAX_TOKENS | LLM maximum tokens | 2000 | All modes |
-| MEM0_EMBEDDER_PROVIDER | Embedder provider for vector embeddings | aws_bedrock | All modes |
-| MEM0_EMBEDDER_MODEL | Embedder model for vector embeddings | amazon.titan-embed-text-v2:0 | All modes |
-
 
 **Note**:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
-- LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
+
 #### Memory Tool
 
 | Environment Variable | Description | Default |
@@ -866,8 +730,6 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
-| PYTHON_REPL_INTERACTIVE | Whether to enable interactive PTY mode | None |
-| PYTHON_REPL_RESET_STATE | Whether to reset the REPL state before execution | None |
 
 #### Shell Tool
 

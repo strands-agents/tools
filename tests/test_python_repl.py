@@ -650,3 +650,499 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+
+
+class TestSecurityModes:
+    """Test the security modes functionality."""
+
+    def test_security_mode_detection_normal(self):
+        """Test that normal mode is detected correctly."""
+        with patch.dict(os.environ, {}, clear=True):
+            # Clear any existing PYTHON_REPL_RESTRICTED_MODE
+            manager = python_repl.SecurityManager()
+            assert manager.mode == python_repl.SecurityMode.NORMAL
+
+    def test_security_mode_detection_restricted(self):
+        """Test that restricted mode is detected correctly."""
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "true"}):
+            manager = python_repl.SecurityManager()
+            assert manager.mode == python_repl.SecurityMode.RESTRICTED
+
+    def test_security_mode_various_boolean_values(self):
+        """Test various boolean values for restricted mode."""
+        true_values = ["true", "1", "yes", "on", "TRUE", "Yes", "ON"]
+        false_values = ["false", "0", "no", "off", "", "anything_else"]
+
+        for value in true_values:
+            with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": value}):
+                manager = python_repl.SecurityManager()
+                assert (
+                    manager.mode == python_repl.SecurityMode.RESTRICTED
+                ), f"Value '{value}' should enable restricted mode"
+
+        for value in false_values:
+            with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": value}):
+                manager = python_repl.SecurityManager()
+                assert manager.mode == python_repl.SecurityMode.NORMAL, f"Value '{value}' should keep normal mode"
+
+    def test_normal_mode_execution(self, mock_console):
+        """Test that normal mode executes code without restrictions."""
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "import os; result = os.getcwd()", "interactive": False},
+        }
+
+        # Ensure normal mode
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "false"}):
+            # Force recreation of security manager with new environment
+            with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result = python_repl.python_repl(tool=tool_use)
+
+                assert result["status"] == "success"
+                # Verify the code was executed (os.getcwd() should work in normal mode)
+                assert "result" in python_repl.repl_state.get_namespace()
+
+    def test_restricted_mode_blocks_dangerous_import(self, mock_console):
+        """Test that restricted mode blocks dangerous imports."""
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "import os", "interactive": False},
+        }
+
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "true"}):
+            # Force recreation of security manager with new environment
+            with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result = python_repl.python_repl(tool=tool_use)
+
+                assert result["status"] == "error"
+                assert "Security Violation" in result["content"][0]["text"]
+                assert "Import of module 'os' is blocked" in result["content"][0]["text"]
+
+    def test_restricted_mode_blocks_dangerous_builtin(self, mock_console):
+        """Test that restricted mode blocks dangerous built-ins."""
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "eval('1+1')", "interactive": False},
+        }
+
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "true"}):
+            # Force recreation of security manager with new environment
+            with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result = python_repl.python_repl(tool=tool_use)
+
+                assert result["status"] == "error"
+                assert "Security Violation" in result["content"][0]["text"]
+                assert "Call to built-in function 'eval' is blocked" in result["content"][0]["text"]
+
+
+class TestASTSecurityValidator:
+    """Test the AST security validator."""
+
+    def test_dangerous_import_detection(self):
+        """Test detection of dangerous imports."""
+        validator = python_repl.ASTSecurityValidator()
+
+        dangerous_codes = [
+            "import os",
+            "import sys",
+            "import subprocess",
+            "from os import system",
+            "from subprocess import call",
+        ]
+
+        for code in dangerous_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "is blocked" in str(exc_info.value)
+
+    def test_dangerous_builtin_detection(self):
+        """Test detection of dangerous built-in functions."""
+        validator = python_repl.ASTSecurityValidator()
+
+        dangerous_codes = [
+            "eval('1+1')",
+            "exec('x=1')",
+            "compile('1+1', '<string>', 'eval')",
+        ]
+
+        for code in dangerous_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "is blocked" in str(exc_info.value)
+
+    def test_dangerous_import_via_builtin(self):
+        """Test detection of dangerous imports via __import__ calls."""
+        validator = python_repl.ASTSecurityValidator()
+
+        dangerous_import_codes = [
+            "__import__('os')",
+            "__import__('sys')",
+            "__import__('subprocess')",
+            "__import__('socket')",
+        ]
+
+        for code in dangerous_import_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "is blocked" in str(exc_info.value)
+
+    def test_safe_import_allowed(self):
+        """Test that safe imports via __import__ are allowed."""
+        validator = python_repl.ASTSecurityValidator()
+
+        safe_import_codes = [
+            "__import__('math')",
+            "__import__('json')",
+            "__import__('datetime')",
+            "__import__('collections')",
+        ]
+
+        for code in safe_import_codes:
+            # Should not raise SecurityViolation
+            try:
+                validator.validate_code(code)
+            except python_repl.SecurityViolation:
+                pytest.fail(f"Safe import should be allowed: {code}")
+
+    def test_dangerous_attribute_detection(self):
+        """Test detection of dangerous attribute access."""
+        validator = python_repl.ASTSecurityValidator()
+
+        dangerous_codes = [
+            "x.__builtins__",
+            "obj.__globals__",
+            "cls.__subclasses__()",
+        ]
+
+        for code in dangerous_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "is blocked" in str(exc_info.value)
+
+    def test_infinite_loop_detection(self):
+        """Test detection of infinite loops."""
+        validator = python_repl.ASTSecurityValidator()
+
+        infinite_loop_codes = [
+            "while True:\n    pass",
+            "while True:\n    print('infinite')",
+        ]
+
+        for code in infinite_loop_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "Infinite loop detected" in str(exc_info.value)
+
+    def test_large_range_detection(self):
+        """Test detection of excessively large ranges."""
+        validator = python_repl.ASTSecurityValidator()
+
+        large_range_codes = [
+            "range(2000000)",  # Over 1 million limit
+            "for i in range(5000000): pass",
+        ]
+
+        for code in large_range_codes:
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code(code)
+            assert "Large range detected" in str(exc_info.value)
+
+    def test_excessive_nesting_detection(self):
+        """Test detection of excessive nesting depth."""
+        validator = python_repl.ASTSecurityValidator()
+
+        # Create deeply nested structure (over 10 levels)
+        nested_code = "if True:\n"
+        for i in range(12):  # 12 levels of nesting
+            nested_code += "    " * (i + 1) + "if True:\n"
+        nested_code += "    " * 13 + "pass"
+
+        with pytest.raises(python_repl.SecurityViolation) as exc_info:
+            validator.validate_code(nested_code)
+        assert "Excessive nesting depth" in str(exc_info.value)
+
+    def test_safe_code_passes(self):
+        """Test that safe code passes validation."""
+        validator = python_repl.ASTSecurityValidator()
+
+        safe_codes = [
+            "x = 1 + 2",
+            "print('Hello, world!')",
+            "import math",  # math is not in dangerous imports
+            "for i in range(100): print(i)",
+            "def my_function(): return 42",
+            "class MyClass: pass",
+        ]
+
+        for code in safe_codes:
+            # Should not raise any exception
+            validator.validate_code(code)
+
+    def test_create_safe_namespace(self):
+        """Test creation of safe namespace with restricted built-ins."""
+        validator = python_repl.ASTSecurityValidator()
+        base_namespace = {"x": 1, "y": 2}
+
+        safe_namespace = validator.create_safe_namespace(base_namespace)
+
+        # Should contain safe built-ins
+        assert "print" in safe_namespace["__builtins__"]
+        assert "len" in safe_namespace["__builtins__"]
+        assert "range" in safe_namespace["__builtins__"]
+        assert "__import__" in safe_namespace["__builtins__"]  # Now allowed but controlled
+
+        # Should not contain dangerous built-ins
+        assert "eval" not in safe_namespace["__builtins__"]
+        assert "exec" not in safe_namespace["__builtins__"]
+
+        # Should preserve original variables
+        assert safe_namespace["x"] == 1
+        assert safe_namespace["y"] == 2
+
+
+class TestFilePathSecurity:
+    """Test file path security restrictions."""
+
+    def test_allowed_paths_current_directory_default(self):
+        """Test that current directory is allowed by default."""
+        with patch.dict(os.environ, {}, clear=True):
+            validator = python_repl.ASTSecurityValidator()
+            assert os.getcwd() in validator.allowed_paths
+
+    def test_allowed_paths_current_directory_disabled(self):
+        """Test disabling current directory access."""
+        with patch.dict(os.environ, {"PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}):
+            validator = python_repl.ASTSecurityValidator()
+            assert os.getcwd() not in validator.allowed_paths
+
+    def test_allowed_paths_custom_paths(self):
+        """Test setting custom allowed paths."""
+        with tempfile.TemporaryDirectory() as tmpdir1, tempfile.TemporaryDirectory() as tmpdir2:
+            custom_paths = f"{tmpdir1},{tmpdir2}"
+            with patch.dict(
+                os.environ, {"PYTHON_REPL_ALLOWED_PATHS": custom_paths, "PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}
+            ):
+                validator = python_repl.ASTSecurityValidator()
+                assert tmpdir1 in validator.allowed_paths
+                assert tmpdir2 in validator.allowed_paths
+                assert os.getcwd() not in validator.allowed_paths
+
+    def test_file_access_validation_allowed_path(self):
+        """Test that file access in allowed paths is permitted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "test.txt")
+            with patch.dict(
+                os.environ, {"PYTHON_REPL_ALLOWED_PATHS": tmpdir, "PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}
+            ):
+                validator = python_repl.ASTSecurityValidator()
+                # Should not raise exception for allowed path
+                validator.validate_code(f"open('{test_file}', 'w')")
+
+    def test_file_access_validation_blocked_path(self):
+        """Test that file access outside allowed paths is blocked."""
+        with patch.dict(os.environ, {"PYTHON_REPL_ALLOWED_PATHS": "/tmp", "PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}):
+            validator = python_repl.ASTSecurityValidator()
+            with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                validator.validate_code("open('/etc/passwd', 'r')")
+            assert "File access to '/etc/passwd' is blocked" in str(exc_info.value)
+
+    def test_path_traversal_protection(self):
+        """Test protection against path traversal attacks."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(
+                os.environ, {"PYTHON_REPL_ALLOWED_PATHS": tmpdir, "PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}
+            ):
+                validator = python_repl.ASTSecurityValidator()
+
+                # Test various path traversal attempts
+                traversal_paths = [
+                    f"{tmpdir}/../../../etc/passwd",
+                    f"{tmpdir}/../../../tmp/sensitive",
+                ]
+
+                for path in traversal_paths:
+                    with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                        validator.validate_code(f"open('{path}', 'r')")
+                    assert "is blocked" in str(exc_info.value)
+
+    def test_symlink_protection(self):
+        """Test protection against symlink-based bypass attempts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(
+                os.environ, {"PYTHON_REPL_ALLOWED_PATHS": tmpdir, "PYTHON_REPL_ALLOW_CURRENT_DIR": "false"}
+            ):
+                validator = python_repl.ASTSecurityValidator()
+
+                # Test symlink-like path manipulation
+                symlink_paths = [
+                    "/tmp/../etc/passwd",
+                    "/var/../etc/passwd",
+                ]
+
+                for path in symlink_paths:
+                    with pytest.raises(python_repl.SecurityViolation) as exc_info:
+                        validator.validate_code(f"open('{path}', 'r')")
+                    assert "is blocked" in str(exc_info.value)
+
+
+class TestResourceLimits:
+    """Test resource limit enforcement."""
+
+    def test_memory_limit_configuration(self):
+        """Test memory limit configuration from environment."""
+        with patch.dict(os.environ, {"PYTHON_REPL_MEMORY_LIMIT_MB": "50"}):
+            # Pass the environment value explicitly to the constructor
+            memory_limit_mb = int(os.environ.get("PYTHON_REPL_MEMORY_LIMIT_MB", "100"))
+            validator = python_repl.ASTSecurityValidator(memory_limit_mb=memory_limit_mb)
+            assert validator.memory_limit == 50 * 1024 * 1024  # 50MB in bytes
+
+    def test_timeout_configuration(self):
+        """Test timeout configuration from environment."""
+        with patch.dict(os.environ, {"PYTHON_REPL_TIMEOUT": "60"}):
+            # Pass the environment value explicitly to the constructor
+            timeout = int(os.environ.get("PYTHON_REPL_TIMEOUT", "30"))
+            validator = python_repl.ASTSecurityValidator(timeout=timeout)
+            assert validator.timeout == 60
+
+    def test_memory_limit_setting(self):
+        """Test that memory limit is attempted to be set."""
+        validator = python_repl.ASTSecurityValidator(memory_limit_mb=10)
+
+        # Mock resource module to track setrlimit calls
+        with (
+            patch("resource.setrlimit") as mock_setrlimit,
+            patch("resource.getrlimit", return_value=(100 * 1024 * 1024, 200 * 1024 * 1024)),
+        ):
+            namespace = {}
+            try:
+                validator.execute_with_limits("x = 1", namespace)
+            except Exception:
+                pass  # We don't care about execution errors, just limit setting
+
+            # Verify setrlimit was called for memory
+            memory_calls = [
+                call for call in mock_setrlimit.call_args_list if call[0][0] == python_repl.resource.RLIMIT_AS
+            ]
+            assert len(memory_calls) > 0
+
+    def test_cpu_limit_setting(self):
+        """Test that CPU time limit is attempted to be set."""
+        validator = python_repl.ASTSecurityValidator(timeout=5)
+
+        # Mock resource module to track setrlimit calls
+        with patch("resource.setrlimit") as mock_setrlimit, patch("resource.getrlimit", return_value=(30, 60)):
+            namespace = {}
+            try:
+                validator.execute_with_limits("x = 1", namespace)
+            except Exception:
+                pass  # We don't care about execution errors, just limit setting
+
+            # Verify setrlimit was called for CPU time
+            cpu_calls = [
+                call for call in mock_setrlimit.call_args_list if call[0][0] == python_repl.resource.RLIMIT_CPU
+            ]
+            assert len(cpu_calls) > 0
+
+
+class TestSecurityIntegration:
+    """Integration tests for security features."""
+
+    def test_restricted_mode_end_to_end(self, mock_console):
+        """Test complete restricted mode workflow."""
+        # Test that restricted mode properly blocks and allows operations
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "true"}):
+            # Force recreation of security manager with new environment
+            with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                # Test blocked operation
+                blocked_tool = {
+                    "toolUseId": "blocked-id",
+                    "input": {"code": "import subprocess", "interactive": False},
+                }
+
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result = python_repl.python_repl(tool=blocked_tool)
+
+                assert result["status"] == "error"
+                assert "Security Violation" in result["content"][0]["text"]
+
+                # Test allowed operation
+                allowed_tool = {
+                    "toolUseId": "allowed-id",
+                    "input": {"code": "result = sum(range(10))", "interactive": False},
+                }
+
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result = python_repl.python_repl(tool=allowed_tool)
+
+                assert result["status"] == "success"
+                assert python_repl.repl_state.get_namespace()["result"] == 45
+
+    def test_file_access_integration(self, mock_console):
+        """Test file access restrictions in full context."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "test.txt")
+
+            with patch.dict(
+                os.environ,
+                {
+                    "PYTHON_REPL_RESTRICTED_MODE": "true",
+                    "PYTHON_REPL_ALLOWED_PATHS": tmpdir,
+                    "PYTHON_REPL_ALLOW_CURRENT_DIR": "false",
+                },
+            ):
+                # Force recreation of security manager with new environment
+                with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                    # Test allowed file operation
+                    allowed_tool = {
+                        "toolUseId": "allowed-file",
+                        "input": {"code": f"with open('{test_file}', 'w') as f: f.write('test')", "interactive": False},
+                    }
+
+                    with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                        result = python_repl.python_repl(tool=allowed_tool)
+
+                    assert result["status"] == "success"
+
+                    # Test blocked file operation
+                    blocked_tool = {
+                        "toolUseId": "blocked-file",
+                        "input": {"code": "open('/etc/passwd', 'r')", "interactive": False},
+                    }
+
+                    with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                        result = python_repl.python_repl(tool=blocked_tool)
+
+                    assert result["status"] == "error"
+                    assert "Security Violation" in result["content"][0]["text"]
+                    assert "File access" in result["content"][0]["text"]
+
+    def test_security_mode_persistence(self, mock_console):
+        """Test that security mode persists across multiple calls."""
+        with patch.dict(os.environ, {"PYTHON_REPL_RESTRICTED_MODE": "true"}):
+            # Force recreation of security manager with new environment
+            with patch.object(python_repl, "security_manager", python_repl.SecurityManager()):
+                # First call - should be in restricted mode
+                tool1 = {
+                    "toolUseId": "test1",
+                    "input": {"code": "safe_var = 42", "interactive": False},
+                }
+
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result1 = python_repl.python_repl(tool=tool1)
+
+                assert result1["status"] == "success"
+
+                # Second call - should still be in restricted mode
+                tool2 = {
+                    "toolUseId": "test2",
+                    "input": {"code": "import os", "interactive": False},
+                }
+
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    result2 = python_repl.python_repl(tool=tool2)
+
+                assert result2["status"] == "error"
+                assert "Security Violation" in result2["content"][0]["text"]
