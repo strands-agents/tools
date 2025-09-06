@@ -924,6 +924,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | FILE_READ_DIFF_TYPE_DEFAULT | Default diff type for file comparisons | unified |
 | FILE_READ_USE_GIT_DEFAULT | Default setting for using git in time machine mode | true |
 | FILE_READ_NUM_REVISIONS_DEFAULT | Default number of revisions to show in time machine mode | 5 |
+| FILE_READ_ENCODING_DEFAULT | Default text encoding for file operations | utf-8 |
 
 #### Browser Tool
 
