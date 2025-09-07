@@ -73,13 +73,15 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from urllib.parse import quote
+
 import requests
 from rich.panel import Panel
 from rich.text import Text
-from strands_tools.utils import console_util
 from strands import tool
+
+from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +143,7 @@ class BrightDataClient:
 
         Args:
             url (str): URL to scrape
-            zone: Override default Web Unlocker zone name (optional). 
+            zone: Override default Web Unlocker zone name (optional).
             Must be a Web Unlocker zone - datacenter/residential zones will fail.
             Default: "web_unlocker"
 
@@ -201,7 +203,7 @@ class BrightDataClient:
         Args:
             query (str): Search query
             engine (str): Search engine - 'google', 'bing', or 'yandex'
-            zone: Override default Web Unlocker zone name (optional). 
+            zone: Override default Web Unlocker zone name (optional).
             Must be a Web Unlocker zone - datacenter/residential zones will fail.
             Default: "web_unlocker"
 
@@ -274,7 +276,6 @@ class BrightDataClient:
 
             if return_json:
                 params.append("brd_json=1")
-
 
             if params:
                 search_url += "&" + "&".join(params)
@@ -421,8 +422,8 @@ def bright_data(
     action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
     url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
     output_path: Path to save the screenshot (for get_screenshot)
-    zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment 
-          variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to 
+    zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment
+          variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to
           configure your specific Web Unlocker zone name (e.g., BRIGHTDATA_ZONE=web_unlocker_12345)
     query: Search query (for search_engine)
     engine: Search engine to use (google, bing, yandex, default: google)
