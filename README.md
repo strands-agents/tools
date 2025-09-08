@@ -118,6 +118,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
@@ -846,12 +847,21 @@ The Mem0 Memory Tool supports three different backend configurations:
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
+
+#### Bright Data Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| BRIGHTDATA_API_KEY | Bright Data API Key | None |
+| BRIGHTDATA_ZONE | Bright Data Web Unlocker Zone | web_unlocker1 |
+
 #### Memory Tool
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | MEMORY_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
 | MEMORY_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
+
 #### Nova Reels Tool
 
 | Environment Variable | Description | Default |
