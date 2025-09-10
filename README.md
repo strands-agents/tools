@@ -828,11 +828,25 @@ The Mem0 Memory Tool supports three different backend configurations:
    - Uses FAISS as the local vector store backend
    - Requires faiss-cpu package for local vector storage
 
+4. **Neptune Analytics** (Optional Graph backend for search enhancement):
+   - Uses Neptune Analytics as the graph store backend to enhance memory recall.
+   - Requires AWS credentials and Neptune Analytics configuration
+   ```
+   # Configure your Neptune Analytics graph ID in the .env file:
+   export NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER=sample-graph-id
+   
+   # Configure your Neptune Analytics graph ID in Python code:
+   import os
+   os.environ['NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER'] = "g-sample-graph-id"
+   
+   ```
+
 | Environment Variable | Description | Default | Required For |
 |----------------------|-------------|---------|--------------|
 | MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER | Neptune Analytics Graph Identifier | None | Neptune Analytics |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
 | MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
 | MEM0_LLM_MODEL | LLM model for memory processing | anthropic.claude-3-5-haiku-20241022-v1:0 | All modes |
@@ -846,6 +860,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
+- If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
 
 #### Bright Data Tool
