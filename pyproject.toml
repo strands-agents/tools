@@ -47,6 +47,16 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/strands_tools"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"src/strands_tools/py.typed" = "strands_tools/py.typed"
+
+[tool.hatch.build]
+include = [
+    "src/strands_tools/**/*.py",
+    "src/strands_tools/py.typed",
+    "src/strands_tools/**/py.typed",
+]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
