@@ -686,6 +686,9 @@ class WorkflowManager:
             completed_count = sum(1 for result in workflow["task_results"].values() if result["status"] == "completed")
             success_rate = (completed_count / total_tasks) * 100 if total_tasks > 0 else 0
 
+            # Reinstantiate Task Executor for next workflow execution
+            self.task_executor = TaskExecutor()
+
             return {
                 "status": "success",
                 "content": [
