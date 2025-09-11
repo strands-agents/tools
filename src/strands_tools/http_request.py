@@ -52,7 +52,7 @@ TOOL_SPEC = {
         "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. Automatically reads tokens from "
         "environment variables (GITHUB_TOKEN, GITLAB_TOKEN, AWS credentials, etc.) when auth_env_var is specified. "
         "Use environment(action='list') to view available variables. Includes session management, metrics, "
-        "streaming support, cookie handling, redirect control, and optional HTML to markdown conversion."
+        "streaming support, cookie handling, redirect control, proxy support, and optional HTML to markdown conversion."
     ),
     "inputSchema": {
         "json": {
@@ -176,6 +176,15 @@ TOOL_SPEC = {
                         "secret": {"type": "string"},
                         "algorithm": {"type": "string"},
                         "expiry": {"type": "integer"},
+                    },
+                },
+                "proxies": {
+                    "type": "object",
+                    "description": "Dictionary mapping protocol or protocol and hostname to the URL of the proxy.",
+                    "properties": {
+                        "http": {"type": "string"},
+                        "https": {"type": "string"},
+                        "ftp": {"type": "string"},
                     },
                 },
             },
@@ -747,6 +756,7 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "verify": verify,
             "auth": auth,
             "allow_redirects": tool_input.get("allow_redirects", True),
+            "proxies": tool_input.get("proxies", None),
         }
 
         # Set max_redirects if specified
