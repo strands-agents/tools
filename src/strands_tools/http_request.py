@@ -617,6 +617,15 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         )
         ```
 
+    7. Using proxy:
+        ```python
+        http_request(
+            method="GET",
+            url="https://example.com/api",
+            proxies={"https": "https://proxy.example.com:8080"},
+        )
+        ```
+
     Environment Variables:
     - Authentication tokens are read from environment when auth_env_var is specified
     - AWS credentials are automatically loaded from environment variables or credentials file
