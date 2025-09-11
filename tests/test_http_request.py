@@ -1045,3 +1045,49 @@ def test_markdown_conversion_non_html():
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
     assert '"message": "hello"' in result_text  # Should still be JSON (no conversion for non-HTML)
+
+
+def test_proxy_support():
+    """Test HTTP proxy support functionality."""
+    tool_use = {
+        "toolUseId": "test-proxy-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/api/proxy-test",
+            "proxies": {"https": "https://proxy.example.com:8080"},
+        },
+    }
+
+    # Mock the session.request method to capture the proxies parameter
+    with (
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+        patch("requests.Session.request") as mock_request,
+    ):
+        # Configure mock response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '{"status": "success via proxy"}'
+        mock_response.content = b'{"status": "success via proxy"}'
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.history = []
+        mock_response.url = "https://example.com/api/proxy-test"
+        mock_response.request = MagicMock()
+        mock_response.request.body = None
+        mock_request.return_value = mock_response
+
+        # Mock user input
+        mock_input.return_value = "y"
+
+        # Call the function
+        result = http_request.http_request(tool=tool_use)
+
+    # Verify the proxy was actually passed to requests
+    assert mock_request.called
+    call_kwargs = mock_request.call_args[1]
+    assert "proxies" in call_kwargs
+    assert call_kwargs["proxies"] == {"https": "https://proxy.example.com:8080"}
+
+    # Verify the result
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+    assert "Status Code: 200" in result_text
