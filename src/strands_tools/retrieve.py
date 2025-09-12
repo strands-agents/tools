@@ -187,7 +187,7 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
         results: List of retrieval results from Bedrock Knowledge Base
 
     Returns:
-        Formatted string containing the results in a readable format
+        Formatted string containing the results in a readable format, including score, document ID, and content.
     """
     if not results:
         return "No results found above score threshold."
