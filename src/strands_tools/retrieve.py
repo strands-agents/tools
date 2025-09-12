@@ -194,7 +194,14 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
 
     formatted = []
     for result in results:
-        doc_id = result.get("location", {}).get("customDocumentLocation", {}).get("id", "Unknown")
+        # Extract document location - handle both s3Location and customDocumentLocation
+        location = result.get("location", {})
+        doc_id = "Unknown"        
+        if "customDocumentLocation" in location:
+            doc_id = location["customDocumentLocation"].get("id", "Unknown")
+        elif "s3Location" in location:
+            # Extract meaningful part from S3 URI
+            doc_id = location["s3Location"].get("uri", "")
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
