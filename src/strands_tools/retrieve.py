@@ -196,7 +196,7 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
     for result in results:
         # Extract document location - handle both s3Location and customDocumentLocation
         location = result.get("location", {})
-        doc_id = "Unknown"        
+        doc_id = "Unknown"
         if "customDocumentLocation" in location:
             doc_id = location["customDocumentLocation"].get("id", "Unknown")
         elif "s3Location" in location:

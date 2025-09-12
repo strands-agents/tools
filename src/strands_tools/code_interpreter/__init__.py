@@ -17,10 +17,10 @@ Key Features:
 
 Example:
     >>> from strands_tools.code_interpreter import AgentCoreCodeInterpreter
-    >>> 
+    >>>
     >>> # Default usage
     >>> interpreter = AgentCoreCodeInterpreter(region="us-west-2")
-    >>> 
+    >>>
     >>> # Custom identifier usage
     >>> custom_interpreter = AgentCoreCodeInterpreter(
     ...     region="us-west-2",
