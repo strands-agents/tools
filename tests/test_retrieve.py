@@ -116,6 +116,22 @@ def test_format_results_for_display():
     empty_formatted = retrieve.format_results_for_display([])
     assert empty_formatted == "No results found above score threshold."
 
+    # Test with s3Location
+    s3_results = [
+        {
+            "content": {"text": "S3 content", "type": "TEXT"},
+            "location": {
+                "s3Location": {"uri": "s3://bucket/key/document.pdf"},
+                "type": "S3",
+            },
+            "score": 0.88,
+        }
+    ]
+    s3_formatted = retrieve.format_results_for_display(s3_results)
+    assert "Score: 0.8800" in s3_formatted
+    assert "Document ID: s3://bucket/key/document.pdf" in s3_formatted
+    assert "Content: S3 content" in s3_formatted
+
 
 def test_retrieve_tool_direct(mock_boto3_client):
     """Test direct invocation of the retrieve tool."""
