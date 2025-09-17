@@ -166,7 +166,7 @@ class Mem0ServiceClient:
             "provider": "opensearch",
             "config": {
                 "port": 443,
-                "collection_name": "mem0_memories",
+                "collection_name": os.environ.get("OPENSEARCH_COLLECTION", "mem0"),
                 "host": os.environ.get("OPENSEARCH_HOST"),
                 "embedding_model_dims": 1024,
                 "connection_class": RequestsHttpConnection,
