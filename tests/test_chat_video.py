@@ -2,7 +2,7 @@
 Tests for the chat_video tool.
 """
 
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
@@ -88,10 +88,7 @@ class TestChatVideoTool:
 
     @patch.dict("os.environ", {"TWELVELABS_API_KEY": "test-api-key", "TWELVELABS_PEGASUS_INDEX_ID": "test-index"})
     @patch("strands_tools.chat_video.TwelveLabs")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake video content")
-    def test_chat_with_video_upload(
-        self, mock_file, mock_twelvelabs, mock_task, mock_generate_response, temp_video_file
-    ):
+    def test_chat_with_video_upload(self, mock_twelvelabs, mock_task, mock_generate_response, temp_video_file):
         """Test chatting with video upload."""
         # Setup mock
         mock_client = MagicMock()
@@ -220,8 +217,7 @@ class TestChatVideoTool:
 
     @patch.dict("os.environ", {"TWELVELABS_API_KEY": "test-api-key", "TWELVELABS_PEGASUS_INDEX_ID": "test-index"})
     @patch("strands_tools.chat_video.TwelveLabs")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake video content")
-    def test_chat_upload_failure(self, mock_file, mock_twelvelabs, temp_video_file):
+    def test_chat_upload_failure(self, mock_twelvelabs, temp_video_file):
         """Test handling of upload failures."""
         # Setup mock with failed task - accurately representing Twelve Labs behavior
         mock_client = MagicMock()
@@ -287,8 +283,7 @@ class TestChatVideoTool:
 
     @patch.dict("os.environ", {"TWELVELABS_API_KEY": "test-api-key", "TWELVELABS_PEGASUS_INDEX_ID": "test-index"})
     @patch("strands_tools.chat_video.TwelveLabs")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake video content")
-    def test_video_cache(self, mock_file, mock_twelvelabs, mock_task, mock_generate_response, temp_video_file):
+    def test_video_cache(self, mock_twelvelabs, mock_task, mock_generate_response, temp_video_file):
         """Test that video cache prevents duplicate uploads."""
         # Setup mock
         mock_client = MagicMock()
