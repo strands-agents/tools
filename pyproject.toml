@@ -82,6 +82,7 @@ mem0_memory = [
     # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
+    "psycopg2-binary",
 ]
 local_chromium_browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
 agent_core_browser = [
