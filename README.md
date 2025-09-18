@@ -144,6 +144,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
 | rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
+| search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
+| chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 
 \* *These tools do not work on windows*
 
@@ -531,8 +533,37 @@ result = agent.tool.batch(
 )
 ```
 
-### AgentCore Memory
+### Video Tools
 
+```python
+from strands import Agent
+from strands_tools import search_video, chat_video
+
+agent = Agent(tools=[search_video, chat_video])
+
+# Search for video content using natural language
+result = agent.tool.search_video(
+    query="people discussing AI technology",
+    threshold="high",
+    group_by="video",
+    page_limit=5
+)
+
+# Chat with existing video (no index_id needed)
+result = agent.tool.chat_video(
+    prompt="What are the main topics discussed in this video?",
+    video_id="existing-video-id"
+)
+
+# Chat with new video file (index_id required for upload)
+result = agent.tool.chat_video(
+    prompt="Describe what happens in this video",
+    video_path="/path/to/video.mp4",
+    index_id="your-index-id"  # or set TWELVELABS_PEGASUS_INDEX_ID env var
+)
+```
+
+### AgentCore Memory
 ```python
 from strands import Agent
 from strands_tools.agent_core_memory import AgentCoreMemoryToolProvider
@@ -970,6 +1001,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
 | STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
 | STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
+#### Video Tools
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| TWELVELABS_API_KEY | TwelveLabs API key for video analysis | None |
+| TWELVELABS_MARENGO_INDEX_ID | Default index ID for search_video tool | None |
+| TWELVELABS_PEGASUS_INDEX_ID | Default index ID for chat_video tool | None |
 
 
 ## Contributing ❤️
