@@ -536,8 +536,10 @@ def editor(
 
             # Make replacements and backup
             new_content = content.replace(old_str, new_str)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -606,8 +608,12 @@ def editor(
 
             # Make replacements and backup
             new_content = regex.sub(new_str, content)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
+            else:
+                backup_path = "Disabled"
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -678,8 +684,10 @@ def editor(
                 raise ValueError(f"insert_line {insert_line} is out of range")
 
             # Make backup
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Insert and write
             lines.insert(insert_line, new_str)
