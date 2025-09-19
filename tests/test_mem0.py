@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from strands import Agent
 from strands.types.tools import ToolUse
+
 from strands_tools import mem0_memory
 from strands_tools.mem0_memory import Mem0ServiceClient
 
@@ -523,3 +524,279 @@ def test_faiss_client(mock_mem0_memory, mock_tool):
     # Assertions
     assert result["status"] == "success"
     assert "Test memory content" in str(result["content"][0]["text"])
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+        "MEM0_LLM_PROVIDER": "openai",
+        "MEM0_LLM_MODEL": "gpt-4",
+        "MEM0_EMBEDDER_PROVIDER": "openai",
+        "MEM0_EMBEDDER_MODEL": "text-embedding-3-large",
+        "OPENAI_API_KEY": "test-api-key",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+def test_postgresql_store_memory(mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test PostgreSQL store memory functionality."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {
+            "action": "store",
+            "content": "Test memory content",
+            "user_id": "test_user",
+            "metadata": {"category": "test"},
+        },
+    }.get(key, default)
+
+    # Mock data
+    store_response = [
+        {
+            "event": "store",
+            "memory": "Test memory content",
+            "id": "mem123",
+            "created_at": "2024-03-20T10:00:00Z",
+        }
+    ]
+
+    # Configure mocks
+    mock_mem0_service_client.store_memory.return_value = store_response
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert result["content"][0]["text"] == json.dumps(store_response, indent=2)
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+def test_postgresql_get_memory(mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test PostgreSQL get memory functionality."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "get", "memory_id": "mem123"},
+    }.get(key, default)
+
+    # Mock data
+    get_response = {
+        "id": "mem123",
+        "memory": "Test memory content",
+        "created_at": "2024-03-20T10:00:00Z",
+        "user_id": "test_user",
+        "metadata": {"category": "test"},
+    }
+
+    # Configure mocks
+    mock_mem0_service_client.get_memory.return_value = get_response
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert isinstance(result["content"], list)
+    assert len(result["content"]) > 0
+    assert "text" in result["content"][0]
+    memory = json.loads(result["content"][0]["text"])
+    assert memory["id"] == "mem123"
+    assert memory["memory"] == "Test memory content"
+    assert memory["user_id"] == "test_user"
+    assert memory["metadata"] == {"category": "test"}
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+def test_postgresql_list_memories(mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test PostgreSQL list memories functionality."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "list", "user_id": "test_user"},
+    }.get(key, default)
+
+    # Mock data for list_memories response
+    list_response = {
+        "results": [
+            {
+                "id": "mem123",
+                "memory": "Test memory content",
+                "created_at": "2024-03-20T10:00:00Z",
+                "user_id": "test_user",
+                "metadata": {"category": "test"},
+            }
+        ]
+    }
+
+    # Configure mocks
+    mock_mem0_service_client.list_memories.return_value = list_response
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert isinstance(result["content"], list)
+    assert len(result["content"]) > 0
+    assert "text" in result["content"][0]
+    # Parse the JSON string in text
+    memories = json.loads(result["content"][0]["text"])
+    assert isinstance(memories, list)
+    assert len(memories) > 0
+    assert "id" in memories[0]
+    assert memories[0]["id"] == "mem123"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+def test_postgresql_retrieve_memories(mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test PostgreSQL retrieve memories functionality."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "retrieve", "query": "test query", "user_id": "test_user"},
+    }.get(key, default)
+
+    # Mock data for search_memories response
+    retrieve_response = {
+        "results": [
+            {
+                "id": "mem123",
+                "memory": "Test memory content",
+                "score": 0.85,
+                "created_at": "2024-03-20T10:00:00Z",
+                "user_id": "test_user",
+                "metadata": {"category": "test"},
+            }
+        ]
+    }
+
+    # Configure mocks
+    mock_mem0_service_client.search_memories.return_value = retrieve_response
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert isinstance(result["content"], list)
+    assert len(result["content"]) > 0
+    assert "text" in result["content"][0]
+    # Parse the JSON string in text
+    memories = json.loads(result["content"][0]["text"])
+    assert isinstance(memories, list)
+    assert len(memories) > 0
+    assert "id" in memories[0]
+    assert memories[0]["id"] == "mem123"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+        "BYPASS_TOOL_CONSENT": "true",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+def test_postgresql_delete_memory(mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test PostgreSQL delete memory functionality with BYPASS_TOOL_CONSENT mode enabled."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "delete", "memory_id": "mem123"},
+    }.get(key, default)
+
+    # Configure mocks
+    mock_mem0_service_client.delete_memory.return_value = {"status": "success"}
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert "Memory mem123 deleted successfully" in str(result["content"][0]["text"])
+
+    # Verify correct functions were called
+    mock_mem0_service_client.delete_memory.assert_called_once()
+    call_args = mock_mem0_service_client.delete_memory.call_args[0]
+    assert call_args[0] == "mem123"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "test-cluster.cluster-abc123.us-west-2.rds.amazonaws.com",
+        "POSTGRESQL_USER": "test_user",
+        # Missing POSTGRESQL_PASSWORD
+        "MEM0_LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-api-key",
+    },
+)
+def test_postgresql_missing_required_vars(mock_tool):
+    """Test PostgreSQL client with missing required environment variables."""
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {
+            "action": "store",
+            "content": "Test memory content",
+            "user_id": "test_user",
+        },
+    }.get(key, default)
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "error"
+    assert "Missing required PostgreSQL environment variables" in str(result["content"][0]["text"])
+    assert "POSTGRESQL_PASSWORD" in str(result["content"][0]["text"])
