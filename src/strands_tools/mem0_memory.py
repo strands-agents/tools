@@ -204,14 +204,14 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
-            raise RuntimeError("""Conflicting backend configurations: 
-            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set. 
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR") and os.environ.get("OPENSEARCH_HOST"):
+            raise RuntimeError("""Conflicting backend configurations:
+            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR and OPENSEARCH_HOST environment variables are set.
             Please specify only one backend.""")
 
         # Vector search providers
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
-            logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR"):
+            logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
             merged_config = self._configure_neptune_analytics_backend(config)
 
         elif os.environ.get("OPENSEARCH_HOST"):
@@ -243,7 +243,7 @@ class Mem0ServiceClient:
             "provider": "neptune",
             "config": {
                 "collection_name": os.environ.get("NEPTUNE_ANALYTICS_VECTOR_COLLECTION", "mem0"),
-                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
+                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR')}"},
         }
         return  self._merge_config(config)
 
@@ -257,6 +257,7 @@ class Mem0ServiceClient:
             An initialized Mem0Memory instance configured for OpenSearch.
         """
         # Add vector portion of the config
+        config = config or {}
         config["vector_store"] = {
             "provider": "opensearch",
             "config": {
