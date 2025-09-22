@@ -208,7 +208,6 @@ class Mem0ServiceClient:
             raise RuntimeError("Conflicting backend configurations: Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set. Please specify only one backend.")
 
         # Vector search providers
-        print("Test v2")
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             merged_config = self._configure_neptune_analytics_backend(config)
@@ -220,7 +219,6 @@ class Mem0ServiceClient:
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
             merged_config = self._initialize_faiss_client(config)
-
 
         # Graph backend providers
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
