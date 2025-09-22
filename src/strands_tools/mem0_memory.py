@@ -204,6 +204,9 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
+            raise RuntimeError("Conflicting backend configurations: Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set. Please specify only one backend.")
+
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             return self._configure_neptune_analytics_backend(config)
