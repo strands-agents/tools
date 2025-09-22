@@ -207,16 +207,21 @@ class Mem0ServiceClient:
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
             raise RuntimeError("Conflicting backend configurations: Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set. Please specify only one backend.")
 
+        # Vector search providers
+        print("Test v2")
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
-            return self._configure_neptune_analytics_backend(config)
+            merged_config = self._configure_neptune_analytics_backend(config)
 
-        if os.environ.get("OPENSEARCH_HOST"):
+        elif os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
-            return self._initialize_opensearch_client(config)
+            merged_config = self._initialize_opensearch_client(config)
 
-        logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
-        return self._initialize_faiss_client(config)
+        else:
+            logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
+            merged_config = self._initialize_faiss_client(config)
+
+        return Mem0Memory.from_config(config_dict=merged_config)
 
     def _configure_neptune_analytics_backend(self, config: Optional[Dict] = None) -> Dict:
         """Initialize a Mem0 client with Neptune Analytics graph backend.
@@ -238,11 +243,9 @@ class Mem0ServiceClient:
             "provider": "neptune",
             "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
         }
-        merged_config = self._merge_config(config)
-        merged_config = Mem0Memory.from_config(config_dict=merged_config)
-        return merged_config
+        return  self._merge_config(config)
 
-    def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Mem0Memory:
+    def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Dict:
         """Initialize a Mem0 client with OpenSearch backend.
 
         Args:
@@ -251,6 +254,21 @@ class Mem0ServiceClient:
         Returns:
             An initialized Mem0Memory instance configured for OpenSearch.
         """
+        # Add vector portion of the config
+        config["vector_store"] = {
+            "provider": "opensearch",
+            "config": {
+                "port": 443,
+                "collection_name": os.environ.get("OPENSEARCH_COLLECTION", "mem0"),
+                "host": os.environ.get("OPENSEARCH_HOST"),
+                "embedding_model_dims": 1024,
+                "connection_class": RequestsHttpConnection,
+                "pool_maxsize": 20,
+                "use_ssl": True,
+                "verify_certs": True,
+            },
+        }
+
         # Set up AWS region
         self.region = os.environ.get("AWS_REGION", "us-west-2")
         if not os.environ.get("AWS_REGION"):
@@ -265,9 +283,9 @@ class Mem0ServiceClient:
         merged_config = self._merge_config(config)
         merged_config["vector_store"]["config"].update({"http_auth": auth, "host": os.environ["OPENSEARCH_HOST"]})
 
-        return Mem0Memory.from_config(config_dict=merged_config)
+        return merged_config
 
-    def _initialize_faiss_client(self, config: Optional[Dict] = None) -> Mem0Memory:
+    def _initialize_faiss_client(self, config: Optional[Dict] = None) -> Dict:
         """Initialize a Mem0 client with FAISS backend.
 
         Args:
@@ -295,8 +313,8 @@ class Mem0ServiceClient:
                 "path": "/tmp/mem0_384_faiss",
             },
         }
+        return merged_config
 
-        return Mem0Memory.from_config(config_dict=merged_config)
 
     def _merge_config(self, config: Optional[Dict] = None) -> Dict:
         """Merge user-provided configuration with default configuration.
