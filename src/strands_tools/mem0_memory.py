@@ -221,6 +221,12 @@ class Mem0ServiceClient:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
             merged_config = self._initialize_faiss_client(config)
 
+
+        # Graph backend providers
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
+            logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
+            merged_config = self._configure_neptune_analytics_graph_backend(merged_config)
+
         return Mem0Memory.from_config(config_dict=merged_config)
 
     def _configure_neptune_analytics_backend(self, config: Optional[Dict] = None) -> Dict:
@@ -238,10 +244,6 @@ class Mem0ServiceClient:
             "config": {
                 "collection_name": os.environ.get("NEPTUNE_ANALYTICS_VECTOR_COLLECTION", "mem0"),
                 "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
-        }
-        config["graph_store"] = {
-            "provider": "neptune",
-            "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
         }
         return  self._merge_config(config)
 
@@ -315,6 +317,20 @@ class Mem0ServiceClient:
         }
         return merged_config
 
+    def _configure_neptune_analytics_graph_backend(self, config: Dict) -> Dict:
+        """Initialize a Mem0 client with Neptune Analytics graph backend.
+
+        Args:
+            config: Configuration dictionary to add graph backend to.
+
+        Returns:
+            An configuration dict with graph backend.
+        """
+        config["graph_store"] = {
+            "provider": "neptune",
+            "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
+        }
+        return config
 
     def _merge_config(self, config: Optional[Dict] = None) -> Dict:
         """Merge user-provided configuration with default configuration.
