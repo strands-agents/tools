@@ -445,7 +445,8 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
     # Test with Neptune Analytics for both vector and graph
     with patch.dict(
         os.environ,
-        {"NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR": "test.opensearch.amazonaws.com", "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234"},
+        {"NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR": "test.opensearch.amazonaws.com",
+         "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234"},
     ):
         client = Mem0ServiceClient()
         assert client.mem0 is not None
