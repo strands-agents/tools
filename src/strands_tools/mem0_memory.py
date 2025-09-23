@@ -243,9 +243,10 @@ class Mem0ServiceClient:
             "provider": "neptune",
             "config": {
                 "collection_name": os.environ.get("NEPTUNE_ANALYTICS_VECTOR_COLLECTION", "mem0"),
-                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR')}"},
+                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR')}",
+            },
         }
-        return  self._merge_config(config)
+        return self._merge_config(config)
 
     def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Dict:
         """Initialize a Mem0 client with OpenSearch backend.
@@ -503,8 +504,9 @@ def format_retrieve_response(memories: List[Dict]) -> Panel:
 def format_retrieve_graph_response(memories: List[Dict]) -> Panel:
     """Format retrieve response for graph data"""
     if not memories:
-        return Panel("No graph memories found matching the query.",
-                     title="[bold yellow]No Matches", border_style="yellow")
+        return Panel(
+            "No graph memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
+        )
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
     table.add_column("Source", style="cyan")
