@@ -197,13 +197,13 @@ class Mem0ServiceClient:
             Please specify only one backend.""")
 
         # Vector search providers
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR"):
-            logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._configure_neptune_analytics_backend(config)
-
-        elif os.environ.get("OPENSEARCH_HOST"):
+        if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
             merged_config = self._initialize_opensearch_client(config)
+
+        elif os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR"):
+            logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
+            merged_config = self._configure_neptune_analytics_backend(config)
 
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
