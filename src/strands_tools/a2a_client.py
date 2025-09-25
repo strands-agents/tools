@@ -139,7 +139,8 @@ class A2AClientToolProvider:
         Discover an A2A agent and return its agent card with capabilities.
 
         This function fetches the agent card from the specified A2A agent URL
-        and caches it for future use.
+        and caches it for future use. Use this when you need to discover a new
+        agent that is not in the known agents list.
 
         Args:
             url: The base URL of the A2A agent to discover
@@ -212,9 +213,14 @@ class A2AClientToolProvider:
         """
         Send a message to a specific A2A agent and return the response.
 
+        IMPORTANT: If the user provides a specific URL, use it directly. If the user
+        refers to an agent by name only, use a2a_list_discovered_agents first to get
+        the correct URL. Never guess, generate, or hallucinate URLs.
+
         Args:
             message_text: The message content to send to the agent
-            target_agent_url: The URL of the target A2A agent
+            target_agent_url: The exact URL of the target A2A agent
+                (user-provided URL or from a2a_list_discovered_agents)
             message_id: Optional message ID for tracking (generates UUID if not provided)
 
         Returns:
