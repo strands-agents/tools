@@ -162,19 +162,6 @@ class Mem0ServiceClient:
                 "max_tokens": int(os.environ.get("MEM0_LLM_MAX_TOKENS", 2000)),
             },
         },
-        "vector_store": {
-            "provider": "opensearch",
-            "config": {
-                "port": 443,
-                "collection_name": os.environ.get("OPENSEARCH_COLLECTION", "mem0"),
-                "host": os.environ.get("OPENSEARCH_HOST"),
-                "embedding_model_dims": 1024,
-                "connection_class": RequestsHttpConnection,
-                "pool_maxsize": 20,
-                "use_ssl": True,
-                "verify_certs": True,
-            },
-        },
     }
 
     def __init__(self, config: Optional[Dict] = None):
