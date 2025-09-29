@@ -578,9 +578,9 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
     table.add_column("Target", style="green")
 
     for memory in memories:
-        source = memory.get("source", "N/A")
-        relationship = memory.get("relationship", "N/A")
-        destination = memory.get("target", "N/A")
+        source = memory[0].get("source", "N/A")
+        relationship = memory[0].get("relationship", "N/A")
+        destination = memory[0].get("target", "N/A")
 
         table.add_row(source, relationship, destination)
 
@@ -702,7 +702,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Process graph relations (If any)
             if "relations" in results:
-                relationships_list = results.get("relations", [])
+                relationships_list = results.get("relations", [])["added_entities"]
                 results_list.extend(relationships_list)
                 panel_graph = format_store_graph_response(relationships_list)
                 console.print(panel_graph)
