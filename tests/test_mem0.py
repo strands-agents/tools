@@ -447,7 +447,7 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
 
     with patch.dict(
         os.environ,
-        {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "NEPTUNE_DATABASE_ENDPOINT": "g-5aaaaa1234"},
+        {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com"},
     ):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
