@@ -204,9 +204,17 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            raise RuntimeError("""Conflicting backend configurations:
+                Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and NEPTUNE_DATABASE_ENDPOINT environment variables are set.
+                Please specify only one graph backend.""")
+
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             config = self._configure_neptune_analytics_backend(config)
+        elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
+            config = self._configure_neptune_backend(config)
 
         if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
@@ -228,6 +236,22 @@ class Mem0ServiceClient:
         config["graph_store"] = {
             "provider": "neptune",
             "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
+        }
+        return config
+
+    def _configure_neptune_backend(self, config: Optional[Dict] = None) -> Dict:
+        """Initialize a Mem0 client with Neptune Database graph backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An configuration dict with graph backend.
+        """
+        config = config or {}
+        config["graph_store"] = {
+            "provider": "neptunedb",
+            "config": {"endpoint": f"neptune-db://{os.environ.get('NEPTUNE_DATABASE_ENDPOINT')}"},
         }
         return config
 
