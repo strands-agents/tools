@@ -86,7 +86,7 @@ logger = logging.getLogger(__name__)
 # Initialize Rich console
 console = Console()
 
-TOOL_SPEC = {""
+TOOL_SPEC = {
     "name": "mem0_memory",
     "description": (
         "Memory management tool for storing, retrieving, and managing memories in Mem0.\n\n"
