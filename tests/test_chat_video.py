@@ -46,9 +46,15 @@ def mock_task():
 @pytest.fixture
 def temp_video_file(tmp_path):
     """Create a temporary video file path."""
-    video_path = tmp_path / "test_video.mp4"
-    video_path.write_bytes(b"fake video content")
-    return str(video_path)
+
+    def _create_video(filename="test_video.mp4", content=None):
+        video_path = tmp_path / filename
+        if content is None:
+            content = b"fake video content"
+        video_path.write_bytes(content)
+        return str(video_path)
+
+    return _create_video
 
 
 class TestChatVideoTool:
@@ -99,7 +105,7 @@ class TestChatVideoTool:
         # Create tool use
         tool_use = {
             "toolUseId": "test-chat-2",
-            "input": {"prompt": "Describe this video", "video_path": temp_video_file},
+            "input": {"prompt": "Describe this video", "video_path": temp_video_file()},
         }
 
         # Execute chat
@@ -219,29 +225,29 @@ class TestChatVideoTool:
     @patch("strands_tools.chat_video.TwelveLabs")
     def test_chat_upload_failure(self, mock_twelvelabs, temp_video_file):
         """Test handling of upload failures."""
-        # Setup mock with failed task - accurately representing Twelve Labs behavior
+        # Setup mock with failed task
         mock_client = MagicMock()
         mock_twelvelabs.return_value.__enter__.return_value = mock_client
 
-        # Create mock task that simulates a failed upload
         mock_task = MagicMock()
-        mock_task.id = "task_failed_123"
-        mock_task.status = "failed"  # This status persists after wait_for_done()
-        mock_task.video_id = None  # Failed tasks don't have video IDs
-        mock_task.wait_for_done = MagicMock(return_value=None)
-
+        mock_task.status = "failed"
+        mock_task.wait_for_done = MagicMock()
         mock_client.task.create.return_value = mock_task
 
-        tool_use = {"toolUseId": "test-chat-9", "input": {"prompt": "Test prompt", "video_path": temp_video_file}}
+        tool_use = {
+            "toolUseId": "test-chat-9",
+            "input": {
+                "prompt": "Test prompt",
+                "video_path": temp_video_file(
+                    "upload_failure_test.mp4", content=b"unique content for upload failure test"
+                ),
+            },
+        }
 
         result = chat_video.chat_video(tool=tool_use)
 
-        # Assert error status
         assert result["status"] == "error"
-
-        # Check for error message - flexible to handle different error wrapping
-        error_text = result["content"][0]["text"]
-        assert "Video indexing failed" in error_text or "Error chatting with video" in error_text
+        assert "Video indexing failed" in result["content"][0]["text"]
 
     @patch.dict("os.environ", {"TWELVELABS_API_KEY": "test-api-key"})
     @patch("strands_tools.chat_video.TwelveLabs")
@@ -295,12 +301,18 @@ class TestChatVideoTool:
         chat_video.VIDEO_CACHE.clear()
 
         # First upload
-        tool_use1 = {"toolUseId": "test-cache-1", "input": {"prompt": "First prompt", "video_path": temp_video_file}}
+        tool_use1 = {
+            "toolUseId": "test-cache-1",
+            "input": {"prompt": "First prompt", "video_path": temp_video_file("cache_test.mp4")},
+        }
         result1 = chat_video.chat_video(tool=tool_use1)
         assert result1["status"] == "success"
 
         # Second upload with same file
-        tool_use2 = {"toolUseId": "test-cache-2", "input": {"prompt": "Second prompt", "video_path": temp_video_file}}
+        tool_use2 = {
+            "toolUseId": "test-cache-2",
+            "input": {"prompt": "Second prompt", "video_path": temp_video_file("cache_test.mp4")},
+        }
         result2 = chat_video.chat_video(tool=tool_use2)
         assert result2["status"] == "success"
 
