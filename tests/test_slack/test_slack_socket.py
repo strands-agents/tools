@@ -17,7 +17,10 @@ class TestSocketModeHandlerProcessing(unittest.TestCase):
         # Create a tool registry structure manually for the mock agent
         self.mock_agent.tool_registry = MagicMock()
         self.mock_agent.tool_registry.registry = MagicMock()
-        self.mock_agent.tool_registry.registry.values.return_value = ["tool1", "tool2"]
+        # Create mock tool objects instead of strings
+        mock_tool1 = MagicMock()
+        mock_tool2 = MagicMock()
+        self.mock_agent.tool_registry.registry.values.return_value = [mock_tool1, mock_tool2]
         self.mock_agent.system_prompt = "Test system prompt"
         self.handler.agent = self.mock_agent
 
@@ -156,6 +159,34 @@ class TestSocketModeHandlerProcessing(unittest.TestCase):
             # Check that the agent was not called
             # Note: The agent class is created but never called
             self.assertEqual(0, mock_agent_instance.call_count)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.Agent")
+    def test_process_message_with_provided_agent(self, mock_agent_class, mock_client):
+        """Test that handler uses provided agent when available (new feature)."""
+        # Handler already has self.mock_agent set from setUp()
+        # This tests the new agent delegation feature
+
+        # Create a mock event
+        event = {"type": "message", "text": "Hello test", "user": "USER123", "channel": "CHANNEL123", "ts": "1234.5678"}
+
+        # Create mock agent instance
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.return_value = "Test response"
+        mock_agent_class.return_value = mock_agent_instance
+
+        # Mock the environment variable for auto-reply
+        with patch.dict("os.environ", {"STRANDS_SLACK_AUTO_REPLY": "true"}):
+            # Process the message
+            self.handler._process_message(event)
+
+            # Check that a new agent was created with the provided agent's configuration
+            mock_agent_class.assert_called_once()
+            # Verify the agent was called with tools from the provided agent
+            call_args = mock_agent_class.call_args
+            self.assertIn("tools", call_args.kwargs)
+            # Check that reactions were added
+            mock_client.reactions_add.assert_called()
 
 
 def create_mock_socket_mode_request(event_type="message", text="Test message"):

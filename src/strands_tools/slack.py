@@ -350,17 +350,20 @@ class SocketModeHandler:
             logger.info("Skipping own message")
             return
 
-        tools = list(self.agent.tool_registry.registry.values())
-        trace_attributes = self.agent.trace_attributes
+        if self.agent:
+            tools = list(self.agent.tool_registry.registry.values())
+            trace_attributes = self.agent.trace_attributes
 
-        agent = Agent(
-            model=self.agent.model,
-            messages=[],
-            system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
-            tools=tools,
-            callback_handler=self.agent.callback_handler,
-            trace_attributes=trace_attributes,
-        )
+            agent = Agent(
+                model=self.agent.model,
+                messages=[],
+                system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
+                tools=tools,
+                callback_handler=self.agent.callback_handler,
+                trace_attributes=trace_attributes,
+            )
+        else:
+            agent = Agent(tools=[slack], system_prompt=SLACK_SYSTEM_PROMPT, messages=[])
 
         channel_id = event.get("channel")
         text = event.get("text", "")
@@ -437,16 +440,19 @@ class SocketModeHandler:
     def _process_interactive(self, event):
         """Process an interactive event."""
         # Process interactive events similar to messages
-        if client and self.agent:
-            tools = list(self.agent.tool_registry.registry.values())
+        if client:
+            if self.agent:
+                tools = list(self.agent.tool_registry.registry.values())
 
-            agent = Agent(
-                model=self.agent.model,
-                messages=[],
-                system_prompt=SLACK_SYSTEM_PROMPT,
-                tools=tools,
-                callback_handler=self.agent.callback_handler,
-            )
+                agent = Agent(
+                    model=self.agent.model,
+                    messages=[],
+                    system_prompt=SLACK_SYSTEM_PROMPT,
+                    tools=tools,
+                    callback_handler=self.agent.callback_handler,
+                )
+            else:
+                agent = Agent(tools=[slack], system_prompt=SLACK_SYSTEM_PROMPT, messages=[])
 
             channel_id = event.get("channel")
             actions = event.get("actions", [])
