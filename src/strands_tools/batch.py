@@ -79,7 +79,7 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
         - If a tool function is not found or an error occurs, it will be captured in the results.
         - This tool is designed to work with agents that support dynamic tool invocation.
 
-    Sammple output:
+    Sample output:
         {
             "status": "success",
             "results": [
@@ -96,41 +96,83 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
     agent = kwargs.get("agent")
     invocations = kwargs.get("invocations", [])
     results = []
+    
     try:
         if not hasattr(agent, "tool") or agent.tool is None:
             raise AttributeError("Agent does not have a valid 'tool' attribute.")
+            
         for invocation in invocations:
             tool_name = invocation.get("name")
             arguments = invocation.get("arguments", {})
             tool_fn = getattr(agent.tool, tool_name, None)
+            
             if callable(tool_fn):
                 try:
-                    # Only pass JSON-serializable arguments to the tool
+                    # Call the tool function with the provided arguments
                     result = tool_fn(**arguments)
-
-                    if result["status"] == "success":
-                        results.append({"json": {"name": tool_name, "status": "success", "result": result}})
-                    else:
-                        results.append(
-                            {"toolUseId": tool_use_id, "status": "error", "content": [{"text": "Tool missing"}]}
-                        )
-                except Exception as e:
-                    error_msg = f"Error in batch tool: {str(e)}\n{traceback.format_exc()}"
-                    console.print(f"Error in batch tool: {str(e)}")
-                    results.append({"toolUseId": tool_use_id, "status": "error", "content": [{"text": error_msg}]})
-            else:
-                results.append(
-                    {
-                        "toolUseId": tool_use_id,
-                        "status": "error",
-                        "content": [{"text": f"Tool '{tool_name}' not found in agent or tool call failed."}],
+                    
+                    # Create a consistent result structure
+                    batch_result = {
+                        "name": tool_name,
+                        "status": "success",
+                        "result": result
                     }
-                )
+                    results.append(batch_result)
+                    
+                except Exception as e:
+                    error_msg = f"Error executing tool '{tool_name}': {str(e)}"
+                    console.print(error_msg)
+                    
+                    batch_result = {
+                        "name": tool_name,
+                        "status": "error",
+                        "error": str(e),
+                        "traceback": traceback.format_exc()
+                    }
+                    results.append(batch_result)
+            else:
+                error_msg = f"Tool '{tool_name}' not found in agent"
+                console.print(error_msg)
+                
+                batch_result = {
+                    "name": tool_name,
+                    "status": "error",
+                    "error": error_msg
+                }
+                results.append(batch_result)
+        
+        # Create a readable summary for the agent
+        summary_lines = []
+        summary_lines.append(f"Batch execution completed with {len(results)} tool(s):")
+        
+        for result in results:
+            if result["status"] == "success":
+                summary_lines.append(f"✓ {result['name']}: Success")
+            else:
+                summary_lines.append(f"✗ {result['name']}: Error - {result['error']}")
+        
+        summary_text = "\n".join(summary_lines)
+        
         return {
             "toolUseId": tool_use_id,
             "status": "success",
-            "content": results,
+            "content": [
+                {
+                    "text": summary_text
+                },
+                {
+                    "json": {
+                        "batch_summary": {
+                            "total_tools": len(results),
+                            "successful": len([r for r in results if r["status"] == "success"]),
+                            "failed": len([r for r in results if r["status"] == "error"])
+                        },
+                        "results": results
+                    }
+                }
+            ]
         }
+        
     except Exception as e:
         error_msg = f"Error in batch tool: {str(e)}\n{traceback.format_exc()}"
         console.print(f"Error in batch tool: {str(e)}")
