@@ -204,9 +204,17 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            raise RuntimeError("""Conflicting backend configurations:
+                Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and NEPTUNE_DATABASE_ENDPOINT environment variables are set.
+                Please specify only one graph backend.""")
+
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             config = self._configure_neptune_analytics_backend(config)
+        elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
+            config = self._configure_neptune_backend(config)
 
         if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
@@ -228,6 +236,22 @@ class Mem0ServiceClient:
         config["graph_store"] = {
             "provider": "neptune",
             "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
+        }
+        return config
+
+    def _configure_neptune_backend(self, config: Optional[Dict] = None) -> Dict:
+        """Initialize a Mem0 client with Neptune Database graph backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An configuration dict with graph backend.
+        """
+        config = config or {}
+        config["graph_store"] = {
+            "provider": "neptunedb",
+            "config": {"endpoint": f"neptune-db://{os.environ.get('NEPTUNE_DATABASE_ENDPOINT')}"},
         }
         return config
 
@@ -543,6 +567,26 @@ def format_store_response(results: List[Dict]) -> Panel:
 
     return Panel(table, title="[bold green]Memory Stored", border_style="green")
 
+def format_store_graph_response(memories: List[Dict]) -> Panel:
+    """Format store response for graph data"""
+    if not memories:
+        return Panel("No graph memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
+
+    table = Table(title="Graph Memories Stored", show_header=True, header_style="bold magenta")
+    table.add_column("Source", style="cyan")
+    table.add_column("Relationship", style="yellow", width=50)
+    table.add_column("Target", style="green")
+
+    for memory in memories:
+        source = memory[0].get("source", "N/A")
+        relationship = memory[0].get("relationship", "N/A")
+        destination = memory[0].get("target", "N/A")
+
+        table.add_row(source, relationship, destination)
+
+    return Panel(table, title="[bold green]Memories Stored (Graph)", border_style="green")
+
+
 
 def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
@@ -655,6 +699,14 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if results_list:
                 panel = format_store_response(results_list)
                 console.print(panel)
+
+            # Process graph relations (If any)
+            if "relations" in results:
+                relationships_list = results.get("relations", [])["added_entities"]
+                results_list.extend(relationships_list)
+                panel_graph = format_store_graph_response(relationships_list)
+                console.print(panel_graph)
+
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
