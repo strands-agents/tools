@@ -433,6 +433,28 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
         assert client.mem0 is not None
 
+    # Test with conflict scenario
+    with patch.dict(
+        os.environ,
+        {
+            "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+            "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR": "g-5aaaaa1234",
+        },
+    ):
+        with pytest.raises(RuntimeError):
+            Mem0ServiceClient()
+
+    # Test with Neptune Analytics for both vector and graph
+    with patch.dict(
+        os.environ,
+        {
+            "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR": "test.opensearch.amazonaws.com",
+            "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234",
+        },
+    ):
+        client = Mem0ServiceClient()
+        assert client.mem0 is not None
+
     # Test with custom config (OpenSearch)
     custom_config = {
         "embedder": {"provider": "custom", "config": {"model": "custom-model"}},
