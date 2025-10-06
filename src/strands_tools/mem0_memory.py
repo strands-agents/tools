@@ -614,15 +614,13 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
 
     table = Table(title="Graph Memories Stored", show_header=True, header_style="bold magenta")
     table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
     table.add_column("Target", style="green")
 
     for memory in memories:
         source = memory[0].get("source", "N/A")
-        relationship = memory[0].get("relationship", "N/A")
         destination = memory[0].get("target", "N/A")
 
-        table.add_row(source, relationship, destination)
+        table.add_row(source, destination)
 
     return Panel(table, title="[bold green]Memories Stored (Graph)", border_style="green")
 
