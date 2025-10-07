@@ -786,6 +786,63 @@ result = agent.tool.use_computer(
 )
 ```
 
+### Elasticsearch Memory
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import ElasticsearchMemoryToolProvider
+
+# Method 1: Elasticsearch Cloud (traditional)
+provider = ElasticsearchMemoryToolProvider(
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Method 2: Elasticsearch Serverless (URL-based)
+provider = ElasticsearchMemoryToolProvider(
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+agent = Agent(tools=provider.tools)
+
+# Store a memory with semantic embeddings
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"}
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.elasticsearch_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5
+)
+
+# List all memories with pagination
+result = agent.tool.elasticsearch_memory(
+    action="list",
+    max_results=10
+)
+
+# Get specific memory by ID
+result = agent.tool.elasticsearch_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234"
+)
+
+# Delete a memory
+result = agent.tool.elasticsearch_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
