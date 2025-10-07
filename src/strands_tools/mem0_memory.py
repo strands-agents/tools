@@ -213,7 +213,6 @@ class Mem0ServiceClient:
             merged_config = self._initialize_faiss_client(config)
 
 
-
         # Graph backend providers
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
             raise RuntimeError("""Conflicting backend configurations:
@@ -222,10 +221,10 @@ class Mem0ServiceClient:
 
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
-            config = self._configure_neptune_analytics_backend(config)
+            merged_config = self._configure_neptune_analytics_graph_backend(merged_config)
         elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
             logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
-            config = self._configure_neptune_backend(config)
+            merged_config = self._configure_neptune_backend(merged_config)
 
 
         return Mem0Memory.from_config(config_dict=merged_config)
