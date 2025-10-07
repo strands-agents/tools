@@ -118,7 +118,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 import boto3
 from elasticsearch import Elasticsearch
@@ -128,14 +128,17 @@ from strands.types.tools import AgentTool
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
 # Define memory actions as an Enum
 class MemoryAction(str, Enum):
     """Enum for memory actions."""
+
     RECORD = "record"
     RETRIEVE = "retrieve"
     LIST = "list"
     GET = "get"
     DELETE = "delete"
+
 
 # Define required parameters for each action
 REQUIRED_PARAMS = {
@@ -186,7 +189,7 @@ class ElasticsearchMemoryToolProvider:
         self.cloud_id = cloud_id or os.getenv("ELASTICSEARCH_CLOUD_ID")
         self.es_url = es_url or os.getenv("ELASTICSEARCH_URL")
         self.api_key = api_key or os.getenv("ELASTICSEARCH_API_KEY")
-        
+
         # Validate required parameters
         if not self.api_key:
             raise ValueError("api_key is required")
@@ -202,11 +205,7 @@ class ElasticsearchMemoryToolProvider:
             if self.es_url:
                 # Use URL-based connection (for serverless)
                 self.es_client = Elasticsearch(
-                    hosts=[self.es_url],
-                    api_key=self.api_key,
-                    request_timeout=30,
-                    retry_on_timeout=True,
-                    max_retries=3
+                    hosts=[self.es_url], api_key=self.api_key, request_timeout=30, retry_on_timeout=True, max_retries=3
                 )
             else:
                 # Use cloud_id connection
@@ -215,24 +214,21 @@ class ElasticsearchMemoryToolProvider:
                     api_key=self.api_key,
                     request_timeout=30,
                     retry_on_timeout=True,
-                    max_retries=3
+                    max_retries=3,
                 )
-            
+
             # Test connection
             if not self.es_client.ping():
                 raise ConnectionError("Unable to connect to Elasticsearch cluster")
-                
+
         except Exception as e:
-            raise ConnectionError(f"Failed to initialize Elasticsearch client: {str(e)}")
+            raise ConnectionError(f"Failed to initialize Elasticsearch client: {str(e)}") from e
 
         # Initialize Amazon Bedrock client for embeddings
         try:
-            self.bedrock_runtime = boto3.client(
-                'bedrock-runtime',
-                region_name=self.region
-            )
+            self.bedrock_runtime = boto3.client("bedrock-runtime", region_name=self.region)
         except Exception as e:
-            raise ConnectionError(f"Failed to initialize Bedrock client: {str(e)}")
+            raise ConnectionError(f"Failed to initialize Bedrock client: {str(e)}") from e
 
         # Ensure index exists with proper mappings
         self._ensure_index_exists()
@@ -244,47 +240,31 @@ class ElasticsearchMemoryToolProvider:
                 mapping = {
                     "mappings": {
                         "properties": {
-                            "content": {
-                                "type": "text",
-                                "analyzer": "standard"
-                            },
+                            "content": {"type": "text", "analyzer": "standard"},
                             "embedding": {
                                 "type": "dense_vector",
                                 "dims": DEFAULT_EMBEDDING_DIMS,
                                 "index": True,
-                                "similarity": "cosine"
+                                "similarity": "cosine",
                             },
-                            "namespace": {
-                                "type": "keyword"
-                            },
-                            "memory_id": {
-                                "type": "keyword"
-                            },
-                            "timestamp": {
-                                "type": "date"
-                            },
-                            "metadata": {
-                                "type": "object",
-                                "enabled": True
-                            }
+                            "namespace": {"type": "keyword"},
+                            "memory_id": {"type": "keyword"},
+                            "timestamp": {"type": "date"},
+                            "metadata": {"type": "object", "enabled": True},
                         }
                     }
                 }
-                
+
                 # Add settings only if not using serverless (URL-based connection)
                 if not self.es_url:
-                    mapping["settings"] = {
-                        "number_of_shards": 1,
-                        "number_of_replicas": 0,
-                        "index.knn": True
-                    }
-                
+                    mapping["settings"] = {"number_of_shards": 1, "number_of_replicas": 0, "index.knn": True}
+
                 self.es_client.indices.create(index=self.index_name, body=mapping)
                 logger.info(f"Created Elasticsearch index: {self.index_name}")
-                
+
         except Exception as e:
             logger.error(f"Failed to create index {self.index_name}: {str(e)}")
-            raise
+            raise ConnectionError(f"Failed to create index {self.index_name}: {str(e)}") from e
 
     def _generate_embedding(self, text: str) -> List[float]:
         """
@@ -304,25 +284,24 @@ class ElasticsearchMemoryToolProvider:
         """
         try:
             logger.debug(f"Generating embedding for text: {text[:100]}...")
-            
+
             response = self.bedrock_runtime.invoke_model(
-                modelId=self.embedding_model,
-                body=json.dumps({"inputText": text})
+                modelId=self.embedding_model, body=json.dumps({"inputText": text})
             )
-            
-            response_body = json.loads(response['body'].read())
-            embedding = response_body['embedding']
-            
+
+            response_body = json.loads(response["body"].read())
+            embedding = response_body["embedding"]
+
             # Validate embedding dimensions
             if len(embedding) != DEFAULT_EMBEDDING_DIMS:
                 raise Exception(f"Expected {DEFAULT_EMBEDDING_DIMS} dimensions, got {len(embedding)}")
-            
+
             logger.debug(f"Generated embedding with {len(embedding)} dimensions")
             return embedding
-            
+
         except Exception as e:
             logger.error(f"Failed to generate embedding for text '{text[:50]}...': {str(e)}")
-            raise Exception(f"Embedding generation failed: {str(e)}")
+            raise Exception(f"Embedding generation failed: {str(e)}") from e
 
     def _generate_memory_id(self) -> str:
         """Generate a unique memory ID."""
@@ -419,10 +398,7 @@ class ElasticsearchMemoryToolProvider:
                 "memory_id": memory_id,
             }
 
-            missing_params = [
-                param for param in REQUIRED_PARAMS[action_enum] 
-                if not param_values.get(param)
-            ]
+            missing_params = [param for param in REQUIRED_PARAMS[action_enum] if not param_values.get(param)]
 
             if missing_params:
                 return {
@@ -499,10 +475,10 @@ class ElasticsearchMemoryToolProvider:
         """
         # Generate unique memory ID
         memory_id = self._generate_memory_id()
-        
+
         # Generate embedding for semantic search
         embedding = self._generate_embedding(content)
-        
+
         # Prepare document
         doc = {
             "memory_id": memory_id,
@@ -510,16 +486,12 @@ class ElasticsearchMemoryToolProvider:
             "embedding": embedding,
             "namespace": self.namespace,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
-        
+
         # Store in Elasticsearch
-        response = self.es_client.index(
-            index=self.index_name,
-            id=memory_id,
-            body=doc
-        )
-        
+        response = self.es_client.index(index=self.index_name, id=memory_id, body=doc)
+
         # Return filtered response with embedding metadata
         return {
             "memory_id": memory_id,
@@ -527,11 +499,7 @@ class ElasticsearchMemoryToolProvider:
             "namespace": self.namespace,
             "timestamp": doc["timestamp"],
             "result": response["result"],
-            "embedding_info": {
-                "model": self.embedding_model,
-                "dimensions": len(embedding),
-                "generated": True
-            }
+            "embedding_info": {"model": self.embedding_model, "dimensions": len(embedding), "generated": True},
         }
 
     def _retrieve_memories(self, query: str, max_results: int, next_token: Optional[str] = None) -> Dict:
@@ -548,10 +516,10 @@ class ElasticsearchMemoryToolProvider:
         """
         # Generate embedding for query
         query_embedding = self._generate_embedding(query)
-        
+
         # Calculate offset from next_token
         from_offset = int(next_token) if next_token else 0
-        
+
         # Perform semantic search using k-NN
         search_body = {
             "knn": {
@@ -559,17 +527,15 @@ class ElasticsearchMemoryToolProvider:
                 "query_vector": query_embedding,
                 "k": max_results,
                 "num_candidates": max_results * 3,
-                "filter": {
-                    "term": {"namespace": self.namespace}
-                }
+                "filter": {"term": {"namespace": self.namespace}},
             },
             "from": from_offset,
             "size": max_results,
-            "_source": ["memory_id", "content", "timestamp", "metadata"]
+            "_source": ["memory_id", "content", "timestamp", "metadata"],
         }
-        
+
         response = self.es_client.search(index=self.index_name, body=search_body)
-        
+
         # Format results
         memories = []
         for hit in response["hits"]["hits"]:
@@ -578,10 +544,10 @@ class ElasticsearchMemoryToolProvider:
                 "content": hit["_source"]["content"],
                 "timestamp": hit["_source"]["timestamp"],
                 "metadata": hit["_source"].get("metadata", {}),
-                "score": hit["_score"]
+                "score": hit["_score"],
             }
             memories.append(memory)
-        
+
         result = {
             "memories": memories,
             "total": response["hits"]["total"]["value"],
@@ -591,14 +557,14 @@ class ElasticsearchMemoryToolProvider:
                 "search_type": "k-NN vector similarity",
                 "embedding_model": self.embedding_model,
                 "embedding_dimensions": DEFAULT_EMBEDDING_DIMS,
-                "similarity_function": "cosine"
-            }
+                "similarity_function": "cosine",
+            },
         }
-        
+
         # Add next_token if there are more results
         if from_offset + max_results < response["hits"]["total"]["value"]:
             result["next_token"] = str(from_offset + max_results)
-            
+
         return result
 
     def _list_memories(self, max_results: int, next_token: Optional[str] = None) -> Dict:
@@ -614,21 +580,17 @@ class ElasticsearchMemoryToolProvider:
         """
         # Calculate offset from next_token
         from_offset = int(next_token) if next_token else 0
-        
+
         search_body = {
-            "query": {
-                "term": {"namespace": self.namespace}
-            },
-            "sort": [
-                {"timestamp": {"order": "desc"}}
-            ],
+            "query": {"term": {"namespace": self.namespace}},
+            "sort": [{"timestamp": {"order": "desc"}}],
             "from": from_offset,
             "size": max_results,
-            "_source": ["memory_id", "content", "timestamp", "metadata"]
+            "_source": ["memory_id", "content", "timestamp", "metadata"],
         }
-        
+
         response = self.es_client.search(index=self.index_name, body=search_body)
-        
+
         # Format results
         memories = []
         for hit in response["hits"]["hits"]:
@@ -636,19 +598,16 @@ class ElasticsearchMemoryToolProvider:
                 "memory_id": hit["_source"]["memory_id"],
                 "content": hit["_source"]["content"],
                 "timestamp": hit["_source"]["timestamp"],
-                "metadata": hit["_source"].get("metadata", {})
+                "metadata": hit["_source"].get("metadata", {}),
             }
             memories.append(memory)
-        
-        result = {
-            "memories": memories,
-            "total": response["hits"]["total"]["value"]
-        }
-        
+
+        result = {"memories": memories, "total": response["hits"]["total"]["value"]}
+
         # Add next_token if there are more results
         if from_offset + max_results < response["hits"]["total"]["value"]:
             result["next_token"] = str(from_offset + max_results)
-            
+
         return result
 
     def _get_memory(self, memory_id: str) -> Dict:
@@ -667,25 +626,25 @@ class ElasticsearchMemoryToolProvider:
         try:
             response = self.es_client.get(index=self.index_name, id=memory_id)
             source = response["_source"]
-            
+
             # Verify namespace
             if source.get("namespace") != self.namespace:
                 raise Exception(f"Memory {memory_id} not found in namespace {self.namespace}")
-            
+
             return {
                 "memory_id": source["memory_id"],
                 "content": source["content"],
                 "timestamp": source["timestamp"],
                 "metadata": source.get("metadata", {}),
-                "namespace": source["namespace"]
+                "namespace": source["namespace"],
             }
-            
+
         except Exception as e:
             # Handle Elasticsearch NotFoundError
-            if hasattr(e, 'status_code') and e.status_code == 404:
-                raise Exception(f"Memory {memory_id} not found")
+            if hasattr(e, "status_code") and e.status_code == 404:
+                raise Exception(f"Memory {memory_id} not found") from e
             elif "not_found" in str(e).lower() or "NotFoundError" in str(type(e)):
-                raise Exception(f"Memory {memory_id} not found")
+                raise Exception(f"Memory {memory_id} not found") from e
             raise
 
     def _delete_memory(self, memory_id: str) -> Dict:
@@ -704,16 +663,13 @@ class ElasticsearchMemoryToolProvider:
         try:
             # First verify the memory exists and is in correct namespace
             self._get_memory(memory_id)
-            
+
             # Delete the memory
             response = self.es_client.delete(index=self.index_name, id=memory_id)
-            
-            return {
-                "memory_id": memory_id,
-                "result": response["result"]
-            }
-            
+
+            return {"memory_id": memory_id, "result": response["result"]}
+
         except Exception as e:
             if "not_found" in str(e).lower():
-                raise Exception(f"Memory {memory_id} not found")
+                raise Exception(f"Memory {memory_id} not found") from e
             raise
