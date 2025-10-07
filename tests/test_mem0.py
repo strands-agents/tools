@@ -445,6 +445,7 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
         client = Mem0ServiceClient()
         assert client.mem0 is not None
 
+    # Test with Neptune Database with OpenSearch
     with patch.dict(
         os.environ,
         {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
