@@ -1,0 +1,24 @@
+2025-10-05 17:53:40,864 - INFO - Starting RDS Discovery - Action: assess
+2025-10-05 17:53:40,865 - INFO - Starting SQL Server assessment - File: ../real_servers.csv, Auth: sql
+2025-10-05 17:53:40,865 - INFO - Found 1 servers to assess
+2025-10-05 17:53:40,865 - INFO - Assessing server 1/1: 3.81.26.46
+2025-10-05 17:53:42,779 - INFO - Found credentials in environment variables.
+2025-10-05 17:53:43,480 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:53:43,845 - INFO - Assessment completed - Files: CSV=../RDSdiscovery_1759704823.csv, JSON=../RDSdiscovery_1759704823.json, LOG=../RDSdiscovery_1759704823.log
+2025-10-05 17:53:43,845 - INFO - RDS Discovery completed - Action: assess, Time: 2.98s
+2025-10-05 17:57:40,372 - INFO - Starting RDS Discovery - Action: assess
+2025-10-05 17:57:40,377 - INFO - Starting SQL Server assessment - File: ../sizing_test_servers.csv, Auth: sql
+2025-10-05 17:57:40,377 - INFO - Found 5 servers to assess
+2025-10-05 17:57:40,378 - INFO - Assessing server 1/5: 3.81.26.46
+2025-10-05 17:57:42,036 - INFO - Found credentials in environment variables.
+2025-10-05 17:57:42,481 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:57:42,519 - INFO - Assessing server 2/5: 3.81.26.46
+2025-10-05 17:57:44,175 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:57:44,213 - INFO - Assessing server 3/5: 3.81.26.46
+2025-10-05 17:57:45,884 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:57:45,922 - INFO - Assessing server 4/5: 3.81.26.46
+2025-10-05 17:57:47,551 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:57:47,589 - INFO - Assessing server 5/5: 3.81.26.46
+2025-10-05 17:57:49,174 - INFO - Assessment completed for 3.81.26.46 - RDS Compatible: Y
+2025-10-05 17:57:50,043 - INFO - Assessment completed - Files: CSV=../RDSdiscovery_1759705069.csv, JSON=../RDSdiscovery_1759705069.json, LOG=../RDSdiscovery_1759705069.log
+2025-10-05 17:57:50,043 - INFO - RDS Discovery completed - Action: assess, Time: 9.67s
