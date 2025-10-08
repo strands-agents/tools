@@ -1,6 +1,6 @@
 # Elasticsearch Memory Tool
 
-The Elasticsearch Memory Tool provides comprehensive memory management capabilities using Elasticsearch as the backend with vector embeddings for semantic search. It follows the same pattern as other memory tools in the Strands framework while leveraging Elasticsearch's powerful search and storage capabilities.
+The Elasticsearch Memory Tool provides comprehensive memory management capabilities using Elasticsearch as the backend with vector embeddings for semantic search. It uses the direct tool pattern where tools are imported and used directly with agents.
 
 ## Features
 
@@ -38,18 +38,20 @@ This will install:
 
 ```python
 from strands import Agent
-from strands_tools.elasticsearch_memory import ElasticsearchMemoryToolProvider
+from strands_tools.elasticsearch_memory import elasticsearch_memory
 
-# Initialize the provider
-provider = ElasticsearchMemoryToolProvider(
+# Create an agent with the direct tool
+agent = Agent(tools=[elasticsearch_memory])
+
+# Use the tool with configuration parameters
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
     cloud_id="your-elasticsearch-cloud-id",
     api_key="your-elasticsearch-api-key",
     index_name="my_memories",
     namespace="user_123"
 )
-
-# Create an agent with the memory tool
-agent = Agent(tools=provider.tools)
 ```
 
 ### Environment Variables
@@ -65,12 +67,13 @@ export ELASTICSEARCH_EMBEDDING_MODEL="amazon.titan-embed-text-v2:0"
 export AWS_REGION="us-west-2"
 ```
 
-Then initialize with minimal parameters:
+Then use the tool with minimal parameters (environment variables will be used):
 
 ```python
-provider = ElasticsearchMemoryToolProvider(
-    cloud_id=os.getenv("ELASTICSEARCH_CLOUD_ID"),
-    api_key=os.getenv("ELASTICSEARCH_API_KEY")
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza"
+    # cloud_id, api_key, etc. will be read from environment variables
 )
 ```
 
@@ -80,13 +83,17 @@ provider = ElasticsearchMemoryToolProvider(
 
 ```python
 # Store a simple memory
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="record",
-    content="User prefers vegetarian pizza with extra cheese and no onions"
+    content="User prefers vegetarian pizza with extra cheese and no onions",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 
 # Store a memory with metadata
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="record",
     content="Meeting scheduled for next Tuesday at 2 PM with the development team",
     metadata={
@@ -94,7 +101,11 @@ result = agent.tool.elasticsearch_memory(
         "priority": "high",
         "participants": ["dev_team"],
         "date": "2024-01-16"
-    }
+    },
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
@@ -102,17 +113,25 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 # Search for food-related memories
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
-    max_results=5
+    max_results=5,
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 
 # Search for meeting information
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="retrieve",
     query="upcoming meetings and appointments",
-    max_results=10
+    max_results=10,
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
@@ -120,16 +139,24 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 # List recent memories
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="list",
-    max_results=20
+    max_results=20,
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 
 # List with pagination
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="list",
     max_results=10,
-    next_token="10"  # Start from the 11th result
+    next_token="10",  # Start from the 11th result
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
@@ -137,9 +164,13 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 # Retrieve a specific memory by ID
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="get",
-    memory_id="mem_1704567890123_abc12345"
+    memory_id="mem_1704567890123_abc12345",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
@@ -147,18 +178,53 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 # Delete a specific memory
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="delete",
-    memory_id="mem_1704567890123_abc12345"
+    memory_id="mem_1704567890123_abc12345",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
 ## Advanced Configuration
 
+### Using Configuration Dictionary
+
+For cleaner code, you can use a configuration dictionary:
+
+```python
+config = {
+    "cloud_id": "your-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123",
+    "region": "us-east-1"
+}
+
+# Store memory
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    **config
+)
+
+# Search memories
+result = elasticsearch_memory(
+    action="retrieve",
+    query="food preferences",
+    max_results=5,
+    **config
+)
+```
+
 ### Custom Embedding Model
 
 ```python
-provider = ElasticsearchMemoryToolProvider(
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
     cloud_id="your-cloud-id",
     api_key="your-api-key",
     embedding_model="amazon.titan-embed-text-v1:0",  # Different model
@@ -166,18 +232,35 @@ provider = ElasticsearchMemoryToolProvider(
 )
 ```
 
+### Elasticsearch Serverless (URL-based connection)
+
+```python
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+```
+
 ### Multiple Namespaces
 
 ```python
 # User-specific memories
-user_provider = ElasticsearchMemoryToolProvider(
+result = elasticsearch_memory(
+    action="record",
+    content="Alice likes Italian food",
     cloud_id="your-cloud-id",
     api_key="your-api-key",
     namespace="user_alice"
 )
 
 # System-wide memories
-system_provider = ElasticsearchMemoryToolProvider(
+result = elasticsearch_memory(
+    action="record",
+    content="System maintenance scheduled",
     cloud_id="your-cloud-id",
     api_key="your-api-key",
     namespace="system_global"
@@ -269,28 +352,41 @@ The tool provides comprehensive error handling:
 
 ```python
 # Invalid credentials
-try:
-    provider = ElasticsearchMemoryToolProvider(
-        cloud_id="invalid-cloud-id",
-        api_key="invalid-api-key"
-    )
-except ConnectionError as e:
-    print(f"Connection failed: {e}")
+result = elasticsearch_memory(
+    action="record",
+    content="test",
+    cloud_id="invalid-cloud-id",
+    api_key="invalid-api-key"
+)
+# Returns: {"status": "error", "content": [{"text": "Unable to connect to Elasticsearch cluster"}]}
 ```
 
 ### Missing Parameters
 
 ```python
 # Missing required content for record action
-result = agent.tool.elasticsearch_memory(action="record")
+result = elasticsearch_memory(
+    action="record",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key"
+)
 # Returns: {"status": "error", "content": [{"text": "The following parameters are required for record action: content"}]}
+
+# Missing connection parameters
+result = elasticsearch_memory(action="record", content="test")
+# Returns: {"status": "error", "content": [{"text": "Either cloud_id or es_url is required"}]}
 ```
 
 ### Memory Not Found
 
 ```python
 # Non-existent memory ID
-result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent")
+result = elasticsearch_memory(
+    action="get",
+    memory_id="nonexistent",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key"
+)
 # Returns: {"status": "error", "content": [{"text": "API error: Memory nonexistent not found"}]}
 ```
 
@@ -316,35 +412,59 @@ result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent")
 
 ## Best Practices
 
-### 1. Namespace Organization
+### 1. Configuration Management
 
-The namespace parameter is crucial for data isolation and multi-tenant memory management. Here are recommended patterns:
-
-- **User-based**: `namespace="user_{user_id}"`
-- **Session-based**: `namespace="session_{session_id}"`
-- **Hierarchical**: `namespace="org_{org_id}_user_{user_id}"`
-- **Feature-based**: `namespace="feature_{feature_name}"`
+Create reusable configuration objects:
 
 ```python
-# Organize by user
-user_memories = ElasticsearchMemoryToolProvider(namespace=f"user_{user_id}")
+# Create a base configuration
+base_config = {
+    "cloud_id": "your-cloud-id",
+    "api_key": "your-api-key",
+    "region": "us-east-1"
+}
 
-# Organize by session
-session_memories = ElasticsearchMemoryToolProvider(namespace=f"session_{session_id}")
+# User-specific configuration
+def get_user_config(user_id):
+    return {
+        **base_config,
+        "index_name": "user_memories",
+        "namespace": f"user_{user_id}"
+    }
 
-# Organize hierarchically for organizations
-org_user_memories = ElasticsearchMemoryToolProvider(namespace=f"org_{org_id}_user_{user_id}")
-
-# Organize by application context/feature
-chat_memories = ElasticsearchMemoryToolProvider(namespace="feature_chat")
-task_memories = ElasticsearchMemoryToolProvider(namespace="feature_tasks")
+# Usage
+user_config = get_user_config("alice")
+result = elasticsearch_memory(
+    action="record",
+    content="Alice likes Italian food",
+    **user_config
+)
 ```
 
-### 2. Metadata Usage
+### 2. Namespace Organization
+
+The namespace parameter is crucial for data isolation and multi-tenant memory management:
+
+```python
+# User-based namespaces
+user_namespace = f"user_{user_id}"
+
+# Session-based namespaces
+session_namespace = f"session_{session_id}"
+
+# Hierarchical namespaces
+org_user_namespace = f"org_{org_id}_user_{user_id}"
+
+# Feature-based namespaces
+chat_namespace = "feature_chat"
+task_namespace = "feature_tasks"
+```
+
+### 3. Metadata Usage
 
 ```python
 # Use structured metadata for better organization
-agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="record",
     content="Important project deadline",
     metadata={
@@ -353,16 +473,17 @@ agent.tool.elasticsearch_memory(
         "priority": "high",
         "due_date": "2024-02-01",
         "assigned_to": ["alice", "bob"]
-    }
+    },
+    **config
 )
 ```
 
-### 3. Error Handling
+### 4. Error Handling
 
 ```python
-def safe_memory_operation(agent, action, **kwargs):
+def safe_memory_operation(action, **kwargs):
     try:
-        result = agent.tool.elasticsearch_memory(action=action, **kwargs)
+        result = elasticsearch_memory(action=action, **kwargs)
         if result["status"] == "error":
             logger.error(f"Memory operation failed: {result['content'][0]['text']}")
             return None
@@ -372,21 +493,29 @@ def safe_memory_operation(agent, action, **kwargs):
         return None
 ```
 
-### 4. Batch Operations
+### 5. Batch Operations
 
 ```python
 # Store multiple related memories
 memories = [
     "User likes Italian food",
-    "User is allergic to nuts",
+    "User is allergic to nuts", 
     "User prefers evening meetings"
 ]
 
+config = {
+    "cloud_id": "your-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123"
+}
+
 for content in memories:
-    agent.tool.elasticsearch_memory(
+    elasticsearch_memory(
         action="record",
         content=content,
-        metadata={"batch": "user_preferences", "timestamp": datetime.now().isoformat()}
+        metadata={"batch": "user_preferences", "timestamp": datetime.now().isoformat()},
+        **config
     )
 ```
 
@@ -423,7 +552,12 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # This will show detailed Elasticsearch and Bedrock API calls
-provider = ElasticsearchMemoryToolProvider(...)
+result = elasticsearch_memory(
+    action="record",
+    content="test",
+    cloud_id="your-cloud-id",
+    api_key="your-api-key"
+)
 ```
 
 ## Security Considerations
