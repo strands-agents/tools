@@ -44,7 +44,7 @@ from strands_tools.elasticsearch_memory import elasticsearch_memory
 agent = Agent(tools=[elasticsearch_memory])
 
 # Use the tool with configuration parameters
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     cloud_id="your-elasticsearch-cloud-id",
@@ -70,7 +70,7 @@ export AWS_REGION="us-west-2"
 Then use the tool with minimal parameters (environment variables will be used):
 
 ```python
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza"
     # cloud_id, api_key, etc. will be read from environment variables
@@ -83,7 +83,7 @@ result = elasticsearch_memory(
 
 ```python
 # Store a simple memory
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese and no onions",
     cloud_id="your-cloud-id",
@@ -93,7 +93,7 @@ result = elasticsearch_memory(
 )
 
 # Store a memory with metadata
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="Meeting scheduled for next Tuesday at 2 PM with the development team",
     metadata={
@@ -113,7 +113,7 @@ result = elasticsearch_memory(
 
 ```python
 # Search for food-related memories
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
@@ -124,7 +124,7 @@ result = elasticsearch_memory(
 )
 
 # Search for meeting information
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="upcoming meetings and appointments",
     max_results=10,
@@ -139,7 +139,7 @@ result = elasticsearch_memory(
 
 ```python
 # List recent memories
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="list",
     max_results=20,
     cloud_id="your-cloud-id",
@@ -149,7 +149,7 @@ result = elasticsearch_memory(
 )
 
 # List with pagination
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="list",
     max_results=10,
     next_token="10",  # Start from the 11th result
@@ -164,7 +164,7 @@ result = elasticsearch_memory(
 
 ```python
 # Retrieve a specific memory by ID
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="get",
     memory_id="mem_1704567890123_abc12345",
     cloud_id="your-cloud-id",
@@ -178,7 +178,7 @@ result = elasticsearch_memory(
 
 ```python
 # Delete a specific memory
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="delete",
     memory_id="mem_1704567890123_abc12345",
     cloud_id="your-cloud-id",
@@ -204,14 +204,14 @@ config = {
 }
 
 # Store memory
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza",
     **config
 )
 
 # Search memories
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="food preferences",
     max_results=5,
@@ -222,7 +222,7 @@ result = elasticsearch_memory(
 ### Custom Embedding Model
 
 ```python
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza",
     cloud_id="your-cloud-id",
@@ -235,7 +235,7 @@ result = elasticsearch_memory(
 ### Elasticsearch Serverless (URL-based connection)
 
 ```python
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza",
     es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
@@ -249,7 +249,7 @@ result = elasticsearch_memory(
 
 ```python
 # User-specific memories
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="Alice likes Italian food",
     cloud_id="your-cloud-id",
@@ -258,7 +258,7 @@ result = elasticsearch_memory(
 )
 
 # System-wide memories
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="System maintenance scheduled",
     cloud_id="your-cloud-id",
@@ -434,7 +434,7 @@ def get_user_config(user_id):
 
 # Usage
 user_config = get_user_config("alice")
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="Alice likes Italian food",
     **user_config
@@ -481,9 +481,9 @@ result = elasticsearch_memory(
 ### 4. Error Handling
 
 ```python
-def safe_memory_operation(action, **kwargs):
+def safe_memory_operation(agent, action, **kwargs):
     try:
-        result = elasticsearch_memory(action=action, **kwargs)
+        result = agent.tool.elasticsearch_memory(action=action, **kwargs)
         if result["status"] == "error":
             logger.error(f"Memory operation failed: {result['content'][0]['text']}")
             return None
@@ -511,7 +511,7 @@ config = {
 }
 
 for content in memories:
-    elasticsearch_memory(
+    agent.tool.elasticsearch_memory(
         action="record",
         content=content,
         metadata={"batch": "user_preferences", "timestamp": datetime.now().isoformat()},
@@ -552,7 +552,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # This will show detailed Elasticsearch and Bedrock API calls
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="test",
     cloud_id="your-cloud-id",

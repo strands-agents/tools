@@ -796,7 +796,7 @@ from strands_tools.elasticsearch_memory import elasticsearch_memory
 agent = Agent(tools=[elasticsearch_memory])
 
 # Store a memory with semantic embeddings
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     metadata={"category": "food_preferences", "type": "dietary"},
@@ -807,7 +807,7 @@ result = elasticsearch_memory(
 )
 
 # Search memories using semantic similarity (vector search)
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
@@ -826,28 +826,28 @@ config = {
 }
 
 # List all memories with pagination
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="list",
     max_results=10,
     **config
 )
 
 # Get specific memory by ID
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="get",
     memory_id="mem_1234567890_abcd1234",
     **config
 )
 
 # Delete a memory
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="delete",
     memory_id="mem_1234567890_abcd1234",
     **config
 )
 
 # Use Elasticsearch Serverless (URL-based connection)
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza",
     es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
