@@ -216,7 +216,7 @@ class Mem0ServiceClient:
         return Mem0Memory.from_config(config_dict=merged_config)
 
     def _configure_neptune_analytics_vector_backend(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with Neptune Analytics graph backend.
+        """Initialize a Mem0 client with Neptune Analytics vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
