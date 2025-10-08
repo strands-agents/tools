@@ -457,8 +457,9 @@ def format_retrieve_response(memories: List[Dict]) -> Panel:
 def format_retrieve_graph_response(memories: List[Dict]) -> Panel:
     """Format retrieve response for graph data"""
     if not memories:
-        return Panel("No graph memories found matching the query.",
-                     title="[bold yellow]No Matches", border_style="yellow")
+        return Panel(
+            "No graph memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
+        )
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
     table.add_column("Source", style="cyan")
