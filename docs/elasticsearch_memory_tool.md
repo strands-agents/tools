@@ -352,7 +352,7 @@ The tool provides comprehensive error handling:
 
 ```python
 # Invalid credentials
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="test",
     cloud_id="invalid-cloud-id",
@@ -365,7 +365,7 @@ result = elasticsearch_memory(
 
 ```python
 # Missing required content for record action
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     cloud_id="your-cloud-id",
     api_key="your-api-key"
@@ -373,7 +373,7 @@ result = elasticsearch_memory(
 # Returns: {"status": "error", "content": [{"text": "The following parameters are required for record action: content"}]}
 
 # Missing connection parameters
-result = elasticsearch_memory(action="record", content="test")
+result = agent.tool.elasticsearch_memory(action="record", content="test")
 # Returns: {"status": "error", "content": [{"text": "Either cloud_id or es_url is required"}]}
 ```
 
@@ -381,7 +381,7 @@ result = elasticsearch_memory(action="record", content="test")
 
 ```python
 # Non-existent memory ID
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="get",
     memory_id="nonexistent",
     cloud_id="your-cloud-id",
@@ -464,7 +464,7 @@ task_namespace = "feature_tasks"
 
 ```python
 # Use structured metadata for better organization
-result = elasticsearch_memory(
+result = agent.tool.elasticsearch_memory(
     action="record",
     content="Important project deadline",
     metadata={
