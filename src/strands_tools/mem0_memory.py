@@ -193,7 +193,7 @@ class Mem0ServiceClient:
 
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
             raise RuntimeError("""Conflicting backend configurations:
-            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set.
+            Only one environment variable of NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER or OPENSEARCH_HOST can be set.""")```
             Please specify only one backend.""")
 
         # Vector search providers
