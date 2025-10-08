@@ -790,56 +790,70 @@ result = agent.tool.use_computer(
 
 ```python
 from strands import Agent
-from strands_tools.elasticsearch_memory import ElasticsearchMemoryToolProvider
+from strands_tools.elasticsearch_memory import elasticsearch_memory
 
-# Method 1: Elasticsearch Cloud (traditional)
-provider = ElasticsearchMemoryToolProvider(
+# Create agent with direct tool usage
+agent = Agent(tools=[elasticsearch_memory])
+
+# Store a memory with semantic embeddings
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
     cloud_id="your-elasticsearch-cloud-id",
     api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
 
-# Method 2: Elasticsearch Serverless (URL-based)
-provider = ElasticsearchMemoryToolProvider(
-    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+# Search memories using semantic similarity (vector search)
+result = elasticsearch_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    cloud_id="your-elasticsearch-cloud-id",
     api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
 
-agent = Agent(tools=provider.tools)
-
-# Store a memory with semantic embeddings
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza with extra cheese",
-    metadata={"category": "food_preferences", "type": "dietary"}
-)
-
-# Search memories using semantic similarity (vector search)
-result = agent.tool.elasticsearch_memory(
-    action="retrieve",
-    query="food preferences and dietary restrictions",
-    max_results=5
-)
+# Use configuration dictionary for cleaner code
+config = {
+    "cloud_id": "your-elasticsearch-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123"
+}
 
 # List all memories with pagination
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="list",
-    max_results=10
+    max_results=10,
+    **config
 )
 
 # Get specific memory by ID
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="get",
-    memory_id="mem_1234567890_abcd1234"
+    memory_id="mem_1234567890_abcd1234",
+    **config
 )
 
 # Delete a memory
-result = agent.tool.elasticsearch_memory(
+result = elasticsearch_memory(
     action="delete",
-    memory_id="mem_1234567890_abcd1234"
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use Elasticsearch Serverless (URL-based connection)
+result = elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
 )
 ```
 
