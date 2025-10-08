@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from strands import Agent
 
-from src.strands_tools.elasticsearch_memory import ElasticsearchMemoryToolProvider
+from src.strands_tools.elasticsearch_memory import ElasticsearchMemoryToolProvider, elasticsearch_memory
 
 
 @pytest.fixture
@@ -76,9 +76,9 @@ def provider(mock_elasticsearch_client, mock_bedrock_client):
 
 
 @pytest.fixture
-def agent(provider):
-    """Create an agent with the provider's tools."""
-    return Agent(tools=provider.tools)
+def agent(mock_elasticsearch_client, mock_bedrock_client):
+    """Create an agent with the direct elasticsearch_memory tool."""
+    return Agent(tools=[elasticsearch_memory])
 
 
 def test_initialization(mock_elasticsearch_client, mock_bedrock_client):
@@ -501,3 +501,32 @@ def test_embedding_generation(provider, mock_bedrock_client):
     # Verify request body
     body = json.loads(call_args["body"])
     assert body["inputText"] == "test text"
+
+
+def test_direct_tool_usage(mock_elasticsearch_client, mock_bedrock_client):
+    """Test using the elasticsearch_memory tool directly with an agent."""
+    # Configure mock responses
+    mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
+
+    # Create agent with direct tool usage - this demonstrates the new pattern
+    agent = Agent(tools=[elasticsearch_memory])
+
+    # Test calling the tool directly with configuration parameters
+    result = elasticsearch_memory(
+        action="record",
+        content="Test memory content",
+        cloud_id="test-cloud-id",
+        api_key="test-api-key",
+        index_name="test_index",
+        namespace="test_namespace"
+    )
+
+    # Verify success response
+    assert result["status"] == "success"
+    assert "Memory stored successfully" in result["content"][0]["text"]
+
+    # Verify Elasticsearch index was called
+    mock_elasticsearch_client["client"].index.assert_called_once()
+
+    # Verify embedding generation was called
+    mock_bedrock_client["bedrock"].invoke_model.assert_called_once()

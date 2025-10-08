@@ -348,7 +348,6 @@ class ElasticsearchMemoryToolProvider:
                 tools.append(attr)
         return tools
 
-    @tool
     def elasticsearch_memory(
         self,
         action: str,
@@ -702,3 +701,99 @@ class ElasticsearchMemoryToolProvider:
             raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found") from None
         except Exception as e:
             raise ElasticsearchMemoryError(f"Failed to delete memory {memory_id}: {str(e)}") from e
+
+
+@tool
+def elasticsearch_memory(
+    action: str,
+    content: Optional[str] = None,
+    query: Optional[str] = None,
+    memory_id: Optional[str] = None,
+    max_results: Optional[int] = None,
+    next_token: Optional[str] = None,
+    metadata: Optional[Dict] = None,
+    cloud_id: Optional[str] = None,
+    api_key: Optional[str] = None,
+    es_url: Optional[str] = None,
+    index_name: Optional[str] = None,
+    namespace: Optional[str] = None,
+    embedding_model: Optional[str] = None,
+    region: Optional[str] = None,
+) -> Dict:
+    """
+    Work with Elasticsearch memories - create, search, retrieve, list, and manage memory records.
+
+    This tool helps agents store and access memories using Elasticsearch with semantic search
+    capabilities, allowing them to remember important information across conversations.
+
+    Key Capabilities:
+    - Store new memories with automatic embedding generation
+    - Search for memories using semantic similarity
+    - Browse and list all stored memories
+    - Retrieve specific memories by ID
+    - Delete unwanted memories
+
+    Supported Actions:
+    -----------------
+    Memory Management:
+    - record: Store a new memory with semantic embeddings
+      Use this when you need to save information for later semantic recall.
+
+    - retrieve: Find relevant memories using semantic search
+      Use this when searching for information related to a topic or concept.
+      This performs vector similarity search for the most relevant matches.
+
+    - list: Browse all stored memories with pagination
+      Use this to see all available memories without filtering.
+
+    - get: Fetch a specific memory by ID
+      Use this when you already know the exact memory ID.
+
+    - delete: Remove a specific memory
+      Use this to delete memories that are no longer needed.
+
+    Args:
+        action: The memory operation to perform (one of: "record", "retrieve", "list", "get", "delete")
+        content: For record action: Text content to store as a memory
+        query: Search terms for semantic search (required for retrieve action)
+        memory_id: ID of a specific memory (required for get and delete actions)
+        max_results: Maximum number of results to return (optional, default: 10)
+        next_token: Pagination token for list action (optional)
+        metadata: Additional metadata to store with the memory (optional)
+        cloud_id: Elasticsearch Cloud ID for connection (optional if es_url provided)
+        api_key: Elasticsearch API key for authentication
+        es_url: Elasticsearch URL for serverless connection (optional if cloud_id provided)
+        index_name: Name of the Elasticsearch index (defaults to 'strands_memory')
+        namespace: Namespace for memory operations (defaults to 'default')
+        embedding_model: Amazon Bedrock model for embeddings (defaults to Titan)
+        region: AWS region for Bedrock service (defaults to 'us-west-2')
+
+    Returns:
+        Dict: Response containing the requested memory information or operation status
+    """
+    try:
+        # Create a provider instance with the given parameters
+        provider = ElasticsearchMemoryToolProvider(
+            cloud_id=cloud_id,
+            api_key=api_key,
+            es_url=es_url,
+            index_name=index_name,
+            namespace=namespace,
+            embedding_model=embedding_model,
+            region=region,
+        )
+        
+        # Delegate to the provider's elasticsearch_memory method
+        return provider.elasticsearch_memory(
+            action=action,
+            content=content,
+            query=query,
+            memory_id=memory_id,
+            max_results=max_results,
+            next_token=next_token,
+            metadata=metadata,
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize Elasticsearch memory provider: {str(e)}")
+        return {"status": "error", "content": [{"text": f"Initialization error: {str(e)}"}]}
