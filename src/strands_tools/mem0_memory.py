@@ -193,8 +193,7 @@ class Mem0ServiceClient:
 
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
             raise RuntimeError("""Conflicting backend configurations:
-            Only one environment variable of NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER or OPENSEARCH_HOST can be set.""")```
-            Please specify only one backend.""")
+            Only one environment variable of NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER or OPENSEARCH_HOST can be set.""")
 
         # Vector search providers
         if os.environ.get("OPENSEARCH_HOST"):
@@ -496,9 +495,9 @@ def format_retrieve_graph_response(memories: List[Dict]) -> Panel:
         )
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
-    table.add_column("Destination", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Destination", style="green", width=30)
 
     for memory in memories:
         source = memory.get("source", "N/A")
@@ -516,9 +515,9 @@ def format_list_graph_response(memories: List[Dict]) -> Panel:
         return Panel("No graph memories found.", title="[bold yellow]No Memories", border_style="yellow")
 
     table = Table(title="Graph Memories", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
-    table.add_column("Target", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Target", style="green", width=30)
 
     for memory in memories:
         source = memory.get("source", "N/A")
@@ -585,9 +584,9 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
         return Panel("No graph memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
 
     table = Table(title="Graph Memories Stored", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
-    table.add_column("Target", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Target", style="green", width=30)
 
     for memory in memories:
         source = memory[0].get("source", "N/A")
