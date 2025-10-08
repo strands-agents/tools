@@ -191,9 +191,9 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR") and os.environ.get("OPENSEARCH_HOST"):
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
             raise RuntimeError("""Conflicting backend configurations:
-            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR and OPENSEARCH_HOST environment variables are set.
+            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set.
             Please specify only one backend.""")
 
         # Vector search providers
@@ -201,9 +201,9 @@ class Mem0ServiceClient:
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
             merged_config = self._initialize_opensearch_client(config)
 
-        elif os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR"):
+        elif os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._configure_neptune_analytics_backend(config)
+            merged_config = self._configure_neptune_analytics_vector_backend(config)
 
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
@@ -216,7 +216,7 @@ class Mem0ServiceClient:
 
         return Mem0Memory.from_config(config_dict=merged_config)
 
-    def _configure_neptune_analytics_backend(self, config: Optional[Dict] = None) -> Dict:
+    def _configure_neptune_analytics_vector_backend(self, config: Optional[Dict] = None) -> Dict:
         """Initialize a Mem0 client with Neptune Analytics graph backend.
 
         Args:
@@ -230,7 +230,7 @@ class Mem0ServiceClient:
             "provider": "neptune",
             "config": {
                 "collection_name": os.environ.get("NEPTUNE_ANALYTICS_VECTOR_COLLECTION", "mem0"),
-                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER_VECTOR')}",
+                "endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}",
             },
         }
         return self._merge_config(config)
