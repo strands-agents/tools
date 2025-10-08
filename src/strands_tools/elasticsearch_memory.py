@@ -121,12 +121,38 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 import boto3
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, NotFoundError
 from strands import tool
 from strands.types.tools import AgentTool
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+# Custom exceptions for better error handling
+class ElasticsearchMemoryError(Exception):
+    """Base exception for Elasticsearch memory operations."""
+    pass
+
+
+class ElasticsearchConnectionError(ElasticsearchMemoryError):
+    """Raised when connection to Elasticsearch fails."""
+    pass
+
+
+class ElasticsearchMemoryNotFoundError(ElasticsearchMemoryError):
+    """Raised when a memory record is not found."""
+    pass
+
+
+class ElasticsearchEmbeddingError(ElasticsearchMemoryError):
+    """Raised when embedding generation fails."""
+    pass
+
+
+class ElasticsearchValidationError(ElasticsearchMemoryError):
+    """Raised when parameter validation fails."""
+    pass
 
 
 # Define memory actions as an Enum
@@ -222,13 +248,13 @@ class ElasticsearchMemoryToolProvider:
                 raise ConnectionError("Unable to connect to Elasticsearch cluster")
 
         except Exception as e:
-            raise ConnectionError(f"Failed to initialize Elasticsearch client: {str(e)}") from e
+            raise ElasticsearchConnectionError(f"Failed to initialize Elasticsearch client: {str(e)}") from e
 
         # Initialize Amazon Bedrock client for embeddings
         try:
             self.bedrock_runtime = boto3.client("bedrock-runtime", region_name=self.region)
         except Exception as e:
-            raise ConnectionError(f"Failed to initialize Bedrock client: {str(e)}") from e
+            raise ElasticsearchConnectionError(f"Failed to initialize Bedrock client: {str(e)}") from e
 
         # Ensure index exists with proper mappings
         self._ensure_index_exists()
@@ -264,7 +290,7 @@ class ElasticsearchMemoryToolProvider:
 
         except Exception as e:
             logger.error(f"Failed to create index {self.index_name}: {str(e)}")
-            raise ConnectionError(f"Failed to create index {self.index_name}: {str(e)}") from e
+            raise ElasticsearchConnectionError(f"Failed to create index {self.index_name}: {str(e)}") from e
 
     def _generate_embedding(self, text: str) -> List[float]:
         """
@@ -289,19 +315,24 @@ class ElasticsearchMemoryToolProvider:
                 modelId=self.embedding_model, body=json.dumps({"inputText": text})
             )
 
-            response_body = json.loads(response["body"].read())
+            try:
+                response_body = json.loads(response["body"].read())
+            except json.JSONDecodeError as e:
+                raise ElasticsearchEmbeddingError(f"Invalid JSON response from Bedrock: {str(e)}") from e
+            
             embedding = response_body["embedding"]
 
             # Validate embedding dimensions
             if len(embedding) != DEFAULT_EMBEDDING_DIMS:
-                raise Exception(f"Expected {DEFAULT_EMBEDDING_DIMS} dimensions, got {len(embedding)}")
+                raise ElasticsearchEmbeddingError(f"Expected {DEFAULT_EMBEDDING_DIMS} dimensions, got {len(embedding)}")
 
-            logger.debug(f"Generated embedding with {len(embedding)} dimensions")
             return embedding
 
+        except ElasticsearchEmbeddingError:
+            raise
         except Exception as e:
             logger.error(f"Failed to generate embedding for text '{text[:50]}...': {str(e)}")
-            raise Exception(f"Embedding generation failed: {str(e)}") from e
+            raise ElasticsearchEmbeddingError(f"Embedding generation failed: {str(e)}") from e
 
     def _generate_memory_id(self) -> str:
         """Generate a unique memory ID."""
@@ -398,7 +429,8 @@ class ElasticsearchMemoryToolProvider:
                 "memory_id": memory_id,
             }
 
-            missing_params = [param for param in REQUIRED_PARAMS[action_enum] if not param_values.get(param)]
+            missing_params = [param for param in REQUIRED_PARAMS[action_enum] 
+                             if param_values.get(param) is None]
 
             if missing_params:
                 return {
@@ -629,7 +661,7 @@ class ElasticsearchMemoryToolProvider:
 
             # Verify namespace
             if source.get("namespace") != self.namespace:
-                raise Exception(f"Memory {memory_id} not found in namespace {self.namespace}")
+                raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found in namespace {self.namespace}")
 
             return {
                 "memory_id": source["memory_id"],
@@ -639,13 +671,12 @@ class ElasticsearchMemoryToolProvider:
                 "namespace": source["namespace"],
             }
 
-        except Exception as e:
-            # Handle Elasticsearch NotFoundError
-            if hasattr(e, "status_code") and e.status_code == 404:
-                raise Exception(f"Memory {memory_id} not found") from e
-            elif "not_found" in str(e).lower() or "NotFoundError" in str(type(e)):
-                raise Exception(f"Memory {memory_id} not found") from e
+        except NotFoundError:
+            raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found") from None
+        except ElasticsearchMemoryNotFoundError:
             raise
+        except Exception as e:
+            raise ElasticsearchMemoryError(f"Failed to get memory {memory_id}: {str(e)}") from e
 
     def _delete_memory(self, memory_id: str) -> Dict:
         """
@@ -669,7 +700,9 @@ class ElasticsearchMemoryToolProvider:
 
             return {"memory_id": memory_id, "result": response["result"]}
 
-        except Exception as e:
-            if "not_found" in str(e).lower():
-                raise Exception(f"Memory {memory_id} not found") from e
+        except ElasticsearchMemoryNotFoundError:
             raise
+        except NotFoundError:
+            raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found") from None
+        except Exception as e:
+            raise ElasticsearchMemoryError(f"Failed to delete memory {memory_id}: {str(e)}") from e

@@ -16,3 +16,4 @@ venv/
 .DS_Store
 .prompt
 .kiro
+test_ayan_index.py

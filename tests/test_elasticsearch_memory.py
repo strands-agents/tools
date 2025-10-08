@@ -128,12 +128,14 @@ def test_initialization_missing_required_params():
 
 def test_initialization_connection_failure():
     """Test initialization with connection failure."""
+    from src.strands_tools.elasticsearch_memory import ElasticsearchConnectionError
+    
     with mock.patch("src.strands_tools.elasticsearch_memory.Elasticsearch") as mock_es:
         mock_client = MagicMock()
         mock_es.return_value = mock_client
         mock_client.ping.return_value = False  # Connection failure
 
-        with pytest.raises(ConnectionError, match="Unable to connect to Elasticsearch cluster"):
+        with pytest.raises(ElasticsearchConnectionError, match="Failed to initialize Elasticsearch client"):
             ElasticsearchMemoryToolProvider(cloud_id="test-cloud-id", api_key="test-api-key")
 
 
@@ -387,15 +389,10 @@ def test_bedrock_api_error_handling(provider, mock_bedrock_client):
 
 def test_memory_not_found(provider, mock_elasticsearch_client):
     """Test handling when memory is not found."""
+    from elasticsearch import NotFoundError
 
-    # Configure mock to raise not found exception
-    # Create a mock exception that looks like NotFoundError
-    class MockNotFoundError(Exception):
-        def __init__(self, message):
-            super().__init__(message)
-            self.status_code = 404
-
-    mock_elasticsearch_client["client"].get.side_effect = MockNotFoundError("not found")
+    # Configure mock to raise NotFoundError
+    mock_elasticsearch_client["client"].get.side_effect = NotFoundError("404", "not_found_exception", {})
 
     # Call the method
     result = provider.elasticsearch_memory(action="get", memory_id="nonexistent")
