@@ -286,7 +286,6 @@ class ElasticsearchMemoryToolProvider:
                     mapping["settings"] = {"number_of_shards": 1, "number_of_replicas": 0, "index.knn": True}
 
                 self.es_client.indices.create(index=self.index_name, body=mapping)
-                logger.info(f"Created Elasticsearch index: {self.index_name}")
 
         except Exception as e:
             logger.error(f"Failed to create index {self.index_name}: {str(e)}")
@@ -309,8 +308,6 @@ class ElasticsearchMemoryToolProvider:
             Exception: If embedding generation fails
         """
         try:
-            logger.debug(f"Generating embedding for text: {text[:100]}...")
-
             response = self.bedrock_runtime.invoke_model(
                 modelId=self.embedding_model, body=json.dumps({"inputText": text})
             )
@@ -331,7 +328,6 @@ class ElasticsearchMemoryToolProvider:
         except ElasticsearchEmbeddingError:
             raise
         except Exception as e:
-            logger.error(f"Failed to generate embedding for text '{text[:50]}...': {str(e)}")
             raise ElasticsearchEmbeddingError(f"Embedding generation failed: {str(e)}") from e
 
     def _generate_memory_id(self) -> str:
