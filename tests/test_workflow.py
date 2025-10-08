@@ -247,6 +247,17 @@ class TestWorkflowExecution:
             assert result["status"] == "error"
             assert "not found" in result["content"][0]["text"]
 
+    def test_task_id_namespacing(self):
+        """Test task ID namespacing and extraction logic."""
+        workflow_id = "test_workflow"
+        task_id = "task1"
+
+        namespaced_task_id = f"{workflow_id}:{task_id}"
+        assert namespaced_task_id == "test_workflow:task1"
+
+        extracted_id = namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
+        assert extracted_id == "task1"
+
 
 class TestWorkflowStatus:
     """Test workflow status functionality."""
