@@ -786,6 +786,149 @@ result = agent.tool.use_computer(
 )
 ```
 
+### Elasticsearch Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import elasticsearch_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[elasticsearch_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.elasticsearch_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "cloud_id": "your-elasticsearch-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.elasticsearch_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.elasticsearch_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.elasticsearch_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use Elasticsearch Serverless (URL-based connection)
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+```
+
+### MongoDB Atlas Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.mongodb_memory import mongodb_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[mongodb_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.mongodb_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    "database_name": "memory_db",
+    "collection_name": "memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.mongodb_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.mongodb_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.mongodb_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use environment variables for configuration
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza"
+    # cluster_uri, database_name, etc. will be read from environment variables
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -1001,6 +1144,16 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
 | STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
 | STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
+#### MongoDB Atlas Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| MONGODB_ATLAS_CLUSTER_URI | MongoDB Atlas connection URI | None |
+| MONGODB_DATABASE_NAME | Default database name for MongoDB operations | memory_db |
+| MONGODB_COLLECTION_NAME | Default collection name for MongoDB operations | memories |
+| MONGODB_NAMESPACE | Default namespace for memory isolation | default |
+| MONGODB_EMBEDDING_MODEL | Bedrock model for generating embeddings | amazon.titan-embed-text-v2:0 |
 
 #### Video Tools
 
