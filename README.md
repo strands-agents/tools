@@ -788,6 +788,8 @@ result = agent.tool.use_computer(
 
 ### Elasticsearch Memory
 
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
 ```python
 from strands import Agent
 from strands_tools.elasticsearch_memory import elasticsearch_memory

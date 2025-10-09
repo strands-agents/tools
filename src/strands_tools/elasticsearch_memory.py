@@ -130,26 +130,31 @@ logger = logging.getLogger(__name__)
 # Custom exceptions for better error handling
 class ElasticsearchMemoryError(Exception):
     """Base exception for Elasticsearch memory operations."""
+
     pass
 
 
 class ElasticsearchConnectionError(ElasticsearchMemoryError):
     """Raised when connection to Elasticsearch fails."""
+
     pass
 
 
 class ElasticsearchMemoryNotFoundError(ElasticsearchMemoryError):
     """Raised when a memory record is not found."""
+
     pass
 
 
 class ElasticsearchEmbeddingError(ElasticsearchMemoryError):
     """Raised when embedding generation fails."""
+
     pass
 
 
 class ElasticsearchValidationError(ElasticsearchMemoryError):
     """Raised when parameter validation fails."""
+
     pass
 
 
@@ -232,15 +237,13 @@ def _generate_embedding(bedrock_runtime, text: str, embedding_model: str) -> Lis
         Exception: If embedding generation fails
     """
     try:
-        response = bedrock_runtime.invoke_model(
-            modelId=embedding_model, body=json.dumps({"inputText": text})
-        )
+        response = bedrock_runtime.invoke_model(modelId=embedding_model, body=json.dumps({"inputText": text}))
 
         try:
             response_body = json.loads(response["body"].read())
         except json.JSONDecodeError as e:
             raise ElasticsearchEmbeddingError(f"Invalid JSON response from Bedrock: {str(e)}") from e
-        
+
         embedding = response_body["embedding"]
 
         # Validate embedding dimensions
@@ -610,7 +613,11 @@ def elasticsearch_memory(
             if es_url:
                 # Use URL-based connection (for serverless)
                 es_client = Elasticsearch(
-                    hosts=[es_url], api_key=api_key, request_timeout=30, retry_on_timeout=True, max_retries=3
+                    hosts=[es_url],
+                    api_key=api_key,
+                    request_timeout=30,
+                    retry_on_timeout=True,
+                    max_retries=3,
                 )
             else:
                 # Use cloud_id connection
@@ -659,8 +666,7 @@ def elasticsearch_memory(
             "memory_id": memory_id,
         }
 
-        missing_params = [param for param in REQUIRED_PARAMS[action_enum] 
-                         if param_values.get(param) is None]
+        missing_params = [param for param in REQUIRED_PARAMS[action_enum] if param_values.get(param) is None]
 
         if missing_params:
             return {
@@ -678,14 +684,18 @@ def elasticsearch_memory(
         # Execute the appropriate action
         try:
             if action_enum == MemoryAction.RECORD:
-                response = _record_memory(es_client, bedrock_runtime, index_name, namespace, embedding_model, content, metadata)
+                response = _record_memory(
+                    es_client, bedrock_runtime, index_name, namespace, embedding_model, content, metadata
+                )
                 return {
                     "status": "success",
                     "content": [{"text": f"Memory stored successfully: {json.dumps(response, default=str)}"}],
                 }
 
             elif action_enum == MemoryAction.RETRIEVE:
-                response = _retrieve_memories(es_client, bedrock_runtime, index_name, namespace, embedding_model, query, max_results, next_token)
+                response = _retrieve_memories(
+                    es_client, bedrock_runtime, index_name, namespace, embedding_model, query, max_results, next_token
+                )
                 return {
                     "status": "success",
                     "content": [{"text": f"Memories retrieved successfully: {json.dumps(response, default=str)}"}],
