@@ -96,83 +96,73 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
     agent = kwargs.get("agent")
     invocations = kwargs.get("invocations", [])
     results = []
-    
+
     try:
         if not hasattr(agent, "tool") or agent.tool is None:
             raise AttributeError("Agent does not have a valid 'tool' attribute.")
-            
+
         for invocation in invocations:
             tool_name = invocation.get("name")
             arguments = invocation.get("arguments", {})
             tool_fn = getattr(agent.tool, tool_name, None)
-            
+
             if callable(tool_fn):
                 try:
                     # Call the tool function with the provided arguments
                     result = tool_fn(**arguments)
-                    
+
                     # Create a consistent result structure
-                    batch_result = {
-                        "name": tool_name,
-                        "status": "success",
-                        "result": result
-                    }
+                    batch_result = {"name": tool_name, "status": "success", "result": result}
                     results.append(batch_result)
-                    
+
                 except Exception as e:
                     error_msg = f"Error executing tool '{tool_name}': {str(e)}"
                     console.print(error_msg)
-                    
+
                     batch_result = {
                         "name": tool_name,
                         "status": "error",
                         "error": str(e),
-                        "traceback": traceback.format_exc()
+                        "traceback": traceback.format_exc(),
                     }
                     results.append(batch_result)
             else:
                 error_msg = f"Tool '{tool_name}' not found in agent"
                 console.print(error_msg)
-                
-                batch_result = {
-                    "name": tool_name,
-                    "status": "error",
-                    "error": error_msg
-                }
+
+                batch_result = {"name": tool_name, "status": "error", "error": error_msg}
                 results.append(batch_result)
-        
+
         # Create a readable summary for the agent
         summary_lines = []
         summary_lines.append(f"Batch execution completed with {len(results)} tool(s):")
-        
+
         for result in results:
             if result["status"] == "success":
                 summary_lines.append(f"✓ {result['name']}: Success")
             else:
                 summary_lines.append(f"✗ {result['name']}: Error - {result['error']}")
-        
+
         summary_text = "\n".join(summary_lines)
-        
+
         return {
             "toolUseId": tool_use_id,
             "status": "success",
             "content": [
-                {
-                    "text": summary_text
-                },
+                {"text": summary_text},
                 {
                     "json": {
                         "batch_summary": {
                             "total_tools": len(results),
                             "successful": len([r for r in results if r["status"] == "success"]),
-                            "failed": len([r for r in results if r["status"] == "error"])
+                            "failed": len([r for r in results if r["status"] == "error"]),
                         },
-                        "results": results
+                        "results": results,
                     }
-                }
-            ]
+                },
+            ],
         }
-        
+
     except Exception as e:
         error_msg = f"Error in batch tool: {str(e)}\n{traceback.format_exc()}"
         console.print(f"Error in batch tool: {str(e)}")

@@ -8,29 +8,29 @@ from strands_tools import batch
 def mock_agent():
     """Fixture to create a mock agent with tools."""
     agent = MagicMock()
-    
+
     # Create a mock tool registry that mimics the real agent's tool access pattern
     mock_tool_registry = MagicMock()
     mock_tool_registry.registry = {
         "http_request": MagicMock(return_value={"status": "success", "result": {"ip": "127.0.0.1"}}),
         "use_aws": MagicMock(return_value={"status": "success", "result": {"buckets": ["bucket1", "bucket2"]}}),
-        "error_tool": MagicMock(side_effect=Exception("Tool execution failed"))
+        "error_tool": MagicMock(side_effect=Exception("Tool execution failed")),
     }
     agent.tool_registry = mock_tool_registry
-    
+
     # Create a custom mock tool object that properly handles getattr
     class MockTool:
         def __init__(self):
             self.http_request = mock_tool_registry.registry["http_request"]
             self.use_aws = mock_tool_registry.registry["use_aws"]
             self.error_tool = mock_tool_registry.registry["error_tool"]
-        
+
         def __getattr__(self, name):
             # Return None for non-existent tools (this will make callable() return False)
             return None
-    
+
     agent.tool = MockTool()
-    
+
     return agent
 
 
@@ -47,18 +47,18 @@ def test_batch_success(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
     assert len(result["content"]) == 2
-    
+
     # Check the summary text
     assert "Batch execution completed with 2 tool(s):" in result["content"][0]["text"]
     assert "✓ http_request: Success" in result["content"][0]["text"]
     assert "✓ use_aws: Success" in result["content"][0]["text"]
-    
+
     # Check the JSON results
     json_content = result["content"][1]["json"]
     assert json_content["batch_summary"]["total_tools"] == 2
     assert json_content["batch_summary"]["successful"] == 2
     assert json_content["batch_summary"]["failed"] == 0
-    
+
     results = json_content["results"]
     assert len(results) == 2
     assert results[0]["name"] == "http_request"
@@ -81,17 +81,17 @@ def test_batch_missing_tool(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
     assert len(result["content"]) == 2
-    
+
     # Check the summary text
     assert "Batch execution completed with 1 tool(s):" in result["content"][0]["text"]
     assert "✗ non_existent_tool: Error" in result["content"][0]["text"]
-    
+
     # Check the JSON results
     json_content = result["content"][1]["json"]
     assert json_content["batch_summary"]["total_tools"] == 1
     assert json_content["batch_summary"]["successful"] == 0
     assert json_content["batch_summary"]["failed"] == 1
-    
+
     results = json_content["results"]
     assert len(results) == 1
     assert results[0]["name"] == "non_existent_tool"
@@ -111,17 +111,17 @@ def test_batch_tool_error(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
     assert len(result["content"]) == 2
-    
+
     # Check the summary text
     assert "Batch execution completed with 1 tool(s):" in result["content"][0]["text"]
     assert "✗ error_tool: Error" in result["content"][0]["text"]
-    
+
     # Check the JSON results
     json_content = result["content"][1]["json"]
     assert json_content["batch_summary"]["total_tools"] == 1
     assert json_content["batch_summary"]["successful"] == 0
     assert json_content["batch_summary"]["failed"] == 1
-    
+
     results = json_content["results"]
     assert len(results) == 1
     assert results[0]["name"] == "error_tool"
@@ -140,10 +140,10 @@ def test_batch_no_invocations(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
     assert len(result["content"]) == 2
-    
+
     # Check the summary text
     assert "Batch execution completed with 0 tool(s):" in result["content"][0]["text"]
-    
+
     # Check the JSON results
     json_content = result["content"][1]["json"]
     assert json_content["batch_summary"]["total_tools"] == 0
