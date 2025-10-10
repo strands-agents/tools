@@ -1029,6 +1029,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | EDITOR_DIR_TREE_MAX_DEPTH | Maximum depth for directory tree visualization | 2 |
 | EDITOR_DEFAULT_STYLE | Default style for output panels | default |
 | EDITOR_DEFAULT_LANGUAGE | Default language for syntax highlighting | python |
+| EDITOR_DISABLE_BACKUP | Skip creating .bak backup files during edit operations | false |
 
 #### Environment Tool
 
