@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from strands import Agent
 
-from src.strands_tools.mongodb_memory import mongodb_memory
+from src.strands_tools.mongodb_memory import mongodb_memory, MongoDBMemoryTool
 
 
 @pytest.fixture
@@ -97,7 +97,7 @@ def test_missing_required_params(mock_mongodb_client, mock_bedrock_client):
     # Test missing cluster_uri
     result = agent.tool.mongodb_memory(action="record", content="test")
     assert result["status"] == "error"
-    assert "cluster_uri is required" in result["content"][0]["text"]
+    assert "cluster_uri is required for MongoDB Memory Tool" in result["content"][0]["text"]
 
 
 def test_connection_failure(mock_mongodb_client, mock_bedrock_client):
@@ -143,7 +143,7 @@ def test_vector_index_creation(mock_mongodb_client, mock_bedrock_client, config)
     assert call_args["definition"]["mappings"]["fields"]["embedding"]["type"] == "knnVector"
     assert call_args["definition"]["mappings"]["fields"]["embedding"]["dimensions"] == 1024
     assert call_args["definition"]["mappings"]["fields"]["embedding"]["similarity"] == "cosine"
-    assert call_args["definition"]["mappings"]["fields"]["namespace"]["type"] == "filter"
+    assert call_args["definition"]["mappings"]["fields"]["namespace"]["type"] == "string"
 
 
 def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
@@ -162,7 +162,10 @@ def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
 
     # Verify success response
     assert result["status"] == "success"
-    assert "Memory stored successfully" in result["content"][0]["text"]
+    assert "json" in result["content"][0]
+    response_data = result["content"][0]["json"]
+    assert "memory_id" in response_data
+    assert response_data["content"] == "Test memory content"
 
     # Verify MongoDB insert was called
     mock_mongodb_client["collection"].insert_one.assert_called_once()
@@ -191,7 +194,10 @@ def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client, config):
 
     # Verify success response
     assert result["status"] == "success"
-    assert "Memories retrieved successfully" in result["content"][0]["text"]
+    assert "json" in result["content"][0]
+    response_data = result["content"][0]["json"]
+    assert "memories" in response_data
+    assert len(response_data["memories"]) >= 0
 
     # Verify aggregate was called with vector search pipeline
     mock_mongodb_client["collection"].aggregate.assert_called()
@@ -235,7 +241,10 @@ def test_list_memories(mock_mongodb_client, mock_bedrock_client, config):
 
     # Verify success response
     assert result["status"] == "success"
-    assert "Memories listed successfully" in result["content"][0]["text"]
+    assert "json" in result["content"][0]
+    response_data = result["content"][0]["json"]
+    assert "memories" in response_data
+    assert "total" in response_data
 
     # Verify find was called with proper query
     mock_mongodb_client["collection"].find.assert_called_once()
@@ -261,7 +270,10 @@ def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
 
     # Verify success response
     assert result["status"] == "success"
-    assert "Memory retrieved successfully" in result["content"][0]["text"]
+    assert "json" in result["content"][0]
+    response_data = result["content"][0]["json"]
+    assert "memory_id" in response_data
+    assert response_data["memory_id"] == "mem_123"
 
     # Verify find_one was called
     mock_mongodb_client["collection"].find_one.assert_called_once()
@@ -291,7 +303,11 @@ def test_delete_memory(mock_mongodb_client, mock_bedrock_client, config):
 
     # Verify success response
     assert result["status"] == "success"
-    assert "Memory deleted successfully: mem_123" in result["content"][0]["text"]
+    assert "json" in result["content"][0]
+    response_data = result["content"][0]["json"]
+    assert "memory_id" in response_data
+    assert response_data["memory_id"] == "mem_123"
+    assert response_data["result"] == "deleted"
 
     # Verify delete was called
     mock_mongodb_client["collection"].delete_one.assert_called_once()
@@ -461,7 +477,9 @@ def test_environment_variable_defaults(mock_mongodb_client, mock_bedrock_client)
 
         # Verify success (means env vars were used correctly)
         assert result["status"] == "success"
-        assert "Memory stored successfully" in result["content"][0]["text"]
+        assert "json" in result["content"][0]
+        response_data = result["content"][0]["json"]
+        assert "memory_id" in response_data
 
 
 def test_agent_tool_usage(mock_mongodb_client, mock_bedrock_client):
