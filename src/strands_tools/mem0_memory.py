@@ -198,25 +198,25 @@ class Mem0ServiceClient:
         # Vector search providers
         if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
-            merged_config = self._initialize_opensearch_config(config)
+            merged_config = self._append_opensearch_config(config)
 
         elif os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._initialize_neptune_analytics_vector_config(config)
+            merged_config = self._append_neptune_analytics_vector_config(config)
 
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
-            merged_config = self._initialize_faiss_config(config)
+            merged_config = self._append_faiss_config(config)
 
         # Graph backend providers
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._initialize_neptune_analytics_graph_config(merged_config)
+            merged_config = self._append_neptune_analytics_graph_config(merged_config)
 
         return Mem0Memory.from_config(config_dict=merged_config)
 
-    def _initialize_neptune_analytics_vector_config(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with Neptune Analytics vector backend.
+    def _append_neptune_analytics_vector_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Analytics vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -234,8 +234,8 @@ class Mem0ServiceClient:
         }
         return self._merge_config(config)
 
-    def _initialize_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with OpenSearch backend.
+    def _append_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of OpenSearch vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -275,8 +275,9 @@ class Mem0ServiceClient:
 
         return merged_config
 
-    def _initialize_faiss_config(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with FAISS backend.
+    def _append_faiss_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of FAISS vector backend.
+
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -305,8 +306,8 @@ class Mem0ServiceClient:
         }
         return merged_config
 
-    def _initialize_neptune_analytics_graph_config(self, config: Dict) -> Dict:
-        """Initialize a Mem0 client with Neptune Analytics graph backend.
+    def _append_neptune_analytics_graph_config(self, config: Dict) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Analytics graph backend.
 
         Args:
             config: Configuration dictionary to add Neptune Analytics graph backend
