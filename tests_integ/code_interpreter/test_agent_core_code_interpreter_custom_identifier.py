@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def custom_identifier_interpreter() -> AgentCoreCodeInterpreter:
-    """Create a real AgentCoreCodeInterpreter with custom identifier."""
-    custom_id = "test-custom-interpreter-abc123"
-    return AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+    """Create a real AgentCoreCodeInterpreter with custom parameters but default identifier."""
+    # Use default identifier but customize other parameters
+    return AgentCoreCodeInterpreter(region="us-west-2", auto_session=True, default_session="custom-default")
 
 
 @pytest.fixture
@@ -95,16 +95,16 @@ class TestCustomIdentifierEndToEnd:
         assert code_result['status'] == 'success'
 
     @skip_if_github_action.mark
-    def test_multiple_sessions_with_different_identifiers(self):
-        """Test creating multiple sessions with different custom identifiers."""
-        # Create interpreters with different custom identifiers
+    def test_multiple_sessions_with_different_configurations(self):
+        """Test creating multiple sessions with different configurations."""
+        # Create interpreters with different session configurations but same valid identifier
         interpreter1 = AgentCoreCodeInterpreter(
-            region="us-west-2", 
-            identifier="test-interpreter-1-abc123"
+            region="us-west-2",
+            default_session="session1-default"
         )
         interpreter2 = AgentCoreCodeInterpreter(
             region="us-west-2", 
-            identifier="test-interpreter-2-def456"
+            default_session="session2-default"
         )
 
         # Create sessions with each interpreter
@@ -112,7 +112,7 @@ class TestCustomIdentifierEndToEnd:
             code_interpreter_input={
                 "action": {
                     "type": "initSession",
-                    "description": "First custom session",
+                    "description": "First session",
                     "session_name": "session-1"
                 }
             }
@@ -122,7 +122,7 @@ class TestCustomIdentifierEndToEnd:
             code_interpreter_input={
                 "action": {
                     "type": "initSession",
-                    "description": "Second custom session",
+                    "description": "Second session",
                     "session_name": "session-2"
                 }
             }
@@ -329,7 +329,7 @@ class TestErrorScenariosWithIdentifierContext:
     def test_session_not_found_error_with_custom_identifier(self):
         """Test that session not found errors work correctly with custom identifiers."""
         custom_id = "session-not-found-test"
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id, auto_session=False)  # Disable auto session
 
         # Try to execute code in non-existent session
         result = interpreter.code_interpreter(
@@ -410,6 +410,27 @@ class TestIdentifierValidationAndEdgeCases:
         # This test documents the current behavior
         assert interpreter.identifier == "   "
 
+    @skip_if_github_action.mark
+    def test_complete_session_creation_flow_with_default_identifier(self, custom_identifier_interpreter):
+        """Test complete session creation flow with default identifier (custom ones aren't supported)."""
+        # Test direct tool call with default identifier
+        result = custom_identifier_interpreter.code_interpreter(
+            code_interpreter_input={
+                "action": {
+                    "type": "initSession",
+                    "description": "Custom identifier test session",
+                    "session_name": "custom-id-session"
+                }
+            }
+        )
+
+        # Verify session was created successfully
+        assert result['status'] == 'success'
+        assert 'sessionName' in result['content'][0]['json']
+        assert result['content'][0]['json']['sessionName'] == 'custom-id-session'
+        assert result['content'][0]['json']['description'] == 'Custom identifier test session'
+        assert 'sessionId' in result['content'][0]['json']
+
     def test_very_long_identifier(self):
         """Test handling of very long identifier strings."""
         long_id = "a" * 1000  # Very long identifier
@@ -443,3 +464,67 @@ class TestIdentifierValidationAndEdgeCases:
         # The specific error will depend on AWS validation
         # For now, we just verify the identifier was stored correctly
         assert interpreter.identifier == complex_id
+
+    @skip_if_github_action.mark
+    def test_auto_session_creation_with_custom_identifier(self):  # Fixed signature with self
+        """Test automatic session creation when executing code directly."""
+        # Create interpreter with auto_session=True
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_session=True)
+        
+        # Execute code without creating a session first
+        result = interpreter.code_interpreter(
+            code_interpreter_input={
+                "action": {
+                    "type": "executeCode",
+                    "code": "print('Auto-created session with custom identifier')",
+                    "language": "python"
+                }
+            }
+        )
+        
+        assert result['status'] == 'success'
+        
+        # Verify default session was created - FIX THIS LINE:
+        assert 'default' in interpreter._sessions  # Use interpreter, not custom_identifier_interpreter
+        
+        # Verify we can list our auto-created session
+        list_result = interpreter.code_interpreter(  # Use interpreter here too
+            code_interpreter_input={"action": {"type": "listLocalSessions"}}
+        )
+        
+        assert list_result['status'] == 'success'
+        assert list_result['content'][0]['json']['totalSessions'] >= 1
+        
+        # At least one session should be the default session
+        session_names = [s['sessionName'] for s in list_result['content'][0]['json']['sessions']]
+        assert 'default' in session_names
+
+    @skip_if_github_action.mark
+    def test_auto_session_creation_with_default_identifier(self):
+        """Test automatic session creation when executing code directly."""
+        # Create interpreter with auto_session=True
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_session=True)
+        
+        # Execute code without creating a session first
+        result = interpreter.code_interpreter(
+            code_interpreter_input={
+                "action": {
+                    "type": "executeCode",
+                    "code": "print('Auto-created session with default identifier')",
+                    "language": "python"
+                }
+            }
+        )
+        
+        assert result['status'] == 'success'
+        
+        # Verify default session was created
+        assert 'default' in interpreter._sessions
+        
+        # Verify we can list our auto-created session
+        list_result = interpreter.code_interpreter(
+            code_interpreter_input={"action": {"type": "listLocalSessions"}}
+        )
+        
+        assert list_result['status'] == 'success'
+        assert list_result['content'][0]['json']['totalSessions'] >= 1

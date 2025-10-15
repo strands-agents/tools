@@ -1,18 +1,15 @@
 """
-Pydantic models for BedrockAgentCore Code Sandbox Strands tool.
-
-This module contains all the Pydantic models used for type-safe action definitions
-with discriminated unions, ensuring required fields are present for each action type.
+Pydantic models for Code Interpreter
 """
 
 from enum import Enum
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
 
 class LanguageType(str, Enum):
-    """Supported programming languages for code execution."""
+    """Supported programming languages."""
 
     PYTHON = "python"
     JAVASCRIPT = "javascript"
@@ -20,86 +17,99 @@ class LanguageType(str, Enum):
 
 
 class FileContent(BaseModel):
-    """Represents a file with its path and text content for writing to the sandbox file system. Used when creating or
-    updating files during code execution sessions."""
+    """File content for writing to sandbox."""
 
-    path: str = Field(description="The file path where content should be written")
-    text: str = Field(description="Text content for the file")
+    path: str = Field(description="File path")
+    text: str = Field(description="File content")
 
 
-# Action-specific Pydantic models using discriminated unions
 class InitSessionAction(BaseModel):
-    """Create a new isolated code execution environment. Use this when starting a new coding task, data analysis
-    project, or when you need a fresh sandbox environment. Each session maintains its own state, variables,
-    and file system."""
+    """Create a new session."""
 
-    type: Literal["initSession"] = Field(description="Initialize a new code interpreter session")
-    description: str = Field(description="Required description of what this session will be used for")
-    session_name: str = Field(description="human-readable session name")
+    type: Literal["initSession"] = Field(description="Initialize session")
+    description: str = Field(description="Session purpose")
+    session_name: str = Field(description="Session name")
 
 
 class ListLocalSessionsAction(BaseModel):
-    """View all active code interpreter sessions managed by this tool instance. Use this to see what sessions are
-    available, check their status, or find the session name you need for other operations."""
+    """List all sessions."""
 
-    type: Literal["listLocalSessions"] = Field(description="List all local sessions managed by this tool instance")
+    type: Literal["listLocalSessions"] = Field(description="List sessions")
 
 
 class ExecuteCodeAction(BaseModel):
-    """Execute code in a specific programming language within an existing session. Use this for running Python
-    scripts, JavaScript/TypeScript code, data analysis, calculations, or any programming task. The session maintains
-    state between executions."""
+    """Execute code in a specific programming language within an existing session."""
 
-    type: Literal["executeCode"] = Field(description="Execute code in the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
-    code: str = Field(description="Required code to execute")
+    type: Literal["executeCode"] = Field(description="Execute code")
+
+    session_name: Optional[str] = Field(
+        default=None,
+        description="Session name. If not provided, uses the " "default session which will be auto-created.",
+    )
+
+    code: str = Field(description="Code to execute")
     language: LanguageType = Field(default=LanguageType.PYTHON, description="Programming language for code execution")
     clear_context: bool = Field(default=False, description="Whether to clear the execution context before running code")
 
 
 class ExecuteCommandAction(BaseModel):
-    """Execute shell/terminal commands within the sandbox environment. Use this for system operations like installing
-    packages, running scripts, file management, or any command-line tasks that need to be performed in the session."""
+    """Execute shell command within the sandbox environment."""
 
-    type: Literal["executeCommand"] = Field(description="Execute a shell command in the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
-    command: str = Field(description="Required shell command to execute")
+    type: Literal["executeCommand"] = Field(description="Execute a shell command")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
+    command: str = Field(description="Shell command to execute")
 
 
 class ReadFilesAction(BaseModel):
-    """Read the contents of one or more files from the sandbox file system. Use this to examine data files,
-    configuration files, code files, or any other files that have been created or uploaded to the session."""
+    """Read the contents of one or more files from the sandbox file system."""
 
-    type: Literal["readFiles"] = Field(description="Read files from the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+    type: Literal["readFiles"] = Field(description="Read files")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     paths: List[str] = Field(description="List of file paths to read")
 
 
 class ListFilesAction(BaseModel):
-    """Browse and list files and directories within the sandbox file system. Use this to explore the directory
-    structure, find files, or understand what's available in the session before reading or manipulating files."""
+    """Browse and list files and directories within the sandbox file system."""
 
     type: Literal["listFiles"] = Field(description="List files in a directory")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     path: str = Field(default=".", description="Directory path to list (defaults to current directory)")
 
 
 class RemoveFilesAction(BaseModel):
-    """Delete one or more files from the sandbox file system. Use this to clean up temporary files, remove outdated
-    data, or manage storage space within the session. Be careful as this permanently removes files."""
+    """Delete one or more files from the sandbox file system."""
 
-    type: Literal["removeFiles"] = Field(description="Remove files from the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
-    paths: List[str] = Field(description="Required list of file paths to remove")
+    type: Literal["removeFiles"] = Field(description="Remove files")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
+    paths: List[str] = Field(description="List of file paths to remove")
 
 
 class WriteFilesAction(BaseModel):
-    """Create or update multiple files in the sandbox file system with specified content. Use this to save data,
-    create configuration files, write code files, or store any text-based content that your code execution will need."""
+    """Create or update multiple files in the sandbox file system with specified content."""
 
-    type: Literal["writeFiles"] = Field(description="Write files to the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
-    content: List[FileContent] = Field(description="Required list of file content to write")
+    type: Literal["writeFiles"] = Field(description="Write files")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
+    content: List[FileContent] = Field(description="List of file content to write")
 
 
 class CodeInterpreterInput(BaseModel):

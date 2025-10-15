@@ -223,7 +223,8 @@ def test_unknown_action_type(mock_interpreter):
         result = mock_interpreter.code_interpreter({"action": {"type": "unknownAction"}})
 
         assert result["status"] == "error"
-        assert "Unknown action type" in result["content"][0]["text"]
+        # Update assertion to match the new error message format
+        assert "Unknown action:" in result["content"][0]["text"]
 
 
 def test_cleanup_method(mock_interpreter):
@@ -291,6 +292,6 @@ def test_multiple_tool_calls_only_start_once(mock_interpreter):
 
 def test_dynamic_tool_spec(mock_interpreter):
     assert (
-        "The tool supports the following programming languages: PYTHON, JAVASCRIPT, TYPESCRIPT"
+        "Supported Languages: PYTHON, JAVASCRIPT, TYPESCRIPT"
         in mock_interpreter.code_interpreter.tool_spec["description"]
     )

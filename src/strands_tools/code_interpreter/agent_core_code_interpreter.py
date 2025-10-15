@@ -47,81 +47,51 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
     This class provides a code interpreter interface using AWS Bedrock AgentCore services.
     It supports executing Python, JavaScript, and TypeScript code in isolated sandbox
-    environments with custom code interpreter identifiers.
+    environments with automatic session management.
 
     The class maintains session state and provides methods for code execution, file
     operations, and session management. It supports both default AWS code interpreter
     environments and custom environments specified by identifier.
 
-    Examples:
-        Basic usage with default identifier:
-
-        >>> interpreter = AgentCoreCodeInterpreter(region="us-west-2")
-        >>> # Uses default identifier: "aws.codeinterpreter.v1"
-
-        Using a custom code interpreter identifier:
-
-        >>> custom_id = "my-custom-interpreter-abc123"
-        >>> interpreter = AgentCoreCodeInterpreter(
-        ...     region="us-west-2",
-        ...     identifier=custom_id
-        ... )
-
-        Environment-specific usage:
-
-        >>> # For testing environments
-        >>> test_interpreter = AgentCoreCodeInterpreter(
-        ...     region="us-east-1",
-        ...     identifier="test-interpreter-xyz789"
-        ... )
-
-        >>> # For production environments
-        >>> prod_interpreter = AgentCoreCodeInterpreter(
-        ...     region="us-west-2",
-        ...     identifier="prod-interpreter-def456"
-        ... )
+    Args:
+        region (Optional[str]): AWS region for the sandbox service. If not provided,
+            the region will be resolved from AWS configuration.
+        identifier (Optional[str]): Custom code interpreter identifier to use
+            for code execution sessions. If not provided, defaults to the AWS-managed
+            identifier "aws.codeinterpreter.v1".
+        auto_session (bool): Enable automatic session creation when a session doesn't exist.
+            Defaults to True.
+        default_session (str): Default session name to use when session_name is not specified
+            in operations. Defaults to "default".
 
     Attributes:
         region (str): The AWS region where the code interpreter service is hosted.
         identifier (str): The code interpreter identifier being used for sessions.
+        auto_session (bool): Whether automatic session creation is enabled.
+        default_session (str): The default session name.
     """
 
-    def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        region: Optional[str] = None,
+        identifier: Optional[str] = None,
+        auto_session: bool = True,
+        default_session: str = "default",
+    ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter.
 
         Args:
-            region (Optional[str]): AWS region for the sandbox service. If not provided,
-                the region will be resolved from AWS configuration (environment variables,
-                AWS config files, or instance metadata). Defaults to None.
-            identifier (Optional[str]): Custom code interpreter identifier to use
-                for code execution sessions. This allows you to specify custom code
-                interpreter environments instead of the default AWS-provided one.
-
-                Valid formats include:
-                - Default identifier: "aws.codeinterpreter.v1" (used when None)
-                - Custom identifier: "my-custom-interpreter-abc123"
-                - Environment-specific: "test-interpreter-xyz789"
-
-                Note: Use the code interpreter ID, not the full ARN. The AWS service
-                expects the identifier portion only (e.g., "my-interpreter-123" rather
-                than "arn:aws:bedrock-agentcore:region:account:code-interpreter-custom/my-interpreter-123").
-
-                If not provided, defaults to "aws.codeinterpreter.v1" for backward
-                compatibility. Defaults to None.
-
-        Note:
-            This constructor maintains full backward compatibility. Existing code
-            that doesn't specify the identifier parameter will continue to work
-            unchanged with the default AWS code interpreter environment.
-
-        Raises:
-            Exception: If there are issues with AWS region resolution or client
-                initialization during session creation.
+            region (Optional[str]): AWS region for the sandbox service.
+            identifier (Optional[str]): Custom code interpreter identifier.
+            auto_session (bool): Enable automatic session creation. Defaults to True.
+            default_session (str): Default session name. Defaults to "default".
         """
         super().__init__()
         self.region = resolve_region(region)
         self.identifier = identifier or "aws.codeinterpreter.v1"
+        self.auto_session = auto_session
+        self.default_session = default_session
         self._sessions: Dict[str, SessionInfo] = {}
 
     def start_platform(self) -> None:
@@ -240,84 +210,121 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             "content": [{"json": {"sessions": sessions_info, "totalSessions": len(sessions_info)}}],
         }
 
+    def _ensure_session(self, session_name: Optional[str]) -> tuple[str, Optional[Dict[str, Any]]]:
+        """
+        Ensure a session exists, creating it automatically if needed.
+
+        This method checks if the specified session exists. If auto_session is enabled
+        and the session doesn't exist, it will be created automatically.
+
+        Args:
+            session_name (Optional[str]): The session name to ensure exists. If None,
+                uses the default_session.
+
+        Returns:
+            tuple[str, Optional[Dict[str, Any]]]: A tuple containing:
+                - The session name (either provided or default)
+                - An error dictionary if session creation failed, None otherwise
+        """
+        if not session_name:
+            session_name = self.default_session
+
+        if session_name in self._sessions:
+            return session_name, None
+
+        if self.auto_session:
+            logger.info(f"Auto-creating session: {session_name}")
+            init_action = InitSessionAction(
+                type="initSession",
+                session_name=session_name,
+                description=f"Auto-initialized session for {session_name}",
+            )
+            result = self.init_session(init_action)
+
+            if result.get("status") != "success":
+                return session_name, result
+
+            logger.info(f"Successfully auto-created session: {session_name}")
+            return session_name, None
+
+        return session_name, {"status": "error", "content": [{"text": f"Session '{session_name}' not found"}]}
+
     def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
-        """Execute code in a Bedrock AgentCoresession."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """Execute code in a Bedrock AgentCore session with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Executing {action.language} code in session '{action.session_name}'")
+        logger.debug(f"Executing {action.language} code in session '{session_name}'")
 
-        # Use the invoke method with proper parameters as shown in the example
         params = {"code": action.code, "language": action.language.value, "clearContext": action.clear_context}
-        response = self._sessions[action.session_name].client.invoke("executeCode", params)
+        response = self._sessions[session_name].client.invoke("executeCode", params)
 
         return self._create_tool_result(response)
 
     def execute_command(self, action: ExecuteCommandAction) -> Dict[str, Any]:
-        """Execute a command in a Bedrock AgentCoresession."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """Execute a command in a Bedrock AgentCore session with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Executing command in session '{action.session_name}': {action.command}")
+        logger.debug(f"Executing command in session '{session_name}': {action.command}")
 
-        # Use the invoke method with proper parameters as shown in the example
         params = {"command": action.command}
-        response = self._sessions[action.session_name].client.invoke("executeCommand", params)
+        response = self._sessions[session_name].client.invoke("executeCommand", params)
 
         return self._create_tool_result(response)
 
     def read_files(self, action: ReadFilesAction) -> Dict[str, Any]:
-        """Read files from a Bedrock AgentCoresession."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """Read files from a Bedrock AgentCore session with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Reading files from session '{action.session_name}': {action.paths}")
+        logger.debug(f"Reading files from session '{session_name}': {action.paths}")
 
-        # Use the invoke method with proper parameters as shown in the example
         params = {"paths": action.paths}
-        response = self._sessions[action.session_name].client.invoke("readFiles", params)
+        response = self._sessions[session_name].client.invoke("readFiles", params)
 
         return self._create_tool_result(response)
 
     def list_files(self, action: ListFilesAction) -> Dict[str, Any]:
-        """List files in a Bedrock AgentCoresession directory."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """List files in a Bedrock AgentCore session directory with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Listing files in session '{action.session_name}' at path: {action.path}")
+        logger.debug(f"Listing files in session '{session_name}' at path: {action.path}")
 
-        # Use the invoke method with proper parameters as shown in the example
         params = {"path": action.path}
-        response = self._sessions[action.session_name].client.invoke("listFiles", params)
+        response = self._sessions[session_name].client.invoke("listFiles", params)
 
         return self._create_tool_result(response)
 
     def remove_files(self, action: RemoveFilesAction) -> Dict[str, Any]:
-        """Remove files from a Bedrock AgentCoresession."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """Remove files from a Bedrock AgentCore session with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Removing files from session '{action.session_name}': {action.paths}")
+        logger.debug(f"Removing files from session '{session_name}': {action.paths}")
 
-        # Use the invoke method with proper parameters as shown in the example
         params = {"paths": action.paths}
-        response = self._sessions[action.session_name].client.invoke("removeFiles", params)
+        response = self._sessions[session_name].client.invoke("removeFiles", params)
 
         return self._create_tool_result(response)
 
     def write_files(self, action: WriteFilesAction) -> Dict[str, Any]:
-        """Write files to a Bedrock AgentCoresession."""
-        if action.session_name not in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{action.session_name}' not found"}]}
+        """Write files to a Bedrock AgentCore session with automatic session management."""
+        session_name, error = self._ensure_session(action.session_name)
+        if error:
+            return error
 
-        logger.debug(f"Writing {len(action.content)} files to session '{action.session_name}'")
+        logger.debug(f"Writing {len(action.content)} files to session '{session_name}'")
 
-        # Convert FileContent objects to dictionaries for the API
         content_dicts = [{"path": fc.path, "text": fc.text} for fc in action.content]
-
-        # Use the invoke method with proper parameters as shown in the example
         params = {"content": content_dicts}
-        response = self._sessions[action.session_name].client.invoke("writeFiles", params)
+        response = self._sessions[session_name].client.invoke("writeFiles", params)
 
         return self._create_tool_result(response)
 

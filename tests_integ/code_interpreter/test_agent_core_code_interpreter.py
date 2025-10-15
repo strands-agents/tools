@@ -75,3 +75,35 @@ def test_complex_natural_language_workflow(agent):
     """)
 
     assert "PASS" in result.message["content"][0]["text"]
+
+@skip_if_github_action.mark
+def test_auto_session_creation(bedrock_agent_core_code_interpreter):
+    """Test automatic session creation on first code execution."""
+    # Execute code directly without initializing session
+    result = bedrock_agent_core_code_interpreter.code_interpreter(
+        code_interpreter_input={
+            "action": {
+                "type": "executeCode",
+                "code": "import platform\nprint(f'Running on Python {platform.python_version()}')",
+                "language": "python"
+            }
+        }
+    )
+    
+    assert result['status'] == 'success'
+    
+    # Verify the default session exists
+    assert 'default' in bedrock_agent_core_code_interpreter._sessions
+    
+    # Execute a second command in the same auto-created session
+    result2 = bedrock_agent_core_code_interpreter.code_interpreter(
+        code_interpreter_input={
+            "action": {
+                "type": "executeCode",
+                "code": "print('Second execution in auto-created session')",
+                "language": "python"
+            }
+        }
+    )
+    
+    assert result2['status'] == 'success'

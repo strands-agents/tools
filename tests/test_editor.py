@@ -259,12 +259,7 @@ class TestEditorDirectCalls:
         """Test str_replace without creating backup when EDITOR_DISABLE_BACKUP is set."""
         mock_user_input.return_value = "y"
 
-        result = editor.editor(
-            command="str_replace",
-            path=temp_file,
-            old_str="Line 2",
-            new_str="Modified Line 2"
-        )
+        result = editor.editor(command="str_replace", path=temp_file, old_str="Line 2", new_str="Modified Line 2")
 
         assert result["status"] == "success"
 
@@ -278,12 +273,7 @@ class TestEditorDirectCalls:
         """Test pattern_replace without creating backup."""
         mock_user_input.return_value = "y"
 
-        result = editor.editor(
-            command="pattern_replace",
-            path=temp_file,
-            pattern="Line.*",
-            new_str="Updated Line"
-        )
+        result = editor.editor(command="pattern_replace", path=temp_file, pattern="Line.*", new_str="Updated Line")
 
         assert result["status"] == "success"
         backup_path = f"{temp_file}.bak"
@@ -295,12 +285,7 @@ class TestEditorDirectCalls:
         """Test insert without creating backup."""
         mock_user_input.return_value = "y"
 
-        result = editor.editor(
-            command="insert",
-            path=temp_file,
-            new_str="New line",
-            insert_line=2
-        )
+        result = editor.editor(command="insert", path=temp_file, new_str="New line", insert_line=2)
 
         assert result["status"] == "success"
         backup_path = f"{temp_file}.bak"
@@ -315,12 +300,7 @@ class TestEditorDirectCalls:
 
         mock_user_input.return_value = "y"
 
-        result = editor.editor(
-            command="str_replace",
-            path=temp_file,
-            old_str="Line 2",
-            new_str="Modified Line 2"
-        )
+        result = editor.editor(command="str_replace", path=temp_file, old_str="Line 2", new_str="Modified Line 2")
 
         assert result["status"] == "success"
         backup_path = f"{temp_file}.bak"
