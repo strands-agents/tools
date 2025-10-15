@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 from bedrock_agentcore.tools.browser_client import BrowserClient as AgentCoreBrowserClient
 from playwright.async_api import Browser as PlaywrightBrowser
+from typing_extensions import override
 
 from ..utils.aws_util import resolve_region
 from .browser import Browser
@@ -59,6 +60,7 @@ class AgentCoreBrowser(Browser):
 
         return browser
 
+    @override
     async def _setup_session_from_browser(self, browser_or_context):
         """Setup session for AgentCoreBrowser using existing CDP context.
 
