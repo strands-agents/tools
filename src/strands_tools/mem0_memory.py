@@ -222,7 +222,7 @@ class Mem0ServiceClient:
 
         elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
             logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
-            merged_config = self._configure_neptune_backend(merged_config)
+            merged_config = self._append_neptune_database_backend(merged_config)
 
 
         return Mem0Memory.from_config(config_dict=merged_config)
@@ -246,8 +246,8 @@ class Mem0ServiceClient:
         }
         return self._merge_config(config)
 
-    def _configure_neptune_backend(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with Neptune Database graph backend.
+    def _append_neptune_database_backend(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Database graph backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
