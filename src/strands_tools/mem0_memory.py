@@ -713,7 +713,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Process graph relations (If any)
             if "relations" in results:
-                relationships_list = results.get("relations", [])["added_entities"]
+                relationships_list = results.get("relations").get("added_entities", [])
                 results_list.extend(relationships_list)
                 panel_graph = format_store_graph_response(relationships_list)
                 console.print(panel_graph)
