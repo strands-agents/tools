@@ -25,33 +25,88 @@ This will install:
 ## Prerequisites
 
 1. **MongoDB Atlas**: You need a MongoDB Atlas cluster with:
-   - Connection URI (mongodb+srv format)
-   - Database user with read/write permissions
-   - Vector Search enabled (Atlas Search)
+   - Connection URI (mongodb+srv format) - [How to find your connection string](https://www.mongodb.com/docs/atlas/connect-to-database-deployment/)
+   - Database user with read/write permissions - [Create database user](https://www.mongodb.com/docs/atlas/security-add-mongodb-users/)
+   - Vector Search enabled (Atlas Search) - [Enable Atlas Search](https://www.mongodb.com/docs/atlas/atlas-search/create-index/)
 
 2. **Amazon Bedrock**: Access to Amazon Bedrock for embedding generation:
    - AWS credentials configured
    - Access to `amazon.titan-embed-text-v2:0` model (or custom embedding model)
 
+### Getting Your MongoDB Atlas Connection URI
+
+If you're new to MongoDB Atlas:
+
+1. **Sign up for MongoDB Atlas**: Visit [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) and create a free account
+2. **Create a cluster**: Follow the setup wizard to create your first cluster (free tier available)
+3. **Create a database user**: Go to Database Access → Add New Database User with read/write permissions
+4. **Configure network access**: Go to Network Access → Add IP Address (add your current IP or 0.0.0.0/0 for testing)
+5. **Get connection string**: 
+   - Go to your cluster in the Atlas dashboard
+   - Click "Connect" button
+   - Choose "Connect your application"
+   - Select "Python" as the driver
+   - Copy the connection string (it will look like: `mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/`)
+   - Replace `<password>` with your actual database user password
+
+**Important**: Your connection URI should be in the format `mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/` without additional query parameters. The tool will handle SSL and other connection settings automatically.
+
+For detailed instructions, see the [official MongoDB Atlas documentation](https://www.mongodb.com/docs/atlas/connect-to-database-deployment/).
+
 ## Quick Start
 
-### Basic Setup
+### Class-Based Usage (Recommended)
 
 ```python
-from strands import Agent
-from strands_tools.mongodb_memory import mongodb_memory
+from strands_tools.mongodb_memory import MongoDBMemoryTool
 
-# Create an agent with the direct tool
-agent = Agent(tools=[mongodb_memory])
+# Initialize the tool
+memory_tool = MongoDBMemoryTool()
 
-# Use the tool with configuration parameters
-result = agent.tool.mongodb_memory(
-    action="record",
+# Store a memory
+result = memory_tool.record_memory(
     content="User prefers vegetarian pizza with extra cheese",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
+)
+
+# Search memories
+result = memory_tool.retrieve_memories(
+    query="food preferences",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123",
+    max_results=5
+)
+```
+
+### Standalone Function Usage
+
+```python
+from strands_tools.mongodb_memory import mongodb_memory
+
+# Store a memory
+result = mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123"
+)
+
+# Search memories
+result = mongodb_memory(
+    action="retrieve",
+    query="food preferences",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123",
+    max_results=5
 )
 ```
 
@@ -60,7 +115,7 @@ result = agent.tool.mongodb_memory(
 You can also use environment variables for configuration:
 
 ```bash
-export MONGODB_ATLAS_CLUSTER_URI="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority"
+export MONGODB_ATLAS_CLUSTER_URI="mongodb+srv://user:password@cluster.mongodb.net/"
 export MONGODB_DATABASE_NAME="memory_db"
 export MONGODB_COLLECTION_NAME="memories"
 export MONGODB_NAMESPACE="user_123"
@@ -71,7 +126,15 @@ export AWS_REGION="us-west-2"
 Then use the tool with minimal parameters (environment variables will be used):
 
 ```python
-result = agent.tool.mongodb_memory(
+# Class-based usage
+memory_tool = MongoDBMemoryTool()
+result = memory_tool.record_memory(
+    content="User prefers vegetarian pizza"
+    # cluster_uri, database_name, etc. will be read from environment variables
+)
+
+# Standalone function usage
+result = mongodb_memory(
     action="record",
     content="User prefers vegetarian pizza"
     # cluster_uri, database_name, etc. will be read from environment variables
@@ -87,7 +150,7 @@ result = agent.tool.mongodb_memory(
 result = agent.tool.mongodb_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese and no onions",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -103,7 +166,7 @@ result = agent.tool.mongodb_memory(
         "participants": ["dev_team"],
         "date": "2024-01-16"
     },
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -118,7 +181,7 @@ result = agent.tool.mongodb_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -129,7 +192,7 @@ result = agent.tool.mongodb_memory(
     action="retrieve",
     query="upcoming meetings and appointments",
     max_results=10,
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -143,7 +206,7 @@ result = agent.tool.mongodb_memory(
 result = agent.tool.mongodb_memory(
     action="list",
     max_results=20,
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -154,7 +217,7 @@ result = agent.tool.mongodb_memory(
     action="list",
     max_results=10,
     next_token="10",  # Start from the 11th result
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -168,7 +231,7 @@ result = agent.tool.mongodb_memory(
 result = agent.tool.mongodb_memory(
     action="get",
     memory_id="mem_1704567890123_abc12345",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -179,10 +242,9 @@ result = agent.tool.mongodb_memory(
 
 ```python
 # Delete a specific memory
-result = agent.tool.mongodb_memory(
-    action="delete",
+result = memory_tool.delete_memory(
     memory_id="mem_1704567890123_abc12345",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -197,23 +259,24 @@ For cleaner code, you can use a configuration dictionary:
 
 ```python
 config = {
-    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/",
     "database_name": "memory_db",
     "collection_name": "memories",
     "namespace": "user_123",
     "region": "us-east-1"
 }
 
+# Initialize tool
+memory_tool = MongoDBMemoryTool()
+
 # Store memory
-result = agent.tool.mongodb_memory(
-    action="record",
+result = memory_tool.record_memory(
     content="User prefers vegetarian pizza",
     **config
 )
 
 # Search memories
-result = agent.tool.mongodb_memory(
-    action="retrieve",
+result = memory_tool.retrieve_memories(
     query="food preferences",
     max_results=5,
     **config
@@ -223,10 +286,9 @@ result = agent.tool.mongodb_memory(
 ### Custom Embedding Model
 
 ```python
-result = agent.tool.mongodb_memory(
-    action="record",
+result = memory_tool.record_memory(
     content="User prefers vegetarian pizza",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     embedding_model="amazon.titan-embed-text-v1:0",  # Different model
@@ -238,20 +300,18 @@ result = agent.tool.mongodb_memory(
 
 ```python
 # User-specific memories
-result = agent.tool.mongodb_memory(
-    action="record",
+result = memory_tool.record_memory(
     content="Alice likes Italian food",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_alice"
 )
 
 # System-wide memories
-result = agent.tool.mongodb_memory(
-    action="record",
+result = memory_tool.record_memory(
     content="System maintenance scheduled",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
     database_name="memory_db",
     collection_name="memories",
     namespace="system_global"
@@ -347,8 +407,8 @@ The tool provides comprehensive error handling:
 
 ```python
 # Invalid connection URI
-result = agent.tool.mongodb_memory(
-    action="record",
+memory_tool = MongoDBMemoryTool()
+result = memory_tool.record_memory(
     content="test",
     cluster_uri="mongodb+srv://invalid:credentials@invalid.mongodb.net/"
 )
@@ -359,14 +419,14 @@ result = agent.tool.mongodb_memory(
 
 ```python
 # Missing required content for record action
-result = agent.tool.mongodb_memory(
-    action="record",
+memory_tool = MongoDBMemoryTool()
+result = memory_tool.record_memory(
     cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/"
 )
-# Returns: {"status": "error", "content": [{"text": "The following parameters are required for record action: content"}]}
+# Returns: {"status": "error", "content": [{"text": "content is required"}]}
 
 # Missing connection parameters
-result = agent.tool.mongodb_memory(action="record", content="test")
+result = memory_tool.record_memory(content="test")
 # Returns: {"status": "error", "content": [{"text": "cluster_uri is required"}]}
 ```
 
@@ -374,8 +434,7 @@ result = agent.tool.mongodb_memory(action="record", content="test")
 
 ```python
 # Non-existent memory ID
-result = agent.tool.mongodb_memory(
-    action="get",
+result = memory_tool.get_memory(
     memory_id="nonexistent",
     cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/"
 )
@@ -411,7 +470,7 @@ Create reusable configuration objects:
 ```python
 # Create a base configuration
 base_config = {
-    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/",
     "database_name": "memory_db",
     "region": "us-east-1"
 }
@@ -456,8 +515,7 @@ task_namespace = "feature_tasks"
 
 ```python
 # Use structured metadata for better organization
-result = agent.tool.mongodb_memory(
-    action="record",
+result = memory_tool.record_memory(
     content="Important project deadline",
     metadata={
         "type": "deadline",
@@ -473,9 +531,9 @@ result = agent.tool.mongodb_memory(
 ### 4. Error Handling
 
 ```python
-def safe_memory_operation(agent, action, **kwargs):
+def safe_memory_operation(memory_tool, operation_method, **kwargs):
     try:
-        result = agent.tool.mongodb_memory(action=action, **kwargs)
+        result = operation_method(**kwargs)
         if result["status"] == "error":
             logger.error(f"Memory operation failed: {result['content'][0]['text']}")
             return None
@@ -483,6 +541,18 @@ def safe_memory_operation(agent, action, **kwargs):
     except Exception as e:
         logger.error(f"Unexpected error in memory operation: {e}")
         return None
+
+# Usage example:
+memory_tool = MongoDBMemoryTool()
+result = safe_memory_operation(
+    memory_tool, 
+    memory_tool.record_memory,
+    content="Test memory",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123"
+)
 ```
 
 ### 5. Batch Operations
@@ -496,15 +566,15 @@ memories = [
 ]
 
 config = {
-    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/",
     "database_name": "memory_db",
     "collection_name": "memories",
     "namespace": "user_123"
 }
 
+memory_tool = MongoDBMemoryTool()
 for content in memories:
-    agent.tool.mongodb_memory(
-        action="record",
+    memory_tool.record_memory(
         content=content,
         metadata={"batch": "user_preferences", "timestamp": datetime.now().isoformat()},
         **config
@@ -544,8 +614,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # This will show detailed MongoDB and Bedrock API calls
-result = agent.tool.mongodb_memory(
-    action="record",
+memory_tool = MongoDBMemoryTool()
+result = memory_tool.record_memory(
     content="test",
     cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/"
 )
