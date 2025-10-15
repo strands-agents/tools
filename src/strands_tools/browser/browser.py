@@ -221,6 +221,31 @@ class Browser(ABC):
         """
         ...
 
+    async def _setup_session_from_browser(self, browser_or_context):
+        """Setup session components from browser or context.
+
+        This method can be overridden by subclasses to customize how
+        browser, context, and page are extracted from the session object.
+
+        Args:
+            browser_or_context: The object returned by create_browser_session()
+
+        Returns:
+            Tuple of (browser, context, page)
+        """
+        if isinstance(browser_or_context, PlaywrightBrowser):
+            # Normal non-persistent case
+            session_browser = browser_or_context
+            session_context = await session_browser.new_context()
+            session_page = await session_context.new_page()
+        else:
+            # Persistent context case
+            session_context = browser_or_context
+            session_browser = session_context.browser
+            session_page = await session_context.new_page()
+
+        return session_browser, session_context, session_page
+
     # Session Management Methods
     def init_session(self, action: InitSessionAction) -> Dict[str, Any]:
         """Initialize a new browser session."""
@@ -238,30 +263,10 @@ class Browser(ABC):
 
         try:
             # Create new browser instance for this session
-            session = await self.create_browser_session()
+            browser_or_context = await self.create_browser_session()
 
-            if self.__class__.__name__ == "AgentCoreBrowser":
-                # AgentCoreBrowser case
-                session_browser = session
-                if not session_browser.contexts:
-                    raise RuntimeError(
-                        "AgentCoreBrowser CDP connection has no contexts. "
-                        "This may indicate a connection issue with the remote browser."
-                    )
-                session_context = session_browser.contexts[0]
-                session_page = await session_context.new_page()
-
-            elif isinstance(session, PlaywrightBrowser):
-                # Normal non-persistent case
-                session_browser = session
-                session_context = await session_browser.new_context()
-                session_page = await session_context.new_page()
-
-            else:
-                # Local chromium persistent context case
-                session_context = session
-                session_browser = session_context.browser
-                session_page = await session_context.new_page()
+            # Let subclasses customize how to extract browser, context, and page
+            session_browser, session_context, session_page = await self._setup_session_from_browser(browser_or_context)
 
             # Create and store session object
             session = BrowserSession(

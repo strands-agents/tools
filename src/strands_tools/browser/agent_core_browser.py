@@ -59,6 +59,33 @@ class AgentCoreBrowser(Browser):
 
         return browser
 
+    async def _setup_session_from_browser(self, browser_or_context):
+        """Setup session for AgentCoreBrowser using existing CDP context.
+
+        AgentCoreBrowser connects via CDP and uses the default context
+        that comes with the connection, avoiding the need to create a new one.
+
+        Args:
+            browser_or_context: PlaywrightBrowser from CDP connection
+
+        Returns:
+            Tuple of (browser, context, page)
+        """
+        session_browser = browser_or_context
+
+        # CDP connections should have a default context
+        if not session_browser.contexts:
+            raise RuntimeError(
+                "AgentCoreBrowser CDP connection has no contexts. "
+                "This may indicate a connection issue with the remote browser."
+            )
+
+        # Use the existing default context from CDP connection
+        session_context = session_browser.contexts[0]
+        session_page = await session_context.new_page()
+
+        return session_browser, session_context, session_page
+
     def close_platform(self) -> None:
         for client in self._client_dict.values():
             try:
