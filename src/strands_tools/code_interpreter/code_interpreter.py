@@ -1,4 +1,9 @@
-"""Code Interpreter base class - IMPROVED VERSION"""
+"""
+Code Interpreter Tool implementation using Strands @tool decorator.
+
+This module contains the base tool class that provides lifecycle management
+and can be extended by specific platform implementations.
+"""
 
 import logging
 from abc import ABC, abstractmethod
