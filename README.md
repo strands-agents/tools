@@ -114,7 +114,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
+| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
@@ -501,6 +501,33 @@ result = agent.tool.use_aws(
     parameters={},
     region="us-east-1",
     label="List all subnets"
+)
+```
+
+### Retrieve Tool
+
+```python
+from strands import Agent
+from strands_tools import retrieve
+
+agent = Agent(tools=[retrieve])
+
+# Basic retrieval without metadata
+result = agent.tool.retrieve(
+    text="What is artificial intelligence?"
+)
+
+# Retrieval with metadata enabled
+result = agent.tool.retrieve(
+    text="What are the latest developments in machine learning?",
+    enableMetadata=True
+)
+
+# Using environment variable to set default metadata behavior
+# Set RETRIEVE_ENABLE_METADATA_DEFAULT=true in your environment
+result = agent.tool.retrieve(
+    text="Tell me about cloud computing"
+    # enableMetadata will default to the environment variable value
 )
 ```
 
@@ -1075,6 +1102,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
 | STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
 | STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
+#### Retrieve Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
 
 #### Video Tools
 
