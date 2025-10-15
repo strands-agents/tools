@@ -191,24 +191,24 @@ class Mem0ServiceClient:
             logger.debug("Using Mem0 Platform backend (MemoryClient)")
             return MemoryClient()
 
-        # Vector search providers
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("OPENSEARCH_HOST"):
             raise RuntimeError("""Conflicting backend configurations:
-            Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and OPENSEARCH_HOST environment variables are set.
-            Please specify only one backend.""")
+            Only one environment variable of NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER or OPENSEARCH_HOST can be set.""")
 
+        # Vector search providers
         if os.environ.get("OPENSEARCH_HOST"):
             logger.debug("Using OpenSearch backend (Mem0Memory with OpenSearch)")
-            merged_config = self._initialize_opensearch_client(config)
+            merged_config = self._append_opensearch_config(config)
 
         elif os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._configure_neptune_analytics_vector_backend(config)
+            merged_config = self._append_neptune_analytics_vector_config(config)
 
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
-            merged_config = self._initialize_faiss_client(config)
+            merged_config = self._append_faiss_config(config)
 
+        # Graph backend providers
 
         # Graph backend providers
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
@@ -218,7 +218,7 @@ class Mem0ServiceClient:
 
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._configure_neptune_analytics_graph_backend(merged_config)
+            merged_config = self._append_neptune_analytics_graph_config(merged_config)
 
         elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
             logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
@@ -227,8 +227,8 @@ class Mem0ServiceClient:
 
         return Mem0Memory.from_config(config_dict=merged_config)
 
-    def _configure_neptune_analytics_vector_backend(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with Neptune Analytics vector backend.
+    def _append_neptune_analytics_vector_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Analytics vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -262,8 +262,8 @@ class Mem0ServiceClient:
         }
         return config
 
-    def _initialize_opensearch_client(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with OpenSearch backend.
+    def _append_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of OpenSearch vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -303,8 +303,9 @@ class Mem0ServiceClient:
 
         return merged_config
 
-    def _initialize_faiss_client(self, config: Optional[Dict] = None) -> Dict:
-        """Initialize a Mem0 client with FAISS backend.
+    def _append_faiss_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of FAISS vector backend.
+
 
         Args:
             config: Optional configuration dictionary to override defaults.
@@ -334,11 +335,11 @@ class Mem0ServiceClient:
         }
         return merged_config
 
-    def _configure_neptune_analytics_graph_backend(self, config: Dict) -> Dict:
-        """Initialize a Mem0 client with Neptune Analytics graph backend.
+    def _append_neptune_analytics_graph_config(self, config: Dict) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Analytics graph backend.
 
         Args:
-            config: Configuration dictionary to add graph backend to.
+            config: Configuration dictionary to add Neptune Analytics graph backend
 
         Returns:
             An configuration dict with graph backend.
@@ -524,9 +525,9 @@ def format_retrieve_graph_response(memories: List[Dict]) -> Panel:
         )
 
     table = Table(title="Search Results", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
-    table.add_column("Destination", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Destination", style="green", width=30)
 
     for memory in memories:
         source = memory.get("source", "N/A")
@@ -544,9 +545,9 @@ def format_list_graph_response(memories: List[Dict]) -> Panel:
         return Panel("No graph memories found.", title="[bold yellow]No Memories", border_style="yellow")
 
     table = Table(title="Graph Memories", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Relationship", style="yellow", width=50)
-    table.add_column("Target", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Target", style="green", width=30)
 
     for memory in memories:
         source = memory.get("source", "N/A")
@@ -613,14 +614,16 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
         return Panel("No graph memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
 
     table = Table(title="Graph Memories Stored", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan")
-    table.add_column("Target", style="green")
+    table.add_column("Source", style="cyan", width=25)
+    table.add_column("Relationship", style="yellow", width=45)
+    table.add_column("Target", style="green", width=30)
 
     for memory in memories:
         source = memory[0].get("source", "N/A")
+        relationship = memory[0].get("relationship", "N/A")
         destination = memory[0].get("target", "N/A")
 
-        table.add_row(source, destination)
+        table.add_row(source, relationship, destination)
 
     return Panel(table, title="[bold green]Memories Stored (Graph)", border_style="green")
 
@@ -739,7 +742,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Process graph relations (If any)
             if "relations" in results:
-                relationships_list = results.get("relations", [])["added_entities"]
+                relationships_list = results.get("relations").get("added_entities", [])
                 results_list.extend(relationships_list)
                 panel_graph = format_store_graph_response(relationships_list)
                 console.print(panel_graph)
