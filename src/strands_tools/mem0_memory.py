@@ -260,6 +260,10 @@ class Mem0ServiceClient:
             "provider": "neptunedb",
             "config": {"endpoint": f"neptune-db://{os.environ.get('NEPTUNE_DATABASE_ENDPOINT')}"},
         }
+        # To retrieve cosine similarity score instead for Faiss.
+        if "faiss" == config.get("vector_store", {}).get("provider"):
+            config["vector_store"]["config"]["distance_strategy"] = "cosine"
+
         return config
 
     def _append_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
@@ -330,7 +334,6 @@ class Mem0ServiceClient:
             "config": {
                 "embedding_model_dims": 1024,
                 "path": "/tmp/mem0_384_faiss",
-                "distance_strategy": "cosine",
             },
         }
         return merged_config
