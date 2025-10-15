@@ -240,14 +240,25 @@ class Browser(ABC):
             # Create new browser instance for this session
             session = await self.create_browser_session()
 
-            if isinstance(session, PlaywrightBrowser):
+            if self.__class__.__name__ == "AgentCoreBrowser":
+                # AgentCoreBrowser case
+                session_browser = session
+                if not session_browser.contexts:
+                    raise RuntimeError(
+                        "AgentCoreBrowser CDP connection has no contexts. "
+                        "This may indicate a connection issue with the remote browser."
+                    )
+                session_context = session_browser.contexts[0]
+                session_page = await session_context.new_page()
+
+            elif isinstance(session, PlaywrightBrowser):
                 # Normal non-persistent case
                 session_browser = session
                 session_context = await session_browser.new_context()
                 session_page = await session_context.new_page()
 
             else:
-                # Persistent context case
+                # Local chromium persistent context case
                 session_context = session
                 session_browser = session_context.browser
                 session_page = await session_context.new_page()
