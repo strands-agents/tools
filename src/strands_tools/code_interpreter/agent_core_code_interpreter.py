@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -87,8 +88,6 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         # Generate session name strategy
         if session_name is None:
-            import uuid
-
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
         else:
             self.default_session = session_name
