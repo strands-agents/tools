@@ -209,9 +209,21 @@ class Mem0ServiceClient:
             merged_config = self._append_faiss_config(config)
 
         # Graph backend providers
+
+        # Graph backend providers
+        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            raise RuntimeError("""Conflicting backend configurations:
+                Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and NEPTUNE_DATABASE_ENDPOINT environment variables are set.
+                Please specify only one graph backend.""")
+
         if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
             logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
             merged_config = self._append_neptune_analytics_graph_config(merged_config)
+
+        elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
+            logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
+            merged_config = self._append_neptune_database_backend(merged_config)
+
 
         return Mem0Memory.from_config(config_dict=merged_config)
 
@@ -233,6 +245,26 @@ class Mem0ServiceClient:
             },
         }
         return self._merge_config(config)
+
+    def _append_neptune_database_backend(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of Neptune Database graph backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An configuration dict with graph backend.
+        """
+        config = config or {}
+        config["graph_store"] = {
+            "provider": "neptunedb",
+            "config": {"endpoint": f"neptune-db://{os.environ.get('NEPTUNE_DATABASE_ENDPOINT')}"},
+        }
+        # To retrieve cosine similarity score instead for Faiss.
+        if "faiss" == config.get("vector_store", {}).get("provider"):
+            config["vector_store"]["config"]["distance_strategy"] = "cosine"
+
+        return config
 
     def _append_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
         """Update incoming configuration dictionary to include the configuration of OpenSearch vector backend.

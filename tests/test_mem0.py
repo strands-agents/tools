@@ -445,6 +445,16 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
         client = Mem0ServiceClient()
         assert client.mem0 is not None
 
+    # Test with Neptune Database with OpenSearch
+    with patch.dict(
+            os.environ,
+            {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+             "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com"},
+    ):
+        client = Mem0ServiceClient()
+        assert client.region == os.environ.get("AWS_REGION", "us-west-2")
+        assert client.mem0 is not None
+
     # Test with custom config (OpenSearch)
     custom_config = {
         "embedder": {"provider": "custom", "config": {"model": "custom-model"}},
