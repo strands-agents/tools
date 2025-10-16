@@ -292,6 +292,6 @@ def test_multiple_tool_calls_only_start_once(mock_interpreter):
 
 def test_dynamic_tool_spec(mock_interpreter):
     assert (
-        "Supported Languages: PYTHON, JAVASCRIPT, TYPESCRIPT"
+        "The tool supports the following programming languages: PYTHON, JAVASCRIPT, TYPESCRIPT"
         in mock_interpreter.code_interpreter.tool_spec["description"]
     )

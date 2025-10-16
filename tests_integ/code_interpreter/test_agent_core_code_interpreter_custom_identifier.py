@@ -9,6 +9,7 @@ These tests verify end-to-end functionality with custom identifiers, including:
 
 import logging
 from unittest.mock import MagicMock, patch
+import time
 
 import pytest
 from strands import Agent
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 def custom_identifier_interpreter() -> AgentCoreCodeInterpreter:
     """Create a real AgentCoreCodeInterpreter with custom parameters but default identifier."""
     # Use default identifier but customize other parameters
-    return AgentCoreCodeInterpreter(region="us-west-2", auto_session=True, default_session="custom-default")
+    return AgentCoreCodeInterpreter(region="us-west-2", session_name="custom-default")
 
 
 @pytest.fixture
@@ -49,6 +50,11 @@ def agent_with_default_identifier(default_identifier_interpreter: AgentCoreCodeI
     """Create an agent with default identifier code interpreter tool."""
     return Agent(tools=[default_identifier_interpreter.code_interpreter])
 
+@pytest.fixture(autouse=True, scope="function")
+def rate_limit_protection():
+    """Prevent throttling between tests."""
+    yield
+    time.sleep(2) 
 
 class TestCustomIdentifierEndToEnd:
     """Test complete end-to-end functionality with custom identifiers."""
@@ -100,11 +106,11 @@ class TestCustomIdentifierEndToEnd:
         # Create interpreters with different session configurations but same valid identifier
         interpreter1 = AgentCoreCodeInterpreter(
             region="us-west-2",
-            default_session="session1-default"
+            session_name="session1-default"
         )
         interpreter2 = AgentCoreCodeInterpreter(
             region="us-west-2", 
-            default_session="session2-default"
+            session_name="session2-default"
         )
 
         # Create sessions with each interpreter
@@ -140,25 +146,22 @@ class TestCustomIdentifierEndToEnd:
         assert 'session-2' in interpreter2._sessions
         assert 'session-2' not in interpreter1._sessions
 
-    @skip_if_github_action.mark
+    @skip_if_github_action.mark  
     def test_natural_language_workflow_with_custom_identifier(self, agent_with_custom_identifier):
-        """Test complex natural language workflow with custom identifier."""
-        result: AgentResult = agent_with_custom_identifier("""
-        I need you to help me test the custom identifier functionality. Please:
+        """Test custom identifier with consolidated operations."""
         
-        1. Create a new code session called 'custom-test-session'
-        
-        2. Write a Python script that creates a simple text file with the content 'Custom identifier test successful'
-        
-        3. Execute the script to create the file
-        
-        4. Read the file back to verify it was created correctly
-        
-        5. If all steps succeed, respond with "CUSTOM_IDENTIFIER_TEST_PASS"
-        """)
+        result = agent_with_custom_identifier("""
+    Using custom identifier, complete this in ONE code execution:
+    1. Create 'test.txt' with content 'Custom identifier test'
+    2. Read it back
+    3. Return the contents
 
-        # Verify the workflow completed successfully
-        assert "CUSTOM_IDENTIFIER_TEST_PASS" in result.message["content"][0]["text"]
+    Respond with "PASS:" followed by the file contents.
+        """)
+        
+        response = result.message["content"][0]["text"]
+        assert "PASS:" in response
+        assert "Custom identifier test" in response
 
 
 class TestBackwardCompatibility:
@@ -195,7 +198,7 @@ class TestBackwardCompatibility:
 
         assert code_result['status'] == 'success'
 
-    @skip_if_github_action.mark
+    @skip_if_github_action.mark  
     def test_existing_natural_language_workflow_unchanged(self, agent_with_default_identifier):
         """Test that existing natural language workflows work unchanged."""
         # This replicates the complex workflow from the original integration test
@@ -329,7 +332,7 @@ class TestErrorScenariosWithIdentifierContext:
     def test_session_not_found_error_with_custom_identifier(self):
         """Test that session not found errors work correctly with custom identifiers."""
         custom_id = "session-not-found-test"
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id, auto_session=False)  # Disable auto session
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id, auto_create=False)
 
         # Try to execute code in non-existent session
         result = interpreter.code_interpreter(
@@ -466,12 +469,12 @@ class TestIdentifierValidationAndEdgeCases:
         assert interpreter.identifier == complex_id
 
     @skip_if_github_action.mark
-    def test_auto_session_creation_with_custom_identifier(self):  # Fixed signature with self
+    def test_auto_session_creation_with_custom_identifier(self):
         """Test automatic session creation when executing code directly."""
-        # Create interpreter with auto_session=True
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_session=True)
+        # Use default identifier since custom identifiers may not exist in AWS
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")  # Remove identifier="custom-auto-test"
         
-        # Execute code without creating a session first
+        # Execute code without creating a session first - should auto-create with random UUID
         result = interpreter.code_interpreter(
             code_interpreter_input={
                 "action": {
@@ -484,28 +487,31 @@ class TestIdentifierValidationAndEdgeCases:
         
         assert result['status'] == 'success'
         
-        # Verify default session was created - FIX THIS LINE:
-        assert 'default' in interpreter._sessions  # Use interpreter, not custom_identifier_interpreter
+        # Verify a session was created (will be random UUID, not "default")
+        assert len(interpreter._sessions) == 1
+        
+        # Get the auto-created session name (should start with "session-")
+        auto_created_session = list(interpreter._sessions.keys())[0]
+        assert auto_created_session.startswith("session-")
         
         # Verify we can list our auto-created session
-        list_result = interpreter.code_interpreter(  # Use interpreter here too
+        list_result = interpreter.code_interpreter(
             code_interpreter_input={"action": {"type": "listLocalSessions"}}
         )
         
         assert list_result['status'] == 'success'
-        assert list_result['content'][0]['json']['totalSessions'] >= 1
+        assert list_result['content'][0]['json']['totalSessions'] == 1
         
-        # At least one session should be the default session
+        # The session name should be the auto-created one
         session_names = [s['sessionName'] for s in list_result['content'][0]['json']['sessions']]
-        assert 'default' in session_names
+        assert auto_created_session in session_names
 
     @skip_if_github_action.mark
     def test_auto_session_creation_with_default_identifier(self):
         """Test automatic session creation when executing code directly."""
-        # Create interpreter with auto_session=True
-        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_session=True)
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")
         
-        # Execute code without creating a session first
+        # Execute code without creating a session first - should auto-create with random UUID
         result = interpreter.code_interpreter(
             code_interpreter_input={
                 "action": {
@@ -518,8 +524,12 @@ class TestIdentifierValidationAndEdgeCases:
         
         assert result['status'] == 'success'
         
-        # Verify default session was created
-        assert 'default' in interpreter._sessions
+        # Verify a session was created (will be random UUID, not "default")
+        assert len(interpreter._sessions) == 1
+        
+        # Get the auto-created session name (should start with "session-")
+        auto_created_session = list(interpreter._sessions.keys())[0]
+        assert auto_created_session.startswith("session-")
         
         # Verify we can list our auto-created session
         list_result = interpreter.code_interpreter(
@@ -527,4 +537,52 @@ class TestIdentifierValidationAndEdgeCases:
         )
         
         assert list_result['status'] == 'success'
-        assert list_result['content'][0]['json']['totalSessions'] >= 1
+        assert list_result['content'][0]['json']['totalSessions'] == 1
+        
+        # The session name should be the auto-created one
+        session_names = [s['sessionName'] for s in list_result['content'][0]['json']['sessions']]
+        assert auto_created_session in session_names
+
+    @skip_if_github_action.mark
+    def test_session_name_strategies(self):
+        """Test different session_name strategies."""
+        # Case 1: None -> random UUID
+        interpreter1 = AgentCoreCodeInterpreter(region="us-west-2", session_name=None)
+        assert interpreter1.default_session.startswith("session-")
+        assert len(interpreter1.default_session) == len("session-") + 12  # UUID hex[:12]
+        
+        # Case 2: Specific string -> use that string
+        interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", session_name="my-analysis")
+        assert interpreter2.default_session == "my-analysis"
+        
+        # Case 3: Runtime session (simulated)
+        runtime_session_id = "runtime-abc123"
+        interpreter3 = AgentCoreCodeInterpreter(region="us-west-2", session_name=runtime_session_id)
+        assert interpreter3.default_session == runtime_session_id
+
+    def test_auto_create_flag_behavior(self):
+        """Test auto_create flag behavior."""
+        # Case 1: auto_create=True (default) - should succeed
+        interpreter1 = AgentCoreCodeInterpreter(region="us-west-2", auto_create=True)
+        assert interpreter1.auto_create == True
+        
+        # Case 2: auto_create=False - strict mode
+        interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)
+        assert interpreter2.auto_create == False
+        
+        # Test strict mode behavior - should fail when session doesn't exist
+        result = interpreter2.code_interpreter(
+            code_interpreter_input={
+                "action": {
+                    "type": "executeCode",
+                    "session_name": "non-existent-session",
+                    "code": "print('This should fail')",
+                    "language": "python"
+                }
+            }
+        )
+        
+        assert result['status'] == 'error'
+        error_message = result['content'][0]['text']
+        assert "not found" in error_message
+        assert "auto_create" in error_message

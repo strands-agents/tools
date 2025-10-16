@@ -31,132 +31,191 @@ class CodeInterpreter(ABC):
     def __init__(self):
         self._started = False
 
-        self.code_interpreter.tool_spec["description"] = """
-Execute code in isolated sandbox environments with automatic session management.
+        # Existing description (keep all of it)
+        existing_description = """
+        Code Interpreter tool for executing code in isolated sandbox environments.
 
-COMMON USE CASE - Execute Code Directly:
+        This tool provides a comprehensive code execution platform that supports multiple programming
+        languages with persistent session management, file operations, and shell command execution. 
+        Built on the Bedrock AgentCore Code Sandbox platform, it offers secure, isolated environments 
+        for code execution with full lifecycle management.
 
-To execute code, provide the code to run. Sessions are created and managed automatically:
+        Key Features:
+        1. Multi-Language Support:
+           The tool supports the following programming languages: {supported_languages_list}
+           • Full standard library access for each supported language
+           • Runtime environment appropriate for each language
+           • Shell command execution for system operations
 
-{{
-    "action": {{
-        "type": "executeCode",
-        "code": "result = 25 * 48\\nprint(f'Result: {{result}}')",
-        "language": "python"
-    }}
-}}
+        2. Session Management:
+           • Create named, persistent sessions for stateful code execution
+           • List and manage multiple concurrent sessions
+           • Automatic session cleanup and resource management
+           • Session isolation for security and resource separation
 
-The session_name parameter is optional. If not provided, a default session will be used
-and created automatically if it doesn't exist.
+        3. File System Operations:
+           • Read files from the sandbox environment
+           • Write multiple files with custom content
+           • List directory contents and navigate file structures
+           • Remove files and manage sandbox storage
 
-Supported Languages: {supported_languages_list}
+        4. Advanced Execution Features:
+           • Context preservation across code executions within sessions
+           • Optional context clearing for fresh execution environments
+           • Real-time output capture and error handling
+           • Support for long-running processes and interactive code
 
-KEY FEATURES:
+        How It Works:
+        ------------
+        1. The tool accepts structured action inputs defining the operation type
+        2. Sessions are created on-demand with isolated sandbox environments
+        3. Code is executed within the Bedrock AgentCore platform with full runtime support
+        4. Results, outputs, and errors are captured and returned in structured format
+        5. File operations interact directly with the sandbox file system
+        6. Platform lifecycle is managed automatically with cleanup on completion
 
-1. Automatic Session Management
-   - Sessions are created on-demand when executing code
-   - No manual initialization required for simple use cases
-   - State persists within a session between executions
+        Operation Types:
+        --------------
+        - initSession: Create a new isolated code execution session
+        - listLocalSessions: View all active sessions and their status
+        - executeCode: Run code in a specified programming language
+        - executeCommand: Execute shell commands in the sandbox
+        - readFiles: Read file contents from the sandbox file system
+        - writeFiles: Create or update files in the sandbox
+        - listFiles: Browse directory contents and file structures
+        - removeFiles: Delete files from the sandbox environment
 
-2. File System Operations
-   - Read, write, list, and remove files in the sandbox
-   - Files persist within a session
+        Common Usage Scenarios:
+        ---------------------
+        - Data analysis: Execute Python scripts for data processing and visualization
+        - Web development: Run JavaScript/TypeScript for frontend/backend development
+        - System administration: Execute shell commands for environment setup
+        - File processing: Read, transform, and write files programmatically
+        - Educational coding: Provide safe environments for learning and experimentation
+        - CI/CD workflows: Execute build scripts and deployment commands
+        - API testing: Run code to test external services and APIs
 
-3. Shell Command Execution
-   - Execute system commands in the sandbox environment
+        Usage with Strands Agent:
+```python
+        from strands import Agent
+        from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 
-4. Multiple Programming Languages
-   - Python, JavaScript, and TypeScript supported
+        # Create the code interpreter tool
+        bedrock_agent_core_code_interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
 
-OPERATION EXAMPLES:
+        # Create a session
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "initSession",
+                    "description": "Data analysis session",
+                    "session_name": "analysis-session"
+                }}
+            }}
+        )
 
-1. Execute Python Code:
-   {{
-       "action": {{
-           "type": "executeCode",
-           "code": "import pandas as pd\\ndf = pd.DataFrame({{'a': [1,2,3]}})\\nprint(df)",
-           "language": "python"
-       }}
-   }}
+        # Execute Python code
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCode",
+                    "session_name": "analysis-session",
+                    "code": "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df.head())",
+                    "language": "python"
+                }}
+            }}
+        )
 
-2. Execute Shell Command:
-   {{
-       "action": {{
-           "type": "executeCommand",
-           "command": "ls -la"
-       }}
-   }}
+        # Write files to the sandbox
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "writeFiles",
+                    "session_name": "analysis-session",
+                    "content": [
+                        {{"path": "config.json", "text": '{{"debug": true}}'}},
+                        {{"path": "script.py", "text": "print('Hello, World!')"}}
+                    ]
+                }}
+            }}
+        )
 
-3. Write Files:
-   {{
-       "action": {{
-           "type": "writeFiles",
-           "content": [
-               {{"path": "data.txt", "text": "Hello World"}},
-               {{"path": "config.json", "text": '{{"debug": true}}'}}
-           ]
-       }}
-   }}
+        # Execute shell commands
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCommand",
+                    "session_name": "analysis-session",
+                    "command": "ls -la && python script.py"
+                }}
+            }}
+        )
+```
 
-4. Read Files:
-   {{
-       "action": {{
-           "type": "readFiles",
-           "paths": ["data.txt", "config.json"]
-       }}
-   }}
+        Args:
+            code_interpreter_input: Structured input containing the action to perform.
+                Must be a CodeInterpreterInput object with an 'action' field specifying
+                the operation type and required parameters.
 
-5. List Files:
-   {{
-       "action": {{
-           "type": "listFiles",
-           "path": "."
-       }}
-   }}
+                Action Types and Required Fields:
+                - InitSessionAction: type="initSession", description (required), session_name (optional)
+                - ExecuteCodeAction: type="executeCode", session_name, code, language, clear_context (optional)
+                  * language must be one of: {{supported_languages_enum}}
+                - ExecuteCommandAction: type="executeCommand", session_name, command
+                - ReadFilesAction: type="readFiles", session_name, paths (list)
+                - WriteFilesAction: type="writeFiles", session_name, content (list of FileContent objects)
+                - ListFilesAction: type="listFiles", session_name, path
+                - RemoveFilesAction: type="removeFiles", session_name, paths (list)
+                - ListLocalSessionsAction: type="listLocalSessions"
 
-ADVANCED: Manual Session Management
+        Returns:
+            Dict containing execution results in the format:
+            {{
+                "status": "success|error",
+                "content": [{{"text": "...", "json": {{...}}}}]
+            }}
 
-For organizing multiple execution contexts, you can explicitly create named sessions:
+            Success responses include:
+            - Session information for session operations
+            - Code execution output and results
+            - File contents for read operations
+            - Operation confirmations for write/delete operations
 
-{{
-    "action": {{
-        "type": "initSession",
-        "session_name": "data-analysis",
-        "description": "Session for data analysis tasks"
-    }}
-}}
+            Error responses include:
+            - Session not found errors
+            - Code compilation/execution errors
+            - File system operation errors
+            - Platform connectivity issues
+        """
 
-Then reference the session in subsequent operations:
+        auto_session_note = """**IMPORTANT UPDATE: session_name is now optional in most operations**
 
-{{
-    "action": {{
-        "type": "executeCode",
-        "session_name": "data-analysis",
-        "code": "print('Using named session')"
-    }}
-}}
+        Sessions are automatically created when needed. You can now:
+        • Omit session_name to use an auto-generated session (recommended for simple use cases)
+        • Provide session_name for named sessions (useful for multi-step workflows)
+        
+        Quick example without session_name:
+```python
+        # No need to call initSession first
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCode",
+                    "code": "print('Hello, World!')",
+                    "language": "python"
+                }}
+            }}
+        )
+```
+        
+        ---
+        
+        """
 
-RESPONSE FORMAT:
-
-Success:
-{{
-    "status": "success",
-    "content": [{{"text": "execution output"}}]
-}}
-
-Error:
-{{
-    "status": "error",
-    "content": [{{"text": "error description"}}]
-}}
-
-Args:
-    code_interpreter_input: Structured input containing the action to perform.
-
-Returns:
-    Dictionary containing execution results with status and content.
-        """.format(
-            supported_languages_list=", ".join([f"{lang.name}" for lang in self.get_supported_languages()]),
+        # Set description: note + existing content
+        self.code_interpreter.tool_spec["description"] = auto_session_note + existing_description.format(
+            supported_languages_list=", ".join([f"{lang.name}" for lang in self.get_supported_languages()])
         )
 
     @tool

@@ -42,57 +42,60 @@ class SessionInfo:
 
 
 class AgentCoreCodeInterpreter(CodeInterpreter):
-    """
-    Bedrock AgentCore implementation of the CodeInterpreter.
-
-    This class provides a code interpreter interface using AWS Bedrock AgentCore services.
-    It supports executing Python, JavaScript, and TypeScript code in isolated sandbox
-    environments with automatic session management.
-
-    The class maintains session state and provides methods for code execution, file
-    operations, and session management. It supports both default AWS code interpreter
-    environments and custom environments specified by identifier.
-
-    Args:
-        region (Optional[str]): AWS region for the sandbox service. If not provided,
-            the region will be resolved from AWS configuration.
-        identifier (Optional[str]): Custom code interpreter identifier to use
-            for code execution sessions. If not provided, defaults to the AWS-managed
-            identifier "aws.codeinterpreter.v1".
-        auto_session (bool): Enable automatic session creation when a session doesn't exist.
-            Defaults to True.
-        default_session (str): Default session name to use when session_name is not specified
-            in operations. Defaults to "default".
-
-    Attributes:
-        region (str): The AWS region where the code interpreter service is hosted.
-        identifier (str): The code interpreter identifier being used for sessions.
-        auto_session (bool): Whether automatic session creation is enabled.
-        default_session (str): The default session name.
-    """
-
     def __init__(
         self,
         region: Optional[str] = None,
         identifier: Optional[str] = None,
-        auto_session: bool = True,
-        default_session: str = "default",
+        session_name: Optional[str] = None,
+        auto_create: bool = True,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter.
 
         Args:
-            region (Optional[str]): AWS region for the sandbox service.
-            identifier (Optional[str]): Custom code interpreter identifier.
-            auto_session (bool): Enable automatic session creation. Defaults to True.
-            default_session (str): Default session name. Defaults to "default".
+            region: AWS region for the sandbox service.
+            identifier: Custom code interpreter identifier.
+            session_name: Session name or strategy:
+                - None (default): Generate random session ID per instance
+                - "runtime": Use AgentCore runtime session_id (set at invocation time)
+                - Specific string: Use this exact session name
+            auto_create: Automatically create sessions if they don't exist.
+                - True (default): Create sessions on-demand
+                - False: Fail if session doesn't exist (strict mode)
+
+        Examples:
+            # Case 1: Random session per instance (default)
+            interpreter = AgentCoreCodeInterpreter()
+
+            # Case 2: Bind to runtime session (recommended for production)
+            session_id = getattr(context, 'session_id', None)
+            interpreter = AgentCoreCodeInterpreter(session_name=session_id)
+
+            # Case 3: Named session with auto-create
+            interpreter = AgentCoreCodeInterpreter(session_name="my-analysis")
+
+            # Case 4: Strict mode - must pre-initialize
+            interpreter = AgentCoreCodeInterpreter(
+                session_name="must-exist",
+                auto_create=False
+            )
         """
         super().__init__()
         self.region = resolve_region(region)
         self.identifier = identifier or "aws.codeinterpreter.v1"
-        self.auto_session = auto_session
-        self.default_session = default_session
+        self.auto_create = auto_create
+
+        # Generate session name strategy
+        if session_name is None:
+            import uuid
+
+            self.default_session = f"session-{uuid.uuid4().hex[:12]}"
+        else:
+            self.default_session = session_name
+
         self._sessions: Dict[str, SessionInfo] = {}
+
+        logger.info(f"Initialized CodeInterpreter with session='{self.default_session}', " f"auto_create={auto_create}")
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""
@@ -212,42 +215,53 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
     def _ensure_session(self, session_name: Optional[str]) -> tuple[str, Optional[Dict[str, Any]]]:
         """
-        Ensure a session exists, creating it automatically if needed.
+        Ensure a session exists based on configuration.
 
-        This method checks if the specified session exists. If auto_session is enabled
-        and the session doesn't exist, it will be created automatically.
+        Behavior matrix:
+        | session_name | auto_create | Behavior |
+        |--------------|-------------|----------|
+        | None         | True        | Use default_session, create if needed |
+        | None         | False       | Use default_session, error if missing |
+        | "my-session" | True        | Use "my-session", create if needed |
+        | "my-session" | False       | Use "my-session", error if missing |
 
         Args:
-            session_name (Optional[str]): The session name to ensure exists. If None,
-                uses the default_session.
+            session_name: Explicit session name from action, or None to use default
 
         Returns:
-            tuple[str, Optional[Dict[str, Any]]]: A tuple containing:
-                - The session name (either provided or default)
-                - An error dictionary if session creation failed, None otherwise
+            Tuple of (session_name, error_dict or None)
         """
-        if not session_name:
-            session_name = self.default_session
+        # Determine which session to use
+        target_session = session_name if session_name else self.default_session
 
-        if session_name in self._sessions:
-            return session_name, None
+        # Session already exists - use it
+        if target_session in self._sessions:
+            logger.debug(f"Using existing session: {target_session}")
+            return target_session, None
 
-        if self.auto_session:
-            logger.info(f"Auto-creating session: {session_name}")
+        # Session doesn't exist - check auto_create
+        if self.auto_create:
+            # Auto-create the session
+            logger.info(f"Auto-creating session: {target_session}")
             init_action = InitSessionAction(
-                type="initSession",
-                session_name=session_name,
-                description=f"Auto-initialized session for {session_name}",
+                type="initSession", session_name=target_session, description="Auto-initialized session"
             )
             result = self.init_session(init_action)
 
             if result.get("status") != "success":
-                return session_name, result
+                return target_session, result
 
-            logger.info(f"Successfully auto-created session: {session_name}")
-            return session_name, None
+            logger.info(f"Successfully auto-created session: {target_session}")
+            return target_session, None
 
-        return session_name, {"status": "error", "content": [{"text": f"Session '{session_name}' not found"}]}
+        # auto_create=False and session doesn't exist - error
+        logger.error(f"Session '{target_session}' not found and auto_create is disabled")
+        return target_session, {
+            "status": "error",
+            "content": [
+                {"text": f"Session '{target_session}' not found. " f"Create it with initSession or enable auto_create."}
+            ],
+        }
 
     def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
         """Execute code in a Bedrock AgentCore session with automatic session management."""

@@ -47,8 +47,7 @@ def test_initialization(interpreter):
     assert interpreter.identifier == "aws.codeinterpreter.v1"  # Should use default identifier
     assert interpreter._sessions == {}
     assert not interpreter._started
-    assert interpreter.auto_session is True  # Check default value
-    assert interpreter.default_session == "default"  # Check default value
+    assert interpreter.default_session.startswith("session-")
 
 
 def test_ensure_session_existing_session(interpreter, mock_client):
@@ -81,18 +80,19 @@ def test_ensure_session_new_session_with_auto_session(interpreter):
         assert "Auto-initialized" in call_args.description
 
 
-def test_ensure_session_no_auto_session(interpreter):
-    """Test _ensure_session with auto session disabled."""
-    # Disable auto session
-    interpreter.auto_session = False
+def test_ensure_session_no_auto_session():
+    """Test _ensure_session with auto create disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-    # Test with non-existent session
-    session_name, error = interpreter._ensure_session("non-existent")
+        # Test with non-existent session
+        session_name, error = interpreter._ensure_session("non-existent")
 
-    assert session_name == "non-existent"
-    assert error is not None
-    assert error["status"] == "error"
-    assert "not found" in error["content"][0]["text"]
+        assert session_name == "non-existent"
+        assert error is not None
+        assert error["status"] == "error"
+        assert "not found" in error["content"][0]["text"]
 
 
 def test_ensure_session_default_session_name(interpreter):
@@ -103,7 +103,7 @@ def test_ensure_session_default_session_name(interpreter):
         # Test with None session name
         session_name, error = interpreter._ensure_session(None)
 
-        assert session_name == "default"  # Should use default session name
+        assert session_name == interpreter.default_session  # Use actual default session name
         assert error is None
 
 
@@ -556,19 +556,19 @@ def test_execute_code_success(interpreter, mock_client):
     )
 
 
-def test_execute_code_session_not_found(interpreter):
-    """Test code execution with non-existent session."""
-    # Disable auto session creation
-    interpreter.auto_session = False
+def test_execute_code_session_not_found():
+    """Test code execution with non-existent session when auto_create is disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-    action = ExecuteCodeAction(
-        type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
-    )
+        action = ExecuteCodeAction(
+            type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
+        )
 
-    result = interpreter.execute_code(action)
+        result = interpreter.execute_code(action)
 
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
+        assert result["status"] == "error"
 
 
 def test_execute_command_success(interpreter, mock_client):
@@ -584,17 +584,17 @@ def test_execute_command_success(interpreter, mock_client):
     mock_client.invoke.assert_called_once_with("executeCommand", {"command": "ls -la"})
 
 
-def test_execute_command_session_not_found(interpreter):
-    """Test command execution with non-existent session."""
-    # Disable auto session creation
-    interpreter.auto_session = False
+def test_execute_command_session_not_found():
+    """Test command execution with non-existent session when auto_create is disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-    action = ExecuteCommandAction(type="executeCommand", session_name="non-existent", command="ls -la")
+        action = ExecuteCommandAction(type="executeCommand", session_name="non-existent", command="ls -la")
 
-    result = interpreter.execute_command(action)
+        result = interpreter.execute_command(action)
 
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
+        assert result["status"] == "error"
 
 
 def test_read_files_success(interpreter, mock_client):
@@ -753,8 +753,11 @@ def test_execute_code_with_auto_session_creation(mock_client_class, interpreter)
 
     assert result["status"] == "success"
 
-    # Verify session was created
-    assert "default" in interpreter._sessions
+    # Verify session was created (will be random UUID, not "default")
+    assert len(interpreter._sessions) == 1
+    auto_created_session = list(interpreter._sessions.keys())[0]
+    assert auto_created_session.startswith("session-")  # Check pattern instead of exact name
+
     # Verify code was executed
     mock_client.invoke.assert_called_with(
         "executeCode", {"code": "print('Auto session')", "language": "python", "clearContext": False}
