@@ -254,14 +254,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.info(f"Successfully auto-created session: {target_session}")
             return target_session, None
 
-        # auto_create=False and session doesn't exist - error
-        logger.error(f"Session '{target_session}' not found and auto_create is disabled")
-        return target_session, {
-            "status": "error",
-            "content": [
-                {"text": f"Session '{target_session}' not found. " f"Create it with initSession or enable auto_create."}
-            ],
-        }
+        # auto_create=False and session doesn't exist - raise exception
+        logger.debug(f"Session '{target_session}' not found (auto_create disabled)")
+        raise ValueError(f"Session '{target_session}' not found. Create it first using initSession.")
 
     def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
         """Execute code in a Bedrock AgentCore session with automatic session management."""

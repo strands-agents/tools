@@ -86,13 +86,9 @@ def test_ensure_session_no_auto_session():
         mock_resolve.return_value = "us-west-2"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-        # Test with non-existent session
-        session_name, error = interpreter._ensure_session("non-existent")
-
-        assert session_name == "non-existent"
-        assert error is not None
-        assert error["status"] == "error"
-        assert "not found" in error["content"][0]["text"]
+        # Test with non-existent session - should raise ValueError
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter._ensure_session("non-existent")
 
 
 def test_ensure_session_default_session_name(interpreter):
@@ -566,9 +562,9 @@ def test_execute_code_session_not_found():
             type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
         )
 
-        result = interpreter.execute_code(action)
-
-        assert result["status"] == "error"
+        # Expect ValueError to be raised
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter.execute_code(action)
 
 
 def test_execute_command_success(interpreter, mock_client):
@@ -592,9 +588,9 @@ def test_execute_command_session_not_found():
 
         action = ExecuteCommandAction(type="executeCommand", session_name="non-existent", command="ls -la")
 
-        result = interpreter.execute_command(action)
-
-        assert result["status"] == "error"
+        # Expect ValueError to be raised
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter.execute_command(action)
 
 
 def test_read_files_success(interpreter, mock_client):

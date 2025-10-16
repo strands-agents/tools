@@ -32,7 +32,7 @@ class CodeInterpreter(ABC):
         self._started = False
 
         # Existing description (keep all of it)
-        existing_description = """
+        description_template = """
         Code Interpreter tool for executing code in isolated sandbox environments.
 
         This tool provides a comprehensive code execution platform that supports multiple programming
@@ -189,7 +189,7 @@ class CodeInterpreter(ABC):
             - Platform connectivity issues
         """
 
-        auto_session_note = """**IMPORTANT UPDATE: session_name is now optional in most operations**
+        auto_session_note = """**session_name is now optional in most operations**
 
         Sessions are automatically created when needed. You can now:
         • Omit session_name to use an auto-generated session (recommended for simple use cases)
@@ -214,7 +214,7 @@ class CodeInterpreter(ABC):
         """
 
         # Set description: note + existing content
-        self.code_interpreter.tool_spec["description"] = auto_session_note + existing_description.format(
+        self.code_interpreter.tool_spec["description"] = auto_session_note + description_template.format(
             supported_languages_list=", ".join([f"{lang.name}" for lang in self.get_supported_languages()])
         )
 
@@ -271,41 +271,63 @@ class CodeInterpreter(ABC):
         """Cleanup on destruction."""
         try:
             if self._started:
-                logger.debug("Cleaning up in destructor")
+                logger.debug("Platform cleanup completed successfully")
                 self._cleanup()
         except Exception as e:
-            logger.debug(f"Cleanup during destruction skipped: {e}")
+            logger.debug("exception=<%s> | platform cleanup during destruction skipped", str(e))
 
-    # Abstract methods
+    # Abstract methods that must be implemented by subclasses
     @abstractmethod
-    def start_platform(self) -> None: ...
-
-    @abstractmethod
-    def cleanup_platform(self) -> None: ...
-
-    @abstractmethod
-    def init_session(self, action: InitSessionAction) -> Dict[str, Any]: ...
+    def start_platform(self) -> None:
+        """Initialize the platform connection and resources."""
+        ...
 
     @abstractmethod
-    def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]: ...
+    def cleanup_platform(self) -> None:
+        """Clean up platform resources and connections."""
+        ...
 
     @abstractmethod
-    def execute_command(self, action: ExecuteCommandAction) -> Dict[str, Any]: ...
+    def init_session(self, action: InitSessionAction) -> Dict[str, Any]:
+        """Initialize a new sandbox session."""
+        ...
 
     @abstractmethod
-    def read_files(self, action: ReadFilesAction) -> Dict[str, Any]: ...
+    def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
+        """Execute code in a sandbox session."""
+        ...
 
     @abstractmethod
-    def list_files(self, action: ListFilesAction) -> Dict[str, Any]: ...
+    def execute_command(self, action: ExecuteCommandAction) -> Dict[str, Any]:
+        """Execute a shell command in a sandbox session."""
+        ...
 
     @abstractmethod
-    def remove_files(self, action: RemoveFilesAction) -> Dict[str, Any]: ...
+    def read_files(self, action: ReadFilesAction) -> Dict[str, Any]:
+        """Read files from a sandbox session."""
+        ...
 
     @abstractmethod
-    def write_files(self, action: WriteFilesAction) -> Dict[str, Any]: ...
+    def list_files(self, action: ListFilesAction) -> Dict[str, Any]:
+        """List files in a session directory."""
+        ...
 
     @abstractmethod
-    def list_local_sessions(self) -> Dict[str, Any]: ...
+    def remove_files(self, action: RemoveFilesAction) -> Dict[str, Any]:
+        """Remove files from a sandbox session."""
+        ...
 
     @abstractmethod
-    def get_supported_languages(self) -> List[LanguageType]: ...
+    def write_files(self, action: WriteFilesAction) -> Dict[str, Any]:
+        """Write files to a sandbox session."""
+        ...
+
+    @abstractmethod
+    def list_local_sessions(self) -> Dict[str, Any]:
+        """List all sessions created by this platform instance."""
+        ...
+
+    @abstractmethod
+    def get_supported_languages(self) -> List[LanguageType]:
+        """list supported languages"""
+        ...
