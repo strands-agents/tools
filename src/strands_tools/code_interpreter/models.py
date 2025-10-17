@@ -6,7 +6,7 @@ with discriminated unions, ensuring required fields are present for each action 
 """
 
 from enum import Enum
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -35,7 +35,9 @@ class InitSessionAction(BaseModel):
 
     type: Literal["initSession"] = Field(description="Initialize a new code interpreter session")
     description: str = Field(description="Required description of what this session will be used for")
-    session_name: str = Field(description="human-readable session name")
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, a default session will be used."
+    )
 
 
 class ListLocalSessionsAction(BaseModel):
@@ -51,7 +53,12 @@ class ExecuteCodeAction(BaseModel):
     state between executions."""
 
     type: Literal["executeCode"] = Field(description="Execute code in the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None,
+        description="Session name. If not provided, uses the default session which will be auto-created if needed.",
+    )
+
     code: str = Field(description="Required code to execute")
     language: LanguageType = Field(default=LanguageType.PYTHON, description="Programming language for code execution")
     clear_context: bool = Field(default=False, description="Whether to clear the execution context before running code")
@@ -62,7 +69,11 @@ class ExecuteCommandAction(BaseModel):
     packages, running scripts, file management, or any command-line tasks that need to be performed in the session."""
 
     type: Literal["executeCommand"] = Field(description="Execute a shell command in the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     command: str = Field(description="Required shell command to execute")
 
 
@@ -71,7 +82,11 @@ class ReadFilesAction(BaseModel):
     configuration files, code files, or any other files that have been created or uploaded to the session."""
 
     type: Literal["readFiles"] = Field(description="Read files from the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     paths: List[str] = Field(description="List of file paths to read")
 
 
@@ -80,7 +95,11 @@ class ListFilesAction(BaseModel):
     structure, find files, or understand what's available in the session before reading or manipulating files."""
 
     type: Literal["listFiles"] = Field(description="List files in a directory")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     path: str = Field(default=".", description="Directory path to list (defaults to current directory)")
 
 
@@ -89,7 +108,11 @@ class RemoveFilesAction(BaseModel):
     data, or manage storage space within the session. Be careful as this permanently removes files."""
 
     type: Literal["removeFiles"] = Field(description="Remove files from the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     paths: List[str] = Field(description="Required list of file paths to remove")
 
 
@@ -98,7 +121,11 @@ class WriteFilesAction(BaseModel):
     create configuration files, write code files, or store any text-based content that your code execution will need."""
 
     type: Literal["writeFiles"] = Field(description="Write files to the code interpreter")
-    session_name: str = Field(description="Required session name from a previous initSession call")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
     content: List[FileContent] = Field(description="Required list of file content to write")
 
 

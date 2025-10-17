@@ -47,6 +47,60 @@ def test_initialization(interpreter):
     assert interpreter.identifier == "aws.codeinterpreter.v1"  # Should use default identifier
     assert interpreter._sessions == {}
     assert not interpreter._started
+    assert interpreter.default_session.startswith("session-")
+
+
+def test_ensure_session_existing_session(interpreter, mock_client):
+    """Test _ensure_session with existing session."""
+    # Create a test session
+    session_info = SessionInfo(session_id="test-id", description="Test", client=mock_client)
+    interpreter._sessions["test-session"] = session_info
+
+    # Test with existing session
+    session_name, error = interpreter._ensure_session("test-session")
+
+    assert session_name == "test-session"
+    assert error is None
+
+
+def test_ensure_session_new_session_with_auto_session(interpreter):
+    """Test _ensure_session with auto session creation."""
+    with patch.object(interpreter, "init_session") as mock_init:
+        mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
+
+        # Test with non-existent session but auto_session enabled
+        session_name, error = interpreter._ensure_session("new-session")
+
+        assert session_name == "new-session"
+        assert error is None
+        mock_init.assert_called_once()
+        # Verify init_session was called with correct parameters
+        call_args = mock_init.call_args[0][0]
+        assert call_args.session_name == "new-session"
+        assert "Auto-initialized" in call_args.description
+
+
+def test_ensure_session_no_auto_session():
+    """Test _ensure_session with auto create disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
+
+        # Test with non-existent session - should raise ValueError
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter._ensure_session("non-existent")
+
+
+def test_ensure_session_default_session_name(interpreter):
+    """Test _ensure_session uses default session name when none provided."""
+    with patch.object(interpreter, "init_session") as mock_init:
+        mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
+
+        # Test with None session name
+        session_name, error = interpreter._ensure_session(None)
+
+        assert session_name == interpreter.default_session  # Use actual default session name
+        assert error is None
 
 
 def test_initialization_with_default_region():
@@ -498,16 +552,19 @@ def test_execute_code_success(interpreter, mock_client):
     )
 
 
-def test_execute_code_session_not_found(interpreter):
-    """Test code execution with non-existent session."""
-    action = ExecuteCodeAction(
-        type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
-    )
+def test_execute_code_session_not_found():
+    """Test code execution with non-existent session when auto_create is disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-    result = interpreter.execute_code(action)
+        action = ExecuteCodeAction(
+            type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
+        )
 
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
+        # Expect ValueError to be raised
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter.execute_code(action)
 
 
 def test_execute_command_success(interpreter, mock_client):
@@ -523,14 +580,17 @@ def test_execute_command_success(interpreter, mock_client):
     mock_client.invoke.assert_called_once_with("executeCommand", {"command": "ls -la"})
 
 
-def test_execute_command_session_not_found(interpreter):
-    """Test command execution with non-existent session."""
-    action = ExecuteCommandAction(type="executeCommand", session_name="non-existent", command="ls -la")
+def test_execute_command_session_not_found():
+    """Test command execution with non-existent session when auto_create is disabled."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)  # Disable auto_create
 
-    result = interpreter.execute_command(action)
+        action = ExecuteCommandAction(type="executeCommand", session_name="non-existent", command="ls -la")
 
-    assert result["status"] == "error"
-    assert "not found" in result["content"][0]["text"]
+        # Expect ValueError to be raised
+        with pytest.raises(ValueError, match="Session 'non-existent' not found. Create it first using initSession."):
+            interpreter.execute_command(action)
 
 
 def test_read_files_success(interpreter, mock_client):
@@ -667,3 +727,34 @@ def test_get_supported_languages():
     assert LanguageType.JAVASCRIPT in languages
     assert LanguageType.TYPESCRIPT in languages
     assert len(languages) == 3
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_execute_code_with_auto_session_creation(mock_client_class, interpreter):
+    """Test code execution with automatic session creation."""
+    # Configure the mock client
+    mock_client = mock_client_class.return_value
+    mock_client.session_id = "auto-session-id"
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": "Success"}}], "isError": False}
+
+    # Execute code without creating session first
+    action = ExecuteCodeAction(
+        type="executeCode",
+        session_name=None,  # Use default session
+        code="print('Auto session')",
+        language=LanguageType.PYTHON,
+    )
+
+    result = interpreter.execute_code(action)
+
+    assert result["status"] == "success"
+
+    # Verify session was created (will be random UUID, not "default")
+    assert len(interpreter._sessions) == 1
+    auto_created_session = list(interpreter._sessions.keys())[0]
+    assert auto_created_session.startswith("session-")  # Check pattern instead of exact name
+
+    # Verify code was executed
+    mock_client.invoke.assert_called_with(
+        "executeCode", {"code": "print('Auto session')", "language": "python", "clearContext": False}
+    )

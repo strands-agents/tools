@@ -31,9 +31,4 @@ Example:
 from .agent_core_code_interpreter import AgentCoreCodeInterpreter
 from .code_interpreter import CodeInterpreter
 
-__all__ = [
-    # Base classes
-    "CodeInterpreter",
-    # Platform implementations
-    "AgentCoreCodeInterpreter",
-]
+__all__ = ["CodeInterpreter", "AgentCoreCodeInterpreter"]
