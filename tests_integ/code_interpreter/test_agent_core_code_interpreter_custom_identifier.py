@@ -334,23 +334,24 @@ class TestErrorScenariosWithIdentifierContext:
         custom_id = "session-not-found-test"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id, auto_create=False)
 
-        # Try to execute code in non-existent session
-        result = interpreter.code_interpreter(
-            code_interpreter_input={
-                "action": {
-                    "type": "executeCode",
-                    "session_name": "non-existent-session",
-                    "code": "print('This should fail')",
-                    "language": "python"
+        # Try to execute code in non-existent session - should raise ValueError
+        with pytest.raises(ValueError) as exc_info:
+            interpreter.code_interpreter(
+                code_interpreter_input={
+                    "action": {
+                        "type": "executeCode",
+                        "session_name": "non-existent-session",
+                        "code": "print('This should fail')",
+                        "language": "python"
+                    }
                 }
-            }
-        )
+            )
 
-        # Verify error response
-        assert result['status'] == 'error'
-        error_message = result['content'][0]['text']
+        # Verify error message contains expected information
+        error_message = str(exc_info.value)
         assert "non-existent-session" in error_message
         assert "not found" in error_message
+        assert "initSession" in error_message
 
     def test_multiple_error_scenarios_with_different_identifiers(self):
         """Test various error scenarios with different custom identifiers."""
@@ -570,19 +571,21 @@ class TestIdentifierValidationAndEdgeCases:
         interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)
         assert interpreter2.auto_create == False
         
-        # Test strict mode behavior - should fail when session doesn't exist
-        result = interpreter2.code_interpreter(
-            code_interpreter_input={
-                "action": {
-                    "type": "executeCode",
-                    "session_name": "non-existent-session",
-                    "code": "print('This should fail')",
-                    "language": "python"
+        # Test strict mode behavior - should raise ValueError when session doesn't exist
+        with pytest.raises(ValueError) as exc_info:
+            interpreter2.code_interpreter(
+                code_interpreter_input={
+                    "action": {
+                        "type": "executeCode",
+                        "session_name": "non-existent-session",
+                        "code": "print('This should fail')",
+                        "language": "python"
+                    }
                 }
-            }
-        )
+            )
         
-        assert result['status'] == 'error'
-        error_message = result['content'][0]['text']
+        # Verify error message contains expected information
+        error_message = str(exc_info.value)
+        assert "non-existent-session" in error_message
         assert "not found" in error_message
-        assert "auto_create" in error_message
+        assert "initSession" in error_message
