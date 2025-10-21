@@ -254,6 +254,59 @@ class TestEditorDirectCalls:
             assert "Line 2\nINSERTED LINE\nLine 3\n" in content
 
     @patch("strands_tools.editor.get_user_input")
+    @patch.dict("os.environ", {"EDITOR_DISABLE_BACKUP": "true"})
+    def test_str_replace_no_backup(self, mock_user_input, temp_file, clean_content_history):
+        """Test str_replace without creating backup when EDITOR_DISABLE_BACKUP is set."""
+        mock_user_input.return_value = "y"
+
+        result = editor.editor(command="str_replace", path=temp_file, old_str="Line 2", new_str="Modified Line 2")
+
+        assert result["status"] == "success"
+
+        # Verify backup was NOT created
+        backup_path = f"{temp_file}.bak"
+        assert not os.path.exists(backup_path)
+
+    @patch("strands_tools.editor.get_user_input")
+    @patch.dict("os.environ", {"EDITOR_DISABLE_BACKUP": "true"})
+    def test_pattern_replace_no_backup(self, mock_user_input, temp_file, clean_content_history):
+        """Test pattern_replace without creating backup."""
+        mock_user_input.return_value = "y"
+
+        result = editor.editor(command="pattern_replace", path=temp_file, pattern="Line.*", new_str="Updated Line")
+
+        assert result["status"] == "success"
+        backup_path = f"{temp_file}.bak"
+        assert not os.path.exists(backup_path)
+
+    @patch("strands_tools.editor.get_user_input")
+    @patch.dict("os.environ", {"EDITOR_DISABLE_BACKUP": "true"})
+    def test_insert_no_backup(self, mock_user_input, temp_file, clean_content_history):
+        """Test insert without creating backup."""
+        mock_user_input.return_value = "y"
+
+        result = editor.editor(command="insert", path=temp_file, new_str="New line", insert_line=2)
+
+        assert result["status"] == "success"
+        backup_path = f"{temp_file}.bak"
+        assert not os.path.exists(backup_path)
+
+    @patch("strands_tools.editor.get_user_input")
+    def test_backup_created_by_default(self, mock_user_input, temp_file, clean_content_history):
+        """Test that backup is still created by default."""
+        # Ensure env var is not set
+        if "EDITOR_DISABLE_BACKUP" in os.environ:
+            del os.environ["EDITOR_DISABLE_BACKUP"]
+
+        mock_user_input.return_value = "y"
+
+        result = editor.editor(command="str_replace", path=temp_file, old_str="Line 2", new_str="Modified Line 2")
+
+        assert result["status"] == "success"
+        backup_path = f"{temp_file}.bak"
+        assert os.path.exists(backup_path)
+
+    @patch("strands_tools.editor.get_user_input")
     def test_insert_with_search_text(self, mock_user_input, temp_file, clean_content_history):
         """Test inserting text after a line found by search."""
         mock_user_input.return_value = "y"  # Confirm insertion
