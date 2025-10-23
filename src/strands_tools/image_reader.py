@@ -174,6 +174,12 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "success",
             "content": [{"image": {"format": image_format, "source": {"bytes": file_bytes}}}],
         }
+    except requests.exceptions.RequestException as e:
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": f"Error fetching file from url: {str(e)}"}],
+        }
     except Exception as e:
         return {
             "toolUseId": tool_use_id,
