@@ -123,7 +123,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
-| image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
+| image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg") # or use URL: "https://image.png"` | Processing and reading image files for AI analysis |
 | journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
 | think | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes |
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
