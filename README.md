@@ -38,7 +38,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -146,6 +146,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
+| mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
 
 \* *These tools do not work on windows*
 
@@ -886,6 +887,79 @@ result = agent.tool.elasticsearch_memory(
 )
 ```
 
+### MongoDB Atlas Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.mongodb_memory import mongodb_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[mongodb_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.mongodb_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "connection_string": "mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    "database_name": "memories",
+    "collection_name": "user_memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.mongodb_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.mongodb_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.mongodb_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use environment variables for connection
+# Set MONGODB_ATLAS_CLUSTER_URI in your environment
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -1116,6 +1190,19 @@ The Mem0 Memory Tool supports three different backend configurations:
 | TWELVELABS_API_KEY | TwelveLabs API key for video analysis | None |
 | TWELVELABS_MARENGO_INDEX_ID | Default index ID for search_video tool | None |
 | TWELVELABS_PEGASUS_INDEX_ID | Default index ID for chat_video tool | None |
+
+#### MongoDB Atlas Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| MONGODB_ATLAS_CLUSTER_URI | MongoDB Atlas connection string | None |
+| MONGODB_DEFAULT_DATABASE | Default database name for MongoDB operations | memories |
+| MONGODB_DEFAULT_COLLECTION | Default collection name for MongoDB operations | user_memories |
+| MONGODB_DEFAULT_NAMESPACE | Default namespace for memory isolation | default |
+| MONGODB_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
+| MONGODB_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
 
 
 ## Contributing ❤️
