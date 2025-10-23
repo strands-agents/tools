@@ -12,7 +12,7 @@ from strands_tools import image_reader
 
 @pytest.fixture
 def test_image_path():
-    """Return path to a test image file."""
+    """Return path or url to a test image file."""
     # This is a placeholder - we'll use a mock instead of creating real files
     return os.path.expanduser("~/test_image.jpg")
 

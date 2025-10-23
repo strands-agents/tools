@@ -33,21 +33,29 @@ result = agent.tool.image_reader(image_path="/path/to/image.jpg")
 
 # With user directory path
 result = agent.tool.image_reader(image_path="~/Documents/images/photo.png")
+
+# With custom url
+result = agent.tool.image_reader(image_path="https://image.png")
 ```
 
 See the image_reader function docstring for more details on parameters and return format.
 """
 
 import os
+from io import BytesIO
 from os.path import expanduser
 from typing import Any
+from urllib.parse import urlparse
 
+import requests
 from PIL import Image
 from strands.types.tools import ToolResult, ToolUse
 
 TOOL_SPEC = {
     "name": "image_reader",
-    "description": "Reads an image file from a given path and returns it in the format required for the Converse API",
+    "description": (
+        "Reads an image file from a given path or url and returns it in the format required for the Converse API"
+    ),
     "inputSchema": {
         "json": {
             "type": "object",
@@ -114,6 +122,7 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - If the image format is not recognized, it defaults to PNG
         - The function validates file existence before attempting to read
         - User paths with tilde (~) are automatically expanded
+        - Supports direct url
     """
     try:
         tool_use_id = tool["toolUseId"]
@@ -126,17 +135,33 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 "content": [{"text": "File path is required"}],
             }
 
-        file_path = expanduser(tool_input.get("image_path"))
+        image_path = tool_input.get("image_path")
+        parsed_image_path = urlparse(image_path)
+        is_url = all([parsed_image_path.scheme, parsed_image_path.netloc])
 
-        if not os.path.exists(file_path):
+        file_bytes = BytesIO()
+        if is_url:
+            file = BytesIO(requests.get(image_path).content)
+            file_path = file
+            file_bytes = file.getvalue()
+        else:
+            file_path = expanduser(image_path)
+            if not os.path.exists(file_path):
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "error",
+                    "content": [{"text": f"File not found at path: {file_path}"}],
+                }
+
+            with open(file_path, "rb") as file:
+                file_bytes = file.read()
+
+        if not file_path:
             return {
                 "toolUseId": tool_use_id,
                 "status": "error",
-                "content": [{"text": f"File not found at path: {file_path}"}],
+                "content": [{"text": "File path not found"}],
             }
-
-        with open(file_path, "rb") as file:
-            file_bytes = file.read()
 
         # Handle image files using PIL
         with Image.open(file_path) as img:
