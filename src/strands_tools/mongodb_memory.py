@@ -192,9 +192,9 @@ INCLUDE_FIELD = 1
 EXCLUDE_FIELD = 0
 
 # Response size limits to prevent "tool result too large" errors
-MAX_RESPONSE_SIZE = 1000  # Maximum characters in response (very conservative)
-MAX_CONTENT_LENGTH = 30   # Maximum content length per memory in lists
-MAX_MEMORIES_IN_RESPONSE = 2  # Maximum memories to include in responses
+MAX_RESPONSE_SIZE = 70000  # Maximum characters in response (70K total safety margin)
+MAX_CONTENT_LENGTH = 12000   # Maximum content length per memory (12K per memory)
+MAX_MEMORIES_IN_RESPONSE = 5  # Maximum memories to include in responses
 
 # Index creation settings
 INDEX_CREATION_TIMEOUT = 5  # seconds to wait for index creation
@@ -848,7 +848,7 @@ class MongoDBMemoryTool:
                     response = _record_memory(collection, bedrock_runtime, namespace, self._embedding_model, content, metadata)
                     return {
                         "status": "success",
-                        "content": [{"text": f"Memory stored successfully: {json.dumps(response, default=str)}"}],
+                        "content": [{"text": "Memory stored successfully"}, {"json": response}],
                     }
 
                 elif action_enum == MemoryAction.RETRIEVE:
@@ -866,7 +866,7 @@ class MongoDBMemoryTool:
                     optimized_response = _optimize_response_size(response, "retrieve")
                     return {
                         "status": "success",
-                        "content": [{"text": f"Memories retrieved successfully: {json.dumps(optimized_response, default=str)}"}],
+                        "content": [{"text": "Memories retrieved successfully"}, {"json": optimized_response}],
                     }
 
                 elif action_enum == MemoryAction.LIST:
@@ -875,14 +875,14 @@ class MongoDBMemoryTool:
                     optimized_response = _optimize_response_size(response, "list")
                     return {
                         "status": "success",
-                        "content": [{"text": f"Memories listed successfully: {json.dumps(optimized_response, default=str)}"}],
+                        "content": [{"text": "Memories listed successfully"}, {"json": optimized_response}],
                     }
 
                 elif action_enum == MemoryAction.GET:
                     response = _get_memory(collection, namespace, memory_id)
                     return {
                         "status": "success",
-                        "content": [{"text": f"Memory retrieved successfully: {json.dumps(response, default=str)}"}],
+                        "content": [{"text": "Memory retrieved successfully"}, {"json": response}],
                     }
 
                 elif action_enum == MemoryAction.DELETE:
@@ -1050,7 +1050,7 @@ def mongodb_memory(
                 response = _record_memory(collection, bedrock_runtime, namespace, embedding_model, content, metadata)
                 return {
                     "status": "success",
-                    "content": [{"text": f"Memory stored successfully: {json.dumps(response, default=str)}"}],
+                    "content": [{"text": "Memory stored successfully"}, {"json": response}],
                 }
 
             elif action_enum == MemoryAction.RETRIEVE:
@@ -1068,7 +1068,7 @@ def mongodb_memory(
                 optimized_response = _optimize_response_size(response, "retrieve")
                 return {
                     "status": "success",
-                    "content": [{"text": f"Memories retrieved successfully: {json.dumps(optimized_response, default=str)}"}],
+                    "content": [{"text": "Memories retrieved successfully"}, {"json": optimized_response}],
                 }
 
             elif action_enum == MemoryAction.LIST:
@@ -1077,14 +1077,14 @@ def mongodb_memory(
                 optimized_response = _optimize_response_size(response, "list")
                 return {
                     "status": "success",
-                    "content": [{"text": f"Memories listed successfully: {json.dumps(optimized_response, default=str)}"}],
+                    "content": [{"text": "Memories listed successfully"}, {"json": optimized_response}],
                 }
 
             elif action_enum == MemoryAction.GET:
                 response = _get_memory(collection, namespace, memory_id)
                 return {
                     "status": "success",
-                    "content": [{"text": f"Memory retrieved successfully: {json.dumps(response, default=str)}"}],
+                    "content": [{"text": "Memory retrieved successfully"}, {"json": response}],
                 }
 
             elif action_enum == MemoryAction.DELETE:

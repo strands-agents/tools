@@ -164,11 +164,9 @@ def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "text" in result["content"][0]
     assert "Memory stored successfully" in result["content"][0]["text"]
-    # Parse JSON from text response
-    import json
-    response_text = result["content"][0]["text"]
-    json_start = response_text.find("{")
-    response_data = json.loads(response_text[json_start:])
+    # Get JSON from second content item
+    assert "json" in result["content"][1]
+    response_data = result["content"][1]["json"]
     assert "memory_id" in response_data
     assert response_data["content"] == "Test memory content"
 
@@ -201,11 +199,9 @@ def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "text" in result["content"][0]
     assert "Memories retrieved successfully" in result["content"][0]["text"]
-    # Parse JSON from text response
-    import json
-    response_text = result["content"][0]["text"]
-    json_start = response_text.find("{")
-    response_data = json.loads(response_text[json_start:])
+    # Get JSON from second content item
+    assert "json" in result["content"][1]
+    response_data = result["content"][1]["json"]
     assert "memories" in response_data
     assert len(response_data["memories"]) >= 0
 
@@ -253,11 +249,9 @@ def test_list_memories(mock_mongodb_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "text" in result["content"][0]
     assert "Memories listed successfully" in result["content"][0]["text"]
-    # Parse JSON from text response
-    import json
-    response_text = result["content"][0]["text"]
-    json_start = response_text.find("{")
-    response_data = json.loads(response_text[json_start:])
+    # Get JSON from second content item
+    assert "json" in result["content"][1]
+    response_data = result["content"][1]["json"]
     assert "memories" in response_data
     assert "total" in response_data
 
@@ -287,11 +281,9 @@ def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "text" in result["content"][0]
     assert "Memory retrieved successfully" in result["content"][0]["text"]
-    # Parse JSON from text response
-    import json
-    response_text = result["content"][0]["text"]
-    json_start = response_text.find("{")
-    response_data = json.loads(response_text[json_start:])
+    # Get JSON from second content item
+    assert "json" in result["content"][1]
+    response_data = result["content"][1]["json"]
     assert "memory_id" in response_data
     assert response_data["memory_id"] == "mem_123"
 
@@ -496,11 +488,9 @@ def test_environment_variable_defaults(mock_mongodb_client, mock_bedrock_client)
         assert result["status"] == "success"
         assert "text" in result["content"][0]
         assert "Memory stored successfully" in result["content"][0]["text"]
-        # Parse JSON from text response
-        import json
-        response_text = result["content"][0]["text"]
-        json_start = response_text.find("{")
-        response_data = json.loads(response_text[json_start:])
+        # Get JSON from second content item
+        assert "json" in result["content"][1]
+        response_data = result["content"][1]["json"]
         assert "memory_id" in response_data
 
 
