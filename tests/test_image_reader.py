@@ -12,9 +12,16 @@ from strands_tools import image_reader
 
 @pytest.fixture
 def test_image_path():
-    """Return path or url to a test image file."""
+    """Return path to a test image file."""
     # This is a placeholder - we'll use a mock instead of creating real files
     return os.path.expanduser("~/test_image.jpg")
+
+
+@pytest.fixture
+def test_image_url():
+    """Return url to a test image file."""
+    # This is a placeholder - we'll use a mock instead of creating real files
+    return "https://image.png"
 
 
 @pytest.fixture
@@ -62,6 +69,38 @@ def test_image_reader_with_image(mock_pil_open, mock_open, mock_exists, test_ima
     assert "image" in result["content"][0]
     assert result["content"][0]["image"]["format"] == "jpeg"
     assert result["content"][0]["image"]["source"]["bytes"] == b"fake_image_bytes"
+
+
+@patch("strands_tools.image_reader.requests.get")
+@patch("strands_tools.image_reader.Image.open")
+def test_image_reader_with_url(mock_pil_open, mock_requests_get, test_image_url):
+    """Test the image_reader tool with an image URL."""
+
+    # Mock requests.get to simulate downloading the image
+    mock_response = MagicMock()
+    mock_response.content = b"fake_url_image_bytes"
+    mock_requests_get.return_value = mock_response
+
+    # Mock PIL Image
+    mock_img = MagicMock()
+    mock_img.__enter__.return_value.format = "PNG"
+    mock_pil_open.return_value = mock_img
+
+    # Call the tool directly
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"image_path": test_image_url},
+    }
+
+    result = image_reader.image_reader(tool=tool_use)
+
+    # Verify result structure
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+    assert "image" in result["content"][0]
+    image_data = result["content"][0]["image"]
+    assert image_data["format"].lower() == "png"
+    assert image_data["source"]["bytes"] == b"fake_url_image_bytes"
 
 
 @patch("strands_tools.image_reader.os.path.exists")
