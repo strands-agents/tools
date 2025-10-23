@@ -902,7 +902,7 @@ result = agent.tool.mongodb_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     metadata={"category": "food_preferences", "type": "dietary"},
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -913,7 +913,7 @@ result = agent.tool.mongodb_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net",
     database_name="memory_db",
     collection_name="memories",
     namespace="user_123"
@@ -921,7 +921,7 @@ result = agent.tool.mongodb_memory(
 
 # Use configuration dictionary for cleaner code
 config = {
-    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority",
+    "cluster_uri": "mongodb+srv://user:password@cluster.mongodb.net",
     "database_name": "memory_db",
     "collection_name": "memories",
     "namespace": "user_123"
@@ -1177,8 +1177,14 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
+#### Retrieve Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
 | RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
 >>>>>>> origin/main
+| RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
 #### MongoDB Atlas Memory Tool
 
 | Environment Variable | Description | Default |
