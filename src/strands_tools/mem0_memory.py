@@ -97,7 +97,7 @@ TOOL_SPEC = {
         "3. List all memories for a user/agent (requires user_id or agent_id)\n"
         "4. Delete memories\n"
         "5. Get memory history\n"
-        "4. Reset all memories\n\n"
+        "6. Reset all memories\n\n"
         "Actions:\n"
         "- store: Store new memory (requires user_id or agent_id)\n"
         "- get: Get memory by ID\n"
