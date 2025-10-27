@@ -166,6 +166,20 @@ Usage Examples:
                     ),
                     "default": False,
                 },
+                "retrieveFilter": {
+                    "type": "object",
+                    "description": (
+                        "Optional filter to apply to retrieval results based on metadata attributes in the knowledge base. "
+                        "This is a UNION type - only one operator can be specified at the top level. "
+                        "Available operators: "
+                        "equals (exact match), notEquals, greaterThan, greaterThanOrEquals, lessThan, lessThanOrEquals, "
+                        "in (value in list), notIn, listContains (list contains value), stringContains (substring match), "
+                        "startsWith (OpenSearch Serverless only), andAll (all conditions must match, min 2 items), "
+                        "orAll (at least one condition must match, min 2 items). "
+                        "Example: {\"andAll\": [{\"equals\": {\"key\": \"category\", \"value\": \"security\"}}, "
+                        "{\"greaterThan\": {\"key\": \"year\", \"value\": \"2022\"}}]}"
+                    ),
+                },
             },
             "required": ["text"],
         }
