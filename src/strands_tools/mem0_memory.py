@@ -736,11 +736,11 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             elif action == "reset":
                 # Try to get memory info first for better context
                 try:
-                    client.delete_all_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
+                    client.reset_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
 
                     console.print(
                         Panel(
-                            "",
+                            "Deleting memories...",
                             title="[bold red]⚠️ All Memories to be permanently deleted",
                             border_style="red",
                         )
@@ -749,7 +749,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     # Fall back to basic info if we can't get memory details
                     console.print(
                         Panel(
-                            "",
+                            "Deleting memories...",
                             title="[bold red]⚠️ All Memories to be permanently deleted",
                             border_style="red",
                         )
@@ -858,7 +858,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif action == "reset":
-            client.delete_all_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
+            client.reset_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
             panel = Panel("All memories deleted.", title="[bold green]Memories Deleted", border_style="green")
             console.print(panel)
             return ToolResult(
