@@ -1,5 +1,5 @@
 """
-Tool for managing memories using Mem0 (store, delete, list, get, and retrieve)
+Tool for managing memories using Mem0 (store, delete, list, get, retrieve, and reset)
 
 This module provides comprehensive memory management capabilities using
 Mem0 as the backend. It handles all aspects of memory management with
@@ -13,6 +13,7 @@ Key Features:
    • list: Retrieve all memories for a user or agent
    • get: Retrieve specific memories by memory ID
    • retrieve: Perform semantic search across all memories
+   • reset: Remove all existing memories and relationships
 
 2. Safety Features:
    • User confirmation for mutative operations
@@ -95,14 +96,16 @@ TOOL_SPEC = {
         "2. Retrieve memories by ID or semantic search (requires user_id or agent_id)\n"
         "3. List all memories for a user/agent (requires user_id or agent_id)\n"
         "4. Delete memories\n"
-        "5. Get memory history\n\n"
+        "5. Get memory history\n"
+        "4. Reset all memories\n\n"
         "Actions:\n"
         "- store: Store new memory (requires user_id or agent_id)\n"
         "- get: Get memory by ID\n"
         "- list: List all memories (requires user_id or agent_id)\n"
         "- retrieve: Semantic search (requires user_id or agent_id)\n"
         "- delete: Delete memory\n"
-        "- history: Get memory history\n\n"
+        "- history: Get memory history\n"
+        "- reset: Delete all memories\n\n"
         "Note: Most operations require either user_id or agent_id to be specified. The tool will automatically "
         "attempt to retrieve relevant memories when user_id or agent_id is available."
     ),
@@ -112,8 +115,8 @@ TOOL_SPEC = {
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": ("Action to perform (store, get, list, retrieve, delete, history)"),
-                    "enum": ["store", "get", "list", "retrieve", "delete", "history"],
+                    "description": ("Action to perform (store, get, list, retrieve, delete, history, reset)"),
+                    "enum": ["store", "get", "list", "retrieve", "delete", "history", "reset"],
                 },
                 "content": {
                     "type": "string",
@@ -129,11 +132,11 @@ TOOL_SPEC = {
                 },
                 "user_id": {
                     "type": "string",
-                    "description": "User ID for the memory operations (required for store, list, retrieve actions)",
+                    "description": "User ID for the memory operations (either user_id or agent_id is required for store, list, retrieve, and reset actions)",
                 },
                 "agent_id": {
                     "type": "string",
-                    "description": "Agent ID for the memory operations (required for store, list, retrieve actions)",
+                    "description": "Agent ID for the memory operations (either user_id or agent_id is required for store, list, retrieve, and reset actions)",
                 },
                 "metadata": {
                     "type": "object",
@@ -414,6 +417,13 @@ class Mem0ServiceClient:
         """Get the history of a memory by ID."""
         return self.mem0.history(memory_id)
 
+    def reset_memories(self, user_id: Optional[str] = None, agent_id: Optional[str] = None):
+        """Delete all memories for a user or agent."""
+        if not user_id and not agent_id:
+            raise ValueError("Either user_id or agent_id must be provided")
+
+        return self.mem0.delete_all(user_id=user_id, agent_id=agent_id)
+
 
 def format_get_response(memory: Dict) -> Panel:
     """Format get memory response."""
@@ -671,7 +681,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
         action = tool_input["action"]
 
         # For mutative operations, show confirmation dialog unless in BYPASS_TOOL_CONSENT mode
-        mutative_actions = {"store", "delete"}
+        mutative_actions = {"store", "delete", "reset"}
         needs_confirmation = action in mutative_actions and not strands_dev
 
         if needs_confirmation:
@@ -720,6 +730,27 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         Panel(
                             f"Memory ID: {tool_input['memory_id']}",
                             title="[bold red]⚠️ Memory to be permanently deleted",
+                            border_style="red",
+                        )
+                    )
+            elif action == "reset":
+                # Try to get memory info first for better context
+                try:
+                    client.delete_all_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
+
+                    console.print(
+                        Panel(
+                            "",
+                            title="[bold red]⚠️ All Memories to be permanently deleted",
+                            border_style="red",
+                        )
+                    )
+                except Exception:
+                    # Fall back to basic info if we can't get memory details
+                    console.print(
+                        Panel(
+                            "",
+                            title="[bold red]⚠️ All Memories to be permanently deleted",
                             border_style="red",
                         )
                     )
@@ -824,6 +855,16 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 toolUseId=tool_use_id,
                 status="success",
                 content=[ToolResultContent(text=f"Memory {tool_input['memory_id']} deleted successfully")],
+            )
+
+        elif action == "reset":
+            client.delete_all_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
+            panel = Panel("All memories deleted.", title="[bold green]Memories Deleted", border_style="green")
+            console.print(panel)
+            return ToolResult(
+                toolUseId=tool_use_id,
+                status="success",
+                content=[ToolResultContent(text=f"Memories deleted successfully")],
             )
 
         elif action == "history":
