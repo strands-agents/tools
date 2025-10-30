@@ -405,7 +405,6 @@ class WorkflowManager:
         wait=wait_exponential(multiplier=1, min=4, max=30),
         reraise=True,
     )
-   
     def execute_task(self, task: Dict, workflow: Dict) -> Dict:
         """Execute a single task using a specialized agent with rate limiting and retries."""
         try:
@@ -487,9 +486,6 @@ class WorkflowManager:
 
             status = "success" if stop_reason != "error" else "error"
 
-            if "ThrottlingException" in str(e):
-                logger.error(f"Task {task['task_id']} hit throttling, will retry with exponential backoff")
-                raise
             return {
                 "status": status,
                 "content": normalized_content,
@@ -499,6 +495,9 @@ class WorkflowManager:
         except Exception as e:
             error_msg = f"Error executing task {task['task_id']}: {str(e)}"
             logger.error(error_msg)
+            if "ThrottlingException" in str(e):
+                logger.error(f"Task {task['task_id']} hit throttling, will retry with exponential backoff")
+                raise
             return {
                 "status": "error",
                 "content": [{"text": error_msg}],
