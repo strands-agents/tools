@@ -444,7 +444,6 @@ class WorkflowManager:
             # Execute task
             logger.debug(f"Executing task {task_id} with specialized agent")
             raw_out = task_agent(task_prompt)
-            print("----------------result", raw_out)
 
             # normalize raw_out into text + metrics safely
             # case 1: strands-style object with .content or ["content"]
