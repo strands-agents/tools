@@ -427,6 +427,7 @@ class WorkflowManager:
                         if dep_texts:
                             context.append(f"Results from {dep_id}:\n" + "\n".join(dep_texts))
 
+            # Build comprehensive task prompt with context
             task_prompt = task["description"]
             if context:
                 task_prompt = "Previous task results:\n" + "\n\n".join(context) + "\n\nCurrent Task:\n" + task_prompt
