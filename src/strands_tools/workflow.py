@@ -442,7 +442,8 @@ class WorkflowManager:
             # Create specialized agent for this task
             task_agent = self._create_task_agent(task)
 
-            # --- RUN MODEL ---
+            # Execute task
+            logger.debug(f"Executing task {task_id} with specialized agent")
             raw_out = task_agent(task_prompt)
             print("----------------result", raw_out)
 
@@ -478,13 +479,17 @@ class WorkflowManager:
                 else:
                     normalized_content.append({"text": str(item)})
 
-            # metrics pretty print if any
+            # Log metrics if available
             metrics_text = None
             if metrics_obj:
                 metrics_text = metrics_to_string(metrics_obj)
+                logger.debug(f"Task {task_id} metrics: {metrics_text}")
 
             status = "success" if stop_reason != "error" else "error"
 
+            if "ThrottlingException" in str(e):
+                logger.error(f"Task {task['task_id']} hit throttling, will retry with exponential backoff")
+                raise
             return {
                 "status": status,
                 "content": normalized_content,
