@@ -407,11 +407,11 @@ class WorkflowManager:
     )
    
     def execute_task(self, task: Dict, workflow: Dict) -> Dict:
-        """Execute a single task using a specialized agent."""
+        """Execute a single task using a specialized agent with rate limiting and retries."""
         try:
             task_id = task["task_id"]
 
-            # build prompt...
+            # Build context from dependent tasks
             context = []
             if task.get("dependencies"):
                 for dep_id in task["dependencies"]:
@@ -429,18 +429,16 @@ class WorkflowManager:
 
             task_prompt = task["description"]
             if context:
-                task_prompt = (
-                    "Previous task results:\n"
-                    + "\n\n".join(context)
-                    + "\n\nCurrent Task:\n"
-                    + task_prompt
-                )
+                task_prompt = "Previous task results:\n" + "\n\n".join(context) + "\n\nCurrent Task:\n" + task_prompt
 
-            # jitter + rate limit
+            # Add jitter to prevent thundering herd
             jitter = random.uniform(0, 1)
             time.sleep(jitter)
+
+            # Apply rate limiting before making API call
             self._wait_for_rate_limit()
 
+            # Create specialized agent for this task
             task_agent = self._create_task_agent(task)
 
             # --- RUN MODEL ---
