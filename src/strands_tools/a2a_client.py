@@ -7,6 +7,23 @@ Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
 - Push notification support for real-time task completion alerts
+- Custom authentication support via httpx client arguments
+
+Usage Examples:
+
+    Basic usage without authentication:
+        >>> provider = A2AClientToolProvider(
+        ...     known_agent_urls=["http://agent1.example.com", "http://agent2.example.com"]
+        ... )
+
+    With OAuth/Bearer token authentication:
+        >>> provider = A2AClientToolProvider(
+        ...     known_agent_urls=["http://secure-agent.example.com"],
+        ...     httpx_client_args={
+        ...         "headers": {"Authorization": "Bearer your-token-here"},
+        ...         "timeout": 300
+        ...     }
+        ... )
 """
 
 import asyncio
@@ -34,6 +51,7 @@ class A2AClientToolProvider:
         timeout: int = DEFAULT_TIMEOUT,
         webhook_url: str | None = None,
         webhook_token: str | None = None,
+        httpx_client_args: dict[str, Any] | None = None,
     ):
         """
         Initialize A2A client tool provider.
@@ -43,12 +61,26 @@ class A2AClientToolProvider:
             timeout: Timeout for HTTP operations in seconds (defaults to 300)
             webhook_url: Optional webhook URL for push notifications
             webhook_token: Optional authentication token for webhook notifications
+            httpx_client_args: Optional dictionary of arguments to pass to httpx.AsyncClient
+                constructor. This allows custom auth, headers, proxies, etc.
+                Example: {"headers": {"Authorization": "Bearer token"}, "timeout": 60}
+
+                Note: To avoid event loop issues in multi-turn conversations,
+                a fresh client is created for each async operation using these args.
+                This prevents "Event loop is closed" errors when the provider is used
+                across multiple asyncio.run() calls.
         """
         self.timeout = timeout
         self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}
-        self._httpx_client: httpx.AsyncClient | None = None
-        self._client_factory: ClientFactory | None = None
+
+        # Store client args instead of client instance to avoid event loop issues
+        self._httpx_client_args: dict[str, Any] = httpx_client_args or {}
+
+        # Set default timeout if not provided in client args
+        if "timeout" not in self._httpx_client_args:
+            self._httpx_client_args["timeout"] = self.timeout
+
         self._initial_discovery_done: bool = False
 
         # Push notification configuration
@@ -76,27 +108,39 @@ class A2AClientToolProvider:
 
         return tools
 
-    async def _ensure_httpx_client(self) -> httpx.AsyncClient:
-        """Ensure the shared HTTP client is initialized."""
-        if self._httpx_client is None:
-            self._httpx_client = httpx.AsyncClient(timeout=self.timeout)
-        return self._httpx_client
+    def _get_httpx_client(self) -> httpx.AsyncClient:
+        """
+        Get a fresh httpx client for the current operation.
 
-    async def _ensure_client_factory(self) -> ClientFactory:
-        """Ensure the ClientFactory is initialized."""
-        if self._client_factory is None:
-            httpx_client = await self._ensure_httpx_client()
-            config = ClientConfig(
-                httpx_client=httpx_client,
-                streaming=False,  # Use non-streaming mode for simpler response handling
-                push_notification_configs=[self._push_config] if self._push_config else [],
-            )
-            self._client_factory = ClientFactory(config)
-        return self._client_factory
+        Creates a new client using the stored client args. This prevents event loop
+        issues when the provider is used across multiple asyncio.run() calls.
+
+        Similar to the Gemini model provider fix in strands-agents/sdk-python#932,
+        we create fresh clients per operation rather than reusing a single instance.
+        """
+        return httpx.AsyncClient(**self._httpx_client_args)
+
+    def _get_client_factory(self) -> ClientFactory:
+        """
+        Get a ClientFactory for the current operation.
+
+        Creates a fresh ClientFactory with a fresh httpx client for each call to avoid
+        event loop issues when the provider is used across multiple asyncio.run() calls.
+
+        Note: We don't cache the ClientFactory because it contains the httpx client,
+        which would cause "Event loop is closed" errors in multi-turn conversations.
+        """
+        httpx_client = self._get_httpx_client()
+        config = ClientConfig(
+            httpx_client=httpx_client,
+            streaming=False,  # Use non-streaming mode for simpler response handling
+            push_notification_configs=[self._push_config] if self._push_config else [],
+        )
+        return ClientFactory(config)
 
     async def _create_a2a_card_resolver(self, url: str) -> A2ACardResolver:
         """Create a new A2A card resolver for the given URL."""
-        httpx_client = await self._ensure_httpx_client()
+        httpx_client = self._get_httpx_client()
         logger.info(f"A2ACardResolver created for {url}")
         return A2ACardResolver(httpx_client=httpx_client, base_url=url)
 
@@ -243,7 +287,7 @@ class A2AClientToolProvider:
 
             # Get the agent card and create client using factory
             agent_card = await self._discover_agent_card(target_agent_url)
-            client_factory = await self._ensure_client_factory()
+            client_factory = self._get_client_factory()
             client = client_factory.create(agent_card)
 
             if message_id is None:
