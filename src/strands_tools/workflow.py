@@ -416,13 +416,15 @@ class WorkflowManager:
                 for dep_id in task["dependencies"]:
                     dep_result = workflow["task_results"].get(dep_id, {})
                     if dep_result.get("status") == "completed" and dep_result.get("result"):
-                        # Format the dependency results
-                        dep_content = []
-                        for msg in dep_result["result"]:
-                            if isinstance(msg, dict) and msg.get("text"):
-                                dep_content.append(msg["text"])
-                        if dep_content:
-                            context.append(f"Results from {dep_id}:\n" + "\n".join(dep_content))
+                        dep_chunks = dep_result["result"]
+                        dep_texts = []
+                        for chunk in dep_chunks:
+                            if isinstance(chunk, dict) and "text" in chunk:
+                                dep_texts.append(chunk["text"])
+                            else:
+                                dep_texts.append(str(chunk))
+                        if dep_texts:
+                            context.append(f"Results from {dep_id}:\n" + "\n".join(dep_texts))
 
             # Build comprehensive task prompt with context
             task_prompt = task["description"]
@@ -441,35 +443,52 @@ class WorkflowManager:
 
             # Execute task
             logger.debug(f"Executing task {task_id} with specialized agent")
-            result = task_agent(task_prompt)
+            raw_out = task_agent(task_prompt)
 
-            # Extract response content - handle both dict and custom object return types
-            try:
-                content = result.get("content", []) if hasattr(result, "get") else getattr(result, "content", [])
-            except AttributeError:
-                content = [{"text": str(result)}]
+            # normalize raw_out into text + metrics safely
+            # case 1: strands-style object with .content or ["content"]
+            text_chunks = None
+            stop_reason = ""
+            metrics_obj = None
 
-            # Extract stop reason and metrics
-            try:
-                stop_reason = (
-                    result.get("stop_reason", "") if hasattr(result, "get") else getattr(result, "stop_reason", "")
-                )
-                metrics = result.get("metrics") if hasattr(result, "get") else getattr(result, "metrics", None)
-            except AttributeError:
-                stop_reason = ""
-                metrics = None
+            if hasattr(raw_out, "get"):  # dict-like
+                maybe_content = raw_out.get("content", None)
+                if maybe_content is not None:
+                    text_chunks = maybe_content
+                stop_reason = raw_out.get("stop_reason", "") or ""
+                metrics_obj = raw_out.get("metrics", None)
+            elif hasattr(raw_out, "content"):
+                text_chunks = getattr(raw_out, "content")
+                stop_reason = getattr(raw_out, "stop_reason", "") or ""
+                metrics_obj = getattr(raw_out, "metrics", None)
+            else:
+                # plain string or something else -> wrap it
+                text_chunks = [{"text": str(raw_out)}]
+
+            # final safety: if we STILL don't have text_chunks, make one from str()
+            if not text_chunks:
+                text_chunks = [{"text": str(raw_out)}]
+
+            # coerce everything in text_chunks to {"text": "..."} dicts
+            normalized_content = []
+            for item in text_chunks:
+                if isinstance(item, dict) and "text" in item:
+                    normalized_content.append({"text": str(item["text"])})
+                else:
+                    normalized_content.append({"text": str(item)})
 
             # Log metrics if available
-            if metrics:
-                metrics_text = metrics_to_string(metrics)
+            metrics_text = None
+            if metrics_obj:
+                metrics_text = metrics_to_string(metrics_obj)
                 logger.debug(f"Task {task_id} metrics: {metrics_text}")
 
-            # Update task status
             status = "success" if stop_reason != "error" else "error"
+
             return {
                 "status": status,
-                "content": content,
-                "metrics": metrics_text if metrics else None,
+                "content": normalized_content,
+                "metrics": metrics_text,
             }
 
         except Exception as e:
@@ -478,7 +497,11 @@ class WorkflowManager:
             if "ThrottlingException" in str(e):
                 logger.error(f"Task {task['task_id']} hit throttling, will retry with exponential backoff")
                 raise
-            return {"status": "error", "content": [{"text": error_msg}]}
+            return {
+                "status": "error",
+                "content": [{"text": error_msg}],
+                "metrics": None,
+            }
 
     def create_workflow(self, workflow_id: str, tasks: List[Dict]) -> Dict:
         """Create a new workflow with the given tasks."""
