@@ -34,59 +34,28 @@ Usage Examples:
 --------------
 ```python
 from strands import Agent
-from strands_tools.mongodb_memory import MongoDBMemoryTool
+from strands_tools.mongodb_memory import mongodb_memory
 
-# RECOMMENDED: Secure class-based approach (credentials hidden from agents)
-memory_tool = MongoDBMemoryTool(
-    cluster_uri="mongodb+srv://user:pass@cluster.mongodb.net/",
-    database_name="memories_db",
-    collection_name="memories"
-)
-
-# Create agent with secure tool usage
-agent = Agent(tools=[memory_tool.mongodb_memory])
-
-# Store a memory with semantic embeddings (no credentials exposed to agent)
-memory_tool.mongodb_memory(
+# Store a memory
+result = mongodb_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
-    metadata={"category": "food_preferences", "type": "dietary"},
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
     namespace="user_123"
 )
 
-# Search memories using semantic similarity (vector search)
-memory_tool.mongodb_memory(
+# Search memories
+result = mongodb_memory(
     action="retrieve",
-    query="food preferences and dietary restrictions",
-    max_results=5,
-    namespace="user_123"
+    query="food preferences",
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace="user_123",
+    max_results=5
 )
-
-# List all memories with pagination
-memory_tool.mongodb_memory(
-    action="list",
-    max_results=10,
-    namespace="user_123"
-)
-
-# Get specific memory by ID
-memory_tool.mongodb_memory(
-    action="get",
-    memory_id="mem_1234567890_abcd1234",
-    namespace="user_123"
-)
-
-# Delete a memory
-memory_tool.mongodb_memory(
-    action="delete",
-    memory_id="mem_1234567890_abcd1234",
-    namespace="user_123"
-)
-
-# ALTERNATIVE: Environment variable approach (also secure)
-# Set MONGODB_ATLAS_CLUSTER_URI environment variable
-from strands_tools.mongodb_memory import mongodb_memory
-agent = Agent(tools=[mongodb_memory])  # Uses env vars automatically
 ```
 
 Environment Variables:
@@ -117,7 +86,6 @@ from typing import Any, Dict, List, Optional
 import boto3
 from pymongo import MongoClient
 from pymongo.collection import Collection
-from pymongo.database import Database
 from pymongo.cursor import Cursor
 from pymongo.errors import ConnectionFailure
 from strands import tool
@@ -193,7 +161,7 @@ EXCLUDE_FIELD = 0
 
 # Response size limits to prevent "tool result too large" errors
 MAX_RESPONSE_SIZE = 70000  # Maximum characters in response (70K total safety margin)
-MAX_CONTENT_LENGTH = 12000   # Maximum content length per memory (12K per memory)
+MAX_CONTENT_LENGTH = 12000  # Maximum content length per memory (12K per memory)
 MAX_MEMORIES_IN_RESPONSE = 5  # Maximum memories to include in responses
 
 # Index creation settings
@@ -203,11 +171,11 @@ INDEX_CREATION_TIMEOUT = 5  # seconds to wait for index creation
 def _ensure_vector_search_index(collection: Collection, index_name: str = DEFAULT_VECTOR_INDEX_NAME) -> None:
     """
     Create vector search index if it doesn't exist.
-    
+
     This function ensures that the required vector search index exists for semantic search operations.
     If the index doesn't exist, it creates one with the proper configuration for 1024-dimensional
     Titan embeddings using cosine similarity.
-    
+
     Args:
         collection: MongoDB collection to create index on
         index_name: Name of the vector search index to create
@@ -299,27 +267,27 @@ def _truncate_content(content: str, max_length: int = MAX_CONTENT_LENGTH) -> str
 
 def _optimize_response_size(response: Dict, action: str) -> Dict:
     """Optimize response size to prevent 'tool result too large' errors."""
-    
+
     # For list and retrieve operations, limit the number of memories and truncate content
     if action in ["list", "retrieve"] and "memories" in response:
         memories = response["memories"]
-        
+
         # Limit number of memories in response
         if len(memories) > MAX_MEMORIES_IN_RESPONSE:
             memories = memories[:MAX_MEMORIES_IN_RESPONSE]
             response["memories"] = memories
             response["truncated"] = True
             response["showing"] = len(memories)
-        
+
         # Truncate content in each memory
         for memory in memories:
             if "content" in memory:
                 memory["content"] = _truncate_content(memory["content"])
-        
+
         # Remove verbose search_info for retrieve operations to save space
         if action == "retrieve" and "search_info" in response:
             response["search_info"] = {"type": "vector_search", "model": "titan-v2"}
-    
+
     return response
 
 
@@ -327,44 +295,44 @@ def _validate_response_size(response_text: str) -> str:
     """Validate and truncate response if it exceeds size limits."""
     if len(response_text) <= MAX_RESPONSE_SIZE:
         return response_text
-    
+
     # If response is too large, truncate and add warning
-    truncated = response_text[:MAX_RESPONSE_SIZE - 100]  # Leave room for warning
+    truncated = response_text[: MAX_RESPONSE_SIZE - 100]  # Leave room for warning
     return f"{truncated}... [Response truncated due to size limit]"
 
 
 def _mask_connection_string(connection_string: str) -> str:
     """
     Mask sensitive information in MongoDB connection string for logging/error messages.
-    
+
     This function helps prevent credential exposure in logs and error messages by
     masking the username and password portions of MongoDB connection strings.
-    
+
     Args:
         connection_string: MongoDB connection string that may contain credentials
-        
+
     Returns:
         Masked connection string safe for logging
     """
     if not connection_string:
         return "[EMPTY]"
-    
+
     try:
         # Pattern to match mongodb+srv://username:password@host/...
-        pattern = r'mongodb\+srv://([^:]+):([^@]+)@(.+)'
+        pattern = r"mongodb\+srv://([^:]+):([^@]+)@(.+)"
         match = re.match(pattern, connection_string)
-        
+
         if match:
             username, password, rest = match.groups()
             masked_username = username[:2] + "***" if len(username) > 2 else "***"
             return f"mongodb+srv://{masked_username}:***@{rest}"
-        
+
         # Fallback for other patterns
         if "@" in connection_string:
             parts = connection_string.split("@")
             if len(parts) >= 2:
                 return f"***@{parts[-1]}"
-        
+
         return "***[MASKED_CONNECTION_STRING]***"
     except Exception:
         return "***[MASKED_CONNECTION_STRING]***"
@@ -373,21 +341,18 @@ def _mask_connection_string(connection_string: str) -> str:
 def _validate_connection_string(cluster_uri: str) -> bool:
     """
     Validate MongoDB connection string format.
-    
+
     Args:
         cluster_uri: MongoDB connection string to validate
-        
+
     Returns:
         True if connection string appears valid, False otherwise
     """
     if not cluster_uri or not isinstance(cluster_uri, str):
         return False
-    
+
     # Basic validation for MongoDB Atlas connection strings
-    return (
-        cluster_uri.startswith("mongodb+srv://") or 
-        cluster_uri.startswith("mongodb://")
-    ) and "@" in cluster_uri
+    return (cluster_uri.startswith("mongodb+srv://") or cluster_uri.startswith("mongodb://")) and "@" in cluster_uri
 
 
 def _generate_memory_id() -> str:
@@ -498,7 +463,16 @@ def _retrieve_memories(
         {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
         # MongoDB projection syntax: INCLUDE_FIELD = include field, EXCLUDE_FIELD = exclude field
         # We exclude _id (MongoDB's internal ObjectId) and embedding vectors, include only the fields we need
-        {"$project": {"memory_id": INCLUDE_FIELD, "content": INCLUDE_FIELD, "timestamp": INCLUDE_FIELD, "metadata": INCLUDE_FIELD, "score": INCLUDE_FIELD, "_id": EXCLUDE_FIELD}},
+        {
+            "$project": {
+                "memory_id": INCLUDE_FIELD,
+                "content": INCLUDE_FIELD,
+                "timestamp": INCLUDE_FIELD,
+                "metadata": INCLUDE_FIELD,
+                "score": INCLUDE_FIELD,
+                "_id": EXCLUDE_FIELD,
+            }
+        },
     ]
 
     results = list(collection.aggregate(pipeline))
@@ -580,7 +554,14 @@ def _list_memories(collection: Collection, namespace: str, max_results: int, nex
     # We exclude _id (MongoDB's internal ObjectId) and embedding vectors, include only the fields we need
     cursor: Cursor = (
         collection.find(
-            {"namespace": namespace}, {"memory_id": INCLUDE_FIELD, "content": INCLUDE_FIELD, "timestamp": INCLUDE_FIELD, "metadata": INCLUDE_FIELD, "_id": EXCLUDE_FIELD}
+            {"namespace": namespace},
+            {
+                "memory_id": INCLUDE_FIELD,
+                "content": INCLUDE_FIELD,
+                "timestamp": INCLUDE_FIELD,
+                "metadata": INCLUDE_FIELD,
+                "_id": EXCLUDE_FIELD,
+            },
         )
         .sort("timestamp", -1)
         .skip(skip_count)
@@ -621,7 +602,14 @@ def _get_memory(collection: Collection, namespace: str, memory_id: str) -> Dict:
         # We exclude _id (MongoDB's internal ObjectId) and embedding vectors, include only the fields we need
         doc = collection.find_one(
             {"memory_id": memory_id},
-            {"memory_id": INCLUDE_FIELD, "content": INCLUDE_FIELD, "timestamp": INCLUDE_FIELD, "metadata": INCLUDE_FIELD, "namespace": INCLUDE_FIELD, "_id": EXCLUDE_FIELD},
+            {
+                "memory_id": INCLUDE_FIELD,
+                "content": INCLUDE_FIELD,
+                "timestamp": INCLUDE_FIELD,
+                "metadata": INCLUDE_FIELD,
+                "namespace": INCLUDE_FIELD,
+                "_id": EXCLUDE_FIELD,
+            },
         )
 
         if not doc:
@@ -682,11 +670,11 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
 class MongoDBMemoryTool:
     """
     MongoDB Atlas Memory Tool with secure credential management.
-    
+
     This class encapsulates MongoDB Atlas connection credentials and configuration,
     preventing agents from accessing sensitive information like passwords and connection strings.
     """
-    
+
     def __init__(
         self,
         cluster_uri: Optional[str] = None,
@@ -698,7 +686,7 @@ class MongoDBMemoryTool:
     ):
         """
         Initialize MongoDB Memory Tool with secure credential storage.
-        
+
         Args:
             cluster_uri: MongoDB Atlas cluster URI (kept private from agents)
             database_name: Name of the MongoDB database
@@ -714,14 +702,14 @@ class MongoDBMemoryTool:
         self._embedding_model = embedding_model or os.getenv("MONGODB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
         self._region = region or os.getenv("AWS_REGION", DEFAULT_AWS_REGION)
         self._vector_index_name = vector_index_name or DEFAULT_VECTOR_INDEX_NAME
-        
+
         # Validate credentials during initialization
         if not self._cluster_uri:
             raise MongoDBValidationError("cluster_uri is required for MongoDB Memory Tool initialization")
-        
+
         if not _validate_connection_string(self._cluster_uri):
             raise MongoDBValidationError("Invalid MongoDB connection string format")
-    
+
     @tool
     def mongodb_memory(
         self,
@@ -739,7 +727,7 @@ class MongoDBMemoryTool:
 
         This tool helps agents store and access memories using MongoDB Atlas with semantic search
         capabilities, allowing them to remember important information across conversations.
-        
+
         Note: Credentials are securely managed by the class and not exposed to agents.
 
         Key Capabilities:
@@ -789,12 +777,18 @@ class MongoDBMemoryTool:
                 # Use masked connection string in error messages for security
                 masked_uri = _mask_connection_string(self._cluster_uri)
                 logger.error(f"MongoDB connection failed for {masked_uri}: {str(e)}")
-                return {"status": "error", "content": [{"text": f"Unable to connect to MongoDB cluster at {masked_uri}"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": f"Unable to connect to MongoDB cluster at {masked_uri}"}],
+                }
             except Exception as e:
                 # Use masked connection string in error messages for security
                 masked_uri = _mask_connection_string(self._cluster_uri)
                 logger.error(f"MongoDB client initialization failed for {masked_uri}: {str(e)}")
-                return {"status": "error", "content": [{"text": f"Failed to initialize MongoDB client for {masked_uri}"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": f"Failed to initialize MongoDB client for {masked_uri}"}],
+                }
 
             # Initialize Amazon Bedrock client for embeddings
             try:
@@ -845,7 +839,9 @@ class MongoDBMemoryTool:
             # Execute the appropriate action
             try:
                 if action_enum == MemoryAction.RECORD:
-                    response = _record_memory(collection, bedrock_runtime, namespace, self._embedding_model, content, metadata)
+                    response = _record_memory(
+                        collection, bedrock_runtime, namespace, self._embedding_model, content, metadata
+                    )
                     return {
                         "status": "success",
                         "content": [{"text": "Memory stored successfully"}, {"json": response}],
@@ -973,7 +969,17 @@ def mongodb_memory(
 
         # Validate required parameters
         if not cluster_uri:
-            return {"status": "error", "content": [{"text": "cluster_uri is required for MongoDB Memory Tool. Set MONGODB_ATLAS_CLUSTER_URI environment variable or provide cluster_uri parameter."}]}
+            return {
+                "status": "error",
+                "content": [
+                    {
+                        "text": (
+                            "cluster_uri is required for MongoDB Memory Tool. "
+                            "Set MONGODB_ATLAS_CLUSTER_URI environment variable or provide cluster_uri parameter."
+                        )
+                    }
+                ],
+            }
 
         if not _validate_connection_string(cluster_uri):
             return {"status": "error", "content": [{"text": "Invalid MongoDB connection string format"}]}
