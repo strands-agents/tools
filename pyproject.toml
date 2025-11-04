@@ -72,7 +72,6 @@ dev = [
     "ruff>=0.13.0,<0.14.0",
     "responses>=0.6.1,<1.0.0",
     "mem0ai>=0.1.104,<1.0.0",
-    "langchain-aws>=0.2.23",
     "opensearch-py>=2.8.0,<3.0.0",
     "nest-asyncio>=1.5.0,<2.0.0",
     "playwright>=1.42.0,<2.0.0",
