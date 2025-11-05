@@ -18,7 +18,6 @@ from .browser import Browser
 logger = logging.getLogger(__name__)
 
 
-
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 
