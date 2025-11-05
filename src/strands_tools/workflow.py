@@ -445,7 +445,11 @@ class WorkflowManager:
 
             # Extract response content - handle both dict and custom object return types
             try:
-                content = result.get("content", []) if hasattr(result, "get") else getattr(result, "content", [])
+                content = (
+                    result.message.get("content", [])
+                    if hasattr(result.message, "get")
+                    else getattr(result.message, "content", [])
+                )
             except AttributeError:
                 content = [{"text": str(result)}]
 
