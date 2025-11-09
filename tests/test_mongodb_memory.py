@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from strands import Agent
 
-from src.strands_tools.mongodb_memory import mongodb_memory, MongoDBMemoryTool
+from src.strands_tools.mongodb_memory import mongodb_memory
 
 
 @pytest.fixture
