@@ -71,7 +71,7 @@ __all__ = [
 def __getattr__(name: str):
     """
     Lazy load browser implementations only when accessed.
-    
+
     This defers the import of optional dependencies until actually needed:
     - LocalChromiumBrowser requires playwright (lazy loaded)
     - AgentCoreBrowser requires bedrock_agentcore (lazy loaded)
