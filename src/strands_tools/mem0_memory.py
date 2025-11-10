@@ -45,7 +45,7 @@ agent = Agent(tools=[mem0_memory])
 # Store memory in Memory
 agent.tool.mem0_memory(
     action="store",
-    content="Important information to remember",
+    content="Important information to remember for the meeting",
     user_id="alex",  # or agent_id="agent1"
     metadata={"category": "meeting_notes"}
 )
@@ -223,7 +223,6 @@ class Mem0ServiceClient:
         elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
             logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
             merged_config = self._append_neptune_database_backend(merged_config)
-
 
         return Mem0Memory.from_config(config_dict=merged_config)
 
