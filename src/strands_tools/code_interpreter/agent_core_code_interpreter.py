@@ -49,6 +49,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         identifier: Optional[str] = None,
         session_name: Optional[str] = None,
         auto_create: bool = True,
+        persist_sessions: bool = True,
+        verify_session_before_use: bool = True,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter.
@@ -63,6 +65,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             auto_create: Automatically create sessions if they don't exist.
                 - True (default): Create sessions on-demand
                 - False: Fail if session doesn't exist (strict mode)
+            persist_sessions: If True, don't cleanup sessions on object destruction.
+            verify_session_before_use: If True, verify session still exists before reusing.
 
         Examples:
             # Case 1: Random session per instance (default)
@@ -85,16 +89,24 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.region = resolve_region(region)
         self.identifier = identifier or "aws.codeinterpreter.v1"
         self.auto_create = auto_create
+        self.persist_sessions = persist_sessions
+        self.verify_session_before_use = verify_session_before_use
 
         # Generate session name strategy
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
         else:
-            self.default_session = session_name
+            # Clean session name to meet validation: [0-9a-zA-Z]{1,40}
+            self.default_session = session_name.replace("-", "").replace("_", "")[:40]
 
         self._sessions: Dict[str, SessionInfo] = {}
+        self._session_name_to_ci_id: Dict[str, str] = {}
 
-        logger.info(f"Initialized CodeInterpreter with session='{self.default_session}', " f"auto_create={auto_create}")
+        logger.info(
+            f"Initialized CodeInterpreter with session='{self.default_session}', "
+            f"identifier='{self.identifier}', auto_create={auto_create}, "
+            f"persist_sessions={persist_sessions}"
+        )
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""
@@ -105,21 +117,33 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if not self._started:
             return
 
-        logger.info("Cleaning up Bedrock Agent Core platform resources")
+        # Only cleanup if configured to do so
+        if not self.persist_sessions:
+            logger.info("Cleaning up Bedrock Agent Core platform resources")
 
-        # Stop all active sessions with better error handling
-        for session_name, session in list(self._sessions.items()):
-            try:
-                session.client.stop()
-                logger.debug(f"Stopped session: {session_name}")
-            except Exception as e:
-                # Handle weak reference errors and other cleanup issues gracefully
-                logger.debug(
-                    "session=<%s>, exception=<%s> | cleanup skipped (already cleaned up)", session_name, str(e)
-                )
+            for session_name, session in list(self._sessions.items()):
+                try:
+                    # Verify session status before stopping
+                    if self.verify_session_before_use:
+                        try:
+                            session_info = session.client.get_session()
+                            if session_info["status"] != "READY":
+                                logger.debug(f"Session {session_name} already {session_info['status']}")
+                                continue
+                        except Exception as e:
+                            logger.debug(f"Session {session_name} status check failed: {e}")
+                            continue
 
-        self._sessions.clear()
-        logger.info("Bedrock AgentCoreplatform cleanup completed")
+                    session.client.stop()
+                    logger.debug(f"Stopped session: {session_name}")
+                except Exception as e:
+                    logger.debug(f"Session {session_name} cleanup skipped: {e}")
+
+            self._sessions.clear()
+            self._session_name_to_ci_id.clear()
+            logger.info("Bedrock AgentCore platform cleanup completed")
+        else:
+            logger.debug("Skipping cleanup - sessions persist (persist_sessions=True)")
 
     def init_session(self, action: InitSessionAction) -> Dict[str, Any]:
         """
@@ -159,8 +183,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 region=self.region,
             )
 
-            # Start the session with custom identifier
-            client.start(identifier=self.identifier)
+            # Start session with identifier and name
+            client.start(identifier=self.identifier, name=session_name)
+
+            # Store session mapping for reconnection
+            self._session_name_to_ci_id[session_name] = client.session_id
 
             # Store session info
             self._sessions[session_name] = SessionInfo(
@@ -233,14 +260,72 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         # Determine which session to use
         target_session = session_name if session_name else self.default_session
 
-        # Session already exists - use it
+        # Check local cache and verify if enabled
         if target_session in self._sessions:
-            logger.debug(f"Using existing session: {target_session}")
-            return target_session, None
+            if self.verify_session_before_use:
+                try:
+                    session_info = self._sessions[target_session].client.get_session()
+                    if session_info["status"] == "READY":
+                        logger.debug(f"Using cached session (verified): {target_session}")
+                        return target_session, None
+                    else:
+                        logger.warning(
+                            f"Cached session {target_session} is {session_info['status']}, " "will create new session"
+                        )
+                        del self._sessions[target_session]
+                except Exception as e:
+                    logger.warning(f"Session verification failed for {target_session}: {e}")
+                    del self._sessions[target_session]
+            else:
+                logger.debug(f"Using cached session (unverified): {target_session}")
+                return target_session, None
 
-        # Session doesn't exist - check auto_create
+        # Attempt to reconnect to existing session in AgentCore
+        if self.persist_sessions and self.verify_session_before_use:
+            try:
+                logger.debug(f"Attempting to reconnect to session: {target_session}")
+
+                # Create a new client
+                client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
+
+                # List sessions and find by name
+                try:
+                    sessions_response = client.list_sessions(
+                        interpreter_id=self.identifier, status="READY", max_results=100
+                    )
+
+                    logger.debug(f"Found {len(sessions_response.get('items', []))} READY sessions")
+
+                    # Look for session with matching name
+                    for session_item in sessions_response.get("items", []):
+                        if session_item.get("name") == target_session:
+                            # Found matching session
+                            ci_session_id = session_item["sessionId"]
+
+                            logger.info(f"Found existing session: {target_session} " f"(CI ID: {ci_session_id})")
+
+                            # Attach to existing session
+                            client.identifier = self.identifier
+                            client.session_id = ci_session_id
+
+                            self._sessions[target_session] = SessionInfo(
+                                session_id=ci_session_id, description="Reconnected to persisted session", client=client
+                            )
+                            self._session_name_to_ci_id[target_session] = ci_session_id
+
+                            logger.info(f"Reconnected to existing session: {target_session}")
+                            return target_session, None
+
+                    logger.debug(f"No existing session found with name: {target_session}")
+
+                except Exception as e:
+                    logger.debug(f"Session listing failed: {e}")
+
+            except Exception as e:
+                logger.debug(f"Reconnection attempt failed: {e}")
+
+        # Session doesn't exist - create if auto_create enabled
         if self.auto_create:
-            # Auto-create the session
             logger.info(f"Auto-creating session: {target_session}")
             init_action = InitSessionAction(
                 type="initSession", session_name=target_session, description="Auto-initialized session"
@@ -253,9 +338,12 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.info(f"Successfully auto-created session: {target_session}")
             return target_session, None
 
-        # auto_create=False and session doesn't exist - raise exception
+        # auto_create=False and session doesn't exist
         logger.debug(f"Session '{target_session}' not found (auto_create disabled)")
-        raise ValueError(f"Session '{target_session}' not found. Create it first using initSession.")
+        return target_session, {
+            "status": "error",
+            "content": [{"text": f"Session '{target_session}' not found. Create it first using initSession."}],
+        }
 
     def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
         """Execute code in a Bedrock AgentCore session with automatic session management."""
@@ -337,7 +425,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         return self._create_tool_result(response)
 
     def _create_tool_result(self, response) -> Dict[str, Any]:
-        """ """
+        """Create tool result from code interpreter response."""
         if "stream" in response:
             event_stream = response["stream"]
             for event in event_stream:
