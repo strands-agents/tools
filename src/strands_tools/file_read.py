@@ -112,6 +112,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
+from strands import ToolContext
 from strands.types.media import DocumentContent
 from strands.types.tools import (
     ToolResult,
@@ -121,6 +122,7 @@ from strands.types.tools import (
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
+from strands_tools.utils.file_info import get_file_info, FileInfo
 
 # Document format mapping
 FORMAT_EXTENSIONS = {
@@ -137,7 +139,9 @@ FORMAT_EXTENSIONS = {
 }
 
 # Reverse mapping for format detection
-EXTENSION_TO_FORMAT = {ext: fmt for fmt, exts in FORMAT_EXTENSIONS.items() for ext in exts}
+EXTENSION_TO_FORMAT = {
+    ext: fmt for fmt, exts in FORMAT_EXTENSIONS.items() for ext in exts
+}
 
 
 def detect_format(file_path: str) -> str:
@@ -196,7 +200,9 @@ def create_document_block(
         return {"name": neutral_name, "format": format, "source": {"bytes": content}}
 
     except Exception as e:
-        raise Exception(f"Error creating document block for {file_path}: {str(e)}") from e
+        raise Exception(
+            f"Error creating document block for {file_path}: {str(e)}"
+        ) from e
 
 
 def create_document_response(documents: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -415,11 +421,19 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
             return []
 
     except Exception as e:
-        console.print(Panel(escape(f"Error in find_files: {str(e)}"), title="[red]Error", border_style="red"))
+        console.print(
+            Panel(
+                escape(f"Error in find_files: {str(e)}"),
+                title="[red]Error",
+                border_style="red",
+            )
+        )
         return []
 
 
-def create_rich_panel(content: str, title: Optional[str] = None, file_path: Optional[str] = None) -> Panel:
+def create_rich_panel(
+    content: str, title: Optional[str] = None, file_path: Optional[str] = None
+) -> Panel:
     """
     Create a Rich panel with optional syntax highlighting.
 
@@ -494,7 +508,12 @@ def get_file_stats(console, file_path: str) -> Dict[str, Any]:
     return stats
 
 
-def read_file_lines(console: Console, file_path: str, start_line: int = 0, end_line: Optional[int] = None) -> List[str]:
+def read_file_lines(
+    console: Console,
+    file_path: str,
+    start_line: int = 0,
+    end_line: Optional[int] = None,
+) -> List[str]:
     """
     Read specific lines from file.
 
@@ -531,7 +550,9 @@ def read_file_lines(console: Console, file_path: str, start_line: int = 0, end_l
         if end_line is not None:
             end_line = min(end_line, len(all_lines))
             if end_line < start_line:
-                raise ValueError(f"end_line ({end_line}) cannot be less than start_line ({start_line})")
+                raise ValueError(
+                    f"end_line ({end_line}) cannot be less than start_line ({start_line})"
+                )
 
         lines = all_lines[start_line:end_line]
 
@@ -547,12 +568,18 @@ def read_file_lines(console: Console, file_path: str, start_line: int = 0, end_l
         return lines
 
     except Exception as e:
-        error_panel = Panel(escape(f"Error reading file: {str(e)}"), title="[bold red]Error", border_style="red")
+        error_panel = Panel(
+            escape(f"Error reading file: {str(e)}"),
+            title="[bold red]Error",
+            border_style="red",
+        )
         console.print(error_panel)
         raise
 
 
-def read_file_chunk(console: Console, file_path: str, chunk_size: int, chunk_offset: int = 0) -> str:
+def read_file_chunk(
+    console: Console, file_path: str, chunk_size: int, chunk_offset: int = 0
+) -> str:
     """
     Read a chunk of file from given offset.
 
@@ -582,7 +609,9 @@ def read_file_chunk(console: Console, file_path: str, chunk_size: int, chunk_off
     try:
         file_size = os.path.getsize(file_path)
         if chunk_offset < 0 or chunk_offset > file_size:
-            raise ValueError(f"Invalid chunk_offset: {chunk_offset}. File size is {file_size} bytes.")
+            raise ValueError(
+                f"Invalid chunk_offset: {chunk_offset}. File size is {file_size} bytes."
+            )
 
         if chunk_size < 0:
             raise ValueError(f"Invalid chunk_size: {chunk_size}")
@@ -630,7 +659,9 @@ def read_file_chunk(console: Console, file_path: str, chunk_size: int, chunk_off
         raise
 
 
-def search_file(console: Console, file_path: str, pattern: str, context_lines: int = 2) -> List[Dict[str, Any]]:
+def search_file(
+    console: Console, file_path: str, pattern: str, context_lines: int = 2
+) -> List[Dict[str, Any]]:
     """
     Search file for pattern and return matches with context.
 
@@ -703,7 +734,9 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
 
         # Print summary
         summary = Panel(
-            escape(f"Found {total_matches} matches for pattern '{pattern}' in {os.path.basename(file_path)}"),
+            escape(
+                f"Found {total_matches} matches for pattern '{pattern}' in {os.path.basename(file_path)}"
+            ),
             title="[bold yellow]Search Summary",
             border_style="yellow",
             expand=False,
@@ -722,7 +755,9 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
         raise
 
 
-def create_diff(file_path: str, comparison_path: str, diff_type: str = "unified") -> str:
+def create_diff(
+    file_path: str, comparison_path: str, diff_type: str = "unified"
+) -> str:
     """
     Create a diff between two files or directories.
 
@@ -758,7 +793,11 @@ def create_diff(file_path: str, comparison_path: str, diff_type: str = "unified"
 
             # Get all files in both directories
             def get_files(path: str) -> set:
-                return set(str(p.relative_to(path)) for p in Path(path).rglob("*") if p.is_file())
+                return set(
+                    str(p.relative_to(path))
+                    for p in Path(path).rglob("*")
+                    if p.is_file()
+                )
 
             files1 = get_files(file_path)
             files2 = get_files(comparison_path)
@@ -802,7 +841,9 @@ def create_diff(file_path: str, comparison_path: str, diff_type: str = "unified"
         raise Exception(f"Error creating diff: {str(e)}") from e
 
 
-def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int = 5) -> str:
+def time_machine_view(
+    file_path: str, use_git: bool = True, num_revisions: int = 5
+) -> str:
     """
     Show file history using git or filesystem metadata.
 
@@ -856,7 +897,9 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
             ).split("\n")
 
             # Get blame information
-            subprocess.check_output(["git", "blame", "--line-porcelain", rel_path], cwd=repo_root, text=True)
+            subprocess.check_output(
+                ["git", "blame", "--line-porcelain", rel_path], cwd=repo_root, text=True
+            )
 
             # Process git information
             history = []
@@ -899,7 +942,9 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
 
             # Format output
             output = []
-            output.append(f"=== Time Machine View for {os.path.basename(file_path)} ===\n")
+            output.append(
+                f"=== Time Machine View for {os.path.basename(file_path)} ===\n"
+            )
             output.append("Git History:\n")
 
             for entry in history:
@@ -918,7 +963,9 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
             stat = os.stat(file_path)
 
             output = []
-            output.append(f"=== File Information for {os.path.basename(file_path)} ===\n")
+            output.append(
+                f"=== File Information for {os.path.basename(file_path)} ===\n"
+            )
             output.append(f"Created: {time_module.ctime(stat.st_ctime)}")
             output.append(f"Modified: {time_module.ctime(stat.st_mtime)}")
             output.append(f"Accessed: {time_module.ctime(stat.st_atime)}")
@@ -932,7 +979,9 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
         raise Exception(f"Error in time machine view: {str(e)}") from e
 
 
-def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
+def file_read(
+    tool: ToolUse, tool_context: Optional[ToolContext] = None, **kwargs: Any
+) -> ToolResult:
     """
     Advanced file reading tool with multiple specialized reading modes.
 
@@ -947,8 +996,9 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
     2. Validates the required parameters for that mode
     3. Finds all files matching the provided path patterns
     4. Processes each file according to the requested mode
-    5. Formats the results with rich output and appropriate structure
-    6. Returns the results or appropriate error messages
+    5. Tracks file information in agent.state for state management
+    6. Formats the results with rich output and appropriate structure
+    7. Returns the results or appropriate error messages
 
     Reading Modes:
     ------------
@@ -979,6 +1029,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
               Can include wildcards like '*.py' or directories.
             - mode: Reading mode to use (required)
             - Additional parameters specific to each mode
+        tool_context: ToolContext providing access to agent state and configuration
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -994,6 +1045,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Multiple files can be processed in a single call with comma-separated paths
         - The tool supports various wildcard patterns for matching multiple files
         - Document format is auto-detected from file extension or can be specified
+        - File information is stored in agent.state (accessible via agent.state.get("files_read"))
         - For diff mode, both paths must be either files or directories
     """
     console = console_util.create()
@@ -1002,13 +1054,23 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool.get("input", {})
 
     # Get environment variables at runtime
-    file_read_recursive_default = os.getenv("FILE_READ_RECURSIVE_DEFAULT", "true").lower() == "true"
-    file_read_context_lines_default = int(os.getenv("FILE_READ_CONTEXT_LINES_DEFAULT", "2"))
+    file_read_recursive_default = (
+        os.getenv("FILE_READ_RECURSIVE_DEFAULT", "true").lower() == "true"
+    )
+    file_read_context_lines_default = int(
+        os.getenv("FILE_READ_CONTEXT_LINES_DEFAULT", "2")
+    )
     file_read_start_line_default = int(os.getenv("FILE_READ_START_LINE_DEFAULT", "0"))
-    file_read_chunk_offset_default = int(os.getenv("FILE_READ_CHUNK_OFFSET_DEFAULT", "0"))
+    file_read_chunk_offset_default = int(
+        os.getenv("FILE_READ_CHUNK_OFFSET_DEFAULT", "0")
+    )
     file_read_diff_type_default = os.getenv("FILE_READ_DIFF_TYPE_DEFAULT", "unified")
-    file_read_use_git_default = os.getenv("FILE_READ_USE_GIT_DEFAULT", "true").lower() == "true"
-    file_read_num_revisions_default = int(os.getenv("FILE_READ_NUM_REVISIONS_DEFAULT", "5"))
+    file_read_use_git_default = (
+        os.getenv("FILE_READ_USE_GIT_DEFAULT", "true").lower() == "true"
+    )
+    file_read_num_revisions_default = int(
+        os.getenv("FILE_READ_NUM_REVISIONS_DEFAULT", "5")
+    )
 
     try:
         # Validate required parameters
@@ -1033,7 +1095,9 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         if not matching_files:
             error_msg = f"No files found matching pattern(s): {', '.join(paths)}"
-            console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
+            console.print(
+                Panel(escape(error_msg), title="[bold red]Error", border_style="red")
+            )
             return {
                 "toolUseId": tool_use_id,
                 "status": "error",
@@ -1048,19 +1112,57 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
                 # Create document blocks for each file
                 document_blocks = []
+                files_info: List[FileInfo] = []
+
                 for file_path in matching_files:
                     try:
                         document_blocks.append(
-                            create_document_block(file_path, format=format, neutral_name=neutral_name)
+                            create_document_block(
+                                file_path, format=format, neutral_name=neutral_name
+                            )
                         )
+                        # Collect file info for state tracking
+                        try:
+                            mode_info = {}
+                            if format:
+                                mode_info["format"] = format
+                            if neutral_name:
+                                mode_info["neutral_name"] = neutral_name
+                            files_info.append(
+                                get_file_info(
+                                    file_path,
+                                    mode="document",
+                                    mode_info=mode_info if mode_info else None,
+                                )
+                            )
+                        except Exception:
+                            pass
                     except Exception as e:
                         console.print(
                             Panel(
-                                escape(f"Error creating document block for {file_path}: {str(e)}"),
+                                escape(
+                                    f"Error creating document block for {file_path}: {str(e)}"
+                                ),
                                 title="[bold yellow]Warning",
                                 border_style="yellow",
                             )
                         )
+
+                # Store file info in agent state if tool_context is available
+                if tool_context and tool_context.agent and files_info:
+                    # Get existing files_read list or create new one
+                    files_read = tool_context.agent.state.get("files_read") or []
+                    files_read.extend(files_info)
+                    tool_context.agent.state.set("files_read", files_read)
+
+                    # Also track the last files read
+                    tool_context.agent.state.set("last_files_read", files_info)
+
+                    # Store in files dict keyed by path (like LangGraph pattern)
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    for file_info in files_info:
+                        files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
 
                 # Create response with document blocks
                 document_content: List[ToolResultContent] = []
@@ -1075,7 +1177,11 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             except Exception as e:
                 error_msg = f"Error in document mode: {str(e)}"
-                console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
+                console.print(
+                    Panel(
+                        escape(error_msg), title="[bold red]Error", border_style="red"
+                    )
+                )
                 return {
                     "toolUseId": tool_use_id,
                     "status": "error",
@@ -1083,6 +1189,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 }
 
         response_content: List[ToolResultContent] = []
+        files_info: List[FileInfo] = []
 
         # Handle find mode
         if mode == "find":
@@ -1096,6 +1203,16 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     files_by_dir[dir_path] = []
                 files_by_dir[dir_path].append(os.path.basename(file_path))
 
+                # Collect file info for state tracking
+                try:
+                    files_info.append(
+                        get_file_info(
+                            file_path, mode="find", mode_info={"recursive": recursive}
+                        )
+                    )
+                except Exception:
+                    pass
+
             # Create tree structure
             for dir_path, files in sorted(files_by_dir.items()):
                 dir_node = tree.add(f"📁 {dir_path}")
@@ -1103,7 +1220,9 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     dir_node.add(f"📄 {file_name}")
 
             # Display results
-            console.print(Panel(tree, title="[bold green]File Tree", border_style="blue"))
+            console.print(
+                Panel(tree, title="[bold green]File Tree", border_style="blue")
+            )
             console.print(
                 Panel(
                     escape("\n".join(matching_files)),
@@ -1112,10 +1231,31 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
 
+            # Store file info in agent state if tool_context is available
+            if tool_context and tool_context.agent and files_info:
+                # Get existing files_read list or create new one
+                files_read = tool_context.agent.state.get("files_read") or []
+                files_read.extend(files_info)
+                tool_context.agent.state.set("files_read", files_read)
+
+                # Also track the last files read
+                tool_context.agent.state.set("last_files_read", files_info)
+
+                # Store in files dict keyed by path (like LangGraph pattern)
+                files_dict = tool_context.agent.state.get("files") or {}
+                for file_info in files_info:
+                    files_dict[file_info["path"]] = file_info
+                tool_context.agent.state.set("files", files_dict)
+
             return {
                 "toolUseId": tool_use_id,
                 "status": "success",
-                "content": [{"text": f"Found {len(matching_files)} files:\n" + "\n".join(matching_files)}],
+                "content": [
+                    {
+                        "text": f"Found {len(matching_files)} files:\n"
+                        + "\n".join(matching_files)
+                    }
+                ],
             }
 
         # Process each file for other modes
@@ -1133,10 +1273,24 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                             file_path,
                         )
                         console.print(view_panel)
-                        response_content.append({"text": f"Content of {file_path}:\n{content}"})
+                        response_content.append(
+                            {"text": f"Content of {file_path}:\n{content}"}
+                        )
+
+                        # Collect file info AFTER successful read
+                        try:
+                            files_info.append(get_file_info(file_path, mode="view"))
+                        except Exception:
+                            pass
                     except Exception as e:
                         error_msg = f"Error reading file {file_path}: {str(e)}"
-                        console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
+                        console.print(
+                            Panel(
+                                escape(error_msg),
+                                title="[bold red]Error",
+                                border_style="red",
+                            )
+                        )
                         response_content.append({"text": error_msg})
 
                 elif mode == "preview":
@@ -1162,46 +1316,105 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         }
                     )
 
+                    # Collect file info AFTER successful read
+                    try:
+                        files_info.append(
+                            get_file_info(
+                                file_path,
+                                mode="preview",
+                                mode_info={"preview_lines": 50},
+                            )
+                        )
+                    except Exception:
+                        pass
+
                 elif mode == "stats":
                     stats = get_file_stats(console, file_path)
                     response_content.append({"text": json.dumps(stats, indent=2)})
 
+                    # Collect file info AFTER successful stats
+                    try:
+                        files_info.append(get_file_info(file_path, mode="stats"))
+                    except Exception:
+                        pass
+
                 elif mode == "lines":
-                    lines = read_file_lines(
-                        console,
-                        file_path,
-                        tool_input.get("start_line", file_read_start_line_default),
-                        tool_input.get("end_line"),
+                    start_line = tool_input.get(
+                        "start_line", file_read_start_line_default
                     )
+                    end_line = tool_input.get("end_line")
+                    lines = read_file_lines(console, file_path, start_line, end_line)
                     response_content.append({"text": "".join(lines)})
 
+                    # Collect file info AFTER successful read
+                    try:
+                        mode_info = {"start_line": start_line}
+                        if end_line is not None:
+                            mode_info["end_line"] = end_line
+                        files_info.append(
+                            get_file_info(file_path, mode="lines", mode_info=mode_info)
+                        )
+                    except Exception:
+                        pass
+
                 elif mode == "chunk":
+                    chunk_size = tool_input.get("chunk_size", 1024)
+                    chunk_offset = tool_input.get(
+                        "chunk_offset", file_read_chunk_offset_default
+                    )
                     content = read_file_chunk(
-                        console,
-                        file_path,
-                        tool_input.get("chunk_size", 1024),
-                        tool_input.get("chunk_offset", file_read_chunk_offset_default),
+                        console, file_path, chunk_size, chunk_offset
                     )
                     response_content.append({"text": content})
 
+                    # Collect file info AFTER successful read
+                    try:
+                        files_info.append(
+                            get_file_info(
+                                file_path,
+                                mode="chunk",
+                                mode_info={
+                                    "chunk_size": chunk_size,
+                                    "chunk_offset": chunk_offset,
+                                },
+                            )
+                        )
+                    except Exception:
+                        pass
+
                 elif mode == "search":
+                    search_pattern = tool_input.get("search_pattern", "")
+                    context_lines = tool_input.get(
+                        "context_lines", file_read_context_lines_default
+                    )
                     results = search_file(
-                        console,
-                        file_path,
-                        tool_input.get("search_pattern", ""),
-                        tool_input.get("context_lines", file_read_context_lines_default),
+                        console, file_path, search_pattern, context_lines
                     )
                     response_content.extend([{"text": r["context"]} for r in results])
+
+                    # Collect file info AFTER successful search
+                    try:
+                        files_info.append(
+                            get_file_info(
+                                file_path,
+                                mode="search",
+                                mode_info={
+                                    "search_pattern": search_pattern,
+                                    "context_lines": context_lines,
+                                },
+                            )
+                        )
+                    except Exception:
+                        pass
 
                 elif mode == "diff":
                     comparison_path = tool_input.get("comparison_path")
                     if not comparison_path:
                         raise ValueError("comparison_path is required for diff mode")
 
+                    diff_type = tool_input.get("diff_type", file_read_diff_type_default)
                     diff_output = create_diff(
-                        file_path,
-                        os.path.expanduser(comparison_path),
-                        tool_input.get("diff_type", file_read_diff_type_default),
+                        file_path, os.path.expanduser(comparison_path), diff_type
                     )
 
                     diff_panel = create_rich_panel(
@@ -1210,13 +1423,36 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         file_path,
                     )
                     console.print(diff_panel)
-                    response_content.append({"text": f"Diff between {file_path} and {comparison_path}:\n{diff_output}"})
+                    response_content.append(
+                        {
+                            "text": f"Diff between {file_path} and {comparison_path}:\n{diff_output}"
+                        }
+                    )
+
+                    # Collect file info AFTER successful diff
+                    try:
+                        files_info.append(
+                            get_file_info(
+                                file_path,
+                                mode="diff",
+                                mode_info={
+                                    "comparison_path": comparison_path,
+                                    "diff_type": diff_type,
+                                },
+                            )
+                        )
+                    except Exception:
+                        pass
 
                 elif mode == "time_machine":
+                    git_history = tool_input.get(
+                        "git_history", file_read_use_git_default
+                    )
+                    num_revisions = tool_input.get(
+                        "num_revisions", file_read_num_revisions_default
+                    )
                     history_output = time_machine_view(
-                        file_path,
-                        tool_input.get("git_history", file_read_use_git_default),
-                        tool_input.get("num_revisions", file_read_num_revisions_default),
+                        file_path, git_history, num_revisions
                     )
 
                     history_panel = create_rich_panel(
@@ -1225,12 +1461,51 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         file_path,
                     )
                     console.print(history_panel)
-                    response_content.append({"text": f"Time Machine view for {file_path}:\n{history_output}"})
+                    response_content.append(
+                        {
+                            "text": f"Time Machine view for {file_path}:\n{history_output}"
+                        }
+                    )
+
+                    # Collect file info AFTER successful history view
+                    try:
+                        files_info.append(
+                            get_file_info(
+                                file_path,
+                                mode="time_machine",
+                                mode_info={
+                                    "git_history": git_history,
+                                    "num_revisions": num_revisions,
+                                },
+                            )
+                        )
+                    except Exception:
+                        pass
 
             except Exception as e:
                 error_msg = f"Error processing file {file_path}: {str(e)}"
-                console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
+                console.print(
+                    Panel(
+                        escape(error_msg), title="[bold red]Error", border_style="red"
+                    )
+                )
                 response_content.append({"text": error_msg})
+
+        # Store file info in agent state if tool_context is available
+        if tool_context and tool_context.agent and files_info:
+            # Get existing files_read list or create new one
+            files_read = tool_context.agent.state.get("files_read") or []
+            files_read.extend(files_info)
+            tool_context.agent.state.set("files_read", files_read)
+
+            # Also track the last files read
+            tool_context.agent.state.set("last_files_read", files_info)
+
+            # Store in files dict keyed by path (like LangGraph pattern)
+            files_dict = tool_context.agent.state.get("files") or {}
+            for file_info in files_info:
+                files_dict[file_info["path"]] = file_info
+            tool_context.agent.state.set("files", files_dict)
 
         return {
             "toolUseId": tool_use_id,
@@ -1240,7 +1515,9 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     except Exception as e:
         error_msg = f"Error: {str(e)}"
-        console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
+        console.print(
+            Panel(escape(error_msg), title="[bold red]Error", border_style="red")
+        )
         return {
             "toolUseId": tool_use_id,
             "status": "error",

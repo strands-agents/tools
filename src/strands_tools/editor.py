@@ -79,10 +79,11 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
-from strands import tool
+from strands import tool, ToolContext
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
+from strands_tools.utils.file_info import get_file_info
 from strands_tools.utils.user_input import get_user_input
 
 # Global content history cache
@@ -180,7 +181,7 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
     return panel
 
 
-@tool
+@tool(context=True)
 def editor(
     command: str,
     path: str,
@@ -192,6 +193,7 @@ def editor(
     search_text: Optional[str] = None,
     fuzzy: bool = False,
     view_range: Optional[List[int]] = None,
+    tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
     """
     Editor tool designed to do changes iteratively on multiple files.
@@ -320,9 +322,19 @@ def editor(
             raise ValueError("Command is required")
 
         # Validate command
-        valid_commands = ["view", "create", "str_replace", "pattern_replace", "insert", "find_line", "undo_edit"]
+        valid_commands = [
+            "view",
+            "create",
+            "str_replace",
+            "pattern_replace",
+            "insert",
+            "find_line",
+            "undo_edit",
+        ]
         if command not in valid_commands:
-            raise ValueError(f"Unknown command: {command}. Valid commands: {', '.join(valid_commands)}")
+            raise ValueError(
+                f"Unknown command: {command}. Valid commands: {', '.join(valid_commands)}"
+            )
 
         # Get environment variables at runtime
         editor_dir_tree_max_depth = int(os.getenv("EDITOR_DIR_TREE_MAX_DEPTH", "2"))
@@ -360,7 +372,9 @@ def editor(
                 new = new_str
                 if not old or new is None:
                     param_name = "old_str" if command == "str_replace" else "pattern"
-                    raise ValueError(f"Both {param_name} and new_str are required for {command} command")
+                    raise ValueError(
+                        f"Both {param_name} and new_str are required for {command} command"
+                    )
                 language = detect_language(path)
 
                 # Create table grid for side-by-side display
@@ -418,7 +432,9 @@ def editor(
                 console.print()
             elif command == "insert":
                 if not new_str or insert_line is None:
-                    raise ValueError("Both new_str and insert_line are required for insert command")
+                    raise ValueError(
+                        "Both new_str and insert_line are required for insert command"
+                    )
                 language = detect_language(path)
                 # Create table with syntax highlighting
                 table = Table(title="Insertion Preview", show_header=True)
@@ -440,7 +456,9 @@ def editor(
                     if user_input.strip() != "n"
                     else get_user_input("Please provide a reason for cancellation:")
                 )
-                error_message = f"Operation cancelled by the user. Reason: {cancellation_reason}"
+                error_message = (
+                    f"Operation cancelled by the user. Reason: {cancellation_reason}"
+                )
                 error_panel = Panel(
                     Text(error_message, style="bold blue"),
                     title="[bold blue]Operation Cancelled",
@@ -469,6 +487,31 @@ def editor(
                     end = min(len(lines), view_range[1])
                     content = "\n".join(lines[start:end])
 
+                # Track file read in agent state
+                if tool_context and tool_context.agent:
+                    try:
+                        mode_info = None
+                        if view_range:
+                            mode_info = {
+                                "start_line": view_range[0],
+                                "end_line": view_range[1],
+                            }
+                        file_info = get_file_info(
+                            path, mode="view", mode_info=mode_info
+                        )
+
+                        # Add to files_read list
+                        files_read = tool_context.agent.state.get("files_read") or []
+                        files_read.append(file_info)
+                        tool_context.agent.state.set("files_read", files_read)
+
+                        # Update files dict
+                        files_dict = tool_context.agent.state.get("files") or {}
+                        files_dict[file_info["path"]] = file_info
+                        tool_context.agent.state.set("files", files_dict)
+                    except Exception:
+                        pass
+
                 # Determine file type for syntax highlighting
                 file_ext = os.path.splitext(path)[1].lower()
                 lang_map = {
@@ -487,7 +530,9 @@ def editor(
 
                 # Format and print the content
                 formatted = format_code(content, language)
-                formatted_output = format_output(f"📄 File: {os.path.basename(path)}", formatted, "green")
+                formatted_output = format_output(
+                    f"📄 File: {os.path.basename(path)}", formatted, "green"
+                )
                 console.print(formatted_output)
                 result = f"File content displayed in console.\nContent: {content}"
 
@@ -496,7 +541,9 @@ def editor(
                 tree = format_directory_tree(path, editor_dir_tree_max_depth)
                 formatted_output = format_output(f"📁 Directory: {path}", tree, "blue")
                 console.print(formatted_output)
-                result = f"Directory structure displayed in console.\nDirectory tree: {path}"
+                result = (
+                    f"Directory structure displayed in console.\nDirectory tree: {path}"
+                )
             else:
                 raise ValueError(f"Path {path} does not exist")
 
@@ -511,12 +558,31 @@ def editor(
                 f.write(file_text)
             save_content_history(path, file_text)
 
+            # Track file in agent state
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(path, mode="create")
+
+                    # Add to files_written list
+                    files_written = tool_context.agent.state.get("files_written") or []
+                    files_written.append(file_info)
+                    tool_context.agent.state.set("files_written", files_written)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
+
             # Just return success message
             result = f"File {path} created successfully"
 
         elif command == "str_replace":
             if not old_str or new_str is None:
-                raise ValueError("Both old_str and new_str are required for str_replace command")
+                raise ValueError(
+                    "Both old_str and new_str are required for str_replace command"
+                )
 
             # Check content history first
             content = get_last_content(path)
@@ -531,12 +597,18 @@ def editor(
                 # Return existing content if no matches
                 return {
                     "status": "error",
-                    "content": [{"text": f"Note: old_str not found in {path}. Current content:\n{content}"}],
+                    "content": [
+                        {
+                            "text": f"Note: old_str not found in {path}. Current content:\n{content}"
+                        }
+                    ],
                 }
 
             # Make replacements and backup
             new_content = content.replace(old_str, new_str)
-            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            disable_backup = (
+                os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            )
             if not disable_backup:
                 backup_path = f"{path}.bak"
                 shutil.copy2(path, backup_path)
@@ -546,6 +618,27 @@ def editor(
                 f.write(new_content)
             save_content_history(path, new_content)
 
+            # Track file modification in agent state
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(
+                        path,
+                        mode="str_replace",
+                        mode_info={"replacements": count},
+                    )
+
+                    # Add to files_written list
+                    files_written = tool_context.agent.state.get("files_written") or []
+                    files_written.append(file_info)
+                    tool_context.agent.state.set("files_written", files_written)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
+
             result = (
                 f"Text replacement complete and details displayed in console.\nFile: {path}\n"
                 f"Replaced {count} occurrence{'s' if count > 1 else ''}\n"
@@ -554,7 +647,9 @@ def editor(
 
         elif command == "pattern_replace":
             if not pattern or new_str is None:
-                raise ValueError("Both pattern and new_str are required for pattern_replace command")
+                raise ValueError(
+                    "Both pattern and new_str are required for pattern_replace command"
+                )
 
             # Validate pattern
             if not validate_pattern(pattern):
@@ -573,7 +668,11 @@ def editor(
             if not matches:
                 return {
                     "status": "success",
-                    "content": [{"text": f"Note: pattern '{pattern}' not found in {path}. Current content:{content}"}],
+                    "content": [
+                        {
+                            "text": f"Note: pattern '{pattern}' not found in {path}. Current content:{content}"
+                        }
+                    ],
                 }
 
             # Create preview table with match context
@@ -604,11 +703,15 @@ def editor(
 
             # Show more indicator if needed
             if len(matches) > 5:
-                preview_table.add_row("...", f"({len(matches) - 5} more matches)", "→", "...")
+                preview_table.add_row(
+                    "...", f"({len(matches) - 5} more matches)", "→", "..."
+                )
 
             # Make replacements and backup
             new_content = regex.sub(new_str, content)
-            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            disable_backup = (
+                os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            )
             if not disable_backup:
                 backup_path = f"{path}.bak"
                 shutil.copy2(path, backup_path)
@@ -619,6 +722,30 @@ def editor(
             with open(path, "w") as f:
                 f.write(new_content)
             save_content_history(path, new_content)
+
+            # Track file modification in agent state
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(
+                        path,
+                        mode="pattern_replace",
+                        mode_info={
+                            "pattern": pattern,
+                            "replacements": len(matches),
+                        },
+                    )
+
+                    # Add to files_written list
+                    files_written = tool_context.agent.state.get("files_written") or []
+                    files_written.append(file_info)
+                    tool_context.agent.state.set("files_written", files_written)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
 
             # Show summary info
             info_table = Table(show_header=False, border_style="blue")
@@ -633,7 +760,11 @@ def editor(
 
             # Render the UI
             console.print("")
-            console.print(Panel(info_table, title="ℹ️ Pattern Replace Summary", border_style="blue"))
+            console.print(
+                Panel(
+                    info_table, title="ℹ️ Pattern Replace Summary", border_style="blue"
+                )
+            )
             console.print("")
             console.print(preview_table)
             console.print("")
@@ -651,7 +782,9 @@ def editor(
 
         elif command == "insert":
             if not new_str or insert_line is None:
-                raise ValueError("Both new_str and insert_line are required for insert command")
+                raise ValueError(
+                    "Both new_str and insert_line are required for insert command"
+                )
 
             # Get content
             content = get_last_content(path)
@@ -684,7 +817,9 @@ def editor(
                 raise ValueError(f"insert_line {insert_line} is out of range")
 
             # Make backup
-            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            disable_backup = (
+                os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            )
             if not disable_backup:
                 backup_path = f"{path}.bak"
                 shutil.copy2(path, backup_path)
@@ -695,6 +830,27 @@ def editor(
             with open(path, "w") as f:
                 f.write(new_content)
             save_content_history(path, new_content)
+
+            # Track file modification in agent state
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(
+                        path,
+                        mode="insert",
+                        mode_info={"insert_line": insert_line},
+                    )
+
+                    # Add to files_written list
+                    files_written = tool_context.agent.state.get("files_written") or []
+                    files_written.append(file_info)
+                    tool_context.agent.state.set("files_written", files_written)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
 
             # Show context
             context_start = max(0, insert_line - 2)
@@ -731,6 +887,27 @@ def editor(
                 with open(path, "r") as f:
                     content = f.read()
                 save_content_history(path, content)
+
+            # Track file read in agent state
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(
+                        path,
+                        mode="find_line",
+                        mode_info={"search_text": search_text},
+                    )
+
+                    # Add to files_read list
+                    files_read = tool_context.agent.state.get("files_read") or []
+                    files_read.append(file_info)
+                    tool_context.agent.state.set("files_read", files_read)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
 
             # Find line
             line_num = find_context_line(content, search_text, fuzzy)
@@ -786,7 +963,26 @@ def editor(
                 content = f.read()
             save_content_history(path, content)
 
-            formatted_output = format_output("↩️ Undo Complete", f"Successfully reverted changes to {path}", "yellow")
+            # Track file modification in agent state (undone version)
+            if tool_context and tool_context.agent:
+                try:
+                    file_info = get_file_info(path, mode="undo_edit")
+
+                    # Add to files_written list
+                    files_written = tool_context.agent.state.get("files_written") or []
+                    files_written.append(file_info)
+                    tool_context.agent.state.set("files_written", files_written)
+
+                    # Update files dict
+                    files_dict = tool_context.agent.state.get("files") or {}
+                    files_dict[file_info["path"]] = file_info
+                    tool_context.agent.state.set("files", files_dict)
+                except Exception:
+                    pass
+
+            formatted_output = format_output(
+                "↩️ Undo Complete", f"Successfully reverted changes to {path}", "yellow"
+            )
             console.print(formatted_output)
             result = f"Successfully reverted changes to {path}"
 
