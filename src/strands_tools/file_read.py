@@ -1158,7 +1158,7 @@ def file_read(
                     # Also track the last files read
                     tool_context.agent.state.set("last_files_read", files_info)
 
-                    # Store in files dict keyed by path (like LangGraph pattern)
+                    # Store in files dict keyed by path
                     files_dict = tool_context.agent.state.get("files") or {}
                     for file_info in files_info:
                         files_dict[file_info["path"]] = file_info
@@ -1241,7 +1241,7 @@ def file_read(
                 # Also track the last files read
                 tool_context.agent.state.set("last_files_read", files_info)
 
-                # Store in files dict keyed by path (like LangGraph pattern)
+                # Store in files dict keyed by path
                 files_dict = tool_context.agent.state.get("files") or {}
                 for file_info in files_info:
                     files_dict[file_info["path"]] = file_info
@@ -1501,7 +1501,7 @@ def file_read(
             # Also track the last files read
             tool_context.agent.state.set("last_files_read", files_info)
 
-            # Store in files dict keyed by path (like LangGraph pattern)
+            # Store in files dict keyed by path
             files_dict = tool_context.agent.state.get("files") or {}
             for file_info in files_info:
                 files_dict[file_info["path"]] = file_info

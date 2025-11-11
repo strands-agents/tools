@@ -289,7 +289,7 @@ def file_write(
             # Also track the last file written
             tool_context.agent.state.set("last_file_written", file_info)
 
-            # Store in files dict keyed by path (like LangGraph pattern)
+            # Store in files dict keyed by path
             files_dict = tool_context.agent.state.get("files") or {}
             files_dict[file_info["path"]] = file_info
             tool_context.agent.state.set("files", files_dict)

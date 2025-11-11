@@ -1,6 +1,6 @@
 # File State Tracking
 
-This document describes the file state tracking feature in the `file_read`, `file_write`, and `editor` tools, inspired by the [LangGraph deepagents filesystem middleware](https://github.com/langchain-ai/deepagents/blob/master/libs/deepagents/middleware/filesystem.py) pattern.
+This document describes the file state tracking feature in the `file_read`, `file_write`, and `editor` tools.
 
 ## Overview
 
@@ -10,7 +10,7 @@ All file tools (`file_read`, `file_write`, `editor`) automatically track file st
 
 File information is stored in multiple formats for flexibility:
 
-**Dictionary by Path (LangGraph-style):**
+**Dictionary by Path:**
 ```python
 files = agent.state.get("files") or {}
 # Structure: {"/path/to/file.py": FileInfo, ...}
@@ -45,7 +45,7 @@ This enables agents to:
 - Build stateful agents that are aware of their file interactions
 - Monitor file changes across agent operations
 - Implement file-based decision making
-- Integrate with graph-based agent frameworks (LangGraph, etc.)
+- Integrate with graph-based agent frameworks
 
 ## File Info Structure
 
@@ -79,7 +79,7 @@ response = agent.tool.file_write(
     content="Hello, World!\nThis is line 2."
 )
 
-# Access via files dict (LangGraph pattern)
+# Access via files dict
 files = agent.state.get("files") or {}
 if "/tmp/example.txt" in files:
     file_info = files["/tmp/example.txt"]
@@ -117,7 +117,7 @@ response = agent.tool.file_read(
     mode="view"
 )
 
-# Access via files dict (LangGraph pattern)
+# Access via files dict
 files = agent.state.get("files") or {}
 if "/tmp/example.txt" in files:
     file_info = files["/tmp/example.txt"]
@@ -266,96 +266,6 @@ tracker.track_read(read_response)
 # Get summary
 summary = tracker.get_summary()
 print(f"Session summary: {summary}")
-```
-
-## Integration with LangGraph
-
-For agents using LangGraph, file information can be stored in the graph state. The tools accept an optional `state` parameter for seamless integration:
-
-### Method 1: Using State Parameter (Recommended)
-
-```python
-from typing import TypedDict, List, Annotated
-from langgraph.graph import StateGraph, add_messages
-
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    files_accessed: List[dict]
-    last_file_operation: dict
-
-def file_operation_node(state: AgentState):
-    """Node that performs file operations with state tracking."""
-    from strands_tools import file_write
-    
-    # Call tool with state parameter
-    result = file_write(
-        tool={
-            "toolUseId": "write-1",
-            "input": {
-                "path": "/tmp/data.txt",
-                "content": "Important data"
-            }
-        },
-        state=state  # Pass state for integration
-    )
-    
-    # Extract file info from metadata and update state
-    if result.get("metadata") and "file_info" in result["metadata"]:
-        file_info = result["metadata"]["file_info"]
-        state["files_accessed"].append(file_info)
-        state["last_file_operation"] = {
-            "type": "write",
-            "file": file_info["path"],
-            "timestamp": file_info["modified_at"]
-        }
-    
-    return state
-
-# Build graph
-workflow = StateGraph(AgentState)
-workflow.add_node("file_ops", file_operation_node)
-# ... add more nodes and edges
-app = workflow.compile()
-```
-
-### Method 2: Using Metadata Return Pattern
-
-```python
-from typing import TypedDict, List
-from langgraph.graph import StateGraph
-
-class AgentState(TypedDict):
-    messages: List[dict]
-    files_accessed: List[dict]
-    last_file_operation: dict
-
-def process_file_tool_result(state: AgentState, tool_result: dict) -> AgentState:
-    """Update state with file information from tool results."""
-    
-    # Track files from write operations
-    if "metadata" in tool_result and "file_info" in tool_result["metadata"]:
-        file_info = tool_result["metadata"]["file_info"]
-        state["files_accessed"].append(file_info)
-        state["last_file_operation"] = {
-            "type": "write",
-            "file": file_info["path"],
-            "timestamp": file_info["modified_at"]
-        }
-    
-    # Track files from read operations
-    if "metadata" in tool_result and "files_info" in tool_result["metadata"]:
-        for file_info in tool_result["metadata"]["files_info"]:
-            state["files_accessed"].append(file_info)
-        
-        if tool_result["metadata"]["files_info"]:
-            last_file = tool_result["metadata"]["files_info"][-1]
-            state["last_file_operation"] = {
-                "type": "read",
-                "file": last_file["path"],
-                "timestamp": last_file["modified_at"]
-            }
-    
-    return state
 ```
 
 ## Best Practices
