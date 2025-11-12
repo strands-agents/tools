@@ -114,7 +114,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
+| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
@@ -144,6 +144,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
 | rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
+| search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
+| chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 
 \* *These tools do not work on windows*
 
@@ -502,6 +504,33 @@ result = agent.tool.use_aws(
 )
 ```
 
+### Retrieve Tool
+
+```python
+from strands import Agent
+from strands_tools import retrieve
+
+agent = Agent(tools=[retrieve])
+
+# Basic retrieval without metadata
+result = agent.tool.retrieve(
+    text="What is artificial intelligence?"
+)
+
+# Retrieval with metadata enabled
+result = agent.tool.retrieve(
+    text="What are the latest developments in machine learning?",
+    enableMetadata=True
+)
+
+# Using environment variable to set default metadata behavior
+# Set RETRIEVE_ENABLE_METADATA_DEFAULT=true in your environment
+result = agent.tool.retrieve(
+    text="Tell me about cloud computing"
+    # enableMetadata will default to the environment variable value
+)
+```
+
 ### Batch Tool
 
 ```python
@@ -531,8 +560,37 @@ result = agent.tool.batch(
 )
 ```
 
-### AgentCore Memory
+### Video Tools
 
+```python
+from strands import Agent
+from strands_tools import search_video, chat_video
+
+agent = Agent(tools=[search_video, chat_video])
+
+# Search for video content using natural language
+result = agent.tool.search_video(
+    query="people discussing AI technology",
+    threshold="high",
+    group_by="video",
+    page_limit=5
+)
+
+# Chat with existing video (no index_id needed)
+result = agent.tool.chat_video(
+    prompt="What are the main topics discussed in this video?",
+    video_id="existing-video-id"
+)
+
+# Chat with new video file (index_id required for upload)
+result = agent.tool.chat_video(
+    prompt="Describe what happens in this video",
+    video_path="/path/to/video.mp4",
+    index_id="your-index-id"  # or set TWELVELABS_PEGASUS_INDEX_ID env var
+)
+```
+
+### AgentCore Memory
 ```python
 from strands import Agent
 from strands_tools.agent_core_memory import AgentCoreMemoryToolProvider
@@ -755,6 +813,79 @@ result = agent.tool.use_computer(
 )
 ```
 
+### Elasticsearch Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import elasticsearch_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[elasticsearch_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.elasticsearch_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "cloud_id": "your-elasticsearch-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.elasticsearch_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.elasticsearch_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.elasticsearch_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use Elasticsearch Serverless (URL-based connection)
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -925,6 +1056,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | EDITOR_DIR_TREE_MAX_DEPTH | Maximum depth for directory tree visualization | 2 |
 | EDITOR_DEFAULT_STYLE | Default style for output panels | default |
 | EDITOR_DEFAULT_LANGUAGE | Default language for syntax highlighting | python |
+| EDITOR_DISABLE_BACKUP | Skip creating .bak backup files during edit operations | false |
 
 #### Environment Tool
 
@@ -970,6 +1102,20 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
 | STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
 | STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
+#### Retrieve Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
+#### Video Tools
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| TWELVELABS_API_KEY | TwelveLabs API key for video analysis | None |
+| TWELVELABS_MARENGO_INDEX_ID | Default index ID for search_video tool | None |
+| TWELVELABS_PEGASUS_INDEX_ID | Default index ID for chat_video tool | None |
 
 
 ## Contributing ❤️

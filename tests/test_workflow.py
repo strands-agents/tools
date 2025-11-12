@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+from strands.agent import AgentResult
 from strands_tools import workflow as workflow_module
 
 
@@ -247,6 +248,17 @@ class TestWorkflowExecution:
             assert result["status"] == "error"
             assert "not found" in result["content"][0]["text"]
 
+    def test_task_id_namespacing(self):
+        """Test task ID namespacing and extraction logic."""
+        workflow_id = "test_workflow"
+        task_id = "task1"
+
+        namespaced_task_id = f"{workflow_id}:{task_id}"
+        assert namespaced_task_id == "test_workflow:task1"
+
+        extracted_id = namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
+        assert extracted_id == "task1"
+
 
 class TestWorkflowStatus:
     """Test workflow status functionality."""
@@ -415,14 +427,11 @@ class TestWorkflowManager:
         ):
             # Create a proper mock agent result that returns structured data
             mock_task_agent = MagicMock()
-            mock_result = MagicMock()
-            mock_result.__str__ = MagicMock(return_value="Task completed successfully")
-            mock_result.get = MagicMock(
-                side_effect=lambda k, default=None: {
-                    "content": [{"text": "Task completed successfully"}],
-                    "stop_reason": "completed",
-                    "metrics": None,
-                }.get(k, default)
+            mock_result = AgentResult(
+                message={"content": [{"text": "Task completed successfully"}]},
+                stop_reason="completed",
+                metrics=None,
+                state=MagicMock(),
             )
 
             mock_task_agent.return_value = mock_result

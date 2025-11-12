@@ -223,7 +223,8 @@ def test_unknown_action_type(mock_interpreter):
         result = mock_interpreter.code_interpreter({"action": {"type": "unknownAction"}})
 
         assert result["status"] == "error"
-        assert "Unknown action type" in result["content"][0]["text"]
+        # Update assertion to match the new error message format
+        assert "Unknown action:" in result["content"][0]["text"]
 
 
 def test_cleanup_method(mock_interpreter):

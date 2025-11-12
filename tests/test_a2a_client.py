@@ -12,7 +12,7 @@ def test_init_default_parameters():
     assert provider.timeout == DEFAULT_TIMEOUT
     assert provider._known_agent_urls == []
     assert provider._discovered_agents == {}
-    assert provider._httpx_client is None
+    assert provider._httpx_client_args == {"timeout": DEFAULT_TIMEOUT}
 
 
 def test_init_custom_parameters():
@@ -24,6 +24,30 @@ def test_init_custom_parameters():
 
     assert provider.timeout == timeout
     assert provider._known_agent_urls == agent_urls
+
+
+def test_init_with_httpx_client_args():
+    """Test initialization with httpx client args."""
+    client_args = {"headers": {"Authorization": "Bearer token"}, "timeout": 60}
+    provider = A2AClientToolProvider(httpx_client_args=client_args)
+
+    assert provider._httpx_client_args["headers"] == {"Authorization": "Bearer token"}
+    assert provider._httpx_client_args["timeout"] == 60
+
+
+def test_init_without_httpx_client_args():
+    """Test initialization without httpx client args uses default timeout."""
+    provider = A2AClientToolProvider(timeout=45)
+
+    assert provider._httpx_client_args == {"timeout": 45}
+
+
+def test_init_httpx_client_args_overrides_timeout():
+    """Test that httpx_client_args timeout takes precedence."""
+    client_args = {"timeout": 120}
+    provider = A2AClientToolProvider(timeout=45, httpx_client_args=client_args)
+
+    assert provider._httpx_client_args["timeout"] == 120
 
 
 def test_tools_property():
@@ -38,32 +62,51 @@ def test_tools_property():
     assert "a2a_send_message" in tool_names
 
 
-@pytest.mark.asyncio
-async def test_ensure_httpx_client_creates_new_client():
-    """Test _ensure_httpx_client creates new client when none exists."""
+def test_get_httpx_client_creates_new_client():
+    """Test _get_httpx_client creates new client with default args."""
     provider = A2AClientToolProvider(timeout=45)
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        result = await provider._ensure_httpx_client()
+        result = provider._get_httpx_client()
 
         mock_client_class.assert_called_once_with(timeout=45)
         assert result == mock_client
-        assert provider._httpx_client == mock_client
 
 
-@pytest.mark.asyncio
-async def test_ensure_httpx_client_reuses_existing():
-    """Test _ensure_httpx_client reuses existing client."""
-    provider = A2AClientToolProvider()
-    existing_client = Mock()
-    provider._httpx_client = existing_client
+def test_get_httpx_client_uses_custom_args():
+    """Test _get_httpx_client uses custom client args."""
+    client_args = {"headers": {"Authorization": "Bearer token"}, "timeout": 120}
+    provider = A2AClientToolProvider(httpx_client_args=client_args)
 
-    result = await provider._ensure_httpx_client()
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
 
-    assert result == existing_client
+        result = provider._get_httpx_client()
+
+        mock_client_class.assert_called_once_with(headers={"Authorization": "Bearer token"}, timeout=120)
+        assert result == mock_client
+
+
+def test_get_httpx_client_creates_fresh_each_time():
+    """Test _get_httpx_client creates fresh client each time to avoid event loop issues."""
+    provider = A2AClientToolProvider(timeout=60)
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client1 = Mock()
+        mock_client2 = Mock()
+        mock_client_class.side_effect = [mock_client1, mock_client2]
+
+        result1 = provider._get_httpx_client()
+        result2 = provider._get_httpx_client()
+
+        # Should create a new client each time
+        assert mock_client_class.call_count == 2
+        assert result1 == mock_client1
+        assert result2 == mock_client2
 
 
 @pytest.mark.asyncio
@@ -310,7 +353,7 @@ async def test_send_message_without_message_id():
 @pytest.mark.asyncio
 @patch("strands_tools.a2a_client.uuid4")
 @patch.object(A2AClientToolProvider, "_discover_agent_card")
-@patch.object(A2AClientToolProvider, "_ensure_client_factory")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
 async def test_send_message_success(mock_ensure, mock_factory, mock_discover, mock_uuid):
     """Test _send_message successful message sending."""
@@ -374,12 +417,12 @@ async def test_send_message_error(mock_ensure, mock_discover):
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_ensure_httpx_client")
-async def test_create_a2a_card_resolver(mock_ensure_client):
+@patch.object(A2AClientToolProvider, "_get_httpx_client")
+async def test_create_a2a_card_resolver(mock_get_client):
     """Test _create_a2a_card_resolver creates resolver with correct parameters."""
     provider = A2AClientToolProvider()
     mock_client = Mock()
-    mock_ensure_client.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     with patch("strands_tools.a2a_client.A2ACardResolver") as mock_resolver_class:
         mock_resolver = Mock()
@@ -391,13 +434,12 @@ async def test_create_a2a_card_resolver(mock_ensure_client):
         assert result == mock_resolver
 
 
-@pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_ensure_httpx_client")
-async def test_ensure_client_factory(mock_ensure_client):
-    """Test _ensure_client_factory creates ClientFactory with correct parameters."""
+@patch.object(A2AClientToolProvider, "_get_httpx_client")
+def test_get_client_factory(mock_get_client):
+    """Test _get_client_factory creates ClientFactory with correct parameters."""
     provider = A2AClientToolProvider()
     mock_client = Mock()
-    mock_ensure_client.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     with patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class:
         with patch("strands_tools.a2a_client.ClientConfig") as mock_config_class:
@@ -406,18 +448,40 @@ async def test_ensure_client_factory(mock_ensure_client):
             mock_factory = Mock()
             mock_factory_class.return_value = mock_factory
 
-            result = await provider._ensure_client_factory()
+            result = provider._get_client_factory()
 
             mock_config_class.assert_called_once()
             mock_factory_class.assert_called_once_with(mock_config)
             assert result == mock_factory
-            assert provider._client_factory == mock_factory
+
+
+def test_get_client_factory_creates_fresh_each_time():
+    """Test _get_client_factory creates fresh factory each time to avoid event loop issues."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_get_httpx_client") as mock_get_client:
+        with patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class:
+            mock_client1 = Mock()
+            mock_client2 = Mock()
+            mock_get_client.side_effect = [mock_client1, mock_client2]
+
+            mock_factory1 = Mock()
+            mock_factory2 = Mock()
+            mock_factory_class.side_effect = [mock_factory1, mock_factory2]
+
+            result1 = provider._get_client_factory()
+            result2 = provider._get_client_factory()
+
+            # Should create a new factory each time
+            assert mock_factory_class.call_count == 2
+            assert result1 == mock_factory1
+            assert result2 == mock_factory2
 
 
 @pytest.mark.asyncio
 @patch("strands_tools.a2a_client.uuid4")
 @patch.object(A2AClientToolProvider, "_discover_agent_card")
-@patch.object(A2AClientToolProvider, "_ensure_client_factory")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
 async def test_send_message_task_response(mock_ensure, mock_factory, mock_discover, mock_uuid):
     """Test _send_message handling task response from ClientFactory."""
@@ -466,7 +530,7 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
 @pytest.mark.asyncio
 @patch("strands_tools.a2a_client.uuid4")
 @patch.object(A2AClientToolProvider, "_discover_agent_card")
-@patch.object(A2AClientToolProvider, "_ensure_client_factory")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
 async def test_send_message_task_response_no_update(mock_ensure, mock_factory, mock_discover, mock_uuid):
     """Test _send_message handling task response with no update event."""
