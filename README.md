@@ -901,7 +901,7 @@ These variables affect multiple tools:
 | AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
 | LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
-| PYTHON_REPL_PERSISTENCE_DIR | Set Directory for python_repl tool to write state file | Null | python_repl
+| PYTHON_REPL_PERSISTENCE_DIR | Set Directory for python_repl tool to write state file | Null | python_repl |
 
 ### Tool-Specific Environment Variables
 
