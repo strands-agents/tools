@@ -22,8 +22,16 @@ repos:
         pass_filenames: false
         types: [ python ]
         stages: [ pre-commit ]
+      - id: hatch-test
+        name: Unit tests
+        entry: hatch test --cover
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]
       - id: commitizen-check
         name: Check commit message
         entry: hatch run cz check --commit-msg-file
         language: system
+        
         stages: [commit-msg]
