@@ -112,6 +112,8 @@ TOOL_SPEC = {
 }
 
 
+
+
 class OutputCapture:
     """Captures stdout and stderr output."""
 
@@ -152,29 +154,29 @@ class ReplState:
         self._namespace = {
             "__name__": "__main__",
         }
-        # Check is persistence directory path defined in env variable
-        if "PYTHON_REPL_PERSISTENCE_DIR" in os.environ:
-            dir_path = os.environ.get("PYTHON_REPL_PERSISTENCE_DIR")
+        # Check if persistence directory path is defined in env variable
+        if 'PYTHON_REPL_PERSISTENCE_DIR' in os.environ:
+            dir_path = os.environ.get('PYTHON_REPL_PERSISTENCE_DIR')
             # Test directory for validation and security
             try:
                 path = Path(dir_path).resolve()
-
+                
                 # Check if path exists
                 if not path.exists():
                     raise ValueError(f"Directory does not exist: {path}")
-
+                
                 # Check if directory or file
                 if not path.is_dir():
                     raise ValueError(f"Path exists but is not a directory: {path}")
-
+                
                 # Check if directory is writable
                 if not os.access(path, os.W_OK):
                     raise PermissionError(f"Directory is not writable: {path}")
-
+                
                 # If all validations pass, set path
-                self.persistence_dir = os.path.join(path, "repl_state")
+                self.persistence_dir =  os.path.join(path, "repl_state" )
                 logger.debug(f"Using validated persistence directory: {self.persistence_dir}")
-
+                
             except Exception as e:
                 # If validation fails, use original default path
                 logger.warning(f"Invalid path set : {e}. Using default path")
