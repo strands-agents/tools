@@ -33,5 +33,4 @@ repos:
         name: Check commit message
         entry: hatch run cz check --commit-msg-file
         language: system
-        
         stages: [commit-msg]
