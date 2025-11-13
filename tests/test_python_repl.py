@@ -5,8 +5,9 @@ import sys
 import tempfile
 import threading
 import time
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
+
 import dill
 import pytest
 from strands import Agent
@@ -114,7 +115,6 @@ class TestReplState:
             finally:
                 os.unlink(tmpfile.name)
 
-
     def test_unwritable_persistence_dir_falls_back(self):
         """Test that an unwritable directory changes to default."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -130,9 +130,7 @@ class TestReplState:
 
     def test_no_env_var_uses_default(self):
         """Test that missing env var uses default directory."""
-        with (
-            patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": ""})
-        ):
+        with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": ""}):
             repl = python_repl.ReplState()
             assert "repl_state" in repl.persistence_dir
             assert os.path.exists(repl.persistence_dir)
