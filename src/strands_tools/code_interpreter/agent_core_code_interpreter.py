@@ -174,7 +174,6 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.auto_create = auto_create
         self.persist_sessions = persist_sessions
 
-        # Clean session name to meet AWS validation: [0-9a-zA-Z]{1,40}
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
         else:
