@@ -902,7 +902,6 @@ These variables affect multiple tools:
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
 | LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
 
-
 ### Tool-Specific Environment Variables
 
 #### Calculator Tool

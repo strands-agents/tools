@@ -112,7 +112,6 @@ TOOL_SPEC = {
 }
 
 
-
 class OutputCapture:
     """Captures stdout and stderr output."""
 
