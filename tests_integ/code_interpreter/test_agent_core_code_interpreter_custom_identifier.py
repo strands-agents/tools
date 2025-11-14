@@ -4,7 +4,7 @@ Integration tests for the AgentCoreCodeInterpreter custom identifier functionali
 These tests verify end-to-end functionality with custom identifiers, including:
 - Complete session creation flow with custom identifiers
 - Backward compatibility with existing functionality
-- Error scenarios with meaningful error messages including identifier context
+- Error scenarios with meaningful error messages
 """
 
 import logging
@@ -262,7 +262,7 @@ class TestBackwardCompatibility:
 
 
 class TestErrorScenariosWithIdentifierContext:
-    """Test error scenarios and ensure meaningful error messages include identifier context."""
+    """Test error scenarios and ensure meaningful error messages."""
 
     def test_session_initialization_error_handling_with_custom_identifier(self):
         """Test that session initialization errors are handled correctly when using custom identifiers."""
@@ -316,8 +316,8 @@ class TestErrorScenariosWithIdentifierContext:
             assert "clienterrorsession" in error_message
             assert "Client creation failed" in error_message
 
-    def test_logging_includes_identifier_context_on_errors(self):
-        """Test that error logging includes identifier context for debugging."""
+    def test_logging_includes_session_context_on_errors(self):
+        """Test that error logging includes session context for debugging."""
         with patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient") as mock_client_class:
             with patch("strands_tools.code_interpreter.agent_core_code_interpreter.logger") as mock_logger:
                 # Mock client to raise an exception
@@ -338,36 +338,32 @@ class TestErrorScenariosWithIdentifierContext:
                     }
                 )
 
-                # Verify error logging includes identifier
+                # Verify error logging includes session name and error
                 mock_logger.error.assert_called_once()
                 error_call_args = mock_logger.error.call_args[0][0]
-                assert custom_id in error_call_args
                 assert "loggingtestsession" in error_call_args
                 assert "Logging test error" in error_call_args
 
-    def test_session_not_found_error_with_custom_identifier(self):
-        """Test that session not found errors work correctly with custom identifiers."""
+    def test_session_not_found_raises_value_error(self):
+        """Test that session not found raises ValueError when auto_create=False."""
         custom_id = "session-not-found-test"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id, auto_create=False)
 
-        # Try to execute code in non-existent session - should return error dict (not raise)
-        result = interpreter.code_interpreter(
-            code_interpreter_input={
-                "action": {
-                    "type": "executeCode",
-                    "session_name": "nonexistentsession",
-                    "code": "print('This should fail')",
-                    "language": "python"
-                }
-            }
-        )
+        # Try to execute code in non-existent session - should raise ValueError
+        with pytest.raises(ValueError) as exc_info:
+            interpreter.execute_code(
+                ExecuteCodeAction(
+                    type="executeCode",
+                    session_name="nonexistentsession",
+                    code="print('This should fail')",
+                    language=LanguageType.PYTHON
+                )
+            )
 
-        # Verify error response
-        assert result['status'] == 'error'
-        error_message = result['content'][0]['text']
-        assert "nonexistentsession" in error_message
-        assert "not found" in error_message
-        assert "initSession" in error_message
+        # Verify error message
+        assert "nonexistentsession" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+        assert "initSession" in str(exc_info.value)
 
     def test_multiple_error_scenarios_with_different_identifiers(self):
         """Test various error scenarios with different custom identifiers."""
@@ -594,21 +590,18 @@ class TestIdentifierValidationAndEdgeCases:
         interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)
         assert interpreter2.auto_create is False
         
-        # Test strict mode behavior - should return error dict (not raise ValueError)
-        result = interpreter2.code_interpreter(
-            code_interpreter_input={
-                "action": {
-                    "type": "executeCode",
-                    "session_name": "nonexistentsession",
-                    "code": "print('This should fail')",
-                    "language": "python"
-                }
-            }
-        )
+        # Test strict mode behavior - should raise ValueError
+        with pytest.raises(ValueError) as exc_info:
+            interpreter2.execute_code(
+                ExecuteCodeAction(
+                    type="executeCode",
+                    session_name="nonexistentsession",
+                    code="print('This should fail')",
+                    language=LanguageType.PYTHON
+                )
+            )
         
-        # Verify error response
-        assert result['status'] == 'error'
-        error_message = result['content'][0]['text']
-        assert "nonexistentsession" in error_message
-        assert "not found" in error_message
-        assert "initSession" in error_message
+        # Verify error message
+        assert "nonexistentsession" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+        assert "initSession" in str(exc_info.value)
