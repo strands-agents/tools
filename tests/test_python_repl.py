@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import dill
@@ -85,6 +86,54 @@ class TestReplState:
 
         namespace = repl.get_namespace()
         assert namespace["x"] == 42
+
+    def test_valid_persistence_dir_from_env(self):
+        """Test that a valid PYTHON_REPL_PERSISTENCE_DIR is accepted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(tmpdir, exist_ok=True)
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                expected_dir = os.path.join(Path(tmpdir).resolve(), "repl_state")
+                assert repl.persistence_dir == expected_dir
+
+    def test_nonexistent_persistence_dir_falls_back(self):
+        """Test that a nonexistent directory changes to default."""
+        fake_dir = "/badpath"
+        with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": fake_dir}):
+            repl = python_repl.ReplState()
+            assert repl.persistence_dir != fake_dir
+            assert "repl_state" in repl.persistence_dir
+
+    def test_file_instead_of_dir_defaults(self):
+        """Test that a file path instead of directory changes to default."""
+        with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+            try:
+                with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpfile.name}):
+                    repl = python_repl.ReplState()
+                    assert repl.persistence_dir != tmpfile.name
+                    assert "repl_state" in repl.persistence_dir
+            finally:
+                os.unlink(tmpfile.name)
+
+    def test_unwritable_persistence_dir_falls_back(self):
+        """Test that an unwritable directory changes to default."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Mock os.access to simulate unwritable directory
+            with (
+                patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}),
+                patch("os.access", return_value=False),
+            ):
+                repl = python_repl.ReplState()
+                # Should fall back to default
+                assert repl.persistence_dir != tmpdir
+                assert "repl_state" in repl.persistence_dir
+
+    def test_no_env_var_uses_default(self):
+        """Test that missing env var uses default directory."""
+        with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": ""}):
+            repl = python_repl.ReplState()
+            assert "repl_state" in repl.persistence_dir
+            assert os.path.exists(repl.persistence_dir)
 
     def test_clear_state(self, temp_repl_state_dir):
         """Test clearing state."""
