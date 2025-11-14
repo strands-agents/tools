@@ -2,12 +2,19 @@
 Tests for the base CodeInterpreter class.
 """
 
+import sys
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
-from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
-from strands_tools.code_interpreter.models import (
+
+mock_bedrock_agentcore = MagicMock()
+sys.modules["bedrock_agentcore"] = mock_bedrock_agentcore
+sys.modules["bedrock_agentcore.tools"] = MagicMock()
+sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
+
+from strands_tools.code_interpreter.code_interpreter import CodeInterpreter  # noqa: E402
+from strands_tools.code_interpreter.models import (  # noqa: E402
     CodeInterpreterInput,
     ExecuteCodeAction,
     ExecuteCommandAction,
@@ -214,7 +221,6 @@ def test_write_files_action(mock_interpreter):
 
 def test_unknown_action_type(mock_interpreter):
     """Test handling of unknown action type."""
-    # Create a mock action that doesn't match any known types
     with patch("strands_tools.code_interpreter.models.CodeInterpreterInput.model_validate") as mock_validate:
         mock_action = MagicMock()
         mock_action.action = MagicMock()
@@ -223,18 +229,15 @@ def test_unknown_action_type(mock_interpreter):
         result = mock_interpreter.code_interpreter({"action": {"type": "unknownAction"}})
 
         assert result["status"] == "error"
-        # Update assertion to match the new error message format
         assert "Unknown action:" in result["content"][0]["text"]
 
 
 def test_cleanup_method(mock_interpreter):
     """Test explicit cleanup method."""
-    # Start the platform first
     mock_interpreter._start()
     assert mock_interpreter._started
     assert mock_interpreter.platform_started
 
-    # Call cleanup
     mock_interpreter._cleanup()
     assert not mock_interpreter._started
     assert mock_interpreter.platform_cleaned
@@ -243,8 +246,6 @@ def test_cleanup_method(mock_interpreter):
 def test_cleanup_when_not_started(mock_interpreter):
     """Test cleanup when platform was never started."""
     assert not mock_interpreter._started
-
-    # Cleanup should be safe to call
     mock_interpreter._cleanup()
     assert not mock_interpreter._started
 
@@ -254,7 +255,6 @@ def test_destructor_cleanup(mock_interpreter):
     mock_interpreter._start()
     assert mock_interpreter._started
 
-    # Call destructor
     mock_interpreter.__del__()
     assert not mock_interpreter._started
 
@@ -264,9 +264,7 @@ def test_destructor_cleanup_exception_handling():
     mock_interpreter = MockCodeInterpreter()
     mock_interpreter._start()
 
-    # Mock cleanup to raise an exception
     with patch.object(mock_interpreter, "_cleanup", side_effect=Exception("Cleanup error")):
-        # Should not raise exception
         mock_interpreter.__del__()
 
 
@@ -276,17 +274,13 @@ def test_multiple_tool_calls_only_start_once(mock_interpreter):
         action=InitSessionAction(type="initSession", description="Test session", session_name="test-session")
     )
 
-    # First call
     mock_interpreter.code_interpreter(action_input)
     assert mock_interpreter._started
 
-    # Reset the platform_started flag to test it's not called again
     mock_interpreter.platform_started = False
 
-    # Second call
     mock_interpreter.code_interpreter(action_input)
     assert mock_interpreter._started
-    # Platform start should not be called again
     assert not mock_interpreter.platform_started
 
 

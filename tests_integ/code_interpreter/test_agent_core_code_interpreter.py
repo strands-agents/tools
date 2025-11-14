@@ -16,11 +16,13 @@ from tests_integ.ci_environments import skip_if_github_action
 
 logger = logging.getLogger(__name__)
 
-
 @pytest.fixture
 def bedrock_agent_core_code_interpreter() -> AgentCoreCodeInterpreter:
     """Create a real BedrockAgentCore code interpreter tool."""
-    return AgentCoreCodeInterpreter(region="us-west-2")
+    return AgentCoreCodeInterpreter(
+        region="us-west-2",
+        persist_sessions=False  # Don't persist for integration tests
+    )
 
 
 @pytest.fixture
@@ -38,7 +40,7 @@ def test_direct_tool_call(agent):
             "action": {
                 "type": "initSession",
                 "description": "Data analysis session",
-                "session_name": "analysis-session"
+                "session_name": "analysissession"  # Cleaned name (no dashes)
             }
         }
     )
@@ -83,7 +85,7 @@ def test_auto_session_creation(bedrock_agent_core_code_interpreter):
     # Verify a session was auto-created (will be random UUID, not "default")
     assert len(bedrock_agent_core_code_interpreter._sessions) == 1
     auto_created_session = list(bedrock_agent_core_code_interpreter._sessions.keys())[0]
-    assert auto_created_session.startswith("session-")  # Check pattern instead of exact name
+    assert auto_created_session.startswith("session")  # Check pattern instead of exact name
     
     # Execute a second command in the same auto-created session
     result2 = bedrock_agent_core_code_interpreter.code_interpreter(
