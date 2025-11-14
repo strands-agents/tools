@@ -77,14 +77,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             
             session_name (Optional[str]): Session identifier for tracking and reconnection.
                 - None (default): Generates random session ID per instance (e.g., "session-a1b2c3d4e5f6")
-                - String value: Uses provided name (cleaned for AWS validation)
-                
-                Note: Session names are automatically cleaned to meet AWS validation requirements:
-                - Pattern: [0-9a-zA-Z]{1,40}
-                - Hyphens and underscores removed
-                - Truncated to 40 characters
-                
-                Example: "user-123-abc" → "user123abc"
+                - String value: Uses provided name
                 
                 Recommended: Pass context.session_id from AgentCore for automatic persistence:
                     session_id = getattr(context, 'session_id', 'default')
@@ -185,7 +178,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
         else:
-            self.default_session = session_name.replace('-', '').replace('_', '')[:40]
+            self.default_session = session_name
 
         self._sessions: Dict[str, SessionInfo] = {}
 
@@ -435,7 +428,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         return self._create_tool_result(response)
 
     def read_files(self, action: ReadFilesAction) -> Dict[str, Any]:
-         """Read files from a Bedrock AgentCore session with automatic session management."""
+        """Read files from a Bedrock AgentCore session with automatic session management."""
         session_name, error = self._ensure_session(action.session_name)
         if error:
             return error

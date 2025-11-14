@@ -571,14 +571,18 @@ class TestIdentifierValidationAndEdgeCases:
         assert len(parts[1]) == 12
         assert all(c in '0123456789abcdef' for c in parts[1])
         
-        # Case 2: Specific string -> cleaned string (dashes/underscores removed)
+        # Case 2: Specific string -> preserved as-is (NO cleaning)
         interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", session_name="my-analysis")
-        assert interpreter2.default_session == "myanalysis"  # Cleaned
+        assert interpreter2.default_session == "my-analysis"  # Preserved as-is
         
-        # Case 3: Runtime session (simulated with dashes)
+        # Case 3: Runtime session with dashes -> preserved as-is
         runtime_session_id = "runtime-abc-123"
         interpreter3 = AgentCoreCodeInterpreter(region="us-west-2", session_name=runtime_session_id)
-        assert interpreter3.default_session == "runtimeabc123"
+        assert interpreter3.default_session == "runtime-abc-123"  # Preserved as-is
+        
+        # Case 4: Session with underscores -> preserved as-is
+        interpreter4 = AgentCoreCodeInterpreter(region="us-west-2", session_name="my_session_123")
+        assert interpreter4.default_session == "my_session_123"
 
     def test_auto_create_flag_behavior(self):
         """Test auto_create flag behavior."""

@@ -79,18 +79,23 @@ def test_initialization_with_new_parameters():
         assert interpreter.persist_sessions is False
 
 
-def test_session_name_cleaning():
-    """Test that session names are cleaned to meet AWS validation requirements."""
+def test_session_name_no_cleaning():
+    """Test that session names are used as-is without cleaning."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        # Test with UUID containing dashes
+        # Test with UUID containing dashes - should be preserved
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", session_name="16e4dcba-5792-4643-9e54-42b43dc58637")
-        # Should remove dashes and underscores, limit to 40 chars
-        assert "-" not in interpreter.default_session
-        assert "_" not in interpreter.default_session
-        assert len(interpreter.default_session) <= 40
-        assert interpreter.default_session == "16e4dcba579246439e5442b43dc58637"
+        # Session name should be used as-is
+        assert interpreter.default_session == "16e4dcba-5792-4643-9e54-42b43dc58637"
+        
+        # Test with underscores - should be preserved
+        interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", session_name="my_test_session")
+        assert interpreter2.default_session == "my_test_session"
+        
+        # Test with mixed characters - should be preserved
+        interpreter3 = AgentCoreCodeInterpreter(region="us-west-2", session_name="session-name_123")
+        assert interpreter3.default_session == "session-name_123"
 
 
 def test_ensure_session_existing_session(interpreter, mock_client):
