@@ -3,3 +3,7 @@
 # @strands-agents/contributors will be requested for
 # review when someone opens a pull request.
 *       @strands-agents/maintainers
+
+# AWS Bedrock AgentCore maintainers can approve browser and code_interpreter tools
+**/browser/**           @strands-agents/maintainers @aws/bedrock-agentcore-maintainers
+**/code_interpreter/**  @strands-agents/maintainers @aws/bedrock-agentcore-maintainers
