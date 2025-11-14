@@ -901,7 +901,7 @@ These variables affect multiple tools:
 | AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
 | LOG_LEVEL | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO | All tools |
-| PYTHON_REPL_PERSISTENCE_DIR | Set Directory for python_repl tool to write state file | Null | python_repl |
+
 
 ### Tool-Specific Environment Variables
 
@@ -1025,6 +1025,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
 | PYTHON_REPL_INTERACTIVE | Whether to enable interactive PTY mode | None |
 | PYTHON_REPL_RESET_STATE | Whether to reset the REPL state before execution | None |
+| PYTHON_REPL_PERSISTENCE_DIR | Set Directory for python_repl tool to write state file | None |
 
 #### Shell Tool
 
