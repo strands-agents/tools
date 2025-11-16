@@ -21,9 +21,28 @@ from strands_tools.code_interpreter.models import (
     LanguageType,
 )
 
+# Import the module-level cache to clean it between tests
+from strands_tools.code_interpreter.agent_core_code_interpreter import _session_mapping
+
 from tests_integ.ci_environments import skip_if_github_action
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def clear_session_cache():
+    """Clear module-level session cache before each test to prevent conflicts."""
+    _session_mapping.clear()
+    yield
+    # Clean up after test as well
+    _session_mapping.clear()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def rate_limit_protection():
+    """Prevent throttling between tests."""
+    yield
+    time.sleep(2)
 
 
 @pytest.fixture
@@ -58,11 +77,6 @@ def agent_with_default_identifier(default_identifier_interpreter: AgentCoreCodeI
     """Create an agent with default identifier code interpreter tool."""
     return Agent(tools=[default_identifier_interpreter.code_interpreter])
 
-@pytest.fixture(autouse=True, scope="function")
-def rate_limit_protection():
-    """Prevent throttling between tests."""
-    yield
-    time.sleep(2) 
 
 class TestCustomIdentifierEndToEnd:
     """Test complete end-to-end functionality with custom identifiers."""
@@ -76,7 +90,7 @@ class TestCustomIdentifierEndToEnd:
                 "action": {
                     "type": "initSession",
                     "description": "Custom identifier test session",
-                    "session_name": "customidsession"  # Cleaned name (no dashes)
+                    "session_name": "customidsession1"  # Unique name
                 }
             }
         )
@@ -84,13 +98,13 @@ class TestCustomIdentifierEndToEnd:
         # Verify session was created successfully
         assert result['status'] == 'success'
         assert 'sessionName' in result['content'][0]['json']
-        assert result['content'][0]['json']['sessionName'] == 'customidsession'
+        assert result['content'][0]['json']['sessionName'] == 'customidsession1'
         assert result['content'][0]['json']['description'] == 'Custom identifier test session'
         assert 'sessionId' in result['content'][0]['json']
 
         # Verify session is stored in the interpreter
-        assert 'customidsession' in custom_identifier_interpreter._sessions
-        session_info = custom_identifier_interpreter._sessions['customidsession']
+        assert 'customidsession1' in custom_identifier_interpreter._sessions
+        session_info = custom_identifier_interpreter._sessions['customidsession1']
         assert session_info.description == 'Custom identifier test session'
         assert session_info.session_id == result['content'][0]['json']['sessionId']
 
@@ -99,7 +113,7 @@ class TestCustomIdentifierEndToEnd:
             code_interpreter_input={
                 "action": {
                     "type": "executeCode",
-                    "session_name": "customidsession",
+                    "session_name": "customidsession1",
                     "code": "print('Hello from custom identifier session!')",
                     "language": "python"
                 }
@@ -129,7 +143,7 @@ class TestCustomIdentifierEndToEnd:
                 "action": {
                     "type": "initSession",
                     "description": "First session",
-                    "session_name": "session1"
+                    "session_name": "multisession1"  # Unique name
                 }
             }
         )
@@ -139,7 +153,7 @@ class TestCustomIdentifierEndToEnd:
                 "action": {
                     "type": "initSession",
                     "description": "Second session",
-                    "session_name": "session2"
+                    "session_name": "multisession2"  # Unique name
                 }
             }
         )
@@ -147,14 +161,14 @@ class TestCustomIdentifierEndToEnd:
         # Verify both sessions were created successfully
         assert result1['status'] == 'success'
         assert result2['status'] == 'success'
-        assert result1['content'][0]['json']['sessionName'] == 'session1'
-        assert result2['content'][0]['json']['sessionName'] == 'session2'
+        assert result1['content'][0]['json']['sessionName'] == 'multisession1'
+        assert result2['content'][0]['json']['sessionName'] == 'multisession2'
 
         # Verify sessions are isolated
-        assert 'session1' in interpreter1._sessions
-        assert 'session1' not in interpreter2._sessions
-        assert 'session2' in interpreter2._sessions
-        assert 'session2' not in interpreter1._sessions
+        assert 'multisession1' in interpreter1._sessions
+        assert 'multisession1' not in interpreter2._sessions
+        assert 'multisession2' in interpreter2._sessions
+        assert 'multisession2' not in interpreter1._sessions
 
     @skip_if_github_action.mark  
     def test_natural_language_workflow_with_custom_identifier(self, agent_with_custom_identifier):
@@ -435,7 +449,7 @@ class TestIdentifierValidationAndEdgeCases:
                 "action": {
                     "type": "initSession",
                     "description": "Custom identifier test session",
-                    "session_name": "customidsession"
+                    "session_name": "customidsession2"  # Unique name
                 }
             }
         )
@@ -443,7 +457,7 @@ class TestIdentifierValidationAndEdgeCases:
         # Verify session was created successfully
         assert result['status'] == 'success'
         assert 'sessionName' in result['content'][0]['json']
-        assert result['content'][0]['json']['sessionName'] == 'customidsession'
+        assert result['content'][0]['json']['sessionName'] == 'customidsession2'
         assert result['content'][0]['json']['description'] == 'Custom identifier test session'
         assert 'sessionId' in result['content'][0]['json']
 

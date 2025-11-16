@@ -121,6 +121,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             - Session reconnection: ~50-100ms (subsequent invocations)
             - Performance improvement: 30-70% on invocations 2+
 
+        Thread Safety:
+            Module-level cache access is not thread-safe. If using in multi-threaded
+            environments, ensure session names are unique per thread or add external
+            synchronization.
+
         Examples:
             # Production usage with AgentCore context (recommended):
             @app.entrypoint
@@ -155,12 +160,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Notes:
             - Module-level cache persists in long-running Python processes (AgentCore)
             - Cache does NOT persist across container restarts (cold starts)
-            - Session names should be unique per user/conversation for isolation
+            - Session names must be unique per user/conversation for isolation
             - AWS session IDs are globally unique (ULID format)
             - Sessions can be manually stopped via AWS console/API if needed
 
         Raises:
-            ValueError: If auto_create=False and session doesn't exist
+            ValueError: If auto_create=False and session doesn't exist, or if
+                       session_name is already in use by another instance
             Exception: If AWS service errors occur during session operations
 
         See Also:
@@ -239,11 +245,25 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         session_name = action.session_name
 
-        # Check if session already exists
+        # Check if session already exists in instance cache
         if session_name in self._sessions:
             return {
                 "status": "error",
                 "content": [{"text": f"Session '{session_name}' already exists"}]
+            }
+ 
+         # Check if session name already in use (module-level cache)
+        if session_name in _session_mapping:
+            
+            error_msg = (
+                f"Session '{session_name}' is already in use by another instance. "
+                f"Use a unique session name or reconnect to the existing session "
+                f"via _ensure_session() instead of calling init_session() directly."
+            )
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "content": [{"text": error_msg}]
             }
 
         try:
