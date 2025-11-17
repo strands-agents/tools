@@ -94,7 +94,7 @@ class AgentCoreBrowser(Browser):
                 client.stop()
             except Exception as e:
                 logger.error(
-                    "session=<%s>, exception=<%s> " "| failed to close session , relying on idle timeout to auto close",
+                    "session=<%s>, exception=<%s> | failed to close session , relying on idle timeout to auto close",
                     client.session_id,
                     str(e),
                 )

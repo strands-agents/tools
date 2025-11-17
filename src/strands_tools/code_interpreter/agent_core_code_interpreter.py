@@ -94,7 +94,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         self._sessions: Dict[str, SessionInfo] = {}
 
-        logger.info(f"Initialized CodeInterpreter with session='{self.default_session}', " f"auto_create={auto_create}")
+        logger.info(f"Initialized CodeInterpreter with session='{self.default_session}', auto_create={auto_create}")
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from strands import Agent
 from strands_tools import cron
+from strands_tools.cron import _sanitize_description
 
 
 @pytest.fixture
@@ -272,3 +273,49 @@ def test_edit_job_comment_line(mock_subprocess, agent):
 
     # Make sure Popen was not called (crontab was not modified)
     mock_subprocess.Popen.assert_not_called()
+
+
+def test_sanitize_description():
+    """Test description sanitization to prevent crontab injection."""
+    # Test newline injection
+    malicious = "safe comment\n0 * * * * rm -rf /"
+    sanitized = _sanitize_description(malicious)
+    assert "\n" not in sanitized
+    assert sanitized == "safe comment 0 * * * * rm -rf /"
+
+    # Test carriage return injection
+    malicious = "safe comment\r0 * * * * rm -rf /"
+    sanitized = _sanitize_description(malicious)
+    assert "\r" not in sanitized
+    assert sanitized == "safe comment 0 * * * * rm -rf /"
+
+    # Test multiple line breaks
+    malicious = "line1\n\nline2\r\nline3"
+    sanitized = _sanitize_description(malicious)
+    assert sanitized == "line1 line2 line3"
+
+    # Test normal description (no change)
+    normal = "This is a normal description"
+    sanitized = _sanitize_description(normal)
+    assert sanitized == normal
+
+
+def test_add_job_with_malicious_description(mock_subprocess, agent):
+    """Test that malicious descriptions are sanitized when adding jobs."""
+    # Setup mock
+    mock_subprocess.run.return_value.stdout = ""
+
+    # Try to inject a malicious cron job via description
+    malicious_desc = "backup job\n0 * * * * rm -rf /"
+    result = agent.tool.cron(action="add", schedule="0 2 * * *", command="backup.sh", description=malicious_desc)
+
+    # Verify the job was added but description was sanitized
+    result_text = extract_result_text(result)
+    assert "Successfully added new cron job" in result_text
+
+    # Check that the written crontab doesn't contain newlines in the comment
+    mock_subprocess.Popen.assert_called_once()
+    written_content = mock_subprocess.Popen.return_value.__enter__.return_value.stdin.write.call_args[0][0]
+    lines = written_content.strip().split("\n")
+    assert len(lines) == 1  # Should be only one line
+    assert "backup job 0 * * * * rm -rf /" in lines[0]  # Sanitized description

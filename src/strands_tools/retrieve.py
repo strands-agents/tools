@@ -204,7 +204,7 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
         enable_metadata: Whether to include metadata in the formatted output (default: False)
 
     Returns:
-        Formatted string containing the results in a readable format, including score, 
+        Formatted string containing the results in a readable format, including score,
         document ID, optional metadata, and content.
     """
     if not results:

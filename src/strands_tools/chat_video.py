@@ -279,7 +279,7 @@ def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
         api_key = os.getenv("TWELVELABS_API_KEY")
         if not api_key:
             raise ValueError(
-                "TWELVELABS_API_KEY environment variable not set. " "Please set it to your TwelveLabs API key."
+                "TWELVELABS_API_KEY environment variable not set. Please set it to your TwelveLabs API key."
             )
 
         # Extract parameters

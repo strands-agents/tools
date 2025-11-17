@@ -147,8 +147,8 @@ def test_format_results_with_metadata():
                 "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/user-guide.pdf",
                 "x-amz-bedrock-kb-chunk-id": "chunk-12345",
                 "x-amz-bedrock-kb-data-source-id": "datasource-67890",
-                "custom-field": "production-docs"
-            }
+                "custom-field": "production-docs",
+            },
         }
     ]
 
@@ -180,8 +180,8 @@ def test_format_results_without_metadata():
                 "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/user-guide.pdf",
                 "x-amz-bedrock-kb-chunk-id": "chunk-12345",
                 "x-amz-bedrock-kb-data-source-id": "datasource-67890",
-                "custom-field": "production-docs"
-            }
+                "custom-field": "production-docs",
+            },
         }
     ]
 
@@ -203,7 +203,7 @@ def test_format_results_with_empty_metadata():
                 "type": "CUSTOM",
             },
             "score": 0.75,
-            "metadata": {}  # Empty metadata
+            "metadata": {},  # Empty metadata
         }
     ]
 
@@ -228,8 +228,8 @@ def test_format_results_with_metadata_enabled():
             "metadata": {
                 "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/guide.pdf",
                 "x-amz-bedrock-kb-chunk-id": "chunk-67890",
-                "custom-field": "test-data"
-            }
+                "custom-field": "test-data",
+            },
         }
     ]
 
@@ -257,8 +257,8 @@ def test_format_results_with_metadata_disabled():
             "score": 0.65,
             "metadata": {
                 "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/guide.pdf",
-                "x-amz-bedrock-kb-chunk-id": "chunk-11111"
-            }
+                "x-amz-bedrock-kb-chunk-id": "chunk-11111",
+            },
         }
     ]
 
@@ -566,7 +566,7 @@ def test_retrieve_with_enable_metadata_true(mock_boto3_client):
     assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
-    
+
     # Verify metadata is included in the response
     result_text = result["content"][0]["text"]
     assert "Metadata:" in result_text
@@ -591,7 +591,7 @@ def test_retrieve_with_enable_metadata_false(mock_boto3_client):
     assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
-    
+
     # Verify metadata is NOT included in the response
     result_text = result["content"][0]["text"]
     assert "Metadata:" not in result_text
@@ -616,7 +616,7 @@ def test_retrieve_with_enable_metadata_default(mock_boto3_client):
     assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
-    
+
     # Verify metadata is NOT included by default
     result_text = result["content"][0]["text"]
     assert "Metadata:" not in result_text
@@ -659,11 +659,7 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     """Test retrieving via the agent interface with enableMetadata."""
     with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
         # Test with metadata enabled
-        result = agent.tool.retrieve(
-            text="agent query", 
-            knowledgeBaseId="test-kb-id",
-            enableMetadata=True
-        )
+        result = agent.tool.retrieve(text="agent query", knowledgeBaseId="test-kb-id", enableMetadata=True)
 
     result_text = extract_result_text(result)
     assert "Retrieved" in result_text
@@ -673,11 +669,7 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
 
     # Test with metadata disabled
     with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
-        result = agent.tool.retrieve(
-            text="agent query", 
-            knowledgeBaseId="test-kb-id",
-            enableMetadata=False
-        )
+        result = agent.tool.retrieve(text="agent query", knowledgeBaseId="test-kb-id", enableMetadata=False)
 
     result_text = extract_result_text(result)
     assert "Retrieved" in result_text

@@ -620,7 +620,7 @@ def test_graph_complex_topology(mock_parent_agent, mock_graph_builder):
             }
             for i in range(5)
         ],
-        "edges": [{"from": f"node_{i}", "to": f"node_{i+1}"} for i in range(4)]
+        "edges": [{"from": f"node_{i}", "to": f"node_{i + 1}"} for i in range(4)]
         + [
             {"from": "node_0", "to": "node_2"},  # Additional connection
             {"from": "node_1", "to": "node_4"},  # Skip connection
