@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import editor
 from strands_tools.editor import (
     CONTENT_HISTORY,

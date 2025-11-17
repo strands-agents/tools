@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
 from strands_tools.code_interpreter.models import (
     CodeInterpreterInput,

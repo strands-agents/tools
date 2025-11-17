@@ -5,6 +5,7 @@ Tests for the think tool using the Agent interface.
 from unittest.mock import MagicMock, patch
 
 from strands.agent import AgentResult
+
 from strands_tools import think
 from strands_tools.think import ThoughtProcessor
 
