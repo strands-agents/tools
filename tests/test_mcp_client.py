@@ -8,6 +8,7 @@ the Agent interface for simpler and more focused testing.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from strands_tools.mcp_client import ConnectionInfo, MCPTool, _connections, mcp_client
 
 

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import chat_video
 
 
@@ -27,7 +28,7 @@ def mock_generate_response():
     """Create a mock Pegasus response."""
     mock_response = MagicMock()
     mock_response.data = (
-        "This is a video showing a product demonstration. " "The presenter explains the key features and benefits."
+        "This is a video showing a product demonstration. The presenter explains the key features and benefits."
     )
     return mock_response
 

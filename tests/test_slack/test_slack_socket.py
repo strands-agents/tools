@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 from slack_sdk.socket_mode.request import SocketModeRequest
+
 from strands_tools.slack import SocketModeHandler
 
 

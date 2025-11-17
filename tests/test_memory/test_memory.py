@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import memory
 from strands_tools.memory import MemoryFormatter, MemoryServiceClient
 

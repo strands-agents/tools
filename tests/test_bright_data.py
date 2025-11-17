@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import bright_data
 from strands_tools.bright_data import BrightDataClient
 

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from strands import Agent
 from strands.types.tools import ToolUse
+
 from strands_tools import mem0_memory
 from strands_tools.mem0_memory import Mem0ServiceClient
 
@@ -447,9 +448,11 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
 
     # Test with Neptune Database with OpenSearch
     with patch.dict(
-            os.environ,
-            {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
-             "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com"},
+        os.environ,
+        {
+            "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+            "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com",
+        },
     ):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")

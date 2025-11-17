@@ -5,6 +5,7 @@ Tests for the AgentCoreCodeInterpreter class.
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from strands_tools.code_interpreter.agent_core_code_interpreter import (
     AgentCoreCodeInterpreter,
     SessionInfo,
