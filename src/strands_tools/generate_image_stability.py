@@ -63,7 +63,7 @@ from strands.types.tools import ToolResult, ToolUse
 TOOL_SPEC = {
     "name": "generate_image_stability",
     "description": (
-        "Generates an image using Stability AI. " "Simply provide a text description of what you want to create."
+        "Generates an image using Stability AI. Simply provide a text description of what you want to create."
     ),
     "inputSchema": {
         "type": "object",
@@ -110,9 +110,7 @@ TOOL_SPEC = {
             },
             "style_preset": {
                 "type": "string",
-                "description": (
-                    "Style preset for image generation. " "Applies a predefined artistic style to the output"
-                ),
+                "description": ("Style preset for image generation. Applies a predefined artistic style to the output"),
                 "enum": [
                     "3d-model",
                     "analog-film",
@@ -204,7 +202,7 @@ def api_route(model_id: str) -> str:
     except KeyError as err:
         supported_models = list(route_map.keys())
         raise ValueError(
-            f"Unsupported model_id: {model_id}. " f"Supported models are: {', '.join(supported_models)}"
+            f"Unsupported model_id: {model_id}. Supported models are: {', '.join(supported_models)}"
         ) from err
 
     base_url = "https://api.stability.ai/v2beta/stable-image"
@@ -346,7 +344,7 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
         stability_api_key = os.environ.get("STABILITY_API_KEY")
         if not stability_api_key:
             raise ValueError(
-                "STABILITY_API_KEY environment variable not set. " "Please set it with your Stability API key."
+                "STABILITY_API_KEY environment variable not set. Please set it with your Stability API key."
             )
 
         # Get model ID from environment or use default

@@ -364,9 +364,9 @@ class Browser(ABC):
                     "The website might not exist or a network connectivity issue."
                 )
             elif "ERR_CONNECTION_REFUSED" in error_str:
-                error_msg = f"Connection refused for '{action.url}'. " "The server might be down or blocking requests."
+                error_msg = f"Connection refused for '{action.url}'. The server might be down or blocking requests."
             elif "ERR_CONNECTION_TIMED_OUT" in error_str:
-                error_msg = f"Connection timed out for '{action.url}'. " "The server might be slow or unreachable."
+                error_msg = f"Connection timed out for '{action.url}'. The server might be slow or unreachable."
             elif "ERR_SSL_PROTOCOL_ERROR" in error_str:
                 error_msg = (
                     f"SSL/TLS error when connecting to '{action.url}'. "
@@ -748,8 +748,7 @@ class Browser(ABC):
                     "content": [
                         {
                             "text": (
-                                f"Tab with ID '{action.tab_id}' not found. "
-                                f"Available tabs: {list(session.tabs.keys())}"
+                                f"Tab with ID '{action.tab_id}' not found. Available tabs: {list(session.tabs.keys())}"
                             )
                         }
                     ],

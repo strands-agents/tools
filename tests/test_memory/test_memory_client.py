@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.config import Config as BotocoreConfig
+
 from strands_tools.memory import MemoryServiceClient
 
 
