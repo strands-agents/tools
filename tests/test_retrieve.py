@@ -656,6 +656,171 @@ def test_retrieve_with_environment_variable_default(mock_boto3_client):
     assert "test-source-1" not in result_text
 
 
+def test_retrieve_with_override_search_type_hybrid(mock_boto3_client):
+    """Test retrieve with overrideSearchType set to HYBRID."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "overrideSearchType": "HYBRID",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result is successful
+    assert result["status"] == "success"
+    assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
+
+    # Verify that boto3 client was called with overrideSearchType
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10,
+                "overrideSearchType": "HYBRID"
+            }
+        },
+    )
+
+
+def test_retrieve_with_override_search_type_semantic(mock_boto3_client):
+    """Test retrieve with overrideSearchType set to SEMANTIC."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "overrideSearchType": "SEMANTIC",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result is successful
+    assert result["status"] == "success"
+
+    # Verify that boto3 client was called with overrideSearchType
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10,
+                "overrideSearchType": "SEMANTIC"
+            }
+        },
+    )
+
+
+def test_retrieve_with_invalid_override_search_type(mock_boto3_client):
+    """Test retrieve with invalid overrideSearchType."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "overrideSearchType": "INVALID_TYPE",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result is an error
+    assert result["status"] == "error"
+    assert "Invalid overrideSearchType: INVALID_TYPE" in result["content"][0]["text"]
+    assert "Supported values: HYBRID, SEMANTIC" in result["content"][0]["text"]
+
+    # Verify that boto3 client was not called
+    mock_boto3_client.return_value.retrieve.assert_not_called()
+
+
+def test_retrieve_without_override_search_type(mock_boto3_client):
+    """Test retrieve without overrideSearchType (default behavior)."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result is successful
+    assert result["status"] == "success"
+
+    # Verify that boto3 client was called without overrideSearchType
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10
+            }
+        },
+    )
+
+
+def test_retrieve_with_override_search_type_and_filter(mock_boto3_client):
+    """Test retrieve with both overrideSearchType and retrieveFilter."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "overrideSearchType": "HYBRID",
+            "retrieveFilter": {"equals": {"key": "category", "value": "security"}},
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result is successful
+    assert result["status"] == "success"
+
+    # Verify that boto3 client was called with both overrideSearchType and filter
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10,
+                "overrideSearchType": "HYBRID",
+                "filter": {"equals": {"key": "category", "value": "security"}}
+            }
+        },
+    )
+
+
+def test_retrieve_via_agent_with_override_search_type(agent, mock_boto3_client):
+    """Test retrieving via the agent interface with overrideSearchType."""
+    with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
+        result = agent.tool.retrieve(
+            text="agent query", 
+            knowledgeBaseId="test-kb-id", 
+            overrideSearchType="HYBRID"
+        )
+
+    result_text = extract_result_text(result)
+    assert "Retrieved" in result_text
+    assert "results with score >=" in result_text
+
+    # Verify the boto3 client was called with overrideSearchType
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "agent query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "vectorSearchConfiguration": {
+                "numberOfResults": 10,
+                "overrideSearchType": "HYBRID"
+            }
+        },
+    )
+
+
 def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     """Test retrieving via the agent interface with enableMetadata."""
     with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
@@ -677,3 +842,5 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     assert "results with score >=" in result_text
     assert "Metadata:" not in result_text
     assert "test-source" not in result_text
+
+
