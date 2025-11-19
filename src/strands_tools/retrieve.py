@@ -166,6 +166,14 @@ Usage Examples:
                     ),
                     "default": False,
                 },
+                "overrideSearchType": {
+                    "type": "string",
+                    "description": (
+                        "Override the search type for the knowledge base query. Supported values: 'HYBRID', "
+                        "'SEMANTIC'. Default behavior uses the knowledge base's configured search type."
+                    ),
+                    "enum": ["HYBRID", "SEMANTIC"],
+                },
             },
             "required": ["text"],
         }
@@ -306,6 +314,16 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         min_score = tool_input.get("score", default_min_score)
         enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
+        override_search_type = tool_input.get("overrideSearchType")
+
+        # Validate overrideSearchType if provided
+        if override_search_type and override_search_type not in ["HYBRID", "SEMANTIC"]:
+            return {
+                "toolUseId": tool_use_id,
+                "status": "error",
+                "content": [{"text": f"Invalid overrideSearchType: {override_search_type}. "
+                                    f"Supported values: HYBRID, SEMANTIC"}],
+            }
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
@@ -320,6 +338,9 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Default retrieval configuration
         retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
+
+        if override_search_type:
+            retrieval_config["vectorSearchConfiguration"]["overrideSearchType"] = override_search_type
 
         if retrieve_filter:
             try:
