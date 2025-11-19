@@ -5,5 +5,5 @@
 *       @strands-agents/maintainers
 
 # AWS Bedrock AgentCore maintainers can approve browser and code_interpreter tools
-**/browser/**           @strands-agents/maintainers
-**/code_interpreter/**  @strands-agents/maintainers
+**/browser/**           @strands-agents/maintainers @strands-agents/bedrock-agentcore-maintainers
+**/code_interpreter/**  @strands-agents/maintainers @strands-agents/bedrock-agentcore-maintainers
