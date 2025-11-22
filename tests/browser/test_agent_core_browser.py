@@ -27,9 +27,11 @@ def test_bedrock_browser_registers_atexit_handler():
         mock_atexit.assert_called_once()
 
         # Verify it registered the close_platform method
+
+        # Verify it registered the close_platform method
         registered_func = mock_atexit.call_args[0][0]
         assert callable(registered_func)
-        # Verify it's the browser's close_platform method
+        assert registered_func == browser.close_platform
         assert registered_func == browser.close_platform
 
 
@@ -148,3 +150,65 @@ def test_bedrock_browser_close_platform_with_errors():
     # Verify all clients were attempted to be stopped
     mock_client1.stop.assert_called_once()
     mock_client2.stop.assert_called_once()
+
+
+def test_bedrock_browser_reinitializes_playwright_after_close():
+    """Test that playwright reinitializes when creating a new session after close.
+
+    This verifies the fix for the issue where:
+    1. A session is created successfully (playwright initialized)
+    2. The browser is closed (sets _playwright to None and _started to False)
+    3. A new session is created successfully (playwright reinitializes via _start())
+    """
+    from unittest.mock import AsyncMock, patch
+
+    browser = AgentCoreBrowser()
+
+    # Mock playwright for initial session
+    mock_playwright_instance = Mock()
+    mock_chromium = Mock()
+    mock_browser_obj = Mock()
+    mock_context = Mock()
+    mock_page = Mock()
+
+    mock_playwright_instance.chromium = mock_chromium
+    mock_chromium.connect_over_cdp = AsyncMock(return_value=mock_browser_obj)
+    mock_browser_obj.contexts = [mock_context]
+    mock_context.new_page = AsyncMock(return_value=mock_page)
+    mock_playwright_instance.stop = AsyncMock()
+
+    mock_client = Mock()
+    mock_session_id = "test-session-123"
+    mock_client.start.return_value = mock_session_id
+    mock_client.generate_ws_headers.return_value = ("ws://test-url", {"header": "value"})
+
+    with patch("strands_tools.browser.agent_core_browser.AgentCoreBrowserClient", return_value=mock_client):
+        with patch("strands_tools.browser.browser.async_playwright") as mock_async_pw:
+            mock_async_pw.return_value.start = AsyncMock(return_value=mock_playwright_instance)
+
+            # Create initial session through browser() method
+            result = browser.browser(
+                {"action": {"type": "init_session", "session_name": "test-session", "description": "Test"}}
+            )
+            assert result["status"] == "success"
+            assert mock_session_id in browser._client_dict
+            assert browser._started is True
+            assert browser._playwright is not None
+
+            # Close the browser - this sets _playwright to None and _started to False
+            close_result = browser.close({"session_name": "test-session"})
+            assert close_result["status"] == "success"
+            assert browser._playwright is None
+            assert browser._started is False
+
+            # Create a new session - _start() should reinitialize playwright automatically
+            result2 = browser.browser(
+                {"action": {"type": "init_session", "session_name": "test-session-2", "description": "Test 2"}}
+            )
+
+            # Verify playwright was reinitialized and new session created successfully
+            assert result2["status"] == "success"
+            assert browser._started is True
+            assert browser._playwright is not None
+            # Verify async_playwright().start() was called twice (once for each session init)
+            assert mock_async_pw.return_value.start.call_count == 2

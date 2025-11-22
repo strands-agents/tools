@@ -963,6 +963,7 @@ class Browser(ABC):
             except Exception as e:
                 cleanup_errors.append(f"Error stopping Playwright: {str(e)}")
         self._playwright = None
+        self._started = False
 
         self.close_platform()
         self._sessions.clear()
