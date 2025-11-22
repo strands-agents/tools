@@ -73,9 +73,7 @@ def test_initialization_with_new_parameters():
     """Test initialization with new session persistence parameters."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
-        interpreter = AgentCoreCodeInterpreter(
-            region="us-west-2", persist_sessions=False
-        )
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=False)
         assert interpreter.persist_sessions is False
 
 
@@ -88,11 +86,11 @@ def test_session_name_no_cleaning():
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", session_name="16e4dcba-5792-4643-9e54-42b43dc58637")
         # Session name should be used as-is
         assert interpreter.default_session == "16e4dcba-5792-4643-9e54-42b43dc58637"
-        
+
         # Test with underscores - should be preserved
         interpreter2 = AgentCoreCodeInterpreter(region="us-west-2", session_name="my_test_session")
         assert interpreter2.default_session == "my_test_session"
-        
+
         # Test with mixed characters - should be preserved
         interpreter3 = AgentCoreCodeInterpreter(region="us-west-2", session_name="session-name_123")
         assert interpreter3.default_session == "session-name_123"
@@ -125,9 +123,7 @@ def test_ensure_session_reconnection_via_module_cache(mock_client):
             reconnect_client.get_session.return_value = {"status": "READY"}
             mock_client_class.return_value = reconnect_client
 
-            interpreter = AgentCoreCodeInterpreter(
-                region="us-west-2", persist_sessions=True
-            )
+            interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True)
 
             session_name, error = interpreter._ensure_session("target-session")
 
@@ -135,11 +131,10 @@ def test_ensure_session_reconnection_via_module_cache(mock_client):
             assert error is None
             assert "target-session" in interpreter._sessions
             assert interpreter._sessions["target-session"].session_id == "found-session-id"
-            
+
             # Verify get_session was called, not list_sessions
             reconnect_client.get_session.assert_called_once_with(
-                interpreter_id="aws.codeinterpreter.v1",
-                session_id="found-session-id"
+                interpreter_id="aws.codeinterpreter.v1", session_id="found-session-id"
             )
 
 
@@ -159,9 +154,7 @@ def test_ensure_session_module_cache_session_not_ready():
             reconnect_client.get_session.return_value = {"status": "STOPPED"}
             mock_client_class.return_value = reconnect_client
 
-            interpreter = AgentCoreCodeInterpreter(
-                region="us-west-2", persist_sessions=True, auto_create=True
-            )
+            interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
 
             with patch.object(interpreter, "init_session") as mock_init:
                 mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
@@ -192,9 +185,7 @@ def test_ensure_session_module_cache_get_session_fails():
             reconnect_client.session_id = "new-session-id"
             mock_client_class.return_value = reconnect_client
 
-            interpreter = AgentCoreCodeInterpreter(
-                region="us-west-2", persist_sessions=True, auto_create=True
-            )
+            interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
 
             with patch.object(interpreter, "init_session") as mock_init:
                 mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
@@ -804,32 +795,31 @@ def test_module_level_session_mapping():
             "strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient"
         ) as mock_client_class:
             mock_resolve.return_value = "us-west-2"
-            
+
             mock_client1 = MagicMock()
             mock_client1.session_id = "aws-session-123"
-            
+
             # First instance creates session
             interpreter1 = AgentCoreCodeInterpreter(region="us-west-2")
             mock_client_class.return_value = mock_client1
-            
+
             action = InitSessionAction(type="initSession", description="Test", session_name="shared-session")
             result = interpreter1.init_session(action)
-            
+
             assert result["status"] == "success"
             assert _session_mapping["shared-session"] == "aws-session-123"
-            
+
             # Second instance should find session in module cache
             mock_client2 = MagicMock()
             mock_client2.get_session.return_value = {"status": "READY"}
             mock_client_class.return_value = mock_client2
-            
+
             interpreter2 = AgentCoreCodeInterpreter(region="us-west-2")
             session_name, error = interpreter2._ensure_session("shared-session")
-            
+
             assert session_name == "shared-session"
             assert error is None
             # Should have called get_session with cached ID
             mock_client2.get_session.assert_called_once_with(
-                interpreter_id="aws.codeinterpreter.v1",
-                session_id="aws-session-123"
+                interpreter_id="aws.codeinterpreter.v1", session_id="aws-session-123"
             )

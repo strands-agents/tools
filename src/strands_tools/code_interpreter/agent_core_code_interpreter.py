@@ -39,6 +39,7 @@ class SessionInfo:
         client (BedrockAgentCoreCodeInterpreterClient): The underlying Bedrock client
             instance used for code execution and file operations in this session.
     """
+
     session_id: str  # AWS CI session ID
     description: str
     client: BedrockAgentCoreCodeInterpreterClient
@@ -70,30 +71,30 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Args:
             region (Optional[str]): AWS region for the code interpreter service. If None,
                 resolves from environment or defaults to configured region. Example: "us-west-2"
-            
+
             identifier (Optional[str]): Custom code interpreter identifier for the AWS service.
                 Defaults to "aws.codeinterpreter.v1". This must match the interpreter type
                 configured in your AWS account.
-            
+
             session_name (Optional[str]): Session identifier for tracking and reconnection.
                 - None (default): Generates random session ID per instance (e.g., "session-a1b2c3d4e5f6")
                 - String value: Uses provided name
-                
+
                 Recommended: Pass context.session_id from AgentCore for automatic persistence:
                     session_id = getattr(context, 'session_id', 'default')
                     interpreter = AgentCoreCodeInterpreter(session_name=session_id)
-            
+
             auto_create (bool): Automatically create sessions if they don't exist. Default: True
                 - True: Calls init_session() automatically when session not found
                 - False: Raises ValueError if session doesn't exist (strict mode)
-                
+
                 Use False when you want explicit control over session lifecycle or when
                 pre-initializing sessions with specific configurations.
-            
+
             persist_sessions (bool): Prevent session cleanup on object destruction. Default: True
                 - True: Sessions survive object destruction (recommended for AgentCore)
                 - False: Sessions cleaned up in __del__() (use for short-lived scripts)
-                
+
                 In AgentCore's long-running runtime, new object instances are created per
                 invocation but the Python process persists. Setting this to True allows
                 sessions to survive across invocations and be reconnected by subsequent
@@ -239,32 +240,23 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             Exception: If session initialization fails due to AWS service issues,
                 invalid identifier, or other configuration problems.
         """
-        logger.info(
-            f"Initializing Bedrock AgentCore sandbox session: {action.description}"
-        )
+        logger.info(f"Initializing Bedrock AgentCore sandbox session: {action.description}")
 
         session_name = action.session_name
 
         # Check if session already exists in instance cache
         if session_name in self._sessions:
-            return {
-                "status": "error",
-                "content": [{"text": f"Session '{session_name}' already exists"}]
-            }
- 
-         # Check if session name already in use (module-level cache)
+            return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
+
+        # Check if session name already in use (module-level cache)
         if session_name in _session_mapping:
-            
             error_msg = (
                 f"Session '{session_name}' is already in use by another instance. "
                 f"Use a unique session name or reconnect to the existing session "
                 f"via _ensure_session() instead of calling init_session() directly."
             )
             logger.error(error_msg)
-            return {
-                "status": "error",
-                "content": [{"text": error_msg}]
-            }
+            return {"status": "error", "content": [{"text": error_msg}]}
 
         try:
             # Create new sandbox client
@@ -280,14 +272,10 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
             # Store session info locally
             self._sessions[session_name] = SessionInfo(
-                session_id=aws_session_id,
-                description=action.description,
-                client=client
+                session_id=aws_session_id, description=action.description, client=client
             )
 
-            logger.info(
-                f"Initialized session: {session_name} (AWS ID: {aws_session_id})"
-            )
+            logger.info(f"Initialized session: {session_name} (AWS ID: {aws_session_id})")
 
             response = {
                 "status": "success",
@@ -315,11 +303,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         """List all sessions created by this Bedrock AgentCoreplatform instance."""
         sessions_info = []
         for name, info in self._sessions.items():
-            sessions_info.append({
-                "sessionName": name,
-                "description": info.description,
-                "sessionId": info.session_id,
-            })
+            sessions_info.append(
+                {
+                    "sessionName": name,
+                    "description": info.description,
+                    "sessionId": info.session_id,
+                }
+            )
 
         return {
             "status": "success",
@@ -355,38 +345,33 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         # Check module-level cache for AWS session ID
         aws_session_id = _session_mapping.get(target_session)
-        
+
         if aws_session_id:
             # Found in module cache - try to reconnect
             logger.debug(f"Found session in module cache: {target_session} -> {aws_session_id}")
-            
+
             try:
                 client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
-                
+
                 # Verify session still exists and is ready
-                session_info = client.get_session(
-                    interpreter_id=self.identifier,
-                    session_id=aws_session_id
-                )
-                
-                if session_info.get('status') == 'READY':
+                session_info = client.get_session(interpreter_id=self.identifier, session_id=aws_session_id)
+
+                if session_info.get("status") == "READY":
                     # Session is ready - reconnect to it
                     client.identifier = self.identifier
                     client.session_id = aws_session_id
-                    
+
                     self._sessions[target_session] = SessionInfo(
-                        session_id=aws_session_id,
-                        description="Reconnected via module cache",
-                        client=client
+                        session_id=aws_session_id, description="Reconnected via module cache", client=client
                     )
-                    
+
                     logger.info(f"Reconnected to existing session: {target_session}")
                     return target_session, None
                 else:
                     # Session exists but not ready - remove from cache
                     logger.warning(f"Session {target_session} not READY, removing from cache")
                     del _session_mapping[target_session]
-                    
+
             except Exception as e:
                 # Session doesn't exist or error - remove from cache
                 logger.debug(f"Session reconnection failed: {e}")
@@ -396,11 +381,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         # Session not found - create new if auto_create enabled
         if self.auto_create:
             logger.info(f"Auto-creating session: {target_session}")
-            
+
             init_action = InitSessionAction(
-                type="initSession",
-                session_name=target_session,
-                description="Auto-initialized session"
+                type="initSession", session_name=target_session, description="Auto-initialized session"
             )
             result = self.init_session(init_action)
 
@@ -412,9 +395,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         # auto_create=False and session doesn't exist
         logger.debug(f"Session '{target_session}' not found (auto_create disabled)")
-        raise ValueError(
-            f"Session '{target_session}' not found. Create it first using initSession."
-        )
+        raise ValueError(f"Session '{target_session}' not found. Create it first using initSession.")
 
     def execute_code(self, action: ExecuteCodeAction) -> Dict[str, Any]:
         """Execute code in a Bedrock AgentCore session with automatic session management."""
@@ -424,11 +405,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         logger.debug(f"Executing {action.language} code in session '{session_name}'")
 
-        params = {
-            "code": action.code,
-            "language": action.language.value,
-            "clearContext": action.clear_context
-        }
+        params = {"code": action.code, "language": action.language.value, "clearContext": action.clear_context}
         response = self._sessions[session_name].client.invoke("executeCode", params)
 
         return self._create_tool_result(response)
@@ -512,10 +489,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                         "content": [{"text": str(result.get("content"))}],
                     }
 
-            return {
-                "status": "error",
-                "content": [{"text": f"Failed to create tool result: {str(response)}"}]
-            }
+            return {"status": "error", "content": [{"text": f"Failed to create tool result: {str(response)}"}]}
 
         return response
 
