@@ -2,7 +2,7 @@
 Unit tests for the AgentCoreBrowser implementation.
 """
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -15,6 +15,22 @@ def test_bedrock_browser_initialization():
     assert browser.region is not None  # Should resolve from environment or default
     assert browser.session_timeout == 3600
     assert browser._client_dict == {}
+
+
+def test_bedrock_browser_registers_atexit_handler():
+    """Test that close_platform is registered with atexit on initialization."""
+
+    with patch("strands_tools.browser.browser.atexit.register") as mock_atexit:
+        browser = AgentCoreBrowser()
+
+        # Verify atexit.register was called once
+        mock_atexit.assert_called_once()
+
+        # Verify it registered the close_platform method
+        registered_func = mock_atexit.call_args[0][0]
+        assert callable(registered_func)
+        # Verify it's the browser's close_platform method
+        assert registered_func == browser.close_platform
 
 
 def test_bedrock_browser_with_custom_params():
@@ -56,6 +72,40 @@ async def test_bedrock_browser_create_browser_session_no_playwright():
 
     with pytest.raises(RuntimeError, match="Playwright not initialized"):
         await browser.create_browser_session()
+
+
+@pytest.mark.asyncio
+async def test_bedrock_browser_create_browser_session_hydrates_client_dict():
+    """Test that _client_dict is hydrated when create_browser_session is called."""
+    from unittest.mock import AsyncMock, patch
+
+    browser = AgentCoreBrowser()
+
+    # Mock playwright
+    mock_playwright = Mock()
+    mock_chromium = Mock()
+    mock_browser = Mock()
+    mock_playwright.chromium = mock_chromium
+    mock_chromium.connect_over_cdp = AsyncMock(return_value=mock_browser)
+    browser._playwright = mock_playwright
+
+    # Mock BrowserClient
+    mock_client = Mock()
+    mock_session_id = "test-session-123"
+    mock_client.start.return_value = mock_session_id
+    mock_client.generate_ws_headers.return_value = ("ws://test-url", {"header": "value"})
+
+    with patch("strands_tools.browser.agent_core_browser.AgentCoreBrowserClient", return_value=mock_client):
+        # Verify _client_dict is empty before
+        assert browser._client_dict == {}
+
+        # Create browser session
+        await browser.create_browser_session()
+
+        # Verify _client_dict is hydrated with the session
+        assert mock_session_id in browser._client_dict
+        assert browser._client_dict[mock_session_id] == mock_client
+        assert len(browser._client_dict) == 1
 
 
 def test_bedrock_browser_start_platform():

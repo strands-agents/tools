@@ -7,6 +7,7 @@ platform implementations.
 """
 
 import asyncio
+import atexit
 import json
 import logging
 import os
@@ -60,6 +61,7 @@ class Browser(ABC):
         asyncio.set_event_loop(self._loop)
         self._nest_asyncio_applied = False
         self._sessions: Dict[str, BrowserSession] = {}
+        atexit.register(self.close_platform)
 
     @tool
     def browser(self, browser_input: BrowserInput) -> Dict[str, Any]:
