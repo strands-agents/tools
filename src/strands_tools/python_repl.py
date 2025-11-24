@@ -62,6 +62,7 @@ from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
+logger.setLevel("DEBUG")
 
 # Tool specification
 TOOL_SPEC = {
@@ -180,7 +181,7 @@ class ReplState:
                 logger.warning(f"Invalid path set : {e}. Using default path")
                 self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
         else:
-            self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
+            self.persistence_dir = os.path.join("/tmp", "repl_state")
         os.makedirs(self.persistence_dir, exist_ok=True)
         self.state_file = os.path.join(self.persistence_dir, "repl_state.pkl")
         self.load_state()
