@@ -301,6 +301,47 @@ def _validate_response_size(response_text: str) -> str:
     return f"{truncated}... [Response truncated due to size limit]"
 
 
+def _validate_namespace(namespace: Any) -> str:
+    """
+    Validate and sanitize namespace parameter to prevent NoSQL injection.
+
+    This function treats namespace as a trusted identifier by requiring it to be
+    a simple string matching the pattern ^[A-Za-z0-9_-]{1,64}$ before including
+    it in MongoDB queries. This prevents MongoDB operator injection attacks where
+    dictionaries like {"$ne": ""} could be used to bypass tenant isolation.
+
+    Args:
+        namespace: The namespace value to validate (can be any type)
+
+    Returns:
+        str: A validated string namespace (1-64 chars, alphanumeric + underscore + hyphen only)
+
+    Raises:
+        MongoDBValidationError: If namespace cannot be converted to a safe string
+    """
+    if namespace is None:
+        return DEFAULT_NAMESPACE
+
+    if not isinstance(namespace, str):
+        raise MongoDBValidationError(f"Namespace must be a string, got {type(namespace).__name__}. ")
+
+    clean_namespace = str(namespace).strip()
+
+    if not clean_namespace:
+        raise MongoDBValidationError("Invalid namespace: Namespace cannot be empty.")
+
+    if len(clean_namespace) > 64:
+        raise MongoDBValidationError("Invalid namespace: Namespace too long. Maximum 64 characters allowed.")
+
+    if not re.match(r"^[A-Za-z0-9_-]{1,64}$", clean_namespace):
+        raise MongoDBValidationError(
+            f"Invalid namespace: Namespace '{clean_namespace}' contains invalid characters. "
+            "Must match pattern ^[A-Za-z0-9_-]{1,64}$"
+        )
+
+    return clean_namespace
+
+
 def _mask_connection_string(connection_string: str) -> str:
     """
     Mask sensitive information in MongoDB connection string for logging/error messages.
@@ -376,7 +417,7 @@ def _record_memory(
     Args:
         collection: MongoDB collection
         bedrock_runtime: Bedrock runtime client
-        namespace: Memory namespace
+        namespace: Memory namespace (will be validated for security)
         embedding_model: Embedding model ID
         content: Text content to store
         metadata: Optional metadata dictionary
@@ -384,6 +425,9 @@ def _record_memory(
     Returns:
         Dict containing the stored memory information
     """
+    # Validate namespace to prevent NoSQL injection
+    safe_namespace = _validate_namespace(namespace)
+
     # Generate unique memory ID
     memory_id = _generate_memory_id()
 
@@ -395,7 +439,7 @@ def _record_memory(
         "memory_id": memory_id,
         "content": content,
         "embedding": embedding,
-        "namespace": namespace,
+        "namespace": safe_namespace,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "metadata": metadata or {},
     }
@@ -407,7 +451,7 @@ def _record_memory(
     return {
         "memory_id": memory_id,
         "content": content,
-        "namespace": namespace,
+        "namespace": safe_namespace,
         "timestamp": doc["timestamp"],
         "result": "created" if result.inserted_id else "failed",
         "embedding_info": {"model": embedding_model, "dimensions": len(embedding), "generated": True},
@@ -430,7 +474,7 @@ def _retrieve_memories(
     Args:
         collection: MongoDB collection
         bedrock_runtime: Bedrock runtime client
-        namespace: Memory namespace
+        namespace: Memory namespace (will be validated for security)
         embedding_model: Embedding model ID
         query: Search query
         max_results: Maximum number of results
@@ -440,6 +484,9 @@ def _retrieve_memories(
     Returns:
         Dict containing search results
     """
+    # Validate namespace to prevent NoSQL injection
+    safe_namespace = _validate_namespace(namespace)
+
     # Generate embedding for query
     query_embedding = _generate_embedding(bedrock_runtime, query, embedding_model)
 
@@ -455,7 +502,7 @@ def _retrieve_memories(
                 "queryVector": query_embedding,
                 "numCandidates": max_results * 3,  # Use 3x candidates for better search quality
                 "limit": max_results,
-                "filter": {"namespace": {"$eq": namespace}},
+                "filter": {"namespace": {"$eq": safe_namespace}},
             }
         },
         {"$skip": skip_count},
@@ -486,7 +533,7 @@ def _retrieve_memories(
                 "queryVector": query_embedding,
                 "numCandidates": 1000,  # Higher limit for count
                 "limit": 1000,
-                "filter": {"namespace": {"$eq": namespace}},
+                "filter": {"namespace": {"$eq": safe_namespace}},
             }
         },
         {"$count": "total"},
@@ -539,13 +586,16 @@ def _list_memories(collection: Collection, namespace: str, max_results: int, nex
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace
+        namespace: Memory namespace (will be validated for security)
         max_results: Maximum number of results
         next_token: Pagination token
 
     Returns:
         Dict containing all memories
     """
+    # Validate namespace to prevent NoSQL injection
+    safe_namespace = _validate_namespace(namespace)
+
     # Calculate skip from next_token
     skip_count = int(next_token) if next_token else 0
 
@@ -554,7 +604,7 @@ def _list_memories(collection: Collection, namespace: str, max_results: int, nex
     # We exclude _id (MongoDB's internal ObjectId) and embedding vectors, include only the fields we need
     cursor: Cursor = (
         collection.find(
-            {"namespace": namespace},
+            {"namespace": safe_namespace},
             {
                 "memory_id": INCLUDE_FIELD,
                 "content": INCLUDE_FIELD,
@@ -571,7 +621,7 @@ def _list_memories(collection: Collection, namespace: str, max_results: int, nex
     memories = list(cursor)
 
     # Get total count
-    total_count = collection.count_documents({"namespace": namespace})
+    total_count = collection.count_documents({"namespace": safe_namespace})
 
     result = {"memories": memories, "total": total_count}
 
@@ -588,7 +638,7 @@ def _get_memory(collection: Collection, namespace: str, memory_id: str) -> Dict:
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace
+        namespace: Memory namespace (will be validated for security)
         memory_id: Memory ID to retrieve
 
     Returns:
@@ -597,11 +647,14 @@ def _get_memory(collection: Collection, namespace: str, memory_id: str) -> Dict:
     Raises:
         Exception: If memory not found or not in correct namespace
     """
+    # Validate namespace to prevent NoSQL injection
+    safe_namespace = _validate_namespace(namespace)
+
     try:
         # MongoDB projection syntax: INCLUDE_FIELD = include field, EXCLUDE_FIELD = exclude field
         # We exclude _id (MongoDB's internal ObjectId) and embedding vectors, include only the fields we need
         doc = collection.find_one(
-            {"memory_id": memory_id},
+            {"memory_id": memory_id, "namespace": safe_namespace},
             {
                 "memory_id": INCLUDE_FIELD,
                 "content": INCLUDE_FIELD,
@@ -613,11 +666,7 @@ def _get_memory(collection: Collection, namespace: str, memory_id: str) -> Dict:
         )
 
         if not doc:
-            raise MongoDBMemoryNotFoundError(f"Memory {memory_id} not found")
-
-        # Verify namespace
-        if doc.get("namespace") != namespace:
-            raise MongoDBMemoryNotFoundError(f"Memory {memory_id} not found in namespace {namespace}")
+            raise MongoDBMemoryNotFoundError(f"Memory {memory_id} not found in namespace {safe_namespace}")
 
         return {
             "memory_id": doc["memory_id"],
@@ -639,7 +688,7 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace
+        namespace: Memory namespace (will be validated for security)
         memory_id: Memory ID to delete
 
     Returns:
@@ -648,12 +697,15 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
     Raises:
         Exception: If memory not found or deletion fails
     """
+    # Validate namespace to prevent NoSQL injection
+    safe_namespace = _validate_namespace(namespace)
+
     try:
         # First verify the memory exists and is in correct namespace
-        _get_memory(collection, namespace, memory_id)
+        _get_memory(collection, safe_namespace, memory_id)
 
         # Delete the memory
-        result = collection.delete_one({"memory_id": memory_id, "namespace": namespace})
+        result = collection.delete_one({"memory_id": memory_id, "namespace": safe_namespace})
 
         if result.deleted_count == 0:
             raise MongoDBMemoryNotFoundError(f"Memory {memory_id} not found")
@@ -761,8 +813,17 @@ class MongoDBMemoryTool:
         """
         try:
             # Use private configuration (credentials not exposed to agents)
-            namespace = namespace or os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
+            if namespace is None:
+                namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
             max_results = max_results or DEFAULT_MAX_RESULTS
+
+            try:
+                safe_namespace = _validate_namespace(namespace)
+            except MongoDBValidationError as e:
+                return {
+                    "status": "error",
+                    "content": [{"text": f"Invalid namespace: {str(e)}"}],
+                }
 
             # Initialize MongoDB client with secure error handling
             try:
@@ -840,7 +901,7 @@ class MongoDBMemoryTool:
             try:
                 if action_enum == MemoryAction.RECORD:
                     response = _record_memory(
-                        collection, bedrock_runtime, namespace, self._embedding_model, content, metadata
+                        collection, bedrock_runtime, safe_namespace, self._embedding_model, content, metadata
                     )
                     return {
                         "status": "success",
@@ -851,7 +912,7 @@ class MongoDBMemoryTool:
                     response = _retrieve_memories(
                         collection,
                         bedrock_runtime,
-                        namespace,
+                        safe_namespace,
                         self._embedding_model,
                         query,
                         max_results,
@@ -866,7 +927,7 @@ class MongoDBMemoryTool:
                     }
 
                 elif action_enum == MemoryAction.LIST:
-                    response = _list_memories(collection, namespace, max_results, next_token)
+                    response = _list_memories(collection, safe_namespace, max_results, next_token)
                     # Optimize response size for list operations
                     optimized_response = _optimize_response_size(response, "list")
                     return {
@@ -875,14 +936,14 @@ class MongoDBMemoryTool:
                     }
 
                 elif action_enum == MemoryAction.GET:
-                    response = _get_memory(collection, namespace, memory_id)
+                    response = _get_memory(collection, safe_namespace, memory_id)
                     return {
                         "status": "success",
                         "content": [{"text": "Memory retrieved successfully"}, {"json": response}],
                     }
 
                 elif action_enum == MemoryAction.DELETE:
-                    response = _delete_memory(collection, namespace, memory_id)
+                    response = _delete_memory(collection, safe_namespace, memory_id)
                     return {
                         "status": "success",
                         "content": [{"text": f"Memory deleted successfully: {memory_id}"}],
@@ -964,8 +1025,17 @@ def mongodb_memory(
         embedding_model = embedding_model or os.getenv("MONGODB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
         region = region or os.getenv("AWS_REGION", DEFAULT_AWS_REGION)
         vector_index_name = vector_index_name or DEFAULT_VECTOR_INDEX_NAME
-        namespace = namespace or os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
+        if namespace is None:
+            namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
         max_results = max_results or DEFAULT_MAX_RESULTS
+
+        try:
+            safe_namespace = _validate_namespace(namespace)
+        except MongoDBValidationError as e:
+            return {
+                "status": "error",
+                "content": [{"text": f"Invalid namespace: {str(e)}"}],
+            }
 
         # Validate required parameters
         if not cluster_uri:
@@ -1053,7 +1123,9 @@ def mongodb_memory(
         # Execute the appropriate action
         try:
             if action_enum == MemoryAction.RECORD:
-                response = _record_memory(collection, bedrock_runtime, namespace, embedding_model, content, metadata)
+                response = _record_memory(
+                    collection, bedrock_runtime, safe_namespace, embedding_model, content, metadata
+                )
                 return {
                     "status": "success",
                     "content": [{"text": "Memory stored successfully"}, {"json": response}],
@@ -1063,7 +1135,7 @@ def mongodb_memory(
                 response = _retrieve_memories(
                     collection,
                     bedrock_runtime,
-                    namespace,
+                    safe_namespace,
                     embedding_model,
                     query,
                     max_results,
@@ -1078,23 +1150,31 @@ def mongodb_memory(
                 }
 
             elif action_enum == MemoryAction.LIST:
-                response = _list_memories(collection, namespace, max_results, next_token)
+                response = _list_memories(collection, safe_namespace, max_results, next_token)
                 # Optimize response size for list operations
                 optimized_response = _optimize_response_size(response, "list")
+
+                # For empty results, return minimal response to prevent size issues
+                if not optimized_response.get("memories"):
+                    return {
+                        "status": "success",
+                        "content": [{"text": "No memories found"}],
+                    }
+
                 return {
                     "status": "success",
                     "content": [{"text": "Memories listed successfully"}, {"json": optimized_response}],
                 }
 
             elif action_enum == MemoryAction.GET:
-                response = _get_memory(collection, namespace, memory_id)
+                response = _get_memory(collection, safe_namespace, memory_id)
                 return {
                     "status": "success",
                     "content": [{"text": "Memory retrieved successfully"}, {"json": response}],
                 }
 
             elif action_enum == MemoryAction.DELETE:
-                response = _delete_memory(collection, namespace, memory_id)
+                response = _delete_memory(collection, safe_namespace, memory_id)
                 return {
                     "status": "success",
                     "content": [{"text": f"Memory deleted successfully: {memory_id}"}],
