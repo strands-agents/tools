@@ -417,7 +417,7 @@ def _record_memory(
     Args:
         collection: MongoDB collection
         bedrock_runtime: Bedrock runtime client
-        namespace: Memory namespace (will be validated for security)
+        namespace: Memory namespace
         embedding_model: Embedding model ID
         content: Text content to store
         metadata: Optional metadata dictionary
@@ -474,7 +474,7 @@ def _retrieve_memories(
     Args:
         collection: MongoDB collection
         bedrock_runtime: Bedrock runtime client
-        namespace: Memory namespace (will be validated for security)
+        namespace: Memory namespace
         embedding_model: Embedding model ID
         query: Search query
         max_results: Maximum number of results
@@ -586,7 +586,7 @@ def _list_memories(collection: Collection, namespace: str, max_results: int, nex
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace (will be validated for security)
+        namespace: Memory namespace
         max_results: Maximum number of results
         next_token: Pagination token
 
@@ -638,7 +638,7 @@ def _get_memory(collection: Collection, namespace: str, memory_id: str) -> Dict:
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace (will be validated for security)
+        namespace: Memory namespace
         memory_id: Memory ID to retrieve
 
     Returns:
@@ -688,7 +688,7 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
 
     Args:
         collection: MongoDB collection
-        namespace: Memory namespace (will be validated for security)
+        namespace: Memory namespace
         memory_id: Memory ID to delete
 
     Returns:
