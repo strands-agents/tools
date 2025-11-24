@@ -1053,7 +1053,7 @@ def save_diagram_to_directory(title: str, extension: str, content: str = None) -
     Returns:
         Full path to the saved file
     """
-    diagrams_dir = os.path.join(os.getcwd(), "diagrams")
+    diagrams_dir = "/tmp/diagrams"
     os.makedirs(diagrams_dir, exist_ok=True)
 
     # Ensure extension starts with dot

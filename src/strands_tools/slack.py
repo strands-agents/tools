@@ -178,7 +178,7 @@ client = None
 socket_client = None
 
 # Event storage configuration
-EVENTS_DIR = Path.cwd() / "slack_events"
+EVENTS_DIR = Path("/tmp/slack_events")
 EVENTS_FILE = EVENTS_DIR / "events.jsonl"
 
 # Make sure events directory exists

@@ -62,7 +62,6 @@ from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
-logger.setLevel("DEBUG")
 
 # Tool specification
 TOOL_SPEC = {
