@@ -5,6 +5,7 @@ Tests for the think tool using the Agent interface.
 from unittest.mock import MagicMock, patch
 
 from strands.agent import AgentResult
+
 from strands_tools import think
 from strands_tools.think import ThoughtProcessor
 
@@ -512,9 +513,9 @@ def test_think_tool_recursion_prevention_inherit_all():
             "Automatically excluding 'think' tool from nested agent to prevent recursion" in str(call)
             for call in mock_logger.debug.call_args_list
         )
-        assert (
-            recursion_message_logged
-        ), f"Expected recursion prevention message not found in debug calls: {mock_logger.debug.call_args_list}"
+        assert recursion_message_logged, (
+            f"Expected recursion prevention message not found in debug calls: {mock_logger.debug.call_args_list}"
+        )
 
         # Verify the Agent was created with all tools except think
         mock_agent_class.assert_called_once()

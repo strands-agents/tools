@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -66,7 +67,7 @@ dev = [
     "mypy>=0.981,<1.0.0",
     "pre-commit>=3.2.0,<4.2.0",
     "pytest>=8.0.0,<9.0.0",
-    "ruff>=0.4.4,<0.5.0",
+    "ruff>=0.13.0,<0.14.0",
     "responses>=0.6.1,<1.0.0",
     "mem0ai>=0.1.104,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
@@ -113,13 +114,16 @@ twelvelabs = [
 elasticsearch_memory = [
     "elasticsearch>=8.0.0,<9.0.0"
 ]
+mongodb_memory = [
+    "pymongo>=4.0.0,<5.0.0",
+]
 
 [tool.hatch.envs.hatch-static-analysis]
-features = ["mem0_memory", "local_chromium_browser", "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer", "twelvelabs", "elasticsearch_memory"]
+features = ["mem0_memory", "local_chromium_browser", "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer", "twelvelabs", "elasticsearch_memory", "mongodb_memory"]
 dependencies = [
     "strands-agents>=1.0.0",
     "mypy>=0.981,<1.0.0",
-    "ruff>=0.4.4,<0.5.0",
+    "ruff>=0.13.0,<0.14.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
@@ -134,7 +138,7 @@ lint-check = [
 lint-fix = ["ruff check --fix"]
 
 [tool.hatch.envs.hatch-test]
-features = ["mem0_memory", "local_chromium_browser",  "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer", "twelvelabs", "elasticsearch_memory"]
+features = ["mem0_memory", "local_chromium_browser",  "agent_core_browser", "agent_core_code_interpreter", "a2a_client", "diagram", "rss", "use_computer", "twelvelabs", "elasticsearch_memory", "mongodb_memory"]
 extra-dependencies = [
     "moto>=5.1.0,<6.0.0",
     "pytest>=8.0.0,<9.0.0",

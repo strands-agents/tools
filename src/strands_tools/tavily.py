@@ -74,7 +74,7 @@ def _get_api_key() -> str:
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         raise ValueError(
-            "TAVILY_API_KEY environment variable is required. " "Get your free API key at https://app.tavily.com"
+            "TAVILY_API_KEY environment variable is required. Get your free API key at https://app.tavily.com"
         )
     return api_key
 

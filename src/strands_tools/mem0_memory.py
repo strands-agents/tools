@@ -224,7 +224,6 @@ class Mem0ServiceClient:
             logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
             merged_config = self._append_neptune_database_backend(merged_config)
 
-
         return Mem0Memory.from_config(config_dict=merged_config)
 
     def _append_neptune_analytics_vector_config(self, config: Optional[Dict] = None) -> Dict:

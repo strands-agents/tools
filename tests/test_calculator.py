@@ -7,9 +7,6 @@ import unittest.mock as mock
 import pytest
 import sympy as sp
 from strands import Agent
-
-# Module level import for the Agent fixture
-from strands_tools import calculator as calculator_module
 from sympy import Integer, Symbol, exp, log
 
 # Function level imports from calculator module
@@ -32,6 +29,9 @@ from src.strands_tools.calculator import (
     solve_equation,
 )
 from src.strands_tools.calculator import calculator as calculator_func
+
+# Module level import for the Agent fixture
+from strands_tools import calculator as calculator_module
 
 
 @pytest.fixture

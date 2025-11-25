@@ -5,12 +5,18 @@ Simple, direct interface to the system's crontab with helpful guidance in docume
 """
 
 import logging
+import re
 import subprocess
 from typing import Any, Dict, Optional
 
 from strands import tool
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_description(description: str) -> str:
+    """Sanitize description to prevent crontab injection by removing line breaks."""
+    return re.sub(r"[\r\n]+", " ", description).strip()
 
 
 @tool
@@ -117,7 +123,7 @@ def add_job(schedule: str, command: str, description: Optional[str] = None) -> D
         crontab = result.stdout if result.returncode == 0 else ""
 
         # Format the cron job
-        description_text = f"# {description}" if description else ""
+        description_text = f"# {_sanitize_description(description)}" if description else ""
         cron_line = f"{schedule} {command} {description_text}".strip()
 
         # Add to crontab
@@ -224,7 +230,7 @@ def edit_job(
         # Update values
         new_schedule = schedule if schedule is not None else old_schedule
         new_command = command if command is not None else old_command
-        new_comment = f"# {description}" if description is not None else old_comment
+        new_comment = f"# {_sanitize_description(description)}" if description is not None else old_comment
 
         # Create updated line
         new_cron_line = f"{new_schedule} {new_command} {new_comment}".strip()
