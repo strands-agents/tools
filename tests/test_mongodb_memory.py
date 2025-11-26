@@ -13,7 +13,7 @@ from strands import Agent
 from src.strands_tools.mongodb_memory import mongodb_memory
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_mongodb_client():
     """Mock MongoDB client to avoid actual connections."""
     with mock.patch("src.strands_tools.mongodb_memory.MongoClient") as mock_mongo:
@@ -34,6 +34,20 @@ def mock_mongodb_client():
         mock_collection.list_search_indexes.return_value = []
         mock_collection.create_search_index.return_value = None
 
+        # Configure count_documents to return an integer
+        mock_collection.count_documents.return_value = 0
+
+        # Configure aggregate to return empty list by default
+        mock_collection.aggregate.return_value = []
+
+        # Configure find to return empty cursor
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.skip.return_value = mock_cursor
+        mock_cursor.limit.return_value = mock_cursor
+        mock_cursor.__iter__.return_value = []
+        mock_collection.find.return_value = mock_cursor
+
         yield {
             "mongo_class": mock_mongo,
             "client": mock_client,
@@ -42,7 +56,7 @@ def mock_mongodb_client():
         }
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_bedrock_client():
     """Mock Amazon Bedrock client for embeddings."""
     with mock.patch("boto3.client") as mock_boto_client:
@@ -287,10 +301,10 @@ def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
     assert "memory_id" in response_data
     assert response_data["memory_id"] == "mem_123"
 
-    # Verify find_one was called
+    # Verify find_one was called with both memory_id and namespace for security
     mock_mongodb_client["collection"].find_one.assert_called_once()
     call_args = mock_mongodb_client["collection"].find_one.call_args[0]
-    assert call_args[0] == {"memory_id": "mem_123"}
+    assert call_args[0] == {"memory_id": "mem_123", "namespace": "test_namespace"}
 
 
 def test_delete_memory(mock_mongodb_client, mock_bedrock_client, config):
@@ -417,19 +431,17 @@ def test_namespace_validation(mock_mongodb_client, mock_bedrock_client, config):
     """Test that memories are properly filtered by namespace."""
     agent = Agent(tools=[mongodb_memory])
 
-    # Configure mock find_one response with wrong namespace
-    mock_mongodb_client["collection"].find_one.return_value = {
-        "memory_id": "mem_123",
-        "content": "Test content",
-        "namespace": "wrong_namespace",
-    }
+    mock_mongodb_client["collection"].find_one.return_value = None
 
-    # Call the tool
     result = agent.tool.mongodb_memory(action="get", memory_id="mem_123", **config)
 
     # Verify error response
     assert result["status"] == "error"
-    assert "not found in namespace test_namespace" in result["content"][0]["text"]
+    assert "Memory mem_123 not found in namespace test_namespace" in result["content"][0]["text"]
+
+    mock_mongodb_client["collection"].find_one.assert_called_once()
+    call_args = mock_mongodb_client["collection"].find_one.call_args[0]
+    assert call_args[0] == {"memory_id": "mem_123", "namespace": "test_namespace"}
 
 
 def test_pagination_support(mock_mongodb_client, mock_bedrock_client, config):
@@ -754,12 +766,9 @@ def test_security_scenarios(mock_mongodb_client, mock_bedrock_client):
     """Test security-related scenarios like namespace isolation."""
     agent = Agent(tools=[mongodb_memory])
 
-    # Configure mock find_one response with wrong namespace
-    mock_mongodb_client["collection"].find_one.return_value = {
-        "memory_id": "mem_123",
-        "content": "Test content",
-        "namespace": "wrong_namespace",
-    }
+    # Configure mock find_one response to return None (not found)
+    # This simulates the new behavior where we query with both memory_id and namespace
+    mock_mongodb_client["collection"].find_one.return_value = None
 
     # Test namespace validation
     result = agent.tool.mongodb_memory(
@@ -772,7 +781,7 @@ def test_security_scenarios(mock_mongodb_client, mock_bedrock_client):
     )
 
     assert result["status"] == "error"
-    assert "not found in namespace correct_namespace" in result["content"][0]["text"]
+    assert "Memory mem_123 not found in namespace correct_namespace" in result["content"][0]["text"]
 
 
 def test_troubleshooting_scenarios(mock_mongodb_client, mock_bedrock_client, config):
@@ -795,6 +804,72 @@ def test_troubleshooting_scenarios(mock_mongodb_client, mock_bedrock_client, con
     result = agent.tool.mongodb_memory(action="record", content="test", **config)
     assert result["status"] == "error"
     assert "Unable to connect to MongoDB cluster" in result["content"][0]["text"]
+
+
+def test_nosql_injection_prevention(mock_mongodb_client, mock_bedrock_client, config):
+    """Test that NoSQL injection attempts are blocked."""
+    agent = Agent(tools=[mongodb_memory])
+
+    # Test the specific PoC attack: namespace={"$ne": ""}
+    malicious_namespace = {"$ne": ""}
+
+    # Remove namespace from config to avoid conflict
+    test_config = {k: v for k, v in config.items() if k != "namespace"}
+
+    # Test with list action (most common attack vector)
+    result = agent.tool.mongodb_memory(action="list", namespace=malicious_namespace, **test_config)
+
+    # Should be blocked - either by Pydantic validation or our custom validation
+    assert result["status"] == "error"
+    error_text = result["content"][0]["text"]
+    assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text, (
+        f"Expected validation error, got: {error_text}"
+    )
+
+    # Test other MongoDB operators
+    other_injection_attempts = [
+        {"$gt": ""},
+        {"$regex": ".*"},
+        {"$exists": True},
+        {"$in": ["tenant1", "tenant2"]},
+    ]
+
+    for injection_payload in other_injection_attempts:
+        result = agent.tool.mongodb_memory(action="list", namespace=injection_payload, **test_config)
+
+        assert result["status"] == "error", f"Injection {injection_payload} should be blocked"
+        error_text = result["content"][0]["text"]
+        assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text, (
+            f"Expected validation error for {injection_payload}"
+        )
+
+
+def test_namespace_validation_strict_rules(mock_mongodb_client, mock_bedrock_client, config):
+    """Test strict namespace validation rules."""
+    agent = Agent(tools=[mongodb_memory])
+
+    # Remove namespace from config to avoid conflict
+    test_config = {k: v for k, v in config.items() if k != "namespace"}
+
+    # Test invalid characters (should be rejected)
+    invalid_namespaces = [
+        "user.name",  # Dots not allowed in strict mode
+        "user@domain",  # @ symbol
+        "user$name",  # $ symbol (MongoDB operator prefix)
+        "user name",  # Space
+        "user/path",  # Forward slash
+        "user:name",  # Colon
+        "a" * 65,  # Too long (over 64 chars)
+        "",  # Empty
+        "   ",  # Whitespace only
+    ]
+
+    for invalid_namespace in invalid_namespaces:
+        result = agent.tool.mongodb_memory(action="list", namespace=invalid_namespace, **test_config)
+
+        assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
+        error_text = result["content"][0]["text"]
+        assert "Invalid namespace" in error_text, f"Expected validation error for '{invalid_namespace}'"
 
 
 def test_vector_search_pipeline_structure(mock_mongodb_client, mock_bedrock_client, config):
