@@ -45,7 +45,7 @@ agent = Agent(tools=[mem0_memory])
 # Store memory in Memory
 agent.tool.mem0_memory(
     action="store",
-    content="Important information to remember",
+    content="Important information to remember for the meeting",
     user_id="alex",  # or agent_id="agent1"
     metadata={"category": "meeting_notes"}
 )
