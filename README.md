@@ -32,6 +32,8 @@
   </p>
 </div>
 
+trigger integ
+
 Strands Agents Tools is a community-driven project that provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
