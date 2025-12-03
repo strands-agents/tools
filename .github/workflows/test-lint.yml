@@ -61,7 +61,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          pip install --no-cache-dir hatch==1.15.1
+          pip install --no-cache-dir -e ".[build]"
       - name: Run Unit tests
         id: tests
         run: hatch test tests --cover
@@ -114,7 +114,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --no-cache-dir hatch
+          pip install --no-cache-dir -e ".[build]"
 
       - name: Run lint
         id: lint
