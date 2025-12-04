@@ -5,6 +5,7 @@ Unit tests for the AgentCoreBrowser implementation.
 from unittest.mock import Mock
 
 import pytest
+
 from strands_tools.browser import AgentCoreBrowser
 
 

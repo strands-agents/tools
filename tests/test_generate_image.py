@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
+
 from strands_tools import generate_image
 
 

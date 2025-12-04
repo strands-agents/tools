@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+from strands.agent import AgentResult
+
 from strands_tools import workflow as workflow_module
 
 
@@ -426,14 +428,11 @@ class TestWorkflowManager:
         ):
             # Create a proper mock agent result that returns structured data
             mock_task_agent = MagicMock()
-            mock_result = MagicMock()
-            mock_result.__str__ = MagicMock(return_value="Task completed successfully")
-            mock_result.get = MagicMock(
-                side_effect=lambda k, default=None: {
-                    "content": [{"text": "Task completed successfully"}],
-                    "stop_reason": "completed",
-                    "metrics": None,
-                }.get(k, default)
+            mock_result = AgentResult(
+                message={"content": [{"text": "Task completed successfully"}]},
+                stop_reason="completed",
+                metrics=None,
+                state=MagicMock(),
             )
 
             mock_task_agent.return_value = mock_result
