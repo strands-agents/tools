@@ -122,6 +122,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
+| generate_image_gemini | `agent.tool.generate_image_gemini(prompt="A robot holding a red skateboard")` | Generate high-quality images using Google's Gemini Imagen models (Imagen 3 and Imagen 4) |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
 | image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
 | journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
@@ -558,6 +559,37 @@ result = agent.tool.batch(
             }
         },
     ]
+)
+```
+
+### Image Generation with Google Gemini
+
+```python
+import os
+from strands import Agent
+from strands_tools import generate_image_gemini
+
+# Set your API key as environment variable
+os.environ['GOOGLE_API_KEY'] = 'your-api-key-here'
+
+# Create agent with the tool
+agent = Agent(tools=[generate_image_gemini])
+
+# Basic usage with default parameters
+agent.tool.generate_image_gemini(prompt="A robot holding a red skateboard")
+
+# Advanced usage with custom parameters (Imagen 4 Preview - highest quality)
+agent.tool.generate_image_gemini(
+    prompt="A futuristic city with flying cars at sunset",
+    model_id="gemini-3-pro-image-preview",
+    aspect_ratio="16:9"
+)
+
+# Using Imagen 3 Fast model for quick generation
+agent.tool.generate_image_gemini(
+    prompt="A serene mountain landscape",
+    model_id="gemini-2.5-flash-image",
+    aspect_ratio="4:3"
 )
 ```
 
@@ -1183,6 +1215,19 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
+#### Image Generation with Google Gemini
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| GOOGLE_API_KEY | Google Gemini API key (required for generate_image_gemini tool) | None |
+| GEMINI_MODEL_ID | Default Gemini model to use for image generation | gemini-3-pro-image-preview |
+
+**Supported Models:**
+- `gemini-3-pro-image-preview` - Imagen 4 Preview (default, highest quality)
+- `gemini-2.5-flash-image` - Imagen 3 Fast (quick generation)
+
+**Note**: Visit https://ai.google.dev/gemini-api to create a free account and API key.
 
 #### Video Tools
 
