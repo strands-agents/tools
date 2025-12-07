@@ -147,6 +147,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
+| redshift_query | `agent.tool.redshift_query(sql="SELECT * FROM users LIMIT 5", database="dev", clusterIdentifier="my-cluster", secretArn="arn:aws:secretsmanager:...")` | Execute SQL queries on Amazon Redshift (Provisioned or Serverless) using the Redshift Data API. Supports parameters, Secrets Manager authentication, and structured query results. |
+
 
 \* *These tools do not work on windows*
 
