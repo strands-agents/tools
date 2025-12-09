@@ -1246,7 +1246,7 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 return {
                     "toolUseId": tool_use_id,
                     "status": "error",
-                    "content": [{"text": error_msg}],
+                    "content": [cast(ToolResultContent, {"text": error_msg})],
                 }
             except Exception as e:
                 error_msg = f"Error processing file {file_path}: {str(e)}"
