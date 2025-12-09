@@ -16,6 +16,7 @@ sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
 from strands_tools.code_interpreter.code_interpreter import CodeInterpreter  # noqa: E402
 from strands_tools.code_interpreter.models import (  # noqa: E402
     CodeInterpreterInput,
+    DownloadFilesAction,
     ExecuteCodeAction,
     ExecuteCommandAction,
     FileContent,
@@ -71,6 +72,9 @@ class MockCodeInterpreter(CodeInterpreter):
 
     def write_files(self, action: WriteFilesAction) -> Dict[str, Any]:
         return {"status": "success", "content": [{"json": {"filesWritten": len(action.content)}}]}
+
+    def download_files(self, action: DownloadFilesAction) -> Dict[str, Any]:
+        return {"status": "success", "content": [{"json": {"downloadedFiles": action.source_paths, "destinationDir": action.destination_dir}}]}
 
     @staticmethod
     def get_supported_languages() -> List[LanguageType]:

@@ -129,6 +129,23 @@ class WriteFilesAction(BaseModel):
     content: List[FileContent] = Field(description="Required list of file content to write")
 
 
+class DownloadFilesAction(BaseModel):
+    """Download files from the Code Interpreter sandbox to the local file system. Use this to retrieve generated 
+    files (CSV, Excel, images, etc.) from the session after data analysis or file processing. The files are 
+    downloaded as binary data and saved to the specified local directory."""
+
+    type: Literal["downloadFiles"] = Field(description="Download files from the code interpreter to local filesystem")
+
+    session_name: Optional[str] = Field(
+        default=None, description="Session name. If not provided, uses the default session."
+    )
+
+    source_paths: List[str] = Field(description="Required list of file paths in the sandbox to download")
+    destination_dir: str = Field(
+        default="/tmp", description="Local directory to save downloaded files (defaults to /tmp)"
+    )
+
+
 class CodeInterpreterInput(BaseModel):
     action: Union[
         InitSessionAction,
@@ -139,4 +156,5 @@ class CodeInterpreterInput(BaseModel):
         ListFilesAction,
         RemoveFilesAction,
         WriteFilesAction,
+        DownloadFilesAction,
     ] = Field(discriminator="type")
