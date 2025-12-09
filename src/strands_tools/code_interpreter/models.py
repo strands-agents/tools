@@ -130,8 +130,8 @@ class WriteFilesAction(BaseModel):
 
 
 class DownloadFilesAction(BaseModel):
-    """Download files from the Code Interpreter sandbox to the local file system. Use this to retrieve generated 
-    files (CSV, Excel, images, etc.) from the session after data analysis or file processing. The files are 
+    """Download files from the Code Interpreter sandbox to the local file system. Use this to retrieve generated
+    files (CSV, Excel, images, etc.) from the session after data analysis or file processing. The files are
     downloaded as binary data and saved to the specified local directory."""
 
     type: Literal["downloadFiles"] = Field(description="Download files from the code interpreter to local filesystem")

@@ -833,41 +833,30 @@ def test_download_files_success(mock_open, mock_mkdir, mock_mkdtemp, interpreter
     """Test successful file download."""
     import base64
     import json
-    
+
     # Setup session
     session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
     interpreter._sessions["test-session"] = session_info
 
     # Mock sandbox response with base64 encoded data
     file_data = b"Hello, World!"
-    base64_data = base64.b64encode(file_data).decode('utf-8')
-    
+    base64_data = base64.b64encode(file_data).decode("utf-8")
+
     sandbox_output = f"""
 Some other output
 __DOWNLOAD_RESULTS__
-{json.dumps({
-    "data.txt": {
-        "data": base64_data,
-        "size": len(file_data)
-    }
-})}
+{json.dumps({"data.txt": {"data": base64_data, "size": len(file_data)}})}
 __DOWNLOAD_RESULTS_END__
 More output
 """
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     # Mock file system operations
     mock_mkdtemp.return_value = "/tmp/test_dir"
 
     action = DownloadFilesAction(
-        type="downloadFiles",
-        session_name="test-session",
-        source_paths=["data.txt"],
-        destination_dir="/tmp/downloads"
+        type="downloadFiles", session_name="test-session", source_paths=["data.txt"], destination_dir="/tmp/downloads"
     )
 
     with patch("pathlib.Path.exists", return_value=False):
@@ -890,7 +879,7 @@ def test_download_files_session_not_found():
             type="downloadFiles",
             session_name="non-existent",
             source_paths=["data.txt"],
-            destination_dir="/tmp/downloads"
+            destination_dir="/tmp/downloads",
         )
 
         with pytest.raises(ValueError, match="Session 'non-existent' not found"):
@@ -906,7 +895,7 @@ def test_download_files_relative_path_error(interpreter, mock_client):
         type="downloadFiles",
         session_name="test-session",
         source_paths=["data.txt"],
-        destination_dir="relative/path"  # Not absolute
+        destination_dir="relative/path",  # Not absolute
     )
 
     result = interpreter.download_files(action)
@@ -921,16 +910,10 @@ def test_download_files_sandbox_execution_error(interpreter, mock_client):
     interpreter._sessions["test-session"] = session_info
 
     # Mock failed execution
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": "Python error occurred"}}], 
-        "isError": True
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": "Python error occurred"}}], "isError": True}
 
     action = DownloadFilesAction(
-        type="downloadFiles",
-        session_name="test-session",
-        source_paths=["data.txt"],
-        destination_dir="/tmp/downloads"
+        type="downloadFiles", session_name="test-session", source_paths=["data.txt"], destination_dir="/tmp/downloads"
     )
 
     result = interpreter.download_files(action)
@@ -942,31 +925,24 @@ def test_download_files_sandbox_execution_error(interpreter, mock_client):
 def test_download_files_file_not_found(interpreter, mock_client):
     """Test file download when file not found in sandbox."""
     import json
-    
+
     session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
     interpreter._sessions["test-session"] = session_info
 
     # Mock sandbox response with file not found error
     sandbox_output = f"""
 __DOWNLOAD_RESULTS__
-{json.dumps({
-    "missing.txt": {
-        "error": "File not found: missing.txt"
-    }
-})}
+{json.dumps({"missing.txt": {"error": "File not found: missing.txt"}})}
 __DOWNLOAD_RESULTS_END__
 """
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     action = DownloadFilesAction(
         type="downloadFiles",
         session_name="test-session",
         source_paths=["missing.txt"],
-        destination_dir="/tmp/downloads"
+        destination_dir="/tmp/downloads",
     )
 
     result = interpreter.download_files(action)
@@ -984,16 +960,10 @@ def test_download_files_missing_markers(interpreter, mock_client):
     # Mock sandbox response without markers
     sandbox_output = "Some output without markers"
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     action = DownloadFilesAction(
-        type="downloadFiles",
-        session_name="test-session",
-        source_paths=["data.txt"],
-        destination_dir="/tmp/downloads"
+        type="downloadFiles", session_name="test-session", source_paths=["data.txt"], destination_dir="/tmp/downloads"
     )
 
     result = interpreter.download_files(action)
@@ -1014,16 +984,10 @@ __DOWNLOAD_RESULTS__
 __DOWNLOAD_RESULTS_END__
 """
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     action = DownloadFilesAction(
-        type="downloadFiles",
-        session_name="test-session",
-        source_paths=["data.txt"],
-        destination_dir="/tmp/downloads"
+        type="downloadFiles", session_name="test-session", source_paths=["data.txt"], destination_dir="/tmp/downloads"
     )
 
     result = interpreter.download_files(action)
@@ -1038,41 +1002,30 @@ def test_download_files_with_filename_conflict(mock_mkdir, mock_open, interprete
     """Test file download with filename conflicts."""
     import base64
     import json
-    
+
     session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
     interpreter._sessions["test-session"] = session_info
 
     file_data = b"Hello, World!"
-    base64_data = base64.b64encode(file_data).decode('utf-8')
-    
+    base64_data = base64.b64encode(file_data).decode("utf-8")
+
     sandbox_output = f"""
 __DOWNLOAD_RESULTS__
-{json.dumps({
-    "data.txt": {
-        "data": base64_data,
-        "size": len(file_data)
-    }
-})}
+{json.dumps({"data.txt": {"data": base64_data, "size": len(file_data)}})}
 __DOWNLOAD_RESULTS_END__
 """
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     action = DownloadFilesAction(
-        type="downloadFiles",
-        session_name="test-session",
-        source_paths=["data.txt"],
-        destination_dir="/tmp/downloads"
+        type="downloadFiles", session_name="test-session", source_paths=["data.txt"], destination_dir="/tmp/downloads"
     )
 
     # Mock file existence to simulate filename conflict
     # The exists() method is called on Path instance, so we need to check the path string
     def mock_exists(self):
         return str(self).endswith("data.txt") and not str(self).endswith("data_1.txt")
-    
+
     with patch("pathlib.Path.exists", mock_exists):
         result = interpreter.download_files(action)
 
@@ -1088,37 +1041,33 @@ def test_download_files_mixed_results(mock_mkdir, mock_open, interpreter, mock_c
     """Test file download with mixed success and error results."""
     import base64
     import json
-    
+
     session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
     interpreter._sessions["test-session"] = session_info
 
     file_data = b"Success data"
-    base64_data = base64.b64encode(file_data).decode('utf-8')
-    
+    base64_data = base64.b64encode(file_data).decode("utf-8")
+
     sandbox_output = f"""
 __DOWNLOAD_RESULTS__
-{json.dumps({
-    "success.txt": {
-        "data": base64_data,
-        "size": len(file_data)
-    },
-    "failed.txt": {
-        "error": "File not found: failed.txt"
+{
+        json.dumps(
+            {
+                "success.txt": {"data": base64_data, "size": len(file_data)},
+                "failed.txt": {"error": "File not found: failed.txt"},
+            }
+        )
     }
-})}
 __DOWNLOAD_RESULTS_END__
 """
 
-    mock_client.invoke.return_value = {
-        "stream": [{"result": {"content": sandbox_output}}], 
-        "isError": False
-    }
+    mock_client.invoke.return_value = {"stream": [{"result": {"content": sandbox_output}}], "isError": False}
 
     action = DownloadFilesAction(
         type="downloadFiles",
         session_name="test-session",
         source_paths=["success.txt", "failed.txt"],
-        destination_dir="/tmp/downloads"
+        destination_dir="/tmp/downloads",
     )
 
     with patch("pathlib.Path.exists", return_value=False):

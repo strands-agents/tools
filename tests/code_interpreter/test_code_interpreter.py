@@ -74,7 +74,10 @@ class MockCodeInterpreter(CodeInterpreter):
         return {"status": "success", "content": [{"json": {"filesWritten": len(action.content)}}]}
 
     def download_files(self, action: DownloadFilesAction) -> Dict[str, Any]:
-        return {"status": "success", "content": [{"json": {"downloadedFiles": action.source_paths, "destinationDir": action.destination_dir}}]}
+        return {
+            "status": "success",
+            "content": [{"json": {"downloadedFiles": action.source_paths, "destinationDir": action.destination_dir}}],
+        }
 
     @staticmethod
     def get_supported_languages() -> List[LanguageType]:

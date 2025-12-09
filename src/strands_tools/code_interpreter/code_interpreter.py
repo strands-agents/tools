@@ -169,7 +169,8 @@ class CodeInterpreter(ABC):
                 - WriteFilesAction: type="writeFiles", session_name, content (list of FileContent objects)
                 - ListFilesAction: type="listFiles", session_name, path
                 - RemoveFilesAction: type="removeFiles", session_name, paths (list)
-                - DownloadFilesAction: type="downloadFiles", session_name, source_paths (list), destination_dir (optional, defaults to /tmp)
+                - DownloadFilesAction: type="downloadFiles", session_name, source_paths (list), 
+                  destination_dir (optional, defaults to /tmp)
                 - ListLocalSessionsAction: type="listLocalSessions"
 
         Returns:
