@@ -38,7 +38,8 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0 and Amazon Bedrock Knowledge Bases
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
 - 🐍 **Python Execution** - Run Python code snippets with state persistence, user confirmation for code execution, and safety features
@@ -52,6 +53,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
 - 📈 **Diagram** - Create AWS cloud diagrams, basic diagrams, or UML diagrams using python libraries
@@ -102,14 +104,21 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
 | shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
+| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
+| tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
+| tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
+| tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
+| exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) that combines neural and keyword search for optimal results |
+| exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases |
+| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
@@ -129,11 +138,15 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
 | rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
+| search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
+| chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
+| mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
 
 \* *These tools do not work on windows*
 
@@ -150,6 +163,68 @@ agent = Agent(tools=[file_read, file_write, editor])
 agent.tool.file_read(path="config.json")
 agent.tool.file_write(path="output.txt", content="Hello, world!")
 agent.tool.editor(command="view", path="script.py")
+```
+
+### Dynamic MCP Client Integration
+
+⚠️ **SECURITY WARNING**: The Dynamic MCP Client allows agents to autonomously connect to external MCP servers and load remote tools at runtime. This poses significant security risks as agents can potentially connect to malicious servers and execute untrusted code. Use with extreme caution in production environments.
+
+This tool is different from the static MCP server implementation in the Strands SDK (see [MCP Tools Documentation](https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/mcp-tools.md)) which uses pre-configured, trusted MCP servers.
+
+```python
+from strands import Agent
+from strands_tools import mcp_client
+
+agent = Agent(tools=[mcp_client])
+
+# Connect to a custom MCP server via stdio
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="my_tools",
+    transport="stdio",
+    command="python",
+    args=["my_mcp_server.py"]
+)
+
+# List available tools on the server
+tools = agent.tool.mcp_client(
+    action="list_tools",
+    connection_id="my_tools"
+)
+
+# Call a tool from the MCP server
+result = agent.tool.mcp_client(
+    action="call_tool",
+    connection_id="my_tools",
+    tool_name="calculate",
+    tool_args={"x": 10, "y": 20}
+)
+
+# Connect to a SSE-based server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="web_server",
+    transport="sse",
+    server_url="http://localhost:8080/sse"
+)
+
+# Connect to a streamable HTTP server
+agent.tool.mcp_client(
+    action="connect",
+    connection_id="http_server",
+    transport="streamable_http",
+    server_url="https://api.example.com/mcp",
+    headers={"Authorization": "Bearer token"},
+    timeout=60
+)
+
+# Load MCP tools into agent's registry for direct access
+# ⚠️ WARNING: This loads external tools directly into the agent
+agent.tool.mcp_client(
+    action="load_tools",
+    connection_id="my_tools"
+)
+# Now you can call MCP tools directly as: agent.tool.calculate(x=10, y=20)
 ```
 
 ### Shell Commands
@@ -202,6 +277,114 @@ response = agent.tool.http_request(
     url="https://example.com/article",
     convert_to_markdown=True
 )
+```
+
+### Tavily Search, Extract, Crawl, and Map
+
+```python
+from strands import Agent
+from strands_tools.tavily import (
+    tavily_search, tavily_extract, tavily_crawl, tavily_map
+)
+
+# For async usage, call the corresponding *_async function with await.
+# Synchronous usage 
+agent = Agent(tools=[tavily_search, tavily_extract, tavily_crawl, tavily_map])
+
+# Real-time web search
+result = agent.tool.tavily_search(
+    query="Latest developments in renewable energy",
+    search_depth="advanced",
+    topic="news",
+    max_results=10,
+    include_raw_content=True
+)
+
+# Extract content from multiple URLs
+result = agent.tool.tavily_extract(
+    urls=["www.tavily.com", "www.apple.com"],
+    extract_depth="advanced",
+    format="markdown"
+)
+
+# Advanced crawl with instructions and filtering
+result = agent.tool.tavily_crawl(
+    url="www.tavily.com",
+    max_depth=2,
+    limit=50,
+    instructions="Find all API documentation and developer guides",
+    extract_depth="advanced",
+    include_images=True
+)
+
+# Basic website mapping
+result = agent.tool.tavily_map(url="www.tavily.com")
+
+```
+
+### Exa Search and Contents
+
+```python
+from strands import Agent
+from strands_tools.exa import exa_search, exa_get_contents
+
+agent = Agent(tools=[exa_search, exa_get_contents])
+
+# Basic search (auto mode is default and recommended)
+result = agent.tool.exa_search(
+    query="Best project management software",
+    text=True
+)
+
+# Company-specific search when needed
+result = agent.tool.exa_search(
+    query="Anthropic AI safety research",
+    category="company",
+    include_domains=["anthropic.com"],
+    num_results=5,
+    summary={"query": "key research areas and findings"}
+)
+
+# News search with date filtering
+result = agent.tool.exa_search(
+    query="AI regulation policy updates",
+    category="news",
+    start_published_date="2024-01-01T00:00:00.000Z",
+    text=True
+)
+
+# Get detailed content from specific URLs
+result = agent.tool.exa_get_contents(
+    urls=[
+        "https://example.com/blog-post",
+        "https://github.com/microsoft/semantic-kernel"
+    ],
+    text={"maxCharacters": 5000, "includeHtmlTags": False},
+    summary={
+        "query": "main points and practical applications"
+    },
+    subpages=2,
+    extras={"links": 5, "imageLinks": 2}
+)
+
+# Structured summary with JSON schema
+result = agent.tool.exa_get_contents(
+    urls=["https://example.com/article"],
+    summary={
+        "query": "main findings and recommendations",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "main_points": {"type": "string", "description": "Key points from the article"},
+                "recommendations": {"type": "string", "description": "Suggested actions or advice"},
+                "conclusion": {"type": "string", "description": "Overall conclusion"},
+                "relevance": {"type": "string", "description": "Why this matters"}
+            },
+            "required": ["main_points", "conclusion"]
+        }
+    }
+)
+
 ```
 
 ### Python Code Execution
@@ -322,6 +505,33 @@ result = agent.tool.use_aws(
 )
 ```
 
+### Retrieve Tool
+
+```python
+from strands import Agent
+from strands_tools import retrieve
+
+agent = Agent(tools=[retrieve])
+
+# Basic retrieval without metadata
+result = agent.tool.retrieve(
+    text="What is artificial intelligence?"
+)
+
+# Retrieval with metadata enabled
+result = agent.tool.retrieve(
+    text="What are the latest developments in machine learning?",
+    enableMetadata=True
+)
+
+# Using environment variable to set default metadata behavior
+# Set RETRIEVE_ENABLE_METADATA_DEFAULT=true in your environment
+result = agent.tool.retrieve(
+    text="Tell me about cloud computing"
+    # enableMetadata will default to the environment variable value
+)
+```
+
 ### Batch Tool
 
 ```python
@@ -351,8 +561,37 @@ result = agent.tool.batch(
 )
 ```
 
-### AgentCore Memory
+### Video Tools
 
+```python
+from strands import Agent
+from strands_tools import search_video, chat_video
+
+agent = Agent(tools=[search_video, chat_video])
+
+# Search for video content using natural language
+result = agent.tool.search_video(
+    query="people discussing AI technology",
+    threshold="high",
+    group_by="video",
+    page_limit=5
+)
+
+# Chat with existing video (no index_id needed)
+result = agent.tool.chat_video(
+    prompt="What are the main topics discussed in this video?",
+    video_id="existing-video-id"
+)
+
+# Chat with new video file (index_id required for upload)
+result = agent.tool.chat_video(
+    prompt="Describe what happens in this video",
+    video_path="/path/to/video.mp4",
+    index_id="your-index-id"  # or set TWELVELABS_PEGASUS_INDEX_ID env var
+)
+```
+
+### AgentCore Memory
 ```python
 from strands import Agent
 from strands_tools.agent_core_memory import AgentCoreMemoryToolProvider
@@ -575,6 +814,152 @@ result = agent.tool.use_computer(
 )
 ```
 
+### Elasticsearch Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import elasticsearch_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[elasticsearch_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.elasticsearch_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    cloud_id="your-elasticsearch-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "cloud_id": "your-elasticsearch-cloud-id",
+    "api_key": "your-api-key",
+    "index_name": "memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.elasticsearch_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.elasticsearch_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.elasticsearch_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use Elasticsearch Serverless (URL-based connection)
+result = agent.tool.elasticsearch_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123"
+)
+```
+
+### MongoDB Atlas Memory
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+```python
+from strands import Agent
+from strands_tools.mongodb_memory import mongodb_memory
+
+# Create agent with direct tool usage
+agent = Agent(tools=[mongodb_memory])
+
+# Store a memory with semantic embeddings
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza with extra cheese",
+    metadata={"category": "food_preferences", "type": "dietary"},
+    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+
+# Search memories using semantic similarity (vector search)
+result = agent.tool.mongodb_memory(
+    action="retrieve",
+    query="food preferences and dietary restrictions",
+    max_results=5,
+    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+
+# Use configuration dictionary for cleaner code
+config = {
+    "connection_string": "mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    "database_name": "memories",
+    "collection_name": "user_memories",
+    "namespace": "user_123"
+}
+
+# List all memories with pagination
+result = agent.tool.mongodb_memory(
+    action="list",
+    max_results=10,
+    **config
+)
+
+# Get specific memory by ID
+result = agent.tool.mongodb_memory(
+    action="get",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Delete a memory
+result = agent.tool.mongodb_memory(
+    action="delete",
+    memory_id="mem_1234567890_abcd1234",
+    **config
+)
+
+# Use environment variables for connection
+# Set MONGODB_ATLAS_CLUSTER_URI in your environment
+result = agent.tool.mongodb_memory(
+    action="record",
+    content="User prefers vegetarian pizza",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123"
+)
+```
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -618,6 +1003,20 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | MAX_SLEEP_SECONDS | Maximum allowed sleep duration in seconds | 300 |
 
+#### Tavily Search, Extract, Crawl, and Map Tools
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| TAVILY_API_KEY | Tavily API key (required for all Tavily functionality) | None |
+- Visit https://www.tavily.com/ to create a free account and API key.
+
+#### Exa Search and Contents Tools
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| EXA_API_KEY | Exa API key (required for all Exa functionality) | None |
+- Visit https://dashboard.exa.ai/api-keys to create a free account and API key.
+
 #### Mem0 Memory Tool
 
 The Mem0 Memory Tool supports three different backend configurations:
@@ -634,17 +1033,47 @@ The Mem0 Memory Tool supports three different backend configurations:
    - Uses FAISS as the local vector store backend
    - Requires faiss-cpu package for local vector storage
 
+4. **Neptune Analytics** (Optional Graph backend for search enhancement):
+   - Uses Neptune Analytics as the graph store backend to enhance memory recall.
+   - Requires AWS credentials and Neptune Analytics configuration
+   ```
+   # Configure your Neptune Analytics graph ID in the .env file:
+   export NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER=sample-graph-id
+   
+   # Configure your Neptune Analytics graph ID in Python code:
+   import os
+   os.environ['NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER'] = "g-sample-graph-id"
+   
+   ```
+
 | Environment Variable | Description | Default | Required For |
 |----------------------|-------------|---------|--------------|
 | MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER | Neptune Analytics Graph Identifier | None | Neptune Analytics |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
+| MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
+| MEM0_LLM_MODEL | LLM model for memory processing | anthropic.claude-3-5-haiku-20241022-v1:0 | All modes |
+| MEM0_LLM_TEMPERATURE | LLM temperature (0.0-2.0) | 0.1 | All modes |
+| MEM0_LLM_MAX_TOKENS | LLM maximum tokens | 2000 | All modes |
+| MEM0_EMBEDDER_PROVIDER | Embedder provider for vector embeddings | aws_bedrock | All modes |
+| MEM0_EMBEDDER_MODEL | Embedder model for vector embeddings | amazon.titan-embed-text-v2:0 | All modes |
+
 
 **Note**:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
+- If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
+- LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
+
+#### Bright Data Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| BRIGHTDATA_API_KEY | Bright Data API Key | None |
+| BRIGHTDATA_ZONE | Bright Data Web Unlocker Zone | web_unlocker1 |
 
 #### Memory Tool
 
@@ -652,6 +1081,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | MEMORY_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
 | MEMORY_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
+
 #### Nova Reels Tool
 
 | Environment Variable | Description | Default |
@@ -666,6 +1096,9 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | PYTHON_REPL_BINARY_MAX_LEN | Maximum length for binary content before truncation | 100 |
+| PYTHON_REPL_INTERACTIVE | Whether to enable interactive PTY mode | None |
+| PYTHON_REPL_RESET_STATE | Whether to reset the REPL state before execution | None |
+| PYTHON_REPL_PERSISTENCE_DIR | Set Directory for python_repl tool to write state file | None |
 
 #### Shell Tool
 
@@ -698,12 +1131,19 @@ The Mem0 Memory Tool supports three different backend configurations:
 | EDITOR_DIR_TREE_MAX_DEPTH | Maximum depth for directory tree visualization | 2 |
 | EDITOR_DEFAULT_STYLE | Default style for output panels | default |
 | EDITOR_DEFAULT_LANGUAGE | Default language for syntax highlighting | python |
+| EDITOR_DISABLE_BACKUP | Skip creating .bak backup files during edit operations | false |
 
 #### Environment Tool
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
+
+#### Dynamic MCP Client Tool
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| STRANDS_MCP_TIMEOUT | Default timeout in seconds for MCP operations | 30.0 |
 
 #### File Read Tool
 
@@ -737,6 +1177,33 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_RSS_MAX_ENTRIES | Default setting for maximum number of entries per feed | 100 |
 | STRANDS_RSS_UPDATE_INTERVAL | Default amount of time between updating rss feeds in minutes | 60 |
 | STRANDS_RSS_STORAGE_PATH | Default storage path where rss feeds are stored locally | strands_rss_feeds (this may vary based on your system) |
+
+#### Retrieve Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
+#### Video Tools
+
+| Environment Variable | Description | Default | 
+|----------------------|-------------|---------|
+| TWELVELABS_API_KEY | TwelveLabs API key for video analysis | None |
+| TWELVELABS_MARENGO_INDEX_ID | Default index ID for search_video tool | None |
+| TWELVELABS_PEGASUS_INDEX_ID | Default index ID for chat_video tool | None |
+
+#### MongoDB Atlas Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| MONGODB_ATLAS_CLUSTER_URI | MongoDB Atlas connection string | None |
+| MONGODB_DEFAULT_DATABASE | Default database name for MongoDB operations | memories |
+| MONGODB_DEFAULT_COLLECTION | Default collection name for MongoDB operations | user_memories |
+| MONGODB_DEFAULT_NAMESPACE | Default namespace for memory isolation | default |
+| MONGODB_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
+| MONGODB_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
 
 
 ## Contributing ❤️

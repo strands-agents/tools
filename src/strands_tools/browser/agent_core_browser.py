@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 from bedrock_agentcore.tools.browser_client import BrowserClient as AgentCoreBrowserClient
 from playwright.async_api import Browser as PlaywrightBrowser
+from typing_extensions import override
 
 from ..utils.aws_util import resolve_region
 from .browser import Browser
@@ -20,16 +21,19 @@ logger = logging.getLogger(__name__)
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 
-    def __init__(self, region: Optional[str] = None, session_timeout: int = 3600):
+    def __init__(self, region: Optional[str] = None, identifier: Optional[str] = None, session_timeout: int = 3600):
         """
         Initialize the browser.
 
         Args:
             region: AWS region for the browser service
+            identifier: Browser identifier to use for sessions. If not provided,
+                defaults to "aws.browser.v1" for backward compatibility.
             session_timeout: Session timeout in seconds (default: 3600)
         """
         super().__init__()
         self.region = resolve_region(region)
+        self.identifier = identifier or "aws.browser.v1"
         self.session_timeout = session_timeout
         self._client_dict: Dict[str, AgentCoreBrowserClient] = {}
 
@@ -44,7 +48,7 @@ class AgentCoreBrowser(Browser):
 
         # Create new browser client for this session
         session_client = AgentCoreBrowserClient(region=self.region)
-        session_id = session_client.start(session_timeout_seconds=self.session_timeout)
+        session_id = session_client.start(identifier=self.identifier, session_timeout_seconds=self.session_timeout)
 
         logger.info(f"started Bedrock AgentCore browser session: {session_id}")
 
@@ -56,13 +60,41 @@ class AgentCoreBrowser(Browser):
 
         return browser
 
+    @override
+    async def _setup_session_from_browser(self, browser_or_context):
+        """Setup session for AgentCoreBrowser using existing CDP context.
+
+        AgentCoreBrowser connects via CDP and uses the default context
+        that comes with the connection, avoiding the need to create a new one.
+
+        Args:
+            browser_or_context: PlaywrightBrowser from CDP connection
+
+        Returns:
+            Tuple of (browser, context, page)
+        """
+        session_browser = browser_or_context
+
+        # CDP connections should have a default context
+        if not session_browser.contexts:
+            raise RuntimeError(
+                "AgentCoreBrowser CDP connection has no contexts. "
+                "This may indicate a connection issue with the remote browser."
+            )
+
+        # Use the existing default context from CDP connection
+        session_context = session_browser.contexts[0]
+        session_page = await session_context.new_page()
+
+        return session_browser, session_context, session_page
+
     def close_platform(self) -> None:
         for client in self._client_dict.values():
             try:
                 client.stop()
             except Exception as e:
                 logger.error(
-                    "session=<%s>, exception=<%s> " "| failed to close session , relying on idle timeout to auto close",
+                    "session=<%s>, exception=<%s> | failed to close session , relying on idle timeout to auto close",
                     client.session_id,
                     str(e),
                 )

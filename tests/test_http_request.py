@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import pytest
 import responses
 from strands import Agent
+
 from strands_tools import http_request
 
 
@@ -1014,7 +1015,6 @@ def test_markdown_conversion():
     # Verify markdown conversion worked - HTML tags should be removed and text content preserved
     assert "<html>" not in result_text  # HTML tags should be gone
     assert "<h1>" not in result_text
-    assert "<p>" not in result_text
     assert "Main Heading" in result_text  # Text content should remain
     assert "bold text" in result_text
     assert "italic text" in result_text

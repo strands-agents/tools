@@ -12,6 +12,8 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
+
 from strands_tools import memory
 from strands_tools.memory import MemoryFormatter, MemoryServiceClient
 
@@ -613,7 +615,7 @@ def test_memory_service_client_lazy_loading(mock_session):
     # Configure the mock session to return our mock clients
     mock_session_instance = MagicMock()
     mock_session.return_value = mock_session_instance
-    mock_session_instance.client.side_effect = lambda service, region_name: {
+    mock_session_instance.client.side_effect = lambda service, region_name, config=None: {
         "bedrock-agent": mock_agent_client,
         "bedrock-agent-runtime": mock_runtime_client,
     }[service]
@@ -624,7 +626,13 @@ def test_memory_service_client_lazy_loading(mock_session):
     # Access the agent_client property (should trigger lazy loading)
     retrieved_agent_client = client.agent_client
     assert retrieved_agent_client == mock_agent_client
-    mock_session_instance.client.assert_called_with("bedrock-agent", region_name="us-east-1")
+    call_args = mock_session_instance.client.call_args
+    assert call_args[0] == ("bedrock-agent",)
+    assert call_args[1]["region_name"] == "us-east-1"
+    assert "config" in call_args[1]
+    config = call_args[1]["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-memory"
 
     # Access again (should use cached client)
     mock_session_instance.client.reset_mock()
@@ -635,4 +643,10 @@ def test_memory_service_client_lazy_loading(mock_session):
     # Access runtime_client property (should trigger lazy loading)
     retrieved_runtime_client = client.runtime_client
     assert retrieved_runtime_client == mock_runtime_client
-    mock_session_instance.client.assert_called_with("bedrock-agent-runtime", region_name="us-east-1")
+    call_args = mock_session_instance.client.call_args
+    assert call_args[0] == ("bedrock-agent-runtime",)
+    assert call_args[1]["region_name"] == "us-east-1"
+    assert "config" in call_args[1]
+    config = call_args[1]["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-memory"

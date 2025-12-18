@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import generate_image_stability
 from strands_tools.generate_image_stability import call_stability_api
 

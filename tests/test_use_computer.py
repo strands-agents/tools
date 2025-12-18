@@ -423,8 +423,7 @@ class TestMouseOperations:
             computer.scroll(None, None, None, "up", 15)
 
         expected_message = (
-            "Missing x or y coordinates for scrolling. "
-            "For scrolling to work, mouse must be over the scrollable area."
+            "Missing x or y coordinates for scrolling. For scrolling to work, mouse must be over the scrollable area."
         )
         assert str(exc_info.value) == expected_message
 

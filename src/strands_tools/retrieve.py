@@ -34,6 +34,12 @@ agent = Agent(tools=[retrieve])
 # Basic search with default knowledge base and region
 results = agent.tool.retrieve(text="What is the STRANDS SDK?")
 
+# Search with metadata enabled for source information
+results = agent.tool.retrieve(
+    text="What is the STRANDS SDK?",
+    enableMetadata=True
+)
+
 # Advanced search with custom parameters
 results = agent.tool.retrieve(
     text="deployment steps for production",
@@ -41,6 +47,7 @@ results = agent.tool.retrieve(
     score=0.7,
     knowledgeBaseId="custom-kb-id",
     region="us-east-1",
+    enableMetadata=True,
     retrieveFilter={
         "andAll": [
             {"equals": {"key": "category", "value": "security"}},
@@ -57,6 +64,7 @@ import os
 from typing import Any, Dict, List
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
 
 TOOL_SPEC = {
@@ -68,7 +76,7 @@ Key Features:
    - Vector-based similarity matching
    - Relevance scoring (0.0-1.0)
    - Score-based filtering
-   
+
 2. Advanced Configuration:
    - Custom result limits
    - Score thresholds
@@ -150,6 +158,28 @@ Usage Examples:
                         "specified."
                     ),
                 },
+                "enableMetadata": {
+                    "type": "boolean",
+                    "description": (
+                        "Whether to include metadata in the response. When enabled, shows source URI, chunk ID, "
+                        "data source ID, and other document metadata. Default is false."
+                    ),
+                    "default": False,
+                },
+                "retrieveFilter": {
+                    "type": "object",
+                    "description": (
+                        "Optional filter to apply to retrieval results based on metadata attributes in the "
+                        "knowledge base. This is a UNION type - only one operator can be specified at the top level. "
+                        "Available operators: "
+                        "equals (exact match), notEquals, greaterThan, greaterThanOrEquals, lessThan, "
+                        "lessThanOrEquals, in (value in list), notIn, listContains (list contains value), "
+                        "stringContains (substring match), startsWith (OpenSearch Serverless only), "
+                        "andAll (all conditions must match, min 2 items), orAll (at least one condition must match, "
+                        "min 2 items). Example: {\"andAll\": [{\"equals\": {\"key\": \"category\", "
+                        "\"value\": \"security\"}}, {\"greaterThan\": {\"key\": \"year\", \"value\": \"2022\"}}]}"
+                    ),
+                },
             },
             "required": ["text"],
         }
@@ -175,25 +205,35 @@ def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> 
     return [result for result in results if result.get("score", 0.0) >= min_score]
 
 
-def format_results_for_display(results: List[Dict[str, Any]]) -> str:
+def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: bool = False) -> str:
     """
     Format retrieval results for readable display.
 
     This function takes the raw results from a knowledge base query and formats
     them into a human-readable string with scores, document IDs, and content.
+    Optionally includes metadata when enabled.
 
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
+        enable_metadata: Whether to include metadata in the formatted output (default: False)
 
     Returns:
-        Formatted string containing the results in a readable format
+        Formatted string containing the results in a readable format, including score,
+        document ID, optional metadata, and content.
     """
     if not results:
         return "No results found above score threshold."
 
     formatted = []
     for result in results:
-        doc_id = result.get("location", {}).get("customDocumentLocation", {}).get("id", "Unknown")
+        # Extract document location - handle both s3Location and customDocumentLocation
+        location = result.get("location", {})
+        doc_id = "Unknown"
+        if "customDocumentLocation" in location:
+            doc_id = location["customDocumentLocation"].get("id", "Unknown")
+        elif "s3Location" in location:
+            # Extract meaningful part from S3 URI
+            doc_id = location["s3Location"].get("uri", "")
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
@@ -202,6 +242,12 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
         if content and isinstance(content.get("text"), str):
             text = content["text"]
             formatted.append(f"Content: {text}\n")
+
+        # Add metadata if enabled and present
+        if enable_metadata:
+            metadata = result.get("metadata")
+            if metadata:
+                formatted.append(f"Metadata: {metadata}")
 
     return "\n".join(formatted)
 
@@ -261,6 +307,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     default_knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
     default_aws_region = os.getenv("AWS_REGION", "us-west-2")
     default_min_score = float(os.getenv("MIN_SCORE", "0.4"))
+    default_enable_metadata = os.getenv("RETRIEVE_ENABLE_METADATA_DEFAULT", "false").lower() == "true"
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
@@ -271,15 +318,19 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
+        config = BotocoreConfig(user_agent_extra="strands-agents-retrieve")
         if profile_name:
             session = boto3.Session(profile_name=profile_name)
-            bedrock_agent_runtime_client = session.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = session.client(
+                "bedrock-agent-runtime", region_name=region_name, config=config
+            )
         else:
-            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name, config=config)
 
         # Default retrieval configuration
         retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
@@ -304,8 +355,8 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         all_results = response.get("retrievalResults", [])
         filtered_results = filter_results_by_score(all_results, min_score)
 
-        # Format results for display
-        formatted_results = format_results_for_display(filtered_results)
+        # Format results for display with optional metadata
+        formatted_results = format_results_for_display(filtered_results, enable_metadata)
 
         # Return success with formatted results
         return {

@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 class CodeInterpreter(ABC):
     def __init__(self):
         self._started = False
-        # Dynamically override the ToolSpec description using the implementation-defined supported languages
-        self.code_interpreter.tool_spec["description"] = """
+
+        # Existing description (keep all of it)
+        description_template = """
         Code Interpreter tool for executing code in isolated sandbox environments.
 
         This tool provides a comprehensive code execution platform that supports multiple programming
@@ -95,7 +96,7 @@ class CodeInterpreter(ABC):
         - API testing: Run code to test external services and APIs
 
         Usage with Strands Agent:
-        ```python
+```python
         from strands import Agent
         from strands_tools.code_interpreter import AgentCoreCodeInterpreter
 
@@ -104,45 +105,53 @@ class CodeInterpreter(ABC):
         agent = Agent(tools=[bedrock_agent_core_code_interpreter.code_interpreter])
 
         # Create a session
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "initSession",
-                "description": "Data analysis session",
-                "session_name": "analysis-session"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "initSession",
+                    "description": "Data analysis session",
+                    "session_name": "analysis-session"
+                }}
             }}
-        }})
+        )
 
         # Execute Python code
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "executeCode",
-                "session_name": "analysis-session",
-                "code": "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df.head())",
-                "language": "python"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCode",
+                    "session_name": "analysis-session",
+                    "code": "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df.head())",
+                    "language": "python"
+                }}
             }}
-        }})
+        )
 
         # Write files to the sandbox
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "writeFiles",
-                "session_name": "analysis-session",
-                "content": [
-                    {{"path": "config.json", "text": '{{"debug": true}}'}},
-                    {{"path": "script.py", "text": "print('Hello, World!')"}}
-                ]
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "writeFiles",
+                    "session_name": "analysis-session",
+                    "content": [
+                        {{"path": "config.json", "text": '{{"debug": true}}'}},
+                        {{"path": "script.py", "text": "print('Hello, World!')"}}
+                    ]
+                }}
             }}
-        }})
+        )
 
         # Execute shell commands
-        agent.tool.code_interpreter({{
-            "action": {{
-                "type": "executeCommand",
-                "session_name": "analysis-session",
-                "command": "ls -la && python script.py"
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCommand",
+                    "session_name": "analysis-session",
+                    "command": "ls -la && python script.py"
+                }}
             }}
-        }})
-        ```
+        )
+```
 
         Args:
             code_interpreter_input: Structured input containing the action to perform.
@@ -178,25 +187,53 @@ class CodeInterpreter(ABC):
             - Code compilation/execution errors
             - File system operation errors
             - Platform connectivity issues
-        """.format(
-            supported_languages_list=", ".join([f"{lang.name}" for lang in self.get_supported_languages()]),
+        """
+
+        auto_session_note = """**session_name is now optional in most operations**
+
+        Sessions are automatically created when needed. You can now:
+        • Omit session_name to use an auto-generated session (recommended for simple use cases)
+        • Provide session_name for named sessions (useful for multi-step workflows)
+        
+        Quick example without session_name:
+```python
+        # No need to call initSession first
+        agent.tool.code_interpreter(
+            code_interpreter_input={{
+                "action": {{
+                    "type": "executeCode",
+                    "code": "print('Hello, World!')",
+                    "language": "python"
+                }}
+            }}
+        )
+```
+        
+        ---
+        
+        """
+
+        # Set description: note + existing content
+        self.code_interpreter.tool_spec["description"] = auto_session_note + description_template.format(
+            supported_languages_list=", ".join([f"{lang.name}" for lang in self.get_supported_languages()])
         )
 
     @tool
     def code_interpreter(self, code_interpreter_input: CodeInterpreterInput) -> Dict[str, Any]:
-        # Auto-start platform on first use
+        """Execute code in isolated sandbox environments."""
+
         if not self._started:
             self._start()
 
         if isinstance(code_interpreter_input, dict):
-            logger.debug("Action was passed as Dict, mapping to CodeInterpreterAction type action")
+            logger.debug("Mapping dict to CodeInterpreterInput")
             action = CodeInterpreterInput.model_validate(code_interpreter_input).action
         else:
             action = code_interpreter_input.action
 
-        logger.debug(f"Processing action {type(action)}")
+        logger.debug(f"Processing action: {type(action).__name__}")
 
-        # Delegate to platform-specific implementations
+        # Delegate to implementations
         if isinstance(action, InitSessionAction):
             return self.init_session(action)
         elif isinstance(action, ListLocalSessionsAction):
@@ -214,29 +251,28 @@ class CodeInterpreter(ABC):
         elif isinstance(action, WriteFilesAction):
             return self.write_files(action)
         else:
-            return {"status": "error", "content": [{"text": f"Unknown action type: {type(action)}"}]}
+            return {"status": "error", "content": [{"text": f"Unknown action: {type(action)}"}]}
 
     def _start(self) -> None:
-        """Start the platform and initialize any required connections."""
+        """Start the platform."""
         if not self._started:
             self.start_platform()
             self._started = True
-            logger.debug("Code Interpreter Tool started")
+            logger.debug("Code Interpreter started")
 
     def _cleanup(self) -> None:
-        """Clean up platform resources and connections."""
+        """Clean up platform resources."""
         if self._started:
             self.cleanup_platform()
             self._started = False
-            logger.debug("Code Interpreter Tool cleaned up")
+            logger.debug("Code Interpreter cleaned up")
 
     def __del__(self):
-        """Cleanup: Clear platform resources when tool is destroyed."""
+        """Cleanup on destruction."""
         try:
             if self._started:
-                logger.debug("Code Interpreter tool destructor called - cleaning up platform")
-                self._cleanup()
                 logger.debug("Platform cleanup completed successfully")
+                self._cleanup()
         except Exception as e:
             logger.debug("exception=<%s> | platform cleanup during destruction skipped", str(e))
 

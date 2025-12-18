@@ -7,7 +7,9 @@ from unittest import mock
 
 import boto3
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
+
 from strands_tools import retrieve
 
 
@@ -115,6 +117,161 @@ def test_format_results_for_display():
     empty_formatted = retrieve.format_results_for_display([])
     assert empty_formatted == "No results found above score threshold."
 
+    # Test with s3Location
+    s3_results = [
+        {
+            "content": {"text": "S3 content", "type": "TEXT"},
+            "location": {
+                "s3Location": {"uri": "s3://bucket/key/document.pdf"},
+                "type": "S3",
+            },
+            "score": 0.88,
+        }
+    ]
+    s3_formatted = retrieve.format_results_for_display(s3_results)
+    assert "Score: 0.8800" in s3_formatted
+    assert "Document ID: s3://bucket/key/document.pdf" in s3_formatted
+    assert "Content: S3 content" in s3_formatted
+
+
+def test_format_results_with_metadata():
+    """Test the format_results_for_display function with metadata enabled."""
+    test_results = [
+        {
+            "content": {"text": "Sample content with metadata", "type": "TEXT"},
+            "location": {
+                "customDocumentLocation": {"id": "test-doc-1"},
+                "type": "CUSTOM",
+            },
+            "score": 0.95,
+            "metadata": {
+                "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/user-guide.pdf",
+                "x-amz-bedrock-kb-chunk-id": "chunk-12345",
+                "x-amz-bedrock-kb-data-source-id": "datasource-67890",
+                "custom-field": "production-docs",
+            },
+        }
+    ]
+
+    # Test with metadata enabled
+    formatted = retrieve.format_results_for_display(test_results, enable_metadata=True)
+    assert "Score: 0.9500" in formatted
+    assert "Document ID: test-doc-1" in formatted
+    assert "Content: Sample content with metadata" in formatted
+    # Check that metadata is included as raw dictionary
+    assert "Metadata: {" in formatted
+    assert "x-amz-bedrock-kb-source-uri" in formatted
+    assert "s3://my-bucket/documents/user-guide.pdf" in formatted
+    assert "chunk-12345" in formatted
+    assert "datasource-67890" in formatted
+    assert "custom-field" in formatted
+
+
+def test_format_results_without_metadata():
+    """Test the format_results_for_display function without metadata."""
+    test_results = [
+        {
+            "content": {"text": "Sample content without metadata", "type": "TEXT"},
+            "location": {
+                "customDocumentLocation": {"id": "test-doc-2"},
+                "type": "CUSTOM",
+            },
+            "score": 0.85,
+            "metadata": {
+                "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/user-guide.pdf",
+                "x-amz-bedrock-kb-chunk-id": "chunk-12345",
+                "x-amz-bedrock-kb-data-source-id": "datasource-67890",
+                "custom-field": "production-docs",
+            },
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.8500" in formatted
+    assert "Document ID: test-doc-2" in formatted
+    assert "Content: Sample content without metadata" in formatted
+    # Ensure no metadata line is added when metadata is missing
+    assert "Metadata:" not in formatted
+
+
+def test_format_results_with_empty_metadata():
+    """Test the format_results_for_display function with empty metadata."""
+    test_results = [
+        {
+            "content": {"text": "Sample content with empty metadata", "type": "TEXT"},
+            "location": {
+                "customDocumentLocation": {"id": "test-doc-3"},
+                "type": "CUSTOM",
+            },
+            "score": 0.75,
+            "metadata": {},  # Empty metadata
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7500" in formatted
+    assert "Document ID: test-doc-3" in formatted
+    assert "Content: Sample content with empty metadata" in formatted
+    # Empty metadata should not be displayed
+    assert "Metadata:" not in formatted
+
+
+def test_format_results_with_metadata_enabled():
+    """Test the format_results_for_display function with metadata enabled."""
+    test_results = [
+        {
+            "content": {"text": "Sample content with metadata enabled", "type": "TEXT"},
+            "location": {
+                "customDocumentLocation": {"id": "test-doc-4"},
+                "type": "CUSTOM",
+            },
+            "score": 0.85,
+            "metadata": {
+                "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/guide.pdf",
+                "x-amz-bedrock-kb-chunk-id": "chunk-67890",
+                "custom-field": "test-data",
+            },
+        }
+    ]
+
+    # Test with metadata enabled
+    formatted = retrieve.format_results_for_display(test_results, enable_metadata=True)
+    assert "Score: 0.8500" in formatted
+    assert "Document ID: test-doc-4" in formatted
+    assert "Content: Sample content with metadata enabled" in formatted
+    assert "Metadata: {" in formatted
+    assert "x-amz-bedrock-kb-source-uri" in formatted
+    assert "s3://my-bucket/documents/guide.pdf" in formatted
+    assert "chunk-67890" in formatted
+    assert "custom-field" in formatted
+
+
+def test_format_results_with_metadata_disabled():
+    """Test the format_results_for_display function with metadata explicitly disabled."""
+    test_results = [
+        {
+            "content": {"text": "Sample content with metadata disabled", "type": "TEXT"},
+            "location": {
+                "customDocumentLocation": {"id": "test-doc-5"},
+                "type": "CUSTOM",
+            },
+            "score": 0.65,
+            "metadata": {
+                "x-amz-bedrock-kb-source-uri": "s3://my-bucket/documents/guide.pdf",
+                "x-amz-bedrock-kb-chunk-id": "chunk-11111",
+            },
+        }
+    ]
+
+    # Test with metadata explicitly disabled
+    formatted = retrieve.format_results_for_display(test_results, enable_metadata=False)
+    assert "Score: 0.6500" in formatted
+    assert "Document ID: test-doc-5" in formatted
+    assert "Content: Sample content with metadata disabled" in formatted
+    # Metadata should not be displayed when disabled
+    assert "Metadata:" not in formatted
+    assert "x-amz-bedrock-kb-source-uri" not in formatted
+
 
 def test_retrieve_tool_direct(mock_boto3_client):
     """Test direct invocation of the retrieve tool."""
@@ -137,8 +294,16 @@ def test_retrieve_tool_direct(mock_boto3_client):
     assert result["status"] == "success"
     assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
 
-    # Verify that boto3 client was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+    # Verify that boto3 client was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-agent-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-retrieve"
+
     mock_boto3_client.return_value.retrieve.assert_called_once_with(
         retrievalQuery={"text": "test query"},
         knowledgeBaseId="test-kb-id",
@@ -240,7 +405,16 @@ def test_retrieve_with_custom_profile(mock_boto3_client):
 
         # Verify session was created with correct profile
         mock_session.assert_called_once_with(profile_name="custom-profile")
-        mock_session_instance.client.assert_called_once_with("bedrock-agent-runtime", region_name="us-west-2")
+
+        # Verify client was called with correct parameters including user agent
+        mock_session_instance.client.assert_called_once()
+        args, kwargs = mock_session_instance.client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-west-2"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"
@@ -276,8 +450,15 @@ def test_retrieve_with_custom_region():
 
         result = retrieve.retrieve(tool=tool_use)
 
-        # Verify client was created with correct region
-        mock_client.assert_called_once_with("bedrock-agent-runtime", region_name="us-east-1")
+        # Verify client was created with correct region and user agent
+        mock_client.assert_called_once()
+        args, kwargs = mock_client.call_args
+        assert args[0] == "bedrock-agent-runtime"
+        assert kwargs["region_name"] == "us-east-1"
+        assert "config" in kwargs
+        config = kwargs["config"]
+        assert isinstance(config, BotocoreConfig)
+        assert config.user_agent_extra == "strands-agents-retrieve"
 
         # Verify result
         assert result["status"] == "success"
@@ -367,3 +548,132 @@ def test_retrieve_with_invalid_filter(mock_boto3_client):
     result = retrieve.retrieve(tool=tool_use)
     assert result["status"] == "error"
     assert "must contain at least 2 items" in result["content"][0]["text"]
+
+
+def test_retrieve_with_enable_metadata_true(mock_boto3_client):
+    """Test retrieve with enableMetadata=True."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "enableMetadata": True,
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result has the expected structure
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+    assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
+
+    # Verify metadata is included in the response
+    result_text = result["content"][0]["text"]
+    assert "Metadata:" in result_text
+    assert "test-source-1" in result_text
+    assert "test-source-2" in result_text
+
+
+def test_retrieve_with_enable_metadata_false(mock_boto3_client):
+    """Test retrieve with enableMetadata=False."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "enableMetadata": False,
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result has the expected structure
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+    assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
+
+    # Verify metadata is NOT included in the response
+    result_text = result["content"][0]["text"]
+    assert "Metadata:" not in result_text
+    assert "test-source-1" not in result_text
+    assert "test-source-2" not in result_text
+
+
+def test_retrieve_with_enable_metadata_default(mock_boto3_client):
+    """Test retrieve with default enableMetadata behavior."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            # No enableMetadata parameter - should default to False
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    # Verify the result has the expected structure
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+    assert "Retrieved 2 results with score >= 0.4" in result["content"][0]["text"]
+
+    # Verify metadata is NOT included by default
+    result_text = result["content"][0]["text"]
+    assert "Metadata:" not in result_text
+    assert "test-source-1" not in result_text
+
+
+def test_retrieve_with_environment_variable_default(mock_boto3_client):
+    """Test retrieve with environment variable controlling default enableMetadata."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            # No enableMetadata parameter - should use environment default
+        },
+    }
+
+    # Test with environment variable set to true
+    with mock.patch.dict(os.environ, {"RETRIEVE_ENABLE_METADATA_DEFAULT": "true"}):
+        result = retrieve.retrieve(tool=tool_use)
+
+    # Verify metadata is included due to environment variable
+    assert result["status"] == "success"
+    result_text = result["content"][0]["text"]
+    assert "Metadata:" in result_text
+    assert "test-source-1" in result_text
+
+    # Test with environment variable set to false
+    with mock.patch.dict(os.environ, {"RETRIEVE_ENABLE_METADATA_DEFAULT": "false"}):
+        result = retrieve.retrieve(tool=tool_use)
+
+    # Verify metadata is NOT included
+    assert result["status"] == "success"
+    result_text = result["content"][0]["text"]
+    assert "Metadata:" not in result_text
+    assert "test-source-1" not in result_text
+
+
+def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
+    """Test retrieving via the agent interface with enableMetadata."""
+    with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
+        # Test with metadata enabled
+        result = agent.tool.retrieve(text="agent query", knowledgeBaseId="test-kb-id", enableMetadata=True)
+
+    result_text = extract_result_text(result)
+    assert "Retrieved" in result_text
+    assert "results with score >=" in result_text
+    assert "Metadata:" in result_text
+    assert "test-source" in result_text
+
+    # Test with metadata disabled
+    with mock.patch.dict(os.environ, {"KNOWLEDGE_BASE_ID": "agent-kb-id"}):
+        result = agent.tool.retrieve(text="agent query", knowledgeBaseId="test-kb-id", enableMetadata=False)
+
+    result_text = extract_result_text(result)
+    assert "Retrieved" in result_text
+    assert "results with score >=" in result_text
+    assert "Metadata:" not in result_text
+    assert "test-source" not in result_text

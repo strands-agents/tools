@@ -5,6 +5,8 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
+
 from strands_tools.memory import MemoryServiceClient
 
 
@@ -86,8 +88,16 @@ def test_agent_client_property(mock_session):
     # Access the property
     result = client.agent_client
 
-    # Verify client was created
-    session_instance.client.assert_called_once_with("bedrock-agent", region_name=client.region)
+    # Verify the client was called with the correct arguments
+    session_instance.client.assert_called_once()
+    args, kwargs = session_instance.client.call_args
+
+    assert args[0] == "bedrock-agent"
+    assert kwargs["region_name"] == client.region
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-memory"
 
     # Verify same client is returned on second access
     session_instance.client.reset_mock()
@@ -113,8 +123,16 @@ def test_runtime_client_property(mock_session):
     # Access the property
     result = client.runtime_client
 
-    # Verify client was created
-    session_instance.client.assert_called_once_with("bedrock-agent-runtime", region_name=client.region)
+    # Verify the client was called with the correct arguments
+    session_instance.client.assert_called_once()
+    args, kwargs = session_instance.client.call_args
+
+    assert args[0] == "bedrock-agent-runtime"
+    assert kwargs["region_name"] == client.region
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-memory"
 
     # Verify same client is returned on second access
     session_instance.client.reset_mock()

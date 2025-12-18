@@ -17,8 +17,6 @@ from .utils.knowledge_base_util import KnowledgeBaseHelper
 
 AWS_REGION = "us-east-1"
 
-pytestmark = pytest.mark.skip(reason="Integration tests are flaky, disabling until they can be made reliable.")
-
 
 @pytest.fixture(scope="module")
 def managed_knowledge_base():
@@ -32,7 +30,7 @@ def managed_knowledge_base():
         if helper.should_teardown:
             helper.destroy()
 
-
+@pytest.mark.skip("memory ingestion takes longer in some cases, test is flaky")
 @patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_memory_integration_store_and_retrieve(managed_knowledge_base):
     """
@@ -43,7 +41,7 @@ def test_memory_integration_store_and_retrieve(managed_knowledge_base):
     """
     kb_id = managed_knowledge_base
     agent = Agent(tools=[memory])
-    clients = KnowledgeBaseHelper._get_boto_clients()
+    clients = KnowledgeBaseHelper.get_boto_clients()
 
     test_uuid = str(uuid.uuid4())
     unique_content = f"The secret password for the test is {test_uuid}."

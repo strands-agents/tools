@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from strands import Agent
 from strands.types.tools import ToolUse
+
 from strands_tools import mem0_memory
 from strands_tools.mem0_memory import Mem0ServiceClient
 
@@ -54,7 +55,18 @@ def extract_result_text(result):
     return str(result)
 
 
-@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch.dict(
+    os.environ,
+    {
+        "MEM0_LLM_PROVIDER": "openai",
+        "MEM0_LLM_MODEL": "gpt-4o",
+        "MEM0_LLM_TEMPERATURE": "0.2",
+        "MEM0_LLM_MAX_TOKENS": "4000",
+        "MEM0_EMBEDDER_PROVIDER": "openai",
+        "MEM0_EMBEDDER_MODEL": "text-embedding-3-large",
+        "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+    },
+)
 @patch("strands_tools.mem0_memory.Mem0Memory")
 @patch("strands_tools.mem0_memory.boto3.Session")
 def test_store_memory(mock_boto3_session, mock_mem0_memory, mock_tool):
@@ -412,6 +424,39 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
     with patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"}):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
+
+    # Test with conflict scenario
+    with patch.dict(
+        os.environ,
+        {
+            "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+            "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234",
+        },
+    ):
+        with pytest.raises(RuntimeError):
+            Mem0ServiceClient()
+
+    # Test with Neptune Analytics for both vector and graph
+    with patch.dict(
+        os.environ,
+        {
+            "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234",
+        },
+    ):
+        client = Mem0ServiceClient()
+        assert client.mem0 is not None
+
+    # Test with Neptune Database with OpenSearch
+    with patch.dict(
+        os.environ,
+        {
+            "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
+            "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com",
+        },
+    ):
+        client = Mem0ServiceClient()
+        assert client.region == os.environ.get("AWS_REGION", "us-west-2")
+        assert client.mem0 is not None
 
     # Test with custom config (OpenSearch)
     custom_config = {

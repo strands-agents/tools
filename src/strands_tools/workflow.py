@@ -625,9 +625,11 @@ class WorkflowManager:
                 for task in ready_tasks[:current_batch_size]:
                     task_id = task["task_id"]
                     if task_id not in active_futures and task_id not in completed_tasks:
+                        # Namespace task_id with workflow_id to prevent conflicts
+                        namespaced_task_id = f"{workflow_id}:{task_id}"
                         tasks_to_submit.append(
                             (
-                                task_id,
+                                namespaced_task_id,
                                 self.execute_task,
                                 (task, workflow),
                                 {},
@@ -646,9 +648,13 @@ class WorkflowManager:
 
                     # Process completed tasks
                     completed_task_ids = []
-                    for task_id, future in active_futures.items():
+                    for namespaced_task_id, future in active_futures.items():
                         if future in done:
-                            completed_task_ids.append(task_id)
+                            # Extract original task_id from namespaced version
+                            task_id = (
+                                namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
+                            )
+                            completed_task_ids.append(namespaced_task_id)
                             try:
                                 result = future.result()
 
