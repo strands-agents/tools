@@ -1,9 +1,0 @@
-# These owners will be the default owners for everything in
-# the repo. Unless a later match takes precedence,
-# @strands-agents/contributors will be requested for
-# review when someone opens a pull request.
-*       @strands-agents/maintainers
-
-# AWS Bedrock AgentCore maintainers can approve browser and code_interpreter tools
-**/browser/**           @strands-agents/maintainers @strands-agents/bedrock-agentcore-maintainers
-**/code_interpreter/**  @strands-agents/maintainers @strands-agents/bedrock-agentcore-maintainers
