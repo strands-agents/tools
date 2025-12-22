@@ -378,10 +378,10 @@ def numeric_evaluation(result: Any, precision: int, scientific: bool) -> Union[i
         # For floating point, evaluate numerically
         if isinstance(result, sp.Basic):
             if hasattr(result, "is_real") and result.is_real:
-                float_result = float(result.evalf(precision))  # type: ignore
+                float_result = float(result.evalf())  # type: ignore
             else:
                 # Handle complex numbers
-                complex_result = complex(result.evalf(precision))  # type: ignore
+                complex_result = complex(result.evalf())  # type: ignore
                 return format_number(complex_result, scientific, precision)
         else:
             float_result = float(result)
