@@ -122,6 +122,14 @@ from strands.types.tools import (
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
 
+
+# Custom Exception for Search if no results are found
+class NoResultsFound(Exception):
+    """Exception raised when no search results are found."""
+
+    pass
+
+
 # Document format mapping
 FORMAT_EXTENSIONS = {
     "pdf": [".pdf"],
@@ -701,6 +709,10 @@ def search_file(console: Console, file_path: str, pattern: str, context_lines: i
 
                 results.append({"line_number": i + 1, "context": match_text})
 
+        # Check if no results found
+        if total_matches == 0:
+            raise NoResultsFound(f"No matches found for pattern '{pattern}' in {os.path.basename(file_path)}")
+
         # Print summary
         summary = Panel(
             escape(f"Found {total_matches} matches for pattern '{pattern}' in {os.path.basename(file_path)}"),
@@ -1227,6 +1239,15 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     console.print(history_panel)
                     response_content.append({"text": f"Time Machine view for {file_path}:\n{history_output}"})
 
+            except NoResultsFound as e:
+                # Handle NoResultsFound specifically to return error status
+                error_msg = str(e)
+                console.print(Panel(escape(error_msg), title="[bold yellow]No Results", border_style="yellow"))
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "error",
+                    "content": [cast(ToolResultContent, {"text": error_msg})],
+                }
             except Exception as e:
                 error_msg = f"Error processing file {file_path}: {str(e)}"
                 console.print(Panel(escape(error_msg), title="[bold red]Error", border_style="red"))
