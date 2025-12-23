@@ -16,6 +16,7 @@ def extract_text(result):
 # Core regression tests (original bug)
 # ------------------------------------------------------------
 
+
 def test_precision_does_not_change_real_value():
     r2 = calculator("221 * 318.11", precision=2)
     r4 = calculator("221 * 318.11", precision=4)
@@ -24,7 +25,7 @@ def test_precision_does_not_change_real_value():
     t4 = extract_text(r4)
 
     assert "70302.31" in t2
-    assert "70302.31" in t4   # trailing zeros are stripped by design
+    assert "70302.31" in t4  # trailing zeros are stripped by design
 
 
 def test_precision_does_not_change_division_value():
@@ -42,6 +43,7 @@ def test_precision_does_not_change_division_value():
 # Complex number regression tests
 # ------------------------------------------------------------
 
+
 def test_precision_does_not_change_complex_value():
     r2 = calculator("(1 + I) * 318.11", precision=2)
     r4 = calculator("(1 + I) * 318.11", precision=4)
@@ -57,6 +59,7 @@ def test_precision_does_not_change_complex_value():
 # Symbolic guardrails (correct semantics)
 # ------------------------------------------------------------
 
+
 def test_expression_with_symbols_remains_symbolic():
     r = calculator("x + 1", precision=2)
     t = extract_text(r)
@@ -69,4 +72,3 @@ def test_force_numeric_applies_numeric_evaluation():
     t = extract_text(r)
 
     assert "1.4142" in t
-
