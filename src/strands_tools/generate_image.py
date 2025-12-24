@@ -236,7 +236,7 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
             filename = create_filename(prompt)
 
             # Save the generated image to a local folder
-            output_dir = "output"
+            output_dir = "/tmp/output"
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
