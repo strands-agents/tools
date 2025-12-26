@@ -112,6 +112,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
+| json_processor | `agent.tool.json_processor(action="validate", data='{"name": "John"}')` | JSON validation, formatting, querying, and manipulation with dot notation support |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
@@ -151,6 +152,40 @@ Below is a comprehensive table of all available tools, how to use them with an a
 \* *These tools do not work on windows*
 
 ## 💻 Usage Examples
+
+## 💻 Usage Examples
+
+### JSON Processing
+
+```python
+from strands import Agent
+from strands_tools import json_processor
+
+agent = Agent(tools=[json_processor])
+
+# Validate JSON data
+result = agent.tool.json_processor(action="validate", data='{"name": "John", "age": 30}')
+
+# Format JSON with custom indentation
+result = agent.tool.json_processor(
+    action="format", 
+    data={"name": "John", "age": 30, "city": "NYC"}, 
+    indent=4
+)
+
+# Query nested data using dot notation
+data = {"user": {"profile": {"name": "John", "contacts": {"email": "john@example.com"}}}}
+result = agent.tool.json_processor(action="query", data=data, query_path="user.profile.name")
+
+# Get all keys from JSON object
+result = agent.tool.json_processor(action="keys", data={"name": "John", "age": 30})
+
+# Minify JSON for compact representation
+result = agent.tool.json_processor(action="minify", data={"name": "John", "age": 30})
+
+# Get size and structure information
+result = agent.tool.json_processor(action="size", data={"users": [{"name": "John"}, {"name": "Jane"}]})
+```
 
 ### File Operations
 
