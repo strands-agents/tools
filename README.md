@@ -114,6 +114,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
+| s3_data_loader | `agent.tool.s3_data_loader(bucket="my-bucket", key="data.csv", operation="describe")` | Load CSV/Parquet/JSON/Excel files from S3 into pandas DataFrames for quick data analysis and statistics |
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
@@ -466,6 +467,147 @@ result = agent.tool.swarm(
     task="Develop marketing strategies for a new sustainable fashion brand",
     swarm_size=4,
     coordination_pattern="hybrid"
+)
+```
+
+### S3 Data Loader
+
+```python
+from strands import Agent
+from strands_tools import s3_data_loader
+
+agent = Agent(tools=[s3_data_loader])
+
+# Load CSV file and get basic statistics
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="describe"
+)
+
+# Get file shape (rows and columns)
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket", 
+    key="datasets/sales_data.csv",
+    operation="shape"
+)
+
+# Get column information
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv", 
+    operation="columns"
+)
+
+# Preview first 10 rows
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="head",
+    rows=10
+)
+
+# Load Parquet file
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/analytics.parquet",
+    operation="describe"
+)
+
+# Load JSON file
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/data.json",
+    operation="shape"
+)
+
+# Load Excel file
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/report.xlsx",
+    operation="columns"
+)
+
+# Load TSV file
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/data.tsv",
+    operation="head"
+)
+
+# Use custom AWS region
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="shape",
+    region="us-west-2"
+)
+
+# Advanced Operations (Phase 2B)
+
+# Query data with pandas syntax
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="query",
+    query="age > 25 and city == 'NYC'",
+    rows=10
+)
+
+# Get random sample of data
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="sample",
+    rows=5
+)
+
+# Get detailed file and data information
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="info"
+)
+
+# Get unique values for all columns
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="unique"
+)
+
+# Get unique values for specific column
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="datasets/sales_data.csv",
+    operation="unique",
+    column="category"
+)
+
+# Batch Operations (Phase 2C)
+
+# List files in S3 bucket with prefix
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    operation="list_files",
+    prefix="datasets/",
+    pattern="*.csv"
+)
+
+# Load multiple files at once
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    operation="batch_load",
+    keys=["file1.csv", "file2.csv", "file3.csv"],
+    rows=5
+)
+
+# Compare two datasets
+result = agent.tool.s3_data_loader(
+    bucket="my-data-bucket",
+    key="current_data.csv",
+    operation="compare",
+    compare_key="previous_data.csv"
 )
 ```
 
