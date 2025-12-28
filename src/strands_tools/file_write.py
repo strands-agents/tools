@@ -38,7 +38,7 @@ from strands_tools import file_write
 
 agent = Agent(tools=[file_write])
 
-# Write to a file with user confirmation
+# Write to a file with user confirmation (overwrites if exists)
 agent.tool.file_write(
     path="/path/to/file.txt",
     content="Hello World!"
@@ -48,6 +48,20 @@ agent.tool.file_write(
 agent.tool.file_write(
     path="/path/to/script.py",
     content="def hello():\n    print('Hello world!')"
+)
+
+# Append to an existing file
+agent.tool.file_write(
+    path="/path/to/log.txt",
+    content="New log entry\n",
+    mode="append"
+)
+
+# Explicitly overwrite a file
+agent.tool.file_write(
+    path="/path/to/config.json",
+    content='{"setting": "value"}',
+    mode="write"
 )
 ```
 
@@ -81,6 +95,15 @@ TOOL_SPEC = {
                 "content": {
                     "type": "string",
                     "description": "The content to write to the file",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["write", "append"],
+                    "description": (
+                        "Write mode: 'write' to overwrite file (default), "
+                        "'append' to add content to end of existing file"
+                    ),
+                    "default": "write",
                 },
             },
             "required": ["path", "content"],
@@ -168,6 +191,8 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - path: The path to the file to write. User paths with tilde (~)
                     are automatically expanded.
             - content: The content to write to the file.
+            - mode: (Optional) Write mode - 'write' to overwrite file (default),
+                    'append' to add content to end of existing file.
         **kwargs: Additional keyword arguments (not used currently)
 
     Returns:
@@ -191,6 +216,24 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
     path = expanduser(tool_input["path"])
     content = tool_input["content"]
+    mode = tool_input.get("mode", "write")
+
+    # Validate mode
+    if mode not in ["write", "append"]:
+        error_message = f"Invalid mode: '{mode}'. Must be 'write' or 'append'"
+        error_panel = Panel(
+            Text(error_message, style="bold red"),
+            title="[bold red]Invalid Mode",
+            border_style="red",
+            box=box.HEAVY,
+            expand=False,
+        )
+        console.print(error_panel)
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": error_message}],
+        }
 
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
@@ -199,6 +242,8 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         Text.assemble(
             ("Path: ", "cyan"),
             (path, "yellow"),
+            ("\nMode: ", "cyan"),
+            (mode, "yellow"),
             ("\nSize: ", "cyan"),
             (f"{len(content)} characters", "yellow"),
         ),
@@ -256,8 +301,11 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 )
             )
 
+        # Map mode to file open mode
+        file_mode = "w" if mode == "write" else "a"
+
         # Write the file
-        with open(path, "w") as file:
+        with open(path, file_mode) as file:
             file.write(content)
 
         success_message = f"File written successfully to {path}"
