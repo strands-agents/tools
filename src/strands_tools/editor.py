@@ -314,8 +314,8 @@ def editor(
     console = console_util.create()
 
     try:
-        path = os.path.expanduser(path)
-
+        path = os.path.abspath(os.path.expanduser(path))
+        
         if not command:
             raise ValueError("Command is required")
 
