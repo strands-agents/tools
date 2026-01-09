@@ -132,11 +132,13 @@ TOOL_SPEC = {
                 },
                 "user_id": {
                     "type": "string",
-                    "description": "User ID for the memory operations (either user_id or agent_id is required for store, list, retrieve, and reset actions)",
+                    "description": "User ID for the memory operations (either user_id or agent_id is required for "
+                                   "store, list, retrieve, and reset actions)",
                 },
                 "agent_id": {
                     "type": "string",
-                    "description": "Agent ID for the memory operations (either user_id or agent_id is required for store, list, retrieve, and reset actions)",
+                    "description": "Agent ID for the memory operations (either user_id or agent_id is required for "
+                                   "store, list, retrieve, and reset actions)",
                 },
                 "metadata": {
                     "type": "object",
@@ -864,7 +866,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
-                content=[ToolResultContent(text=f"Memories deleted successfully")],
+                content=[ToolResultContent(text="Memories deleted successfully")],
             )
 
         elif action == "history":
