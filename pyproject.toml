@@ -43,6 +43,8 @@ dependencies = [
     # Note: Always want the latest tzdata
     "tzdata ; platform_system == 'Windows'",
     "botocore>=1.39.7,<2.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "beautifulsoup4>=4.12.0,<5.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -127,6 +129,8 @@ dependencies = [
     "strands-agents>=1.0.0",
     "mypy>=0.981,<1.0.0",
     "ruff>=0.13.0,<0.14.0",
+    "httpx>=0.27.0,<1.0.0",
+    "beautifulsoup4>=4.12.0,<5.0.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
