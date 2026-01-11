@@ -184,7 +184,8 @@ def test_update_conversation_state_removes_terminal_task():
     """Test _update_conversation_state removes tasks in terminal states."""
     provider = A2AClientToolProvider()
     provider._conversation_states["http://agent.com"] = ConversationState(
-        context_id="ctx-123", active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")}
+        context_id="ctx-123",
+        active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
     )
 
     provider._update_conversation_state("http://agent.com", task_id="task-456", task_state="completed")
@@ -212,7 +213,8 @@ def test_get_task_id_for_continuation_single_active():
     """Test _get_task_id_for_continuation returns task_id when exactly one active."""
     provider = A2AClientToolProvider()
     provider._conversation_states["http://agent.com"] = ConversationState(
-        context_id="ctx-123", active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")}
+        context_id="ctx-123",
+        active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
     )
 
     task_id = provider._get_task_id_for_continuation("http://agent.com")
