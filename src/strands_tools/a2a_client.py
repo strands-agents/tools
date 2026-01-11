@@ -6,6 +6,7 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
+- Context and task ID persistence for multi-turn conversations
 - Push notification support for real-time task completion alerts
 - Custom authentication support via httpx client arguments
 
@@ -24,22 +25,50 @@ Usage Examples:
         ...         "timeout": 300
         ...     }
         ... )
+
+    Multi-turn conversation with context persistence:
+        >>> provider = A2AClientToolProvider(known_agent_urls=["http://agent.example.com"])
+        >>> # First message - server returns context_id and task_id
+        >>> result1 = provider.a2a_send_message("Start a task", "http://agent.example.com")
+        >>> # Second message - automatically includes context_id and task_id
+        >>> result2 = provider.a2a_send_message("Continue the task", "http://agent.example.com")
 """
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
+from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TaskState, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
 
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
+# Terminal task states as defined by A2A protocol
+TERMINAL_TASK_STATES = frozenset({TaskState.completed, TaskState.canceled, TaskState.failed, TaskState.rejected})
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ActiveTask:
+    """Represents an active (non-terminal) task for an agent."""
+
+    task_id: str
+    state: TaskState
+
+
+@dataclass
+class ConversationState:
+    """Tracks conversation state including context_id and active tasks per agent."""
+
+    context_id: str | None = None
+    # Maps target_agent_url to active task
+    active_tasks: dict[str, ActiveTask] = field(default_factory=dict)
 
 
 class A2AClientToolProvider:
@@ -92,6 +121,9 @@ class A2AClientToolProvider:
             self._push_config = PushNotificationConfig(
                 id=f"strands-webhook-{uuid4().hex[:8]}", url=self._webhook_url, token=self._webhook_token
             )
+
+        # Conversation state for context_id and task_id persistence
+        self._conversation_state = ConversationState()
 
     @property
     def tools(self) -> list[AgentTool]:
@@ -177,6 +209,102 @@ class A2AClientToolProvider:
 
         return agent_card
 
+    def _update_conversation_state_from_response(
+        self, response_data: dict[str, Any], target_agent_url: str
+    ) -> None:
+        """
+        Update conversation state from server response.
+
+        Extracts context_id and task_id from the response and updates internal state:
+        - context_id is stored once and reused for all subsequent messages
+        - task_id is tracked per agent and cleared when task reaches terminal state
+
+        Args:
+            response_data: The response data from the server
+            target_agent_url: The URL of the agent that sent the response
+        """
+        # Extract context_id from response (only set if not already set)
+        if "context_id" in response_data and self._conversation_state.context_id is None:
+            self._conversation_state.context_id = response_data["context_id"]
+            logger.info(f"Stored context_id: {self._conversation_state.context_id}")
+
+        # Handle task response
+        task_data = response_data.get("task")
+        if task_data:
+            task_id = task_data.get("id")
+            task_state_str = task_data.get("status", {}).get("state")
+
+            if task_id and task_state_str:
+                try:
+                    task_state = TaskState(task_state_str)
+
+                    if task_state in TERMINAL_TASK_STATES:
+                        # Remove task from active tracking when terminal
+                        if target_agent_url in self._conversation_state.active_tasks:
+                            del self._conversation_state.active_tasks[target_agent_url]
+                            logger.info(
+                                f"Cleared task_id for {target_agent_url} "
+                                f"(terminal state: {task_state_str})"
+                            )
+                    else:
+                        # Store/update active task
+                        self._conversation_state.active_tasks[target_agent_url] = ActiveTask(
+                            task_id=task_id, state=task_state
+                        )
+                        logger.info(
+                            f"Stored task_id {task_id} for {target_agent_url} "
+                            f"(state: {task_state_str})"
+                        )
+                except ValueError:
+                    # Unknown task state, log but don't fail
+                    logger.warning(f"Unknown task state: {task_state_str}")
+
+    def _get_task_id_for_agent(self, target_agent_url: str, explicit_task_id: str | None) -> str | None:
+        """
+        Determine the task_id to use for a message.
+
+        Args:
+            target_agent_url: The URL of the target agent
+            explicit_task_id: Explicitly provided task_id (overrides stored value)
+
+        Returns:
+            The task_id to use, or None if no task should be continued
+        """
+        # Explicit task_id always takes precedence
+        if explicit_task_id is not None:
+            return explicit_task_id
+
+        # Check for active task for this agent
+        active_task = self._conversation_state.active_tasks.get(target_agent_url)
+        if active_task:
+            return active_task.task_id
+
+        return None
+
+    def reset_conversation(self) -> None:
+        """
+        Reset conversation state, clearing context_id and all active tasks.
+
+        Call this method to start a fresh conversation session.
+        """
+        self._conversation_state = ConversationState()
+        logger.info("Conversation state reset")
+
+    def get_conversation_state(self) -> dict[str, Any]:
+        """
+        Get current conversation state for debugging/inspection.
+
+        Returns:
+            dict containing context_id and active tasks
+        """
+        return {
+            "context_id": self._conversation_state.context_id,
+            "active_tasks": {
+                url: {"task_id": task.task_id, "state": task.state.value}
+                for url, task in self._conversation_state.active_tasks.items()
+            },
+        }
+
     @tool
     async def a2a_discover_agent(self, url: str) -> dict[str, Any]:
         """
@@ -252,10 +380,21 @@ class A2AClientToolProvider:
 
     @tool
     async def a2a_send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        context_id: str | None = None,
+        task_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
+
+        This method automatically persists and reuses context_id and task_id across
+        multiple messages to enable multi-turn conversations. The server-returned
+        context_id is stored on the first response and included in all subsequent
+        requests. Task IDs are tracked per agent until they reach a terminal state
+        (completed, canceled, failed, rejected).
 
         IMPORTANT: If the user provides a specific URL, use it directly. If the user
         refers to an agent by name only, use a2a_list_discovered_agents first to get
@@ -266,6 +405,11 @@ class A2AClientToolProvider:
             target_agent_url: The exact URL of the target A2A agent
                 (user-provided URL or from a2a_list_discovered_agents)
             message_id: Optional message ID for tracking (generates UUID if not provided)
+            context_id: Optional context ID to override the stored context_id.
+                If not provided, uses the context_id from previous responses.
+            task_id: Optional task ID to continue a specific task.
+                If not provided, automatically uses the active task_id for this agent
+                (if one exists and is in a non-terminal state).
 
         Returns:
             dict: Response data including:
@@ -274,11 +418,18 @@ class A2AClientToolProvider:
                 - error: Error message (if failed)
                 - message_id: The message ID used
                 - target_agent_url: The agent URL that was contacted
+                - context_id: The context_id used (if any)
+                - task_id: The task_id used (if any)
         """
-        return await self._send_message(message_text, target_agent_url, message_id)
+        return await self._send_message(message_text, target_agent_url, message_id, context_id, task_id)
 
     async def _send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        context_id: str | None = None,
+        task_id: str | None = None,
     ) -> dict[str, Any]:
         """Internal async implementation for send_message."""
 
@@ -293,38 +444,58 @@ class A2AClientToolProvider:
             if message_id is None:
                 message_id = uuid4().hex
 
+            # Determine context_id to use (explicit > stored)
+            effective_context_id = context_id if context_id is not None else self._conversation_state.context_id
+
+            # Determine task_id to use (explicit > active task for this agent)
+            effective_task_id = self._get_task_id_for_agent(target_agent_url, task_id)
+
             message = Message(
                 kind="message",
                 role=Role.user,
                 parts=[Part(TextPart(kind="text", text=message_text))],
                 message_id=message_id,
+                context_id=effective_context_id,
+                task_id=effective_task_id,
             )
 
-            logger.info(f"Sending message to {target_agent_url}")
+            logger.info(
+                f"Sending message to {target_agent_url} "
+                f"(context_id={effective_context_id}, task_id={effective_task_id})"
+            )
 
             # With streaming=False, this will yield exactly one result
             async for event in client.send_message(message):
                 if isinstance(event, Message):
                     # Direct message response
+                    response_data = event.model_dump(mode="python", exclude_none=True)
+                    self._update_conversation_state_from_response(response_data, target_agent_url)
                     return {
                         "status": "success",
-                        "response": event.model_dump(mode="python", exclude_none=True),
+                        "response": response_data,
                         "message_id": message_id,
                         "target_agent_url": target_agent_url,
+                        "context_id": effective_context_id,
+                        "task_id": effective_task_id,
                     }
                 elif isinstance(event, tuple) and len(event) == 2:
                     # (Task, UpdateEvent) tuple - extract the task
                     task, update_event = event
+                    response_data = {
+                        "task": task.model_dump(mode="python", exclude_none=True),
+                        "update": (
+                            update_event.model_dump(mode="python", exclude_none=True) if update_event else None
+                        ),
+                    }
+                    # Update conversation state from task response
+                    self._update_conversation_state_from_response(response_data, target_agent_url)
                     return {
                         "status": "success",
-                        "response": {
-                            "task": task.model_dump(mode="python", exclude_none=True),
-                            "update": (
-                                update_event.model_dump(mode="python", exclude_none=True) if update_event else None
-                            ),
-                        },
+                        "response": response_data,
                         "message_id": message_id,
                         "target_agent_url": target_agent_url,
+                        "context_id": effective_context_id,
+                        "task_id": effective_task_id,
                     }
                 else:
                     # Fallback for unexpected response types
@@ -333,6 +504,8 @@ class A2AClientToolProvider:
                         "response": {"raw_response": str(event)},
                         "message_id": message_id,
                         "target_agent_url": target_agent_url,
+                        "context_id": effective_context_id,
+                        "task_id": effective_task_id,
                     }
 
             # This should never be reached with streaming=False
@@ -341,6 +514,8 @@ class A2AClientToolProvider:
                 "error": "No response received from agent",
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
+                "context_id": effective_context_id,
+                "task_id": effective_task_id,
             }
 
         except Exception as e:
@@ -350,4 +525,58 @@ class A2AClientToolProvider:
                 "error": str(e),
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
+            }
+
+    @tool
+    async def a2a_reset_conversation(self) -> dict[str, Any]:
+        """
+        Reset the conversation state, clearing context_id and all active tasks.
+
+        Call this tool to start a fresh conversation session with A2A agents.
+        This is useful when you want to start a new conversation thread rather
+        than continuing an existing one.
+
+        Returns:
+            dict: Result including:
+                - status: "success" or "error"
+                - message: Confirmation message
+        """
+        try:
+            self.reset_conversation()
+            return {
+                "status": "success",
+                "message": "Conversation state reset successfully",
+            }
+        except Exception as e:
+            logger.exception("Error resetting conversation state")
+            return {
+                "status": "error",
+                "error": str(e),
+            }
+
+    @tool
+    async def a2a_get_conversation_state(self) -> dict[str, Any]:
+        """
+        Get the current conversation state including context_id and active tasks.
+
+        This is useful for debugging or inspecting the current state of multi-turn
+        conversations with A2A agents.
+
+        Returns:
+            dict: Current conversation state including:
+                - status: "success" or "error"
+                - context_id: The current context_id (or None)
+                - active_tasks: Dict mapping agent URLs to their active task info
+        """
+        try:
+            state = self.get_conversation_state()
+            return {
+                "status": "success",
+                **state,
+            }
+        except Exception as e:
+            logger.exception("Error getting conversation state")
+            return {
+                "status": "error",
+                "error": str(e),
             }

@@ -1,9 +1,15 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from a2a.types import Message
+from a2a.types import Message, TaskState
 
-from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider
+from strands_tools.a2a_client import (
+    DEFAULT_TIMEOUT,
+    TERMINAL_TASK_STATES,
+    A2AClientToolProvider,
+    ActiveTask,
+    ConversationState,
+)
 
 
 def test_init_default_parameters():
@@ -14,6 +20,8 @@ def test_init_default_parameters():
     assert provider._known_agent_urls == []
     assert provider._discovered_agents == {}
     assert provider._httpx_client_args == {"timeout": DEFAULT_TIMEOUT}
+    assert provider._conversation_state.context_id is None
+    assert provider._conversation_state.active_tasks == {}
 
 
 def test_init_custom_parameters():
@@ -56,11 +64,13 @@ def test_tools_property():
     provider = A2AClientToolProvider()
     tools = provider.tools
 
-    # Should have the three @tool decorated methods
+    # Should have the five @tool decorated methods
     tool_names = [tool.tool_name for tool in tools]
     assert "a2a_discover_agent" in tool_names
     assert "a2a_list_discovered_agents" in tool_names
     assert "a2a_send_message" in tool_names
+    assert "a2a_reset_conversation" in tool_names
+    assert "a2a_get_conversation_state" in tool_names
 
 
 def test_get_httpx_client_creates_new_client():
@@ -108,6 +118,179 @@ def test_get_httpx_client_creates_fresh_each_time():
         assert mock_client_class.call_count == 2
         assert result1 == mock_client1
         assert result2 == mock_client2
+
+
+# Conversation State Tests
+
+
+def test_terminal_task_states():
+    """Test that terminal task states are defined correctly."""
+    assert TaskState.completed in TERMINAL_TASK_STATES
+    assert TaskState.canceled in TERMINAL_TASK_STATES
+    assert TaskState.failed in TERMINAL_TASK_STATES
+    assert TaskState.rejected in TERMINAL_TASK_STATES
+    # Non-terminal states should not be included
+    assert TaskState.submitted not in TERMINAL_TASK_STATES
+    assert TaskState.working not in TERMINAL_TASK_STATES
+
+
+def test_conversation_state_dataclass():
+    """Test ConversationState dataclass initialization."""
+    state = ConversationState()
+    assert state.context_id is None
+    assert state.active_tasks == {}
+
+    state_with_values = ConversationState(
+        context_id="test-context", active_tasks={"http://test.com": ActiveTask(task_id="task1", state=TaskState.working)}
+    )
+    assert state_with_values.context_id == "test-context"
+    assert "http://test.com" in state_with_values.active_tasks
+
+
+def test_active_task_dataclass():
+    """Test ActiveTask dataclass."""
+    task = ActiveTask(task_id="task123", state=TaskState.working)
+    assert task.task_id == "task123"
+    assert task.state == TaskState.working
+
+
+def test_reset_conversation():
+    """Test reset_conversation clears all state."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "test-context"
+    provider._conversation_state.active_tasks["http://test.com"] = ActiveTask(
+        task_id="task1", state=TaskState.working
+    )
+
+    provider.reset_conversation()
+
+    assert provider._conversation_state.context_id is None
+    assert provider._conversation_state.active_tasks == {}
+
+
+def test_get_conversation_state():
+    """Test get_conversation_state returns correct state."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "ctx123"
+    provider._conversation_state.active_tasks["http://agent1.com"] = ActiveTask(
+        task_id="task1", state=TaskState.working
+    )
+
+    state = provider.get_conversation_state()
+
+    assert state["context_id"] == "ctx123"
+    assert state["active_tasks"]["http://agent1.com"]["task_id"] == "task1"
+    assert state["active_tasks"]["http://agent1.com"]["state"] == "working"
+
+
+def test_get_task_id_for_agent_explicit():
+    """Test _get_task_id_for_agent with explicit task_id."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.active_tasks["http://test.com"] = ActiveTask(
+        task_id="stored_task", state=TaskState.working
+    )
+
+    # Explicit task_id should override stored
+    result = provider._get_task_id_for_agent("http://test.com", "explicit_task")
+    assert result == "explicit_task"
+
+
+def test_get_task_id_for_agent_from_stored():
+    """Test _get_task_id_for_agent returns stored task_id."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.active_tasks["http://test.com"] = ActiveTask(
+        task_id="stored_task", state=TaskState.working
+    )
+
+    result = provider._get_task_id_for_agent("http://test.com", None)
+    assert result == "stored_task"
+
+
+def test_get_task_id_for_agent_no_task():
+    """Test _get_task_id_for_agent with no stored task."""
+    provider = A2AClientToolProvider()
+
+    result = provider._get_task_id_for_agent("http://test.com", None)
+    assert result is None
+
+
+def test_update_conversation_state_stores_context_id():
+    """Test _update_conversation_state_from_response stores context_id."""
+    provider = A2AClientToolProvider()
+
+    response_data = {"context_id": "ctx123"}
+    provider._update_conversation_state_from_response(response_data, "http://test.com")
+
+    assert provider._conversation_state.context_id == "ctx123"
+
+
+def test_update_conversation_state_does_not_override_context_id():
+    """Test _update_conversation_state_from_response doesn't override existing context_id."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "existing_context"
+
+    response_data = {"context_id": "new_context"}
+    provider._update_conversation_state_from_response(response_data, "http://test.com")
+
+    # Should keep existing context_id
+    assert provider._conversation_state.context_id == "existing_context"
+
+
+def test_update_conversation_state_stores_active_task():
+    """Test _update_conversation_state_from_response stores active task."""
+    provider = A2AClientToolProvider()
+
+    response_data = {"task": {"id": "task123", "status": {"state": "working"}}}
+    provider._update_conversation_state_from_response(response_data, "http://agent.com")
+
+    assert "http://agent.com" in provider._conversation_state.active_tasks
+    assert provider._conversation_state.active_tasks["http://agent.com"].task_id == "task123"
+    assert provider._conversation_state.active_tasks["http://agent.com"].state == TaskState.working
+
+
+def test_update_conversation_state_clears_terminal_task():
+    """Test _update_conversation_state_from_response clears terminal task."""
+    provider = A2AClientToolProvider()
+    # Set up an active task
+    provider._conversation_state.active_tasks["http://agent.com"] = ActiveTask(
+        task_id="task123", state=TaskState.working
+    )
+
+    # Response with terminal state
+    response_data = {"task": {"id": "task123", "status": {"state": "completed"}}}
+    provider._update_conversation_state_from_response(response_data, "http://agent.com")
+
+    # Task should be removed
+    assert "http://agent.com" not in provider._conversation_state.active_tasks
+
+
+def test_update_conversation_state_handles_all_terminal_states():
+    """Test _update_conversation_state_from_response handles all terminal states."""
+    for terminal_state in ["completed", "canceled", "failed", "rejected"]:
+        provider = A2AClientToolProvider()
+        provider._conversation_state.active_tasks["http://agent.com"] = ActiveTask(
+            task_id="task123", state=TaskState.working
+        )
+
+        response_data = {"task": {"id": "task123", "status": {"state": terminal_state}}}
+        provider._update_conversation_state_from_response(response_data, "http://agent.com")
+
+        assert "http://agent.com" not in provider._conversation_state.active_tasks, f"Failed for {terminal_state}"
+
+
+def test_update_conversation_state_handles_unknown_state():
+    """Test _update_conversation_state_from_response handles unknown task state gracefully."""
+    provider = A2AClientToolProvider()
+
+    response_data = {"task": {"id": "task123", "status": {"state": "unknown_state"}}}
+    # Should not raise, just log warning
+    provider._update_conversation_state_from_response(response_data, "http://agent.com")
+
+    # No task should be stored for unknown state
+    assert "http://agent.com" not in provider._conversation_state.active_tasks
+
+
+# Agent Discovery Tests
 
 
 @pytest.mark.asyncio
@@ -311,6 +494,9 @@ async def test_list_discovered_agents_error(mock_ensure):
     assert result == expected
 
 
+# Send Message Tests
+
+
 @pytest.mark.asyncio
 async def test_send_message_with_message_id():
     """Test a2a_send_message with provided message_id."""
@@ -322,13 +508,39 @@ async def test_send_message_with_message_id():
             "response": {"result": "ok"},
             "message_id": "test_id",
             "target_agent_url": "http://test.com",
+            "context_id": None,
+            "task_id": None,
         }
         mock_send_message.return_value = expected_result
 
         result = await provider.a2a_send_message("Hello", "http://test.com", "test_id")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id")
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id", None, None)
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_context_and_task_id():
+    """Test a2a_send_message with explicit context_id and task_id."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_send_message") as mock_send_message:
+        expected_result = {
+            "status": "success",
+            "response": {"result": "ok"},
+            "message_id": "test_id",
+            "target_agent_url": "http://test.com",
+            "context_id": "ctx123",
+            "task_id": "task456",
+        }
+        mock_send_message.return_value = expected_result
+
+        result = await provider.a2a_send_message(
+            "Hello", "http://test.com", "test_id", context_id="ctx123", task_id="task456"
+        )
+
+        assert result == expected_result
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id", "ctx123", "task456")
 
 
 @pytest.mark.asyncio
@@ -342,13 +554,15 @@ async def test_send_message_without_message_id():
             "response": {"result": "ok"},
             "message_id": "auto_generated",
             "target_agent_url": "http://test.com",
+            "context_id": None,
+            "task_id": None,
         }
         mock_send_message.return_value = expected_result
 
         result = await provider.a2a_send_message("Hello", "http://test.com")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", None)
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", None, None, None)
 
 
 @pytest.mark.asyncio
@@ -391,11 +605,75 @@ async def test_send_message_success(mock_ensure, mock_factory, mock_discover, mo
         "response": {"result": "success"},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
+        "context_id": None,
+        "task_id": None,
     }
     assert result == expected
     mock_ensure.assert_called_once()
     mock_discover.assert_called_once_with("http://test.com")
     mock_client_factory.create.assert_called_once_with(mock_agent_card)
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_uses_stored_context_id(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message uses stored context_id when not provided."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "stored_context"
+
+    mock_uuid.return_value.hex = "msg123"
+    mock_discover.return_value = Mock()
+
+    mock_client = Mock()
+    mock_factory.return_value.create.return_value = mock_client
+
+    mock_response = Mock(spec=Message)
+    mock_response.model_dump.return_value = {}
+
+    async def mock_send_message_iter(message):
+        # Verify context_id is included in message
+        assert message.context_id == "stored_context"
+        yield mock_response
+
+    mock_client.send_message = mock_send_message_iter
+
+    result = await provider._send_message("Hello", "http://test.com")
+    assert result["context_id"] == "stored_context"
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_uses_stored_task_id(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message uses stored task_id when not provided."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.active_tasks["http://test.com"] = ActiveTask(
+        task_id="stored_task", state=TaskState.working
+    )
+
+    mock_uuid.return_value.hex = "msg123"
+    mock_discover.return_value = Mock()
+
+    mock_client = Mock()
+    mock_factory.return_value.create.return_value = mock_client
+
+    mock_response = Mock(spec=Message)
+    mock_response.model_dump.return_value = {}
+
+    async def mock_send_message_iter(message):
+        # Verify task_id is included in message
+        assert message.task_id == "stored_task"
+        yield mock_response
+
+    mock_client.send_message = mock_send_message_iter
+
+    result = await provider._send_message("Hello", "http://test.com")
+    assert result["task_id"] == "stored_task"
 
 
 @pytest.mark.asyncio
@@ -505,7 +783,7 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
 
     # Mock client response - simulate (Task, UpdateEvent) tuple response
     mock_task = Mock()
-    mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_task.model_dump.return_value = {"id": "task123", "status": {"state": "working"}}
     mock_update_event = Mock()
     mock_update_event.model_dump.return_value = {"event": "finished"}
 
@@ -518,14 +796,20 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
 
     expected = {
         "status": "success",
-        "response": {"task": {"task_id": "123", "status": "completed"}, "update": {"event": "finished"}},
+        "response": {"task": {"id": "task123", "status": {"state": "working"}}, "update": {"event": "finished"}},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
+        "context_id": None,
+        "task_id": None,
     }
     assert result == expected
     mock_ensure.assert_called_once()
     mock_discover.assert_called_once_with("http://test.com")
     mock_client_factory.create.assert_called_once_with(mock_agent_card)
+
+    # Verify conversation state was updated
+    assert "http://test.com" in provider._conversation_state.active_tasks
+    assert provider._conversation_state.active_tasks["http://test.com"].task_id == "task123"
 
 
 @pytest.mark.asyncio
@@ -554,7 +838,7 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
 
     # Mock client response - simulate (Task, None) tuple response
     mock_task = Mock()
-    mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_task.model_dump.return_value = {"id": "task123", "status": {"state": "completed"}}
 
     async def mock_send_message_iter(message):
         yield (mock_task, None)
@@ -565,8 +849,49 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
 
     expected = {
         "status": "success",
-        "response": {"task": {"task_id": "123", "status": "completed"}, "update": None},
+        "response": {"task": {"id": "task123", "status": {"state": "completed"}}, "update": None},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
+        "context_id": None,
+        "task_id": None,
     }
     assert result == expected
+
+    # Verify task was NOT stored because it's in terminal state
+    assert "http://test.com" not in provider._conversation_state.active_tasks
+
+
+# New Tool Tests
+
+
+@pytest.mark.asyncio
+async def test_a2a_reset_conversation_success():
+    """Test a2a_reset_conversation tool."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "test"
+    provider._conversation_state.active_tasks["http://test.com"] = ActiveTask(
+        task_id="task1", state=TaskState.working
+    )
+
+    result = await provider.a2a_reset_conversation()
+
+    assert result["status"] == "success"
+    assert provider._conversation_state.context_id is None
+    assert provider._conversation_state.active_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_a2a_get_conversation_state_success():
+    """Test a2a_get_conversation_state tool."""
+    provider = A2AClientToolProvider()
+    provider._conversation_state.context_id = "ctx123"
+    provider._conversation_state.active_tasks["http://agent.com"] = ActiveTask(
+        task_id="task1", state=TaskState.working
+    )
+
+    result = await provider.a2a_get_conversation_state()
+
+    assert result["status"] == "success"
+    assert result["context_id"] == "ctx123"
+    assert result["active_tasks"]["http://agent.com"]["task_id"] == "task1"
+    assert result["active_tasks"]["http://agent.com"]["state"] == "working"
