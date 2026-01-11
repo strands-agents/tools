@@ -141,7 +141,10 @@ def test_conversation_state_dataclass():
     assert state.active_tasks == {}
 
     state_with_values = ConversationState(
-        context_id="test-context", active_tasks={"http://test.com": ActiveTask(task_id="task1", state=TaskState.working)}
+    state_with_values = ConversationState(
+        context_id="test-context",
+        active_tasks={"http://test.com": ActiveTask(task_id="task1", state=TaskState.working)},
+    )
     )
     assert state_with_values.context_id == "test-context"
     assert "http://test.com" in state_with_values.active_tasks
