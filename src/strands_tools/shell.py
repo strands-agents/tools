@@ -126,6 +126,18 @@ class CommandExecutor:
 
             if pid == 0:  # Child process
                 try:
+                    # Set up environment for proper terminal emulation
+                    # TERM is needed for pagers like 'less' to work correctly
+                    if "TERM" not in os.environ or not os.environ["TERM"]:
+                        os.environ["TERM"] = "xterm-256color"
+
+                    # In non-interactive mode, disable pagers to prevent hangs
+                    # Commands like 'git diff', 'git log', 'man' use pagers by default
+                    if non_interactive_mode:
+                        os.environ["GIT_PAGER"] = "cat"
+                        os.environ["PAGER"] = "cat"
+                        os.environ["MANPAGER"] = "cat"
+
                     os.chdir(cwd)
                     os.execvp("/bin/sh", ["/bin/sh", "-c", command])
                 except Exception as e:
