@@ -126,6 +126,16 @@ class CommandExecutor:
 
             if pid == 0:  # Child process
                 try:
+                    # In non-interactive mode, disable pagers to prevent hangs
+                    # Pagers like 'less' wait for user input which never comes
+                    # This affects: git diff, git log, man, etc.
+                    if non_interactive_mode:
+                        os.environ["GIT_PAGER"] = "cat"
+                        os.environ["PAGER"] = "cat"
+                        os.environ["MANPAGER"] = "cat"
+                        # Also set TERM to ensure proper terminal handling
+                        if "TERM" not in os.environ:
+                            os.environ["TERM"] = "dumb"
                     os.chdir(cwd)
                     os.execvp("/bin/sh", ["/bin/sh", "-c", command])
                 except Exception as e:
