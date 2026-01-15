@@ -141,6 +141,8 @@ class Browser(ABC):
             return self.click(action)
         elif isinstance(action, TypeAction):
             return self.type(action)
+        elif isinstance(action, PressKeyAction):
+            return self.press_key(action)
         elif isinstance(action, GetTextAction):
             return self.get_text(action)
         elif isinstance(action, GetHtmlAction):
