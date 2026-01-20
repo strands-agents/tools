@@ -823,3 +823,47 @@ def test_module_level_session_mapping():
             mock_client2.get_session.assert_called_once_with(
                 interpreter_id="aws.codeinterpreter.v1", session_id="aws-session-123"
             )
+
+
+def test_create_tool_result_preserves_list_content(interpreter):
+    """Test _create_tool_result preserves list content (for binary files like PNG).
+
+    When reading binary files via readFiles, the content may already be a list.
+    The method should preserve this structure instead of stringifying it.
+    Fixes: https://github.com/strands-agents/tools/issues/370
+    """
+    # Simulate content that's already a properly structured list (like binary file data)
+    binary_content = [{"type": "resource", "resource": {"blob": b"\x89PNG\r\n"}}]
+    response = {"stream": [{"result": {"content": binary_content}}], "isError": False}
+
+    result = interpreter._create_tool_result(response)
+
+    assert result["status"] == "success"
+    # Content should be preserved as-is, not wrapped in str()
+    assert result["content"] == binary_content
+    assert result["content"][0]["type"] == "resource"
+
+
+def test_create_tool_result_wraps_string_content(interpreter):
+    """Test _create_tool_result wraps non-list content in text format.
+
+    For backward compatibility, when content is a string or other non-list type,
+    it should be wrapped in [{"text": str(content)}].
+    """
+    response = {"stream": [{"result": {"content": "Hello, World!"}}], "isError": False}
+
+    result = interpreter._create_tool_result(response)
+
+    assert result["status"] == "success"
+    assert result["content"] == [{"text": "Hello, World!"}]
+
+
+def test_create_tool_result_preserves_list_on_error(interpreter):
+    """Test _create_tool_result preserves list content even on error responses."""
+    error_content = [{"type": "text", "text": "Error details"}]
+    response = {"stream": [{"result": {"content": error_content}}], "isError": True}
+
+    result = interpreter._create_tool_result(response)
+
+    assert result["status"] == "error"
+    assert result["content"] == error_content

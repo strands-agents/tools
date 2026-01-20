@@ -477,16 +477,32 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         return self._create_tool_result(response)
 
     def _create_tool_result(self, response) -> Dict[str, Any]:
-        """Create tool result from response."""
+        """Create tool result from response without stringifying binary content.
+
+        When reading binary files (e.g., PNG images) via readFiles, the content
+        may already be properly structured as a list. Stringifying it destroys
+        the binary data. This method preserves content structure when it's
+        already a list, and only wraps non-list content in text format.
+        """
         if "stream" in response:
             event_stream = response["stream"]
             for event in event_stream:
                 if "result" in event:
                     result = event["result"]
+                    content = result.get("content")
                     is_error = response.get("isError", False)
+
+                    # Preserve content structure if already a list (e.g., binary file content)
+                    if isinstance(content, list):
+                        return {
+                            "status": "success" if not is_error else "error",
+                            "content": content,
+                        }
+
+                    # Fall back to text wrapping for non-list content
                     return {
                         "status": "success" if not is_error else "error",
-                        "content": [{"text": str(result.get("content"))}],
+                        "content": [{"text": str(content)}],
                     }
 
             return {"status": "error", "content": [{"text": f"Failed to create tool result: {str(response)}"}]}
