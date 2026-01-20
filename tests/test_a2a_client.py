@@ -14,6 +14,7 @@ def test_init_default_parameters():
     assert provider._known_agent_urls == []
     assert provider._discovered_agents == {}
     assert provider._httpx_client_args == {"timeout": DEFAULT_TIMEOUT}
+    assert provider._exclude_history is False
 
 
 def test_init_custom_parameters():
@@ -566,6 +567,104 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
     expected = {
         "status": "success",
         "response": {"task": {"task_id": "123", "status": "completed"}, "update": None},
+        "message_id": "message_id_123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_includes_history_by_default(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message includes history by default (exclude_history=False)."""
+    provider = A2AClientToolProvider()  # exclude_history defaults to False
+
+    # Mock UUID generation
+    mock_message_uuid = Mock()
+    mock_message_uuid.hex = "message_id_123"
+    mock_uuid.return_value = mock_message_uuid
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock client response - simulate (Task, UpdateEvent) tuple response
+    mock_task = Mock()
+    mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_update_event = Mock()
+    mock_update_event.model_dump.return_value = {"event": "finished"}
+
+    async def mock_send_message_iter(message):
+        yield (mock_task, mock_update_event)
+
+    mock_client.send_message = mock_send_message_iter
+
+    result = await provider._send_message("Hello world", "http://test.com", None)
+
+    # Verify that model_dump was called WITHOUT exclude parameter (history included)
+    mock_task.model_dump.assert_called_once_with(mode="python", exclude_none=True)
+
+    expected = {
+        "status": "success",
+        "response": {"task": {"task_id": "123", "status": "completed"}, "update": {"event": "finished"}},
+        "message_id": "message_id_123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_excludes_history_when_exclude_true(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message excludes history when exclude_history=True."""
+    provider = A2AClientToolProvider(exclude_history=True)
+
+    # Mock UUID generation
+    mock_message_uuid = Mock()
+    mock_message_uuid.hex = "message_id_123"
+    mock_uuid.return_value = mock_message_uuid
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock client response - simulate (Task, UpdateEvent) tuple response
+    mock_task = Mock()
+    mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_update_event = Mock()
+    mock_update_event.model_dump.return_value = {"event": "finished"}
+
+    async def mock_send_message_iter(message):
+        yield (mock_task, mock_update_event)
+
+    mock_client.send_message = mock_send_message_iter
+
+    result = await provider._send_message("Hello world", "http://test.com", None)
+
+    # Verify that model_dump was called WITH exclude={"history"}
+    mock_task.model_dump.assert_called_once_with(mode="python", exclude_none=True, exclude={"history"})
+
+    expected = {
+        "status": "success",
+        "response": {"task": {"task_id": "123", "status": "completed"}, "update": {"event": "finished"}},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
     }

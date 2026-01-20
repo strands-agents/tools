@@ -52,6 +52,7 @@ class A2AClientToolProvider:
         webhook_url: str | None = None,
         webhook_token: str | None = None,
         httpx_client_args: dict[str, Any] | None = None,
+        exclude_history: bool = False,
     ):
         """
         Initialize A2A client tool provider.
@@ -69,10 +70,13 @@ class A2AClientToolProvider:
                 a fresh client is created for each async operation using these args.
                 This prevents "Event loop is closed" errors when the provider is used
                 across multiple asyncio.run() calls.
+            exclude_history: Whether to exclude task history from a2a_send_message responses
+                to reduce payload size and token consumption (defaults to False)
         """
         self.timeout = timeout
         self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}
+        self._exclude_history = exclude_history
 
         # Store client args instead of client instance to avoid event loop issues
         self._httpx_client_args: dict[str, Any] = httpx_client_args or {}
@@ -315,10 +319,16 @@ class A2AClientToolProvider:
                 elif isinstance(event, tuple) and len(event) == 2:
                     # (Task, UpdateEvent) tuple - extract the task
                     task, update_event = event
+
+                    # Conditionally exclude history based on exclude_history setting
+                    task_dump_params = {"mode": "python", "exclude_none": True}
+                    if self._exclude_history:
+                        task_dump_params["exclude"] = {"history"}
+
                     return {
                         "status": "success",
                         "response": {
-                            "task": task.model_dump(mode="python", exclude_none=True),
+                            "task": task.model_dump(**task_dump_params),
                             "update": (
                                 update_event.model_dump(mode="python", exclude_none=True) if update_event else None
                             ),
