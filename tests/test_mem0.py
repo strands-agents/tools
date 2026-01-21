@@ -285,6 +285,36 @@ def test_delete_memory(mock_opensearch, mock_mem0_client, mock_mem0_service_clie
     assert call_args[0] == "mem123"
 
 
+@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_reset_memories(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test reset memories functionality with BYPASS_TOOL_CONSENT mode enabled."""
+    # Setup mocks
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    # Configure the mock_tool
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "reset", "user_id": "user123"},
+    }.get(key, default)
+
+    # Configure mocks
+    mock_mem0_service_client.reset_memories.return_value = {"status": "success"}
+
+    # Call the memory function
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    # Assertions
+    assert result["status"] == "success"
+    assert "Memories deleted successfully" in str(result["content"][0]["text"])
+
+    # Verify correct functions were called
+    mock_mem0_service_client.reset_memories.assert_called_once()
+    call_args = mock_mem0_service_client.reset_memories.call_args
+    assert call_args[0][0] == "user123"
+
+
 @patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
 @patch("strands_tools.mem0_memory.Mem0ServiceClient")
 @patch("opensearchpy.OpenSearch")
