@@ -204,6 +204,10 @@ class Mem0ServiceClient:
             logger.debug("Using Neptune Analytics vector backend (Mem0Memory with Neptune Analytics)")
             merged_config = self._append_neptune_analytics_vector_config(config)
 
+        elif os.environ.get("POSTGRESQL_HOST"):
+            logger.debug("Using PostgreSQL backend (Mem0Memory with PostgreSQL)")
+            merged_config = self._append_pgvector_config(config)
+
         else:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
             merged_config = self._append_faiss_config(config)
@@ -303,6 +307,34 @@ class Mem0ServiceClient:
         # Prepare configuration
         merged_config = self._merge_config(config)
         merged_config["vector_store"]["config"].update({"http_auth": auth, "host": os.environ["OPENSEARCH_HOST"]})
+
+        return merged_config
+
+    def _append_pgvector_config(self, config: Optional[Dict] = None) -> Dict:
+        """Update incoming configuration dictionary to include the configuration of PGVector vector backend.
+
+        Args:
+            config: Optional configuration dictionary to override defaults.
+
+        Returns:
+            An initialized Mem0Memory instance configured for PGVector.
+        """
+        # Add vector portion of the config
+        config = config or {}
+        config["vector_store"] = {
+            "provider": "pgvector",
+            "config": {
+                "host": os.environ.get("POSTGRESQL_HOST"),
+                "port": int(os.environ.get("POSTGRESQL_PORT", 5432)),
+                "user": os.environ.get("POSTGRESQL_USER"),
+                "password": os.environ.get("POSTGRESQL_PASSWORD"),
+                "dbname": os.environ.get("DB_NAME", "postgres"),
+                "collection_name": os.environ.get("DB_COLLECTION_NAME", "mem0_memories"),
+            },
+        }
+
+        # Prepare configuration
+        merged_config = self._merge_config(config)
 
         return merged_config
 
