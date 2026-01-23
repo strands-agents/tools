@@ -10,10 +10,31 @@ Skills follow the AgentSkills.io specification and use progressive disclosure:
 - Phase 3: Load resources (scripts, references, assets) as needed
 
 Key features:
+- Auto-discovery from STRANDS_SKILLS_DIR environment variable
 - Discover skills from a directory
 - Activate/deactivate skills dynamically
 - Load skill resources on demand
 - Progressive disclosure for token efficiency
+
+Environment Variables:
+    STRANDS_SKILLS_DIR: Directory containing skills (default: ./skills)
+    STRANDS_SKILLS_AUTO_DISCOVER: Set to "true" to auto-discover on first use (default: true)
+
+Usage Examples:
+--------------
+```python
+from strands import Agent
+from strands_tools import skills
+
+# Basic usage - auto-discovers from STRANDS_SKILLS_DIR
+agent = Agent(tools=[skills])
+agent("What skills are available?")
+agent("Activate the code-reviewer skill")
+
+# Or use directly
+agent.tool.skills(action="list")
+agent.tool.skills(action="activate", skill_name="code-reviewer")
+```
 
 For more information about Agent Skills:
 - Specification: https://agentskills.io
@@ -31,9 +52,6 @@ from typing import Any, Dict, List, Literal, Optional
 from strands import tool
 
 logger = logging.getLogger(__name__)
-
-# Default skills directory - can be overridden via environment variable
-DEFAULT_SKILLS_DIR = os.environ.get("STRANDS_SKILLS_DIR", "./skills")
 
 # Maximum file size for resources (10MB)
 MAX_RESOURCE_SIZE = 10 * 1024 * 1024
@@ -77,11 +95,24 @@ _REGISTRY_LOCK = Lock()
 
 
 def _get_or_create_registry(skills_dir: str) -> SkillRegistry:
-    """Get or create a registry for the given skills directory."""
+    """Get or create a registry for the given skills directory.
+    
+    If STRANDS_SKILLS_AUTO_DISCOVER is true (default), automatically discovers
+    skills when the registry is first created.
+    """
     skills_dir = str(Path(skills_dir).expanduser().resolve())
     with _REGISTRY_LOCK:
         if skills_dir not in _registries:
-            _registries[skills_dir] = SkillRegistry(skills_dir=Path(skills_dir))
+            registry = SkillRegistry(skills_dir=Path(skills_dir))
+            _registries[skills_dir] = registry
+            
+            # Auto-discover if enabled (default: true)
+            auto_discover = os.environ.get("STRANDS_SKILLS_AUTO_DISCOVER", "true").lower() == "true"
+            if auto_discover and registry.skills_dir.exists():
+                registry.discovered = _discover_skills(registry.skills_dir)
+                if registry.discovered:
+                    logger.info(f"Auto-discovered {len(registry.discovered)} skills from {skills_dir}")
+                    
         return _registries[skills_dir]
 
 
@@ -309,10 +340,6 @@ def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
     """List all discovered and activated skills."""
     registry = _get_or_create_registry(skills_dir)
 
-    # Auto-discover if not done yet
-    if not registry.discovered:
-        registry.discovered = _discover_skills(registry.skills_dir)
-
     return {
         "status": "success",
         "content": [{"text": _format_skills_list(registry.discovered, registry.activated)}],
@@ -327,10 +354,6 @@ def _action_activate(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, An
         return {"status": "error", "content": [{"text": "skill_name is required for activate action"}]}
 
     registry = _get_or_create_registry(skills_dir)
-
-    # Auto-discover if not done yet
-    if not registry.discovered:
-        registry.discovered = _discover_skills(registry.skills_dir)
 
     # Check if skill exists
     if skill_name not in registry.discovered:
@@ -401,10 +424,6 @@ def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, *
 
     registry = _get_or_create_registry(skills_dir)
 
-    # Auto-discover if not done yet
-    if not registry.discovered:
-        registry.discovered = _discover_skills(registry.skills_dir)
-
     if skill_name not in registry.discovered:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
@@ -428,10 +447,6 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
         return {"status": "error", "content": [{"text": "skill_name is required for list_resources action"}]}
 
     registry = _get_or_create_registry(skills_dir)
-
-    # Auto-discover if not done yet
-    if not registry.discovered:
-        registry.discovered = _discover_skills(registry.skills_dir)
 
     if skill_name not in registry.discovered:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
@@ -504,7 +519,7 @@ def skills(
     action: Literal["discover", "list", "activate", "deactivate", "get_resource", "list_resources", "status"],
     skill_name: Optional[str] = None,
     resource_path: Optional[str] = None,
-    skills_dir: Optional[str] = None,
+    STRANDS_SKILLS_DIR: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Manage Agent Skills - modular packages of specialized knowledge and instructions.
 
@@ -512,8 +527,11 @@ def skills(
     you how to perform specific tasks effectively. Skills follow the AgentSkills.io
     specification and use progressive disclosure for token efficiency.
 
+    Skills are automatically discovered from STRANDS_SKILLS_DIR on first use. You can
+    simply call 'list' to see available skills, then 'activate' to load one.
+
     Supported actions:
-    - discover: Scan a directory to find available skills
+    - discover: Scan a directory to find available skills (usually auto-runs)
     - list: Show all discovered skills and their activation status
     - activate: Load a skill's full instructions into your context
     - deactivate: Remove a skill from your active context
@@ -525,16 +543,14 @@ def skills(
         action: The action to perform
         skill_name: Name of the skill (required for activate, deactivate, get_resource, list_resources)
         resource_path: Path to resource file relative to skill directory (required for get_resource)
-        skills_dir: Directory containing skills (default: ./skills or STRANDS_SKILLS_DIR env var)
+        STRANDS_SKILLS_DIR: Directory containing skills. If not provided, uses the
+            STRANDS_SKILLS_DIR environment variable (default: ./skills)
 
     Returns:
         Dict with status and content describing the result
 
     Examples:
-        # Discover skills in the default directory
-        skills(action="discover")
-
-        # List all available skills
+        # List available skills (auto-discovers from STRANDS_SKILLS_DIR)
         skills(action="list")
 
         # Activate a skill to load its instructions
@@ -549,11 +565,11 @@ def skills(
         # Deactivate a skill when done
         skills(action="deactivate", skill_name="code-reviewer")
 
-        # Check current status
-        skills(action="status")
+        # Use a different skills directory
+        skills(action="list", STRANDS_SKILLS_DIR="/path/to/custom/skills")
     """
-    # Resolve skills directory
-    skills_dir = skills_dir or os.environ.get("STRANDS_SKILLS_DIR", DEFAULT_SKILLS_DIR)
+    # Resolve skills directory from parameter or environment variable
+    skills_dir = STRANDS_SKILLS_DIR or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
 
     # Validate action
     if action not in _ACTIONS:
