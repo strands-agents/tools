@@ -6,6 +6,7 @@ Tests cover:
 - Loading skill instructions
 - Resource loading
 - Error handling
+- get_skills_prompt helper
 """
 
 import pytest
@@ -140,9 +141,7 @@ class TestSkillUsage:
 
     def test_use_skill(self, agent, skills_dir):
         """Test loading a skill's instructions."""
-        result = agent.tool.skills(
-            action="use", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir)
-        )
+        result = agent.tool.skills(action="use", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
         text = extract_text(result)
 
         assert result["status"] == "success"
@@ -152,9 +151,7 @@ class TestSkillUsage:
 
     def test_use_nonexistent_skill(self, agent, skills_dir):
         """Test loading a skill that doesn't exist."""
-        result = agent.tool.skills(
-            action="use", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir)
-        )
+        result = agent.tool.skills(action="use", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir))
 
         assert result["status"] == "error"
         text = extract_text(result)
@@ -265,3 +262,74 @@ class TestAutoDiscovery:
 
         assert "code-reviewer" in text
         assert "data-analyst" in text
+
+
+class TestGetSkillsPrompt:
+    """Tests for get_skills_prompt helper function."""
+
+    def test_get_skills_prompt_returns_xml(self, skills_dir):
+        """Test that get_skills_prompt returns XML-formatted prompt."""
+        from strands_tools.skills import _CACHE_LOCK, _cache, get_skills_prompt
+
+        # Clear cache first
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        prompt = get_skills_prompt(str(skills_dir))
+
+        assert "<available_skills>" in prompt
+        assert "</available_skills>" in prompt
+        assert "<skill>" in prompt
+        assert "<name>code-reviewer</name>" in prompt
+        assert "<name>data-analyst</name>" in prompt
+        assert "<description>" in prompt
+
+    def test_get_skills_prompt_empty_dir(self, tmp_path):
+        """Test that get_skills_prompt returns empty string for empty directory."""
+        from strands_tools.skills import _CACHE_LOCK, _cache, get_skills_prompt
+
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        prompt = get_skills_prompt(str(empty_dir))
+
+        assert prompt == ""
+
+    def test_get_skills_prompt_uses_env_var(self, skills_dir, monkeypatch):
+        """Test that get_skills_prompt uses STRANDS_SKILLS_DIR env var."""
+        from strands_tools.skills import _CACHE_LOCK, _cache, get_skills_prompt
+
+        monkeypatch.setenv("STRANDS_SKILLS_DIR", str(skills_dir))
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        prompt = get_skills_prompt()  # No argument - should use env var
+
+        assert "<name>code-reviewer</name>" in prompt
+
+    def test_get_skills_prompt_shares_cache(self, agent, skills_dir):
+        """Test that get_skills_prompt shares cache with skills tool."""
+        from strands_tools.skills import _CACHE_LOCK, _cache, get_skills_prompt
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        # First call skills tool to populate cache
+        agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+
+        # Check cache is populated
+        with _CACHE_LOCK:
+            cache_size_after_tool = len(_cache)
+
+        # Now call get_skills_prompt
+        get_skills_prompt(str(skills_dir))
+
+        # Cache size should be same (reused, not duplicated)
+        with _CACHE_LOCK:
+            cache_size_after_prompt = len(_cache)
+
+        assert cache_size_after_tool == cache_size_after_prompt

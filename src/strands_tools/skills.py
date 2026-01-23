@@ -263,7 +263,6 @@ def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
         metadata = cache.skills[skill_name]
         instructions = _load_skill_instructions(metadata.path)
 
-        # Return instructions - they go into conversation history
         result = f"""## Skill: {metadata.name}
 
 {metadata.description}
@@ -320,16 +319,20 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
 
     for item in metadata.path.rglob("*"):
         if item.is_file() and item.name.upper() != "SKILL.MD":
-            # Use as_posix() for consistent forward slashes on all platforms (Windows fix)
-            rel_path = item.relative_to(metadata.path).as_posix()
-            if rel_path.startswith("scripts/"):
-                resources["scripts"].append(rel_path)
-            elif rel_path.startswith("references/"):
-                resources["references"].append(rel_path)
-            elif rel_path.startswith("assets/"):
-                resources["assets"].append(rel_path)
+            rel_path = item.relative_to(metadata.path)
+            # Use Path.parts for cross-platform directory detection
+            top_dir = rel_path.parts[0] if len(rel_path.parts) > 1 else None
+            # Use as_posix() for consistent display format
+            rel_path_str = rel_path.as_posix()
+
+            if top_dir == "scripts":
+                resources["scripts"].append(rel_path_str)
+            elif top_dir == "references":
+                resources["references"].append(rel_path_str)
+            elif top_dir == "assets":
+                resources["assets"].append(rel_path_str)
             else:
-                resources["other"].append(rel_path)
+                resources["other"].append(rel_path_str)
 
     lines = [f"Resources in '{skill_name}':\n"]
     for category, files in resources.items():
@@ -350,6 +353,59 @@ _ACTIONS = {
     "get_resource": _action_get_resource,
     "list_resources": _action_list_resources,
 }
+
+
+def get_skills_prompt(skills_dir: Optional[str] = None) -> str:
+    """Generate a skills prompt for injection into agent system prompts.
+
+    This is an optional helper for users who want proactive skill awareness.
+    It returns an XML-formatted list of available skills that can be appended
+    to your agent's system prompt.
+
+    Uses the same cache as the skills tool, so no duplicate discovery.
+
+    Args:
+        skills_dir: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
+
+    Returns:
+        XML-formatted string with available skills, or empty string if none found.
+
+    Example:
+        ```python
+        from strands import Agent
+        from strands_tools import skills
+        from strands_tools.skills import get_skills_prompt
+
+        # Optional: Add skills to system prompt for proactive awareness
+        base_prompt = "You are a helpful assistant."
+        agent = Agent(
+            tools=[skills],
+            system_prompt=base_prompt + get_skills_prompt()
+        )
+        ```
+    """
+    skills_dir = skills_dir or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
+    cache = _get_or_create_cache(skills_dir)
+
+    if not cache.skills:
+        return ""
+
+    lines = [
+        "\n\n## Available Skills\n",
+        "You have access to specialized skills. Use `skills(action='list')` to see details,",
+        "or `skills(action='use', skill_name='<name>')` to load one.\n",
+        "<available_skills>",
+    ]
+
+    for name, metadata in sorted(cache.skills.items()):
+        lines.append("  <skill>")
+        lines.append(f"    <name>{name}</name>")
+        lines.append(f"    <description>{metadata.description}</description>")
+        lines.append("  </skill>")
+
+    lines.append("</available_skills>")
+
+    return "\n".join(lines)
 
 
 @tool
