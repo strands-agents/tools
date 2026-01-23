@@ -239,7 +239,7 @@ def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
         if metadata.allowed_tools:
             lines.append(f"    Allowed tools: {', '.join(metadata.allowed_tools)}")
 
-    lines.append(f"\nUse skills(action='use', skill_name='<name>') to load a skill's instructions.")
+    lines.append("\nUse skills(action='use', skill_name='<name>') to load a skill's instructions.")
 
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 

@@ -2,14 +2,11 @@
 Tests for the skills tool.
 
 Tests cover:
-- Skill discovery and listing
+- Skill listing
 - Loading skill instructions
 - Resource loading
 - Error handling
 """
-
-import os
-from pathlib import Path
 
 import pytest
 from strands import Agent
@@ -131,7 +128,8 @@ class TestSkillListing:
 
     def test_list_nonexistent_directory(self, agent, tmp_path):
         """Test listing skills in a nonexistent directory."""
-        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(tmp_path / "nonexistent"))
+        nonexistent = str(tmp_path / "nonexistent")
+        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=nonexistent)
         text = extract_text(result)
 
         assert "No skills found" in text
@@ -142,7 +140,9 @@ class TestSkillUsage:
 
     def test_use_skill(self, agent, skills_dir):
         """Test loading a skill's instructions."""
-        result = agent.tool.skills(action="use", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(
+            action="use", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir)
+        )
         text = extract_text(result)
 
         assert result["status"] == "success"
@@ -152,7 +152,9 @@ class TestSkillUsage:
 
     def test_use_nonexistent_skill(self, agent, skills_dir):
         """Test loading a skill that doesn't exist."""
-        result = agent.tool.skills(action="use", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(
+            action="use", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir)
+        )
 
         assert result["status"] == "error"
         text = extract_text(result)
@@ -172,7 +174,11 @@ class TestSkillResources:
 
     def test_list_resources(self, agent, skills_dir):
         """Test listing skill resources."""
-        result = agent.tool.skills(action="list_resources", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(
+            action="list_resources",
+            skill_name="code-reviewer",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
         text = extract_text(result)
 
         assert "scripts/" in text
@@ -229,7 +235,11 @@ class TestErrorHandling:
 
     def test_missing_resource_path(self, agent, skills_dir):
         """Test error when resource_path is required but not provided."""
-        result = agent.tool.skills(action="get_resource", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(
+            action="get_resource",
+            skill_name="code-reviewer",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
 
         assert result["status"] == "error"
         text = extract_text(result)
@@ -242,12 +252,13 @@ class TestAutoDiscovery:
     def test_auto_discover_from_env(self, agent, skills_dir, monkeypatch):
         """Test that skills are auto-discovered from env var."""
         monkeypatch.setenv("STRANDS_SKILLS_DIR", str(skills_dir))
-        
+
         # Clear cache
-        from strands_tools.skills import _cache, _CACHE_LOCK
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
         with _CACHE_LOCK:
             _cache.clear()
-        
+
         # Should auto-discover from env var
         result = agent.tool.skills(action="list")
         text = extract_text(result)
