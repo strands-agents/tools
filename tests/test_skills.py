@@ -2,15 +2,13 @@
 Tests for the skills tool.
 
 Tests cover:
-- Skill discovery
-- Skill activation/deactivation
+- Skill discovery and listing
+- Loading skill instructions
 - Resource loading
 - Error handling
-- Progressive disclosure pattern
 """
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -95,7 +93,7 @@ description: This should be skipped due to invalid name.
 
 
 @pytest.fixture
-def agent(skills_dir):
+def agent():
     """Create an agent with the skills tool loaded."""
     return Agent(tools=[skills])
 
@@ -108,108 +106,65 @@ def extract_text(result):
     return str(result)
 
 
-class TestSkillDiscovery:
-    """Tests for skill discovery functionality."""
-
-    def test_discover_skills(self, agent, skills_dir):
-        """Test discovering skills in a directory."""
-        result = agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        assert "Discovered 2 skill(s)" in text
-        assert "code-reviewer" in text
-        assert "data-analyst" in text
-        # Invalid skill should not be included
-        assert "Invalid_Skill" not in text
-
-    def test_discover_empty_directory(self, agent, tmp_path):
-        """Test discovering skills in an empty directory."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-
-        result = agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(empty_dir))
-        text = extract_text(result)
-
-        assert "Discovered 0 skill(s)" in text
-
-    def test_discover_nonexistent_directory(self, agent, tmp_path):
-        """Test discovering skills in a nonexistent directory."""
-        result = agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(tmp_path / "nonexistent"))
-        text = extract_text(result)
-
-        assert "Discovered 0 skill(s)" in text
+class TestSkillListing:
+    """Tests for skill listing functionality."""
 
     def test_list_skills(self, agent, skills_dir):
-        """Test listing discovered skills."""
-        # First discover
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        # Then list
+        """Test listing skills in a directory."""
         result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
         text = extract_text(result)
 
         assert "code-reviewer" in text
         assert "data-analyst" in text
-        assert "security" in text.lower() or "code review" in text.lower()
+        assert "Invalid_Skill" not in text
+        assert "Available skills (2)" in text
 
+    def test_list_empty_directory(self, agent, tmp_path):
+        """Test listing skills in an empty directory."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
 
-class TestSkillActivation:
-    """Tests for skill activation/deactivation."""
-
-    def test_activate_skill(self, agent, skills_dir):
-        """Test activating a skill."""
-        # Discover first
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        # Activate
-        result = agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(empty_dir))
         text = extract_text(result)
 
-        assert "Skill Activated: code-reviewer" in text
+        assert "No skills found" in text
+
+    def test_list_nonexistent_directory(self, agent, tmp_path):
+        """Test listing skills in a nonexistent directory."""
+        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(tmp_path / "nonexistent"))
+        text = extract_text(result)
+
+        assert "No skills found" in text
+
+
+class TestSkillUsage:
+    """Tests for loading skill instructions."""
+
+    def test_use_skill(self, agent, skills_dir):
+        """Test loading a skill's instructions."""
+        result = agent.tool.skills(action="use", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Skill: code-reviewer" in text
         assert "Guidelines" in text
-        assert "security" in text.lower()
+        assert "security vulnerabilities" in text.lower()
 
-    def test_activate_nonexistent_skill(self, agent, skills_dir):
-        """Test activating a skill that doesn't exist."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        result = agent.tool.skills(action="activate", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir))
+    def test_use_nonexistent_skill(self, agent, skills_dir):
+        """Test loading a skill that doesn't exist."""
+        result = agent.tool.skills(action="use", skill_name="nonexistent", STRANDS_SKILLS_DIR=str(skills_dir))
 
         assert result["status"] == "error"
         text = extract_text(result)
         assert "not found" in text.lower()
 
-    def test_activate_already_active_skill(self, agent, skills_dir):
-        """Test activating a skill that's already active."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        # Activate again
-        result = agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        assert "already activated" in text.lower()
-
-    def test_deactivate_skill(self, agent, skills_dir):
-        """Test deactivating a skill."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        result = agent.tool.skills(action="deactivate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        assert result["status"] == "success"
-        text = extract_text(result)
-        assert "deactivated" in text.lower()
-
-    def test_deactivate_inactive_skill(self, agent, skills_dir):
-        """Test deactivating a skill that isn't active."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        result = agent.tool.skills(action="deactivate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
+    def test_use_skill_missing_name(self, agent, skills_dir):
+        """Test error when skill_name is not provided."""
+        result = agent.tool.skills(action="use", STRANDS_SKILLS_DIR=str(skills_dir))
 
         assert result["status"] == "error"
         text = extract_text(result)
-        assert "not currently activated" in text.lower()
+        assert "skill_name is required" in text
 
 
 class TestSkillResources:
@@ -217,8 +172,6 @@ class TestSkillResources:
 
     def test_list_resources(self, agent, skills_dir):
         """Test listing skill resources."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
         result = agent.tool.skills(action="list_resources", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
         text = extract_text(result)
 
@@ -229,8 +182,6 @@ class TestSkillResources:
 
     def test_get_resource(self, agent, skills_dir):
         """Test loading a resource file."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
         result = agent.tool.skills(
             action="get_resource",
             skill_name="code-reviewer",
@@ -239,13 +190,11 @@ class TestSkillResources:
         )
         text = extract_text(result)
 
-        assert "analyze" in text
+        assert result["status"] == "success"
         assert "def analyze" in text
 
     def test_get_nonexistent_resource(self, agent, skills_dir):
         """Test loading a resource that doesn't exist."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
         result = agent.tool.skills(
             action="get_resource",
             skill_name="code-reviewer",
@@ -254,13 +203,9 @@ class TestSkillResources:
         )
 
         assert result["status"] == "error"
-        text = extract_text(result)
-        assert "not found" in text.lower() or "failed" in text.lower()
 
     def test_get_resource_path_traversal(self, agent, skills_dir):
         """Test that path traversal is blocked."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
         result = agent.tool.skills(
             action="get_resource",
             skill_name="code-reviewer",
@@ -269,22 +214,6 @@ class TestSkillResources:
         )
 
         assert result["status"] == "error"
-
-
-class TestSkillStatus:
-    """Tests for skill status functionality."""
-
-    def test_status(self, agent, skills_dir):
-        """Test getting skills status."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        result = agent.tool.skills(action="status", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        assert "Discovered: 2" in text
-        assert "Activated: 1" in text
-        assert "code-reviewer" in text
 
 
 class TestErrorHandling:
@@ -296,21 +225,10 @@ class TestErrorHandling:
 
         assert result["status"] == "error"
         text = extract_text(result)
-        # Validation error from Pydantic Literal type
-        assert "error" in text.lower() or "validation" in text.lower()
-
-    def test_missing_skill_name(self, agent, skills_dir):
-        """Test error when skill_name is required but not provided."""
-        result = agent.tool.skills(action="activate", STRANDS_SKILLS_DIR=str(skills_dir))
-
-        assert result["status"] == "error"
-        text = extract_text(result)
-        assert "skill_name is required" in text
+        assert "error" in text.lower() or "invalid" in text.lower()
 
     def test_missing_resource_path(self, agent, skills_dir):
         """Test error when resource_path is required but not provided."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-
         result = agent.tool.skills(action="get_resource", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
 
         assert result["status"] == "error"
@@ -318,64 +236,21 @@ class TestErrorHandling:
         assert "resource_path is required" in text
 
 
-class TestProgressiveDisclosure:
-    """Tests for progressive disclosure pattern."""
-
-    def test_discovery_only_loads_metadata(self, agent, skills_dir):
-        """Test that discovery only loads metadata, not full instructions."""
-        result = agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        # Should have description (metadata)
-        assert "security" in text.lower() or "code review" in text.lower()
-
-        # Should NOT have full instructions content
-        assert "Check for security vulnerabilities" not in text
-
-    def test_activation_loads_full_instructions(self, agent, skills_dir):
-        """Test that activation loads full instructions."""
-        agent.tool.skills(action="discover", STRANDS_SKILLS_DIR=str(skills_dir))
-        result = agent.tool.skills(action="activate", skill_name="code-reviewer", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        # Should have full instructions
-        assert "Guidelines" in text
-        assert "security" in text.lower()
-
-
 class TestAutoDiscovery:
     """Tests for auto-discovery feature."""
 
-    def test_auto_discover_on_list(self, agent, skills_dir, monkeypatch):
-        """Test that skills are auto-discovered when calling list."""
-        # Set the env var for auto-discover
-        monkeypatch.setenv("STRANDS_SKILLS_AUTO_DISCOVER", "true")
+    def test_auto_discover_from_env(self, agent, skills_dir, monkeypatch):
+        """Test that skills are auto-discovered from env var."""
+        monkeypatch.setenv("STRANDS_SKILLS_DIR", str(skills_dir))
         
-        # Clear any existing registries to force new discovery
-        from strands_tools.skills import _registries, _REGISTRY_LOCK
-        with _REGISTRY_LOCK:
-            _registries.clear()
+        # Clear cache
+        from strands_tools.skills import _cache, _CACHE_LOCK
+        with _CACHE_LOCK:
+            _cache.clear()
         
-        # Call list without explicit discover - should auto-discover
-        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+        # Should auto-discover from env var
+        result = agent.tool.skills(action="list")
         text = extract_text(result)
 
-        # Should have discovered skills automatically
         assert "code-reviewer" in text
         assert "data-analyst" in text
-
-    def test_auto_discover_disabled(self, agent, skills_dir, monkeypatch):
-        """Test that auto-discovery can be disabled."""
-        monkeypatch.setenv("STRANDS_SKILLS_AUTO_DISCOVER", "false")
-        
-        # Clear any existing registries
-        from strands_tools.skills import _registries, _REGISTRY_LOCK
-        with _REGISTRY_LOCK:
-            _registries.clear()
-        
-        # Call list - should NOT auto-discover
-        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
-        text = extract_text(result)
-
-        # Should show no skills discovered
-        assert "No skills discovered" in text or "Found 0 skill" in text

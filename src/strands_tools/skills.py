@@ -5,20 +5,12 @@ modular packages of instructions, scripts, and resources that give AI agents
 specialized capabilities for specific tasks.
 
 Skills follow the AgentSkills.io specification and use progressive disclosure:
-- Phase 1: Load only metadata (~100 tokens per skill)
-- Phase 2: Load full instructions when skill is activated
-- Phase 3: Load resources (scripts, references, assets) as needed
-
-Key features:
-- Auto-discovery from STRANDS_SKILLS_DIR environment variable
-- Discover skills from a directory
-- Activate/deactivate skills dynamically
-- Load skill resources on demand
-- Progressive disclosure for token efficiency
+- Phase 1: Load only metadata (~100 tokens per skill) via 'list' action
+- Phase 2: Load full instructions when skill is used via 'use' action
+- Phase 3: Load resources (scripts, references, assets) as needed via 'get_resource'
 
 Environment Variables:
     STRANDS_SKILLS_DIR: Directory containing skills (default: ./skills)
-    STRANDS_SKILLS_AUTO_DISCOVER: Set to "true" to auto-discover on first use (default: true)
 
 Usage Examples:
 --------------
@@ -26,14 +18,20 @@ Usage Examples:
 from strands import Agent
 from strands_tools import skills
 
-# Basic usage - auto-discovers from STRANDS_SKILLS_DIR
-agent = Agent(tools=[skills])
-agent("What skills are available?")
-agent("Activate the code-reviewer skill")
+# Set skills directory via env var or parameter
+import os
+os.environ["STRANDS_SKILLS_DIR"] = "./my-skills"
 
-# Or use directly
+agent = Agent(tools=[skills])
+
+# List available skills
 agent.tool.skills(action="list")
-agent.tool.skills(action="activate", skill_name="code-reviewer")
+
+# Use a skill - loads its instructions
+agent.tool.skills(action="use", skill_name="code-reviewer")
+
+# Get a resource file from a skill
+agent.tool.skills(action="get_resource", skill_name="code-reviewer", resource_path="scripts/analyze.py")
 ```
 
 For more information about Agent Skills:
@@ -59,7 +57,7 @@ MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 
 @dataclass
 class SkillMetadata:
-    """Lightweight skill metadata (Phase 1 of progressive disclosure)."""
+    """Skill metadata from SKILL.md frontmatter."""
 
     name: str
     description: str
@@ -68,59 +66,34 @@ class SkillMetadata:
     allowed_tools: Optional[List[str]] = None
 
 
-@dataclass
-class LoadedSkill:
-    """Fully loaded skill with instructions (Phase 2)."""
-
-    metadata: SkillMetadata
-    instructions: str
-    activated_at: float = 0.0
-
-
-@dataclass
-class SkillRegistry:
-    """Registry for managing discovered and activated skills."""
+@dataclass 
+class SkillsCache:
+    """Cache for discovered skills in a directory."""
 
     skills_dir: Path
-    discovered: Dict[str, SkillMetadata] = field(default_factory=dict)
-    activated: Dict[str, LoadedSkill] = field(default_factory=dict)
-
-    def __post_init__(self):
-        self.skills_dir = Path(self.skills_dir).expanduser().resolve()
+    skills: Dict[str, SkillMetadata] = field(default_factory=dict)
 
 
-# Thread-safe registry storage
-_registries: Dict[str, SkillRegistry] = {}
-_REGISTRY_LOCK = Lock()
+# Thread-safe cache storage
+_cache: Dict[str, SkillsCache] = {}
+_CACHE_LOCK = Lock()
 
 
-def _get_or_create_registry(skills_dir: str) -> SkillRegistry:
-    """Get or create a registry for the given skills directory.
-    
-    If STRANDS_SKILLS_AUTO_DISCOVER is true (default), automatically discovers
-    skills when the registry is first created.
-    """
+def _get_or_create_cache(skills_dir: str) -> SkillsCache:
+    """Get or create a cache for the given skills directory."""
     skills_dir = str(Path(skills_dir).expanduser().resolve())
-    with _REGISTRY_LOCK:
-        if skills_dir not in _registries:
-            registry = SkillRegistry(skills_dir=Path(skills_dir))
-            _registries[skills_dir] = registry
-            
-            # Auto-discover if enabled (default: true)
-            auto_discover = os.environ.get("STRANDS_SKILLS_AUTO_DISCOVER", "true").lower() == "true"
-            if auto_discover and registry.skills_dir.exists():
-                registry.discovered = _discover_skills(registry.skills_dir)
-                if registry.discovered:
-                    logger.info(f"Auto-discovered {len(registry.discovered)} skills from {skills_dir}")
-                    
-        return _registries[skills_dir]
+    with _CACHE_LOCK:
+        if skills_dir not in _cache:
+            cache = SkillsCache(skills_dir=Path(skills_dir))
+            # Auto-discover skills
+            if cache.skills_dir.exists():
+                cache.skills = _discover_skills(cache.skills_dir)
+            _cache[skills_dir] = cache
+        return _cache[skills_dir]
 
 
 def _is_safe_path(path: Path, base_dir: Path) -> bool:
-    """Validate that path is safely contained within base_dir.
-
-    Prevents directory traversal attacks through symlinks or path manipulation.
-    """
+    """Validate that path is safely contained within base_dir."""
     try:
         resolved_path = path.resolve()
         resolved_base = base_dir.resolve()
@@ -131,11 +104,7 @@ def _is_safe_path(path: Path, base_dir: Path) -> bool:
 
 
 def _parse_frontmatter(content: str) -> tuple[dict, str]:
-    """Parse YAML frontmatter from SKILL.md content.
-
-    Returns:
-        Tuple of (frontmatter_dict, body_content)
-    """
+    """Parse YAML frontmatter from SKILL.md content."""
     match = re.match(r"^---\n(.*?)\n---\n(.*)$", content, re.DOTALL)
     if not match:
         raise ValueError("Invalid SKILL.md format - missing YAML frontmatter")
@@ -143,14 +112,12 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
     frontmatter_text = match.group(1)
     body = match.group(2).strip()
 
-    # Parse YAML frontmatter (simple key: value parsing)
     frontmatter = {}
     for line in frontmatter_text.split("\n"):
         if ":" in line:
             key, value = line.split(":", 1)
             key = key.strip()
             value = value.strip()
-            # Handle lists (simple format: key: item1, item2)
             if "," in value:
                 value = [v.strip() for v in value.split(",")]
             frontmatter[key] = value
@@ -159,11 +126,7 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def _validate_skill_name(name: str) -> bool:
-    """Validate skill name follows AgentSkills.io spec.
-
-    - kebab-case (lowercase letters, digits, hyphens)
-    - Max 64 characters
-    """
+    """Validate skill name follows AgentSkills.io spec (kebab-case, max 64 chars)."""
     if not name or len(name) > 64:
         return False
     return bool(re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$", name))
@@ -173,37 +136,25 @@ def _discover_skills(skills_dir: Path) -> Dict[str, SkillMetadata]:
     """Discover all skills in a directory (Phase 1 - metadata only)."""
     discovered = {}
 
-    if not skills_dir.exists():
-        logger.info(f"Skills directory does not exist: {skills_dir}")
-        return discovered
-
-    if not skills_dir.is_dir():
-        logger.warning(f"Skills path is not a directory: {skills_dir}")
+    if not skills_dir.exists() or not skills_dir.is_dir():
         return discovered
 
     for skill_folder in skills_dir.iterdir():
         if not skill_folder.is_dir():
             continue
 
-        # Security: validate path
         if not _is_safe_path(skill_folder, skills_dir):
             logger.warning(f"Skipping unsafe path: {skill_folder}")
             continue
 
-        # Look for SKILL.md (case-insensitive)
+        # Find SKILL.md (case-insensitive)
         skill_md = None
         for f in skill_folder.iterdir():
             if f.name.upper() == "SKILL.MD":
                 skill_md = f
                 break
 
-        if not skill_md:
-            logger.debug(f"No SKILL.md found in {skill_folder}")
-            continue
-
-        # Security: validate SKILL.md path
-        if not _is_safe_path(skill_md, skills_dir):
-            logger.warning(f"Skipping unsafe SKILL.md: {skill_md}")
+        if not skill_md or not _is_safe_path(skill_md, skills_dir):
             continue
 
         try:
@@ -217,38 +168,31 @@ def _discover_skills(skills_dir: Path) -> Dict[str, SkillMetadata]:
                 logger.warning(f"Invalid skill name '{name}' in {skill_folder}")
                 continue
 
-            if not description:
-                logger.warning(f"Skill '{name}' has no description")
-
-            metadata = SkillMetadata(
+            discovered[name] = SkillMetadata(
                 name=name,
                 description=description,
                 path=skill_folder,
                 license=frontmatter.get("license"),
                 allowed_tools=frontmatter.get("allowed-tools"),
             )
-            discovered[name] = metadata
             logger.debug(f"Discovered skill: {name}")
 
         except Exception as e:
             logger.warning(f"Error parsing skill in {skill_folder}: {e}")
-            continue
 
     logger.info(f"Discovered {len(discovered)} skills in {skills_dir}")
     return discovered
 
 
 def _load_skill_instructions(skill_path: Path) -> str:
-    """Load full instructions from a skill (Phase 2)."""
-    skill_md = skill_path / "SKILL.md"
-    if not skill_md.exists():
-        # Try case-insensitive
-        for f in skill_path.iterdir():
-            if f.name.upper() == "SKILL.MD":
-                skill_md = f
-                break
+    """Load full instructions from a skill's SKILL.md (Phase 2)."""
+    skill_md = None
+    for f in skill_path.iterdir():
+        if f.name.upper() == "SKILL.MD":
+            skill_md = f
+            break
 
-    if not skill_md.exists():
+    if not skill_md or not skill_md.exists():
         raise FileNotFoundError(f"SKILL.md not found in {skill_path}")
 
     content = skill_md.read_text(encoding="utf-8")
@@ -257,18 +201,9 @@ def _load_skill_instructions(skill_path: Path) -> str:
 
 
 def _load_resource(skill_path: Path, resource_path: str) -> str:
-    """Load a resource file from a skill (Phase 3).
-
-    Args:
-        skill_path: Path to the skill directory
-        resource_path: Relative path to the resource (e.g., "scripts/helper.py")
-
-    Returns:
-        Content of the resource file
-    """
+    """Load a resource file from a skill (Phase 3)."""
     full_path = skill_path / resource_path
 
-    # Security: validate path
     if not _is_safe_path(full_path, skill_path):
         raise ValueError(f"Invalid resource path: {resource_path}")
 
@@ -278,189 +213,113 @@ def _load_resource(skill_path: Path, resource_path: str) -> str:
     if not full_path.is_file():
         raise ValueError(f"Resource is not a file: {resource_path}")
 
-    # Check file size
     if full_path.stat().st_size > MAX_RESOURCE_SIZE:
         raise ValueError(f"Resource too large (max {MAX_RESOURCE_SIZE} bytes): {resource_path}")
 
     return full_path.read_text(encoding="utf-8")
 
 
-def _format_skills_list(skills: Dict[str, SkillMetadata], activated: Dict[str, LoadedSkill]) -> str:
-    """Format skills list for display."""
-    if not skills:
-        return "No skills discovered."
+# Action handlers
 
-    lines = [f"Found {len(skills)} skill(s):\n"]
-    for name, metadata in sorted(skills.items()):
-        status = "✓ ACTIVE" if name in activated else "○ available"
-        lines.append(f"  [{status}] {name}")
-        lines.append(f"      {metadata.description[:100]}{'...' if len(metadata.description) > 100 else ''}")
-        lines.append(f"      Path: {metadata.path}")
+def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
+    """List all available skills with their descriptions."""
+    cache = _get_or_create_cache(skills_dir)
+
+    if not cache.skills:
+        return {
+            "status": "success",
+            "content": [{"text": f"No skills found in {skills_dir}"}],
+        }
+
+    lines = [f"Available skills ({len(cache.skills)}):\n"]
+    for name, metadata in sorted(cache.skills.items()):
+        lines.append(f"  • {name}")
+        desc = metadata.description[:100] + "..." if len(metadata.description) > 100 else metadata.description
+        lines.append(f"    {desc}")
         if metadata.allowed_tools:
-            lines.append(f"      Allowed tools: {', '.join(metadata.allowed_tools)}")
-        lines.append("")
+            lines.append(f"    Allowed tools: {', '.join(metadata.allowed_tools)}")
 
-    return "\n".join(lines)
+    lines.append(f"\nUse skills(action='use', skill_name='<name>') to load a skill's instructions.")
+
+    return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _format_skill_instructions(skill: LoadedSkill) -> str:
-    """Format activated skill instructions for context injection."""
-    return f"""
-## Skill Activated: {skill.metadata.name}
+def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
+    """Load a skill's full instructions."""
+    if not skill_name:
+        return {"status": "error", "content": [{"text": "skill_name is required"}]}
 
-{skill.metadata.description}
+    cache = _get_or_create_cache(skills_dir)
+
+    if skill_name not in cache.skills:
+        available = ", ".join(sorted(cache.skills.keys())) if cache.skills else "none"
+        return {
+            "status": "error",
+            "content": [{"text": f"Skill '{skill_name}' not found. Available: {available}"}],
+        }
+
+    try:
+        metadata = cache.skills[skill_name]
+        instructions = _load_skill_instructions(metadata.path)
+
+        # Return instructions - they go into conversation history
+        result = f"""## Skill: {metadata.name}
+
+{metadata.description}
 
 ### Instructions
 
-{skill.instructions}
-
----
-Apply these guidelines when working on tasks related to "{skill.metadata.name}".
+{instructions}
 """
-
-
-# Action handlers
-def _action_discover(skills_dir: str, **kwargs) -> Dict[str, Any]:
-    """Discover skills in the specified directory."""
-    registry = _get_or_create_registry(skills_dir)
-    registry.discovered = _discover_skills(registry.skills_dir)
-
-    return {
-        "status": "success",
-        "content": [
-            {
-                "text": f"Discovered {len(registry.discovered)} skill(s) in {skills_dir}\n\n"
-                + _format_skills_list(registry.discovered, registry.activated)
-            }
-        ],
-    }
-
-
-def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
-    """List all discovered and activated skills."""
-    registry = _get_or_create_registry(skills_dir)
-
-    return {
-        "status": "success",
-        "content": [{"text": _format_skills_list(registry.discovered, registry.activated)}],
-    }
-
-
-def _action_activate(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
-    """Activate a skill by loading its full instructions."""
-    import time
-
-    if not skill_name:
-        return {"status": "error", "content": [{"text": "skill_name is required for activate action"}]}
-
-    registry = _get_or_create_registry(skills_dir)
-
-    # Check if skill exists
-    if skill_name not in registry.discovered:
-        available = ", ".join(sorted(registry.discovered.keys())) if registry.discovered else "none"
-        return {
-            "status": "error",
-            "content": [{"text": f"Skill '{skill_name}' not found. Available skills: {available}"}],
-        }
-
-    # Check if already activated
-    if skill_name in registry.activated:
-        return {
-            "status": "success",
-            "content": [{"text": f"Skill '{skill_name}' is already activated.\n\n" + _format_skill_instructions(registry.activated[skill_name])}],
-        }
-
-    # Load full instructions (Phase 2)
-    try:
-        metadata = registry.discovered[skill_name]
-        instructions = _load_skill_instructions(metadata.path)
-
-        loaded_skill = LoadedSkill(
-            metadata=metadata,
-            instructions=instructions,
-            activated_at=time.time(),
-        )
-        registry.activated[skill_name] = loaded_skill
-
-        logger.info(f"Activated skill: {skill_name}")
-        return {
-            "status": "success",
-            "content": [{"text": _format_skill_instructions(loaded_skill)}],
-        }
+        return {"status": "success", "content": [{"text": result}]}
 
     except Exception as e:
-        logger.error(f"Error activating skill '{skill_name}': {e}")
-        return {"status": "error", "content": [{"text": f"Failed to activate skill '{skill_name}': {str(e)}"}]}
-
-
-def _action_deactivate(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
-    """Deactivate a skill."""
-    if not skill_name:
-        return {"status": "error", "content": [{"text": "skill_name is required for deactivate action"}]}
-
-    registry = _get_or_create_registry(skills_dir)
-
-    if skill_name not in registry.activated:
-        return {
-            "status": "error",
-            "content": [{"text": f"Skill '{skill_name}' is not currently activated"}],
-        }
-
-    del registry.activated[skill_name]
-    logger.info(f"Deactivated skill: {skill_name}")
-
-    return {
-        "status": "success",
-        "content": [{"text": f"Skill '{skill_name}' has been deactivated."}],
-    }
+        logger.error(f"Error loading skill '{skill_name}': {e}")
+        return {"status": "error", "content": [{"text": f"Failed to load skill: {e}"}]}
 
 
 def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, **kwargs) -> Dict[str, Any]:
     """Load a resource file from a skill."""
     if not skill_name:
-        return {"status": "error", "content": [{"text": "skill_name is required for get_resource action"}]}
+        return {"status": "error", "content": [{"text": "skill_name is required"}]}
     if not resource_path:
-        return {"status": "error", "content": [{"text": "resource_path is required for get_resource action"}]}
+        return {"status": "error", "content": [{"text": "resource_path is required"}]}
 
-    registry = _get_or_create_registry(skills_dir)
+    cache = _get_or_create_cache(skills_dir)
 
-    if skill_name not in registry.discovered:
+    if skill_name not in cache.skills:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
     try:
-        metadata = registry.discovered[skill_name]
+        metadata = cache.skills[skill_name]
         content = _load_resource(metadata.path, resource_path)
 
         return {
             "status": "success",
-            "content": [{"text": f"# Resource: {skill_name}/{resource_path}\n\n```\n{content}\n```"}],
+            "content": [{"text": f"# {skill_name}/{resource_path}\n\n```\n{content}\n```"}],
         }
 
     except Exception as e:
-        logger.error(f"Error loading resource '{resource_path}' from skill '{skill_name}': {e}")
-        return {"status": "error", "content": [{"text": f"Failed to load resource: {str(e)}"}]}
+        logger.error(f"Error loading resource: {e}")
+        return {"status": "error", "content": [{"text": f"Failed to load resource: {e}"}]}
 
 
 def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
     """List available resources in a skill."""
     if not skill_name:
-        return {"status": "error", "content": [{"text": "skill_name is required for list_resources action"}]}
+        return {"status": "error", "content": [{"text": "skill_name is required"}]}
 
-    registry = _get_or_create_registry(skills_dir)
+    cache = _get_or_create_cache(skills_dir)
 
-    if skill_name not in registry.discovered:
+    if skill_name not in cache.skills:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
-    metadata = registry.discovered[skill_name]
-    skill_path = metadata.path
-
+    metadata = cache.skills[skill_name]
     resources = {"scripts": [], "references": [], "assets": [], "other": []}
 
-    for item in skill_path.rglob("*"):
+    for item in metadata.path.rglob("*"):
         if item.is_file() and item.name.upper() != "SKILL.MD":
-            rel_path = str(item.relative_to(skill_path))
-
-            # Categorize by directory
+            rel_path = str(item.relative_to(metadata.path))
             if rel_path.startswith("scripts/"):
                 resources["scripts"].append(rel_path)
             elif rel_path.startswith("references/"):
@@ -470,13 +329,12 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
             else:
                 resources["other"].append(rel_path)
 
-    lines = [f"Resources in skill '{skill_name}':\n"]
-
+    lines = [f"Resources in '{skill_name}':\n"]
     for category, files in resources.items():
         if files:
             lines.append(f"  {category}/")
             for f in sorted(files):
-                lines.append(f"    - {f}")
+                lines.append(f"    • {f}")
 
     if not any(resources.values()):
         lines.append("  No resources found.")
@@ -484,107 +342,62 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _action_status(skills_dir: str, **kwargs) -> Dict[str, Any]:
-    """Get current skills status."""
-    registry = _get_or_create_registry(skills_dir)
-
-    lines = [
-        f"Skills Directory: {registry.skills_dir}",
-        f"Discovered: {len(registry.discovered)} skill(s)",
-        f"Activated: {len(registry.activated)} skill(s)",
-    ]
-
-    if registry.activated:
-        lines.append("\nActive Skills:")
-        for name in sorted(registry.activated.keys()):
-            lines.append(f"  - {name}")
-
-    return {"status": "success", "content": [{"text": "\n".join(lines)}]}
-
-
-# Action dispatcher
 _ACTIONS = {
-    "discover": _action_discover,
     "list": _action_list,
-    "activate": _action_activate,
-    "deactivate": _action_deactivate,
+    "use": _action_use,
     "get_resource": _action_get_resource,
     "list_resources": _action_list_resources,
-    "status": _action_status,
 }
 
 
 @tool
 def skills(
-    action: Literal["discover", "list", "activate", "deactivate", "get_resource", "list_resources", "status"],
+    action: Literal["list", "use", "get_resource", "list_resources"],
     skill_name: Optional[str] = None,
     resource_path: Optional[str] = None,
     STRANDS_SKILLS_DIR: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Manage Agent Skills - modular packages of specialized knowledge and instructions.
+    """Load and use Agent Skills - modular packages of specialized instructions.
 
-    Agent Skills are folders containing instructions, scripts, and resources that teach
-    you how to perform specific tasks effectively. Skills follow the AgentSkills.io
-    specification and use progressive disclosure for token efficiency.
+    Skills are folders containing SKILL.md files with instructions that help you
+    perform specific tasks effectively. Skills are auto-discovered from STRANDS_SKILLS_DIR.
 
-    Skills are automatically discovered from STRANDS_SKILLS_DIR on first use. You can
-    simply call 'list' to see available skills, then 'activate' to load one.
-
-    Supported actions:
-    - discover: Scan a directory to find available skills (usually auto-runs)
-    - list: Show all discovered skills and their activation status
-    - activate: Load a skill's full instructions into your context
-    - deactivate: Remove a skill from your active context
-    - get_resource: Load a specific resource file from a skill (scripts, references, etc.)
-    - list_resources: List all resource files available in a skill
-    - status: Show current skills directory and activation status
+    Actions:
+    - list: Show all available skills with descriptions
+    - use: Load a skill's full instructions (returns them for you to follow)
+    - get_resource: Load a specific file from a skill (scripts, references, etc.)
+    - list_resources: List all files available in a skill
 
     Args:
         action: The action to perform
-        skill_name: Name of the skill (required for activate, deactivate, get_resource, list_resources)
-        resource_path: Path to resource file relative to skill directory (required for get_resource)
-        STRANDS_SKILLS_DIR: Directory containing skills. If not provided, uses the
-            STRANDS_SKILLS_DIR environment variable (default: ./skills)
+        skill_name: Name of the skill (required for use, get_resource, list_resources)
+        resource_path: Path to resource file (required for get_resource)
+        STRANDS_SKILLS_DIR: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
 
     Returns:
-        Dict with status and content describing the result
+        Dict with status and content
 
     Examples:
-        # List available skills (auto-discovers from STRANDS_SKILLS_DIR)
+        # List available skills
         skills(action="list")
 
-        # Activate a skill to load its instructions
-        skills(action="activate", skill_name="code-reviewer")
+        # Load a skill's instructions
+        skills(action="use", skill_name="code-reviewer")
 
-        # List resources in a skill
-        skills(action="list_resources", skill_name="pdf-processor")
-
-        # Load a specific resource
-        skills(action="get_resource", skill_name="pdf-processor", resource_path="scripts/extract.py")
-
-        # Deactivate a skill when done
-        skills(action="deactivate", skill_name="code-reviewer")
-
-        # Use a different skills directory
-        skills(action="list", STRANDS_SKILLS_DIR="/path/to/custom/skills")
+        # Get a resource file
+        skills(action="get_resource", skill_name="code-reviewer", resource_path="scripts/analyze.py")
     """
-    # Resolve skills directory from parameter or environment variable
     skills_dir = STRANDS_SKILLS_DIR or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
 
-    # Validate action
     if action not in _ACTIONS:
-        valid_actions = ", ".join(_ACTIONS.keys())
-        return {"status": "error", "content": [{"text": f"Invalid action '{action}'. Valid actions: {valid_actions}"}]}
+        return {"status": "error", "content": [{"text": f"Invalid action. Valid: {', '.join(_ACTIONS.keys())}"}]}
 
     try:
-        # Dispatch to action handler
-        handler = _ACTIONS[action]
-        return handler(
+        return _ACTIONS[action](
             skills_dir=skills_dir,
             skill_name=skill_name,
             resource_path=resource_path,
         )
-
     except Exception as e:
-        logger.error(f"Error in skills tool action '{action}': {e}", exc_info=True)
-        return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
+        logger.error(f"Error in skills tool: {e}", exc_info=True)
+        return {"status": "error", "content": [{"text": f"Error: {e}"}]}
