@@ -66,7 +66,7 @@ class SkillMetadata:
     allowed_tools: Optional[List[str]] = None
 
 
-@dataclass 
+@dataclass
 class SkillsCache:
     """Cache for discovered skills in a directory."""
 
@@ -221,6 +221,7 @@ def _load_resource(skill_path: Path, resource_path: str) -> str:
 
 # Action handlers
 
+
 def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
     """List all available skills with their descriptions."""
     cache = _get_or_create_cache(skills_dir)
@@ -319,7 +320,8 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
 
     for item in metadata.path.rglob("*"):
         if item.is_file() and item.name.upper() != "SKILL.MD":
-            rel_path = str(item.relative_to(metadata.path))
+            # Use as_posix() for consistent forward slashes on all platforms (Windows fix)
+            rel_path = item.relative_to(metadata.path).as_posix()
             if rel_path.startswith("scripts/"):
                 resources["scripts"].append(rel_path)
             elif rel_path.startswith("references/"):
