@@ -373,8 +373,7 @@ def get_skills_prompt(skills_dir: Optional[str] = None) -> str:
     Example:
         ```python
         from strands import Agent
-        from strands_tools import skills
-        from strands_tools.skills import get_skills_prompt
+        from strands_tools.skills import skills, get_skills_prompt
 
         # Optional: Add skills to system prompt for proactive awareness
         base_prompt = "You are a helpful assistant."
