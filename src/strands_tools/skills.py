@@ -47,6 +47,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
 
+import yaml
 from strands import tool
 
 logger = logging.getLogger(__name__)
@@ -109,18 +110,8 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
     if not match:
         raise ValueError("Invalid SKILL.md format - missing YAML frontmatter")
 
-    frontmatter_text = match.group(1)
+    frontmatter = yaml.safe_load(match.group(1)) or {}
     body = match.group(2).strip()
-
-    frontmatter = {}
-    for line in frontmatter_text.split("\n"):
-        if ":" in line:
-            key, value = line.split(":", 1)
-            key = key.strip()
-            value = value.strip()
-            if "," in value:
-                value = [v.strip() for v in value.split(",")]
-            frontmatter[key] = value
 
     return frontmatter, body
 
