@@ -7,7 +7,7 @@ The MongoDB Atlas Memory Tool provides comprehensive memory management capabilit
 - **Semantic Search**: Automatic embedding generation using Amazon Bedrock Titan for vector similarity search
 - **Memory Management**: Store, retrieve, list, get, and delete memory operations
 - **Index Management**: Automatic vector search index creation with proper configuration
-- **Namespace Support**: Organize memories by namespace for multi-user scenarios
+- **Namespace Field**: Organize and filter memories using a `namespace` document field for logical grouping within a collection
 - **Pagination**: Support for paginated results in list and retrieve operations
 - **Error Handling**: Comprehensive error handling with clear error messages
 
@@ -299,7 +299,7 @@ result = memory_tool.record_memory(
 ### Multiple Namespaces
 
 ```python
-# User-specific memories
+# Logical grouping by user
 result = memory_tool.record_memory(
     content="Alice likes Italian food",
     cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
@@ -494,7 +494,9 @@ result = agent.tool.mongodb_memory(
 
 ### 2. Namespace Organization
 
-The namespace parameter is crucial for data isolation and multi-tenant memory management:
+The `namespace` parameter is a document field used for logical grouping and query filtering within a collection.
+
+> **Note:** This differs from [MongoDB's glossary definition of "namespace"](https://www.mongodb.com/docs/manual/reference/glossary/#std-term-namespace), which refers to the combination of database and collection names.
 
 ```python
 # User-based namespaces
