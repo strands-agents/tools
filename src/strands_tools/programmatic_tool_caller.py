@@ -9,7 +9,7 @@ and enabling complex orchestration logic.
 Tools are exposed as async functions (e.g., `await calculator(expression="2+2")`).
 The code runs in an async context automatically - no boilerplate needed.
 
-Usage with Strands Agent:
+Usage:
 ```python
 from strands import Agent
 from strands_tools import programmatic_tool_caller, calculator
@@ -18,33 +18,46 @@ agent = Agent(tools=[programmatic_tool_caller, calculator])
 
 result = agent.tool.programmatic_tool_caller(
     code='''
-# Tools are async - use await
 result = await calculator(expression="2 + 2")
 print(f"Result: {result}")
 
-# Parallel execution with asyncio.gather
+# Parallel execution
 results = await asyncio.gather(
     calculator(expression="10 * 1"),
     calculator(expression="10 * 2"),
-    calculator(expression="10 * 3"),
 )
-print(f"Parallel results: {results}")
+print(f"Parallel: {results}")
 '''
 )
 ```
 
-Note: Only print() output is returned to the agent.
+Environment Variables:
+- PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS: Comma-separated list of allowed tools
+- BYPASS_TOOL_CONSENT: Skip user confirmation if "true"
+
+Custom Executors:
+```python
+from strands_tools.programmatic_tool_caller import programmatic_tool_caller, Executor
+
+class MyExecutor(Executor):
+    def execute(self, code: str, namespace: dict) -> str:
+        # Custom execution logic
+        ...
+
+# Set custom executor
+programmatic_tool_caller.executor = MyExecutor()
+```
 """
 
 import asyncio
 import logging
 import os
-import re
 import sys
 import textwrap
 import traceback
+from abc import ABC, abstractmethod
 from io import StringIO
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from rich import box
 from rich.panel import Panel
@@ -59,30 +72,72 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 
-class OutputCapture:
-    """Captures stdout and stderr output during code execution."""
+# =============================================================================
+# Executor Interface & Implementations
+# =============================================================================
 
-    def __init__(self) -> None:
-        self.stdout = StringIO()
-        self.stderr = StringIO()
-        self._stdout = sys.stdout
-        self._stderr = sys.stderr
 
-    def __enter__(self) -> "OutputCapture":
-        sys.stdout = self.stdout
-        sys.stderr = self.stderr
-        return self
+class Executor(ABC):
+    """Abstract base class for code executors.
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        sys.stdout = self._stdout
-        sys.stderr = self._stderr
+    Implement this interface to provide custom execution environments
+    (e.g., Docker, Lambda, smolagents, Code Interpreter).
+    """
 
-    def get_output(self) -> str:
-        output = self.stdout.getvalue()
-        errors = self.stderr.getvalue()
-        if errors:
-            output += f"\n[stderr]\n{errors}"
-        return output
+    @abstractmethod
+    def execute(self, code: str, namespace: Dict[str, Any]) -> str:
+        """Execute code and return captured output.
+
+        Args:
+            code: Python code to execute (already wrapped in async context)
+            namespace: Execution namespace with tools and builtins
+
+        Returns:
+            Captured stdout/stderr output
+
+        Raises:
+            SyntaxError: If code has syntax errors
+            Exception: If execution fails
+        """
+        pass
+
+
+class LocalAsyncExecutor(Executor):
+    """Default executor - runs code locally with asyncio."""
+
+    def execute(self, code: str, namespace: Dict[str, Any]) -> str:
+        """Execute code in local async context."""
+        # Wrap user code in async function
+        indented_code = textwrap.indent(code, "    ")
+        wrapped_code = f"async def __user_code__():\n{indented_code}\n"
+
+        # Capture output
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+
+        try:
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+
+            # Define and run the async function
+            exec(wrapped_code, namespace)
+            asyncio.run(namespace["__user_code__"]())
+
+            output = stdout_capture.getvalue()
+            errors = stderr_capture.getvalue()
+            if errors:
+                output += f"\n[stderr]\n{errors}"
+            return output
+
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+
+# =============================================================================
+# Tool Execution Helpers
+# =============================================================================
 
 
 def _execute_tool(agent: Any, tool_name: str, tool_input: Dict[str, Any]) -> Any:
@@ -108,10 +163,7 @@ def _execute_tool(agent: Any, tool_name: str, tool_input: Dict[str, Any]) -> Any
 
             content = result.get("content", [])
             if content and isinstance(content, list):
-                text_parts = []
-                for item in content:
-                    if isinstance(item, dict) and "text" in item:
-                        text_parts.append(item["text"])
+                text_parts = [item["text"] for item in content if isinstance(item, dict) and "text" in item]
                 if text_parts:
                     return "\n".join(text_parts)
             return str(result)
@@ -125,7 +177,7 @@ def _execute_tool(agent: Any, tool_name: str, tool_input: Dict[str, Any]) -> Any
         raise RuntimeError(f"Failed to execute tool '{tool_name}': {e}") from e
 
 
-def _create_async_tool_function(agent: Any, tool_name: str) -> Any:
+def _create_async_tool_function(agent: Any, tool_name: str) -> Callable:
     """Create an async function wrapper for a tool."""
 
     async def tool_function(**kwargs: Any) -> Any:
@@ -138,7 +190,6 @@ def _create_async_tool_function(agent: Any, tool_name: str) -> Any:
 def _validate_code(code: str) -> List[str]:
     """Validate Python code for potential security issues."""
     warnings: List[str] = []
-
     dangerous_patterns = [
         r"\bimport\s+subprocess\b",
         r"\bfrom\s+subprocess\b",
@@ -154,11 +205,33 @@ def _validate_code(code: str) -> List[str]:
         r"os\.rmdir",
     ]
 
+    import re
+
     for pattern in dangerous_patterns:
         if re.search(pattern, code):
             warnings.append(f"Potentially dangerous pattern: {pattern}")
 
     return warnings
+
+
+def _get_allowed_tools(agent: Any) -> set:
+    """Get allowed tools from env var or default to all (except self)."""
+    all_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
+
+    env_allowed = os.environ.get("PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS", "").strip()
+    if env_allowed:
+        allowed_list = [t.strip() for t in env_allowed.split(",") if t.strip()]
+        return all_tools & set(allowed_list)
+
+    return all_tools
+
+
+# =============================================================================
+# Main Tool
+# =============================================================================
+
+# Default executor - can be swapped by users
+_default_executor = LocalAsyncExecutor()
 
 
 @tool(context=True)
@@ -170,7 +243,7 @@ def programmatic_tool_caller(
     Execute Python code with access to agent tools as async functions.
 
     Tools are available as async functions - use `await` to call them.
-    The code runs in an async context automatically, no boilerplate needed.
+    Code runs in async context automatically, no boilerplate needed.
 
     Example:
         ```python
@@ -190,6 +263,10 @@ def programmatic_tool_caller(
         )
         print(results)
         ```
+
+    Environment Variables:
+        PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS: Comma-separated list of tools to expose
+        BYPASS_TOOL_CONSENT: Skip confirmation if "true"
 
     Args:
         code: Python code to execute. Use `await tool_name(...)` to call tools.
@@ -220,8 +297,8 @@ def programmatic_tool_caller(
             )
         )
 
-        # Get available tools (excluding self)
-        available_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
+        # Get allowed tools
+        available_tools = _get_allowed_tools(agent)
 
         tools_table = Table(show_header=True, header_style="bold cyan", box=box.SIMPLE)
         tools_table.add_column("Available Tools", style="green")
@@ -261,21 +338,11 @@ def programmatic_tool_caller(
         for tool_name in available_tools:
             exec_namespace[tool_name] = _create_async_tool_function(agent, tool_name)
 
-        # Wrap user code in async function and run it
-        # Indent user code to be inside the async function
-        indented_code = textwrap.indent(code, "    ")
-        wrapped_code = f"async def __user_code__():\n{indented_code}\n"
-
         console.print("[green]Executing...[/]")
 
-        output_capture = OutputCapture()
-        with output_capture:
-            # First exec to define the async function
-            exec(wrapped_code, exec_namespace)
-            # Then run it
-            asyncio.run(exec_namespace["__user_code__"]())
-
-        captured_output = output_capture.get_output()
+        # Use the executor
+        executor = getattr(programmatic_tool_caller, "executor", _default_executor)
+        captured_output = executor.execute(code, exec_namespace)
 
         console.print("[bold green]✓ Done[/]")
         if captured_output.strip():
@@ -295,3 +362,7 @@ def programmatic_tool_caller(
         error_msg = f"Execution error:\n{traceback.format_exc()}"
         console.print(Panel(error_msg, title="[bold red]Error[/]", border_style="red"))
         return {"status": "error", "content": [{"text": error_msg}]}
+
+
+# Allow setting custom executor
+programmatic_tool_caller.executor = _default_executor
