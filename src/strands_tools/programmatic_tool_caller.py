@@ -7,8 +7,8 @@ write Python code that calls other tools as functions, reducing API round-trips
 and enabling complex orchestration logic.
 
 The key feature is that within the executed code, agent tools are exposed as
-callable methods (e.g., `tools.calculator(expression="2+2")`) with callbacks
-that route back to the agent's actual tool execution system.
+callable async functions (e.g., `await calculator(expression="2+2")`) that
+route back to the agent's actual tool execution system.
 
 Usage with Strands Agent:
 ```python
@@ -21,35 +21,40 @@ agent = Agent(tools=[programmatic_tool_caller, calculator, file_read])
 # The agent can now write code that calls tools programmatically
 result = agent.tool.programmatic_tool_caller(
     code='''
-# Tools are available as callable functions
-result = tools.calculator(expression="2 + 2")
-print(f"Calculator result: {result}")
+import asyncio
 
-# Multiple tool calls in one execution
-content = tools.file_read(path="example.txt", mode="view")
-print(f"File content: {content}")
+async def main():
+    # Tools are available as async functions
+    result = await calculator(expression="2 + 2")
+    print(f"Calculator result: {result}")
 
-# Complex orchestration with loops and conditionals
-total = 0
-for i in range(5):
-    r = tools.calculator(expression=f"{i} * 10")
-    total += int(r)
-print(f"Total: {total}")
+    # Complex orchestration with loops and conditionals
+    total = 0
+    for i in range(5):
+        r = await calculator(expression=f"{i} * 10")
+        total += int(r)
+    print(f"Total: {total}")
+
+asyncio.run(main())
 '''
 )
 ```
 
+Note: Only the print() output from the code is returned to the agent.
+Tool results are processed within the code and do not enter the agent's context
+unless explicitly printed.
+
 See the programmatic_tool_caller function docstring for more details.
 """
 
+import asyncio
 import logging
 import os
 import re
 import sys
 import traceback
-from datetime import datetime
 from io import StringIO
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from rich import box
 from rich.panel import Panel
@@ -62,122 +67,6 @@ from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
-
-
-class ToolProxy:
-    """
-    Proxy object that exposes agent tools as callable methods.
-
-    This class creates a namespace where each registered tool in the agent's
-    tool registry becomes a callable method. When a tool is called, the proxy
-    routes the execution through the provided callback function to the actual
-    tool implementation.
-
-    Attributes:
-        _tool_registry: The agent's tool registry containing available tools.
-        _callback: Function to execute tool calls and return results.
-        _tool_calls: List tracking all tool calls made during execution.
-        _available_tools: Set of tool names available for programmatic calling.
-    """
-
-    def __init__(
-        self,
-        tool_registry: Any,
-        callback: Callable[[str, Dict[str, Any]], Any],
-    ):
-        """
-        Initialize the ToolProxy.
-
-        Args:
-            tool_registry: The agent's tool registry containing available tools.
-            callback: Function to execute tool calls. Should accept tool name and
-                     input dict, returning the tool result.
-        """
-        self._tool_registry = tool_registry
-        self._callback = callback
-        self._tool_calls: List[Dict[str, Any]] = []
-
-        # Exclude the programmatic_tool_caller itself to avoid recursion
-        self._available_tools = {name for name in tool_registry.registry.keys() if name != "programmatic_tool_caller"}
-
-    def __getattr__(self, name: str) -> Callable[..., Any]:
-        """
-        Get a callable for the specified tool name.
-
-        Args:
-            name: The name of the tool to get.
-
-        Returns:
-            A callable that executes the tool with the provided arguments.
-
-        Raises:
-            AttributeError: If the tool is not available.
-        """
-        if name.startswith("_"):
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-
-        if name not in self._available_tools:
-            available = ", ".join(sorted(self._available_tools))
-            raise AttributeError(f"Tool '{name}' is not available. Available tools: {available}")
-
-        def tool_caller(**kwargs: Any) -> Any:
-            """Execute the tool with the given arguments."""
-            # Record the tool call
-            call_record: Dict[str, Any] = {
-                "tool_name": name,
-                "input": kwargs,
-                "timestamp": datetime.now().isoformat(),
-            }
-            self._tool_calls.append(call_record)
-
-            # Execute the tool through the callback
-            try:
-                result = self._callback(name, kwargs)
-                call_record["status"] = "success"
-                call_record["result"] = result
-                return result
-            except Exception as e:
-                call_record["status"] = "error"
-                call_record["error"] = str(e)
-                raise
-
-        return tool_caller
-
-    def list_tools(self) -> List[str]:
-        """
-        List all available tools.
-
-        Returns:
-            Sorted list of available tool names.
-        """
-        return sorted(self._available_tools)
-
-    def get_tool_info(self, name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get information about a specific tool.
-
-        Args:
-            name: The name of the tool.
-
-        Returns:
-            Dictionary with tool specification, or None if not found.
-        """
-        if name not in self._available_tools:
-            return None
-
-        tool_impl = self._tool_registry.registry.get(name)
-        if tool_impl and hasattr(tool_impl, "tool_spec"):
-            return tool_impl.tool_spec
-        return None
-
-    def get_call_history(self) -> List[Dict[str, Any]]:
-        """
-        Get the history of tool calls made during execution.
-
-        Returns:
-            List of dictionaries containing call information.
-        """
-        return self._tool_calls.copy()
 
 
 class OutputCapture:
@@ -224,8 +113,7 @@ def _execute_tool(
     Execute a tool through the agent's tool system.
 
     This function routes tool calls through the agent's tool registry.
-    For Strands DecoratedFunctionTool, tools can be called directly with
-    keyword arguments.
+    Results are returned directly to the calling code, NOT to the agent's context.
 
     Args:
         agent: The Strands agent instance.
@@ -248,8 +136,6 @@ def _execute_tool(
 
     # Execute the tool
     try:
-        # Call the tool - Strands DecoratedFunctionTool can be called directly
-        # with keyword arguments
         if callable(tool_impl):
             result = tool_impl(**tool_input)
         else:
@@ -266,7 +152,6 @@ def _execute_tool(
             # Extract all text content if available
             content = result.get("content", [])
             if content and isinstance(content, list):
-                # Combine all text content blocks
                 text_parts = []
                 for item in content:
                     if isinstance(item, dict) and "text" in item:
@@ -275,15 +160,44 @@ def _execute_tool(
                     return "\n".join(text_parts)
             return str(result)
 
-        # Return non-dict results directly (could be string, int, etc.)
+        # Return non-dict results directly
         return result
 
     except RuntimeError:
-        # Re-raise RuntimeError without wrapping
         raise
     except Exception as e:
         logger.error(f"Error executing tool '{tool_name}': {e}")
         raise RuntimeError(f"Failed to execute tool '{tool_name}': {e}") from e
+
+
+def _create_tool_function(agent: Any, tool_name: str) -> Any:
+    """
+    Create an async function wrapper for a tool.
+
+    Tools are exposed as async functions to support parallel execution patterns
+    and match Anthropic's programmatic tool calling interface.
+
+    Args:
+        agent: The Strands agent instance.
+        tool_name: Name of the tool to wrap.
+
+    Returns:
+        An async function that calls the tool.
+    """
+
+    async def tool_function(**kwargs: Any) -> Any:
+        """Async wrapper for tool execution."""
+        # Run the synchronous tool execution in a thread pool to not block
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: _execute_tool(agent, tool_name, kwargs))
+
+    # Also create a sync version for simpler use cases
+    def tool_function_sync(**kwargs: Any) -> Any:
+        """Sync wrapper for tool execution."""
+        return _execute_tool(agent, tool_name, kwargs)
+
+    # Return both - we'll inject both into the namespace
+    return tool_function, tool_function_sync
 
 
 def _validate_code(code: str) -> List[str]:
@@ -306,7 +220,7 @@ def _validate_code(code: str) -> List[str]:
         r"\bfrom\s+shutil\b",
         r"\b__import__\s*\(",
         r"\bexec\s*\(",
-        r"\beval\s*\(",  # Allow tools.* but warn on raw eval
+        r"\beval\s*\(",
         r"\bcompile\s*\(",
         r"\bgetattr\s*\(",
         r"\bsetattr\s*\(",
@@ -339,88 +253,77 @@ def _validate_code(code: str) -> List[str]:
 @tool(context=True)
 def programmatic_tool_caller(
     code: str,
-    timeout: int = 30,
     tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
     """
-    Execute Python code with access to agent tools as callable functions.
+    Execute Python code with access to agent tools as callable async functions.
 
     This tool enables programmatic tool calling, where an agent can write Python
-    code that invokes other tools as functions. Tools are exposed through a `tools`
-    namespace, allowing patterns like `tools.calculator(expression="2+2")`.
+    code that invokes other tools as functions. Tools are exposed as async functions
+    at the top level (e.g., `await calculator(expression="2+2")`), matching
+    Anthropic's programmatic tool calling interface.
 
     How It Works:
     ------------
-    1. The code is executed in a restricted namespace with a `tools` object
-    2. The `tools` object proxies calls to the agent's registered tools
-    3. Tool calls are executed synchronously and results returned to the code
-    4. All output (print statements, tool results) is captured and returned
+    1. The code is executed in a namespace where each tool is an async function
+    2. Tool calls are executed and results returned directly to the code
+    3. Only print() output is captured and returned to the agent
+    4. Tool results do NOT enter the agent's context unless explicitly printed
 
     Key Features:
     ------------
-    - Tools exposed as `tools.<tool_name>(**kwargs)`
+    - Tools exposed as async functions: `await tool_name(**kwargs)`
+    - Also available as sync functions: `tool_name_sync(**kwargs)`
     - Supports complex orchestration with loops, conditionals, data processing
-    - Captures stdout/stderr from the executed code
-    - Records all tool calls for transparency
-    - Validates code for potentially dangerous patterns
+    - Only print() output is returned (reduces context window usage)
+    - Tool results are processed in code, not sent back to agent
 
     Example Code Patterns:
     --------------------
     ```python
-    # Simple tool call
-    result = tools.calculator(expression="10 * 5")
+    import asyncio
+
+    async def main():
+        # Simple tool call
+        result = await calculator(expression="10 * 5")
+        print(f"Result: {result}")
+
+        # Loop with tool calls
+        for item in ["apple", "banana", "cherry"]:
+            info = await http_request(url=f"https://api.example.com/info/{item}")
+            print(f"{item}: {info}")
+
+        # Conditional logic
+        stats = await file_read(path="config.json", mode="stats")
+        if stats:
+            config = await file_read(path="config.json", mode="view")
+            print(f"Config loaded")
+
+    asyncio.run(main())
+    ```
+
+    Or using sync functions for simpler cases:
+    ```python
+    result = calculator_sync(expression="2 + 2")
     print(f"Result: {result}")
-
-    # Chaining tool calls
-    content = tools.file_read(path="data.txt", mode="view")
-    analysis = tools.use_llm(prompt=f"Summarize: {content}")
-
-    # Loop with tool calls
-    for item in ["apple", "banana", "cherry"]:
-        info = tools.http_request(url=f"https://api.example.com/info/{item}")
-        print(f"{item}: {info}")
-
-    # Conditional logic
-    if tools.file_read(path="config.json", mode="stats"):
-        config = tools.file_read(path="config.json", mode="view")
     ```
 
     Args:
-        code: Python code to execute. The code has access to a `tools` object
-            that provides callable methods for each available tool.
-        timeout: Maximum execution time in seconds. Default is 30.
-        tool_context: The Strands tool context (automatically injected via @tool decorator).
+        code: Python code to execute. Tools are available as async functions
+            (e.g., `await calculator(...)`) or sync functions (`calculator_sync(...)`).
+        tool_context: The Strands tool context (automatically injected).
 
     Returns:
         Dict with status and content:
         - status: "success" or "error"
-        - content: List of dicts with "text" keys containing:
-            - Captured output from code execution
-            - Summary of tool calls made
-            - Any error messages if execution failed
+        - content: List with single text block containing print() output only
 
-    Security Notes:
-    -------------
-    - Code is validated for potentially dangerous patterns before execution
-    - User confirmation is required unless BYPASS_TOOL_CONSENT is set
-    - The code runs with limited access to the Python environment
-    - Tool access is restricted to the agent's registered tools
-
-    Examples:
-    --------
-    Basic calculation:
-    >>> agent.tool.programmatic_tool_caller(
-    ...     code='result = tools.calculator(expression="2 + 2"); print(result)'
-    ... )
-
-    Multi-tool workflow:
-    >>> agent.tool.programmatic_tool_caller(
-    ...     code='''
-    ...     files = tools.file_read(path=".", mode="find")
-    ...     for f in files.split("\\n")[:5]:
-    ...         print(f"File: {f}")
-    ...     '''
-    ... )
+    Design Notes:
+    ------------
+    - Tools are async to support parallel execution patterns
+    - Only print() output is returned to minimize context usage
+    - Tool results are processed in code, enabling filtering/aggregation
+    - Matches Anthropic's programmatic tool calling interface
     """
     console = console_util.create()
 
@@ -449,21 +352,15 @@ def programmatic_tool_caller(
             )
         )
 
-        # Show available tools (excluding self)
+        # Get available tools (excluding self)
         available_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
 
         tools_table = Table(show_header=True, header_style="bold cyan", box=box.SIMPLE)
         tools_table.add_column("Available Tools", style="green")
-        tools_table.add_column("Description", style="dim")
+        tools_table.add_column("Usage", style="dim")
 
         for tool_name in sorted(available_tools):
-            tool_impl = agent.tool_registry.registry.get(tool_name)
-            desc = ""
-            if tool_impl and hasattr(tool_impl, "tool_spec"):
-                desc = tool_impl.tool_spec.get("description", "")[:60]
-                if len(tool_impl.tool_spec.get("description", "")) > 60:
-                    desc += "..."
-            tools_table.add_row(tool_name, desc)
+            tools_table.add_row(tool_name, f"await {tool_name}(...) or {tool_name}_sync(...)")
 
         console.print(tools_table)
 
@@ -484,7 +381,6 @@ def programmatic_tool_caller(
             details_table.add_row("Code Length", f"{len(code)} characters")
             details_table.add_row("Line Count", f"{len(code.splitlines())} lines")
             details_table.add_row("Available Tools", str(len(available_tools)))
-            details_table.add_row("Timeout", f"{timeout} seconds")
 
             console.print(
                 Panel(
@@ -504,21 +400,11 @@ def programmatic_tool_caller(
                     "content": [{"text": f"Execution cancelled by user. Reason: {cancel_reason}"}],
                 }
 
-        # Create the tool callback
-        def tool_callback(name: str, kwargs: Dict[str, Any]) -> Any:
-            return _execute_tool(agent, name, kwargs)
-
-        # Create the tool proxy
-        tools_proxy = ToolProxy(
-            tool_registry=agent.tool_registry,
-            callback=tool_callback,
-        )
-
-        # Create the execution namespace
+        # Create the execution namespace with tools as functions
         exec_namespace: Dict[str, Any] = {
-            "tools": tools_proxy,
             "__builtins__": __builtins__,
-            # Add some safe imports
+            # Standard library imports
+            "asyncio": __import__("asyncio"),
             "json": __import__("json"),
             "re": __import__("re"),
             "datetime": __import__("datetime"),
@@ -528,8 +414,13 @@ def programmatic_tool_caller(
             "functools": __import__("functools"),
         }
 
+        # Inject each tool as both async and sync functions
+        for tool_name in available_tools:
+            async_func, sync_func = _create_tool_function(agent, tool_name)
+            exec_namespace[tool_name] = async_func  # await tool_name(...)
+            exec_namespace[f"{tool_name}_sync"] = sync_func  # tool_name_sync(...)
+
         # Execute with output capture
-        start_time = datetime.now()
         output_capture = OutputCapture()
 
         console.print("[green]Executing code...[/]")
@@ -537,42 +428,24 @@ def programmatic_tool_caller(
         with output_capture:
             exec(code, exec_namespace)
 
-        execution_time = (datetime.now() - start_time).total_seconds()
         captured_output = output_capture.get_output()
 
-        # Get tool call history
-        call_history = tools_proxy.get_call_history()
-
-        # Build result summary
-        result_parts: List[str] = []
-
-        if captured_output.strip():
-            result_parts.append(f"Output:\n{captured_output}")
-
-        if call_history:
-            calls_summary = f"\nTool calls made: {len(call_history)}"
-            for i, call in enumerate(call_history, 1):
-                calls_summary += f"\n  {i}. {call['tool_name']}({call['input']}) -> {call.get('status', 'unknown')}"
-            result_parts.append(calls_summary)
-
-        result_parts.append(f"\nExecution time: {execution_time:.2f}s")
-
-        # Show success panel
-        success_msg = f"✓ Code executed successfully ({execution_time:.2f}s, {len(call_history)} tool calls)"
-        console.print(f"[bold green]{success_msg}[/]")
+        # Show success
+        console.print("[bold green]✓ Code executed successfully[/]")
 
         if captured_output.strip():
             console.print(
                 Panel(
                     captured_output,
-                    title="[bold green]Execution Output[/]",
+                    title="[bold green]Output[/]",
                     border_style="green",
                 )
             )
 
+        # Return ONLY the print() output - this is what goes to the agent's context
         return {
             "status": "success",
-            "content": [{"text": "\n".join(result_parts)}],
+            "content": [{"text": captured_output.strip() if captured_output.strip() else "(no output)"}],
         }
 
     except SyntaxError:
