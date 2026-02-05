@@ -56,9 +56,9 @@ agent.tool.manage_messages(action="compact", turns="0,1,2")  # specific turns
 agent.tool.manage_messages(action="clear")
 ```
 """
-import os
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
