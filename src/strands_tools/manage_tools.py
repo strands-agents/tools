@@ -532,17 +532,21 @@ def _sandbox_test(code: str) -> Dict[str, Any]:
         temp_path = f.name
 
     try:
+        # Use repr() to properly escape Windows paths (handles backslashes)
+        parent_path = repr(str(Path(temp_path).parent))
+        temp_path_repr = repr(temp_path)
+
         test_code = f'''
 import sys
-sys.path.insert(0, "{Path(temp_path).parent}")
+sys.path.insert(0, {parent_path})
 try:
     import ast
-    with open("{temp_path}") as f:
+    with open({temp_path_repr}) as f:
         ast.parse(f.read())
     print("SYNTAX_OK")
 
     import importlib.util
-    spec = importlib.util.spec_from_file_location("test_tool", "{temp_path}")
+    spec = importlib.util.spec_from_file_location("test_tool", {temp_path_repr})
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     print("IMPORT_OK")
