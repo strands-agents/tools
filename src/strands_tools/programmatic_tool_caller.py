@@ -170,7 +170,7 @@ def _execute_tool(
         raise RuntimeError(f"Failed to execute tool '{tool_name}': {e}") from e
 
 
-def _create_tool_function(agent: Any, tool_name: str) -> Any:
+def _create_tool_function(agent: Any, tool_name: str) -> tuple:
     """
     Create an async function wrapper for a tool.
 
@@ -188,7 +188,7 @@ def _create_tool_function(agent: Any, tool_name: str) -> Any:
     async def tool_function(**kwargs: Any) -> Any:
         """Async wrapper for tool execution."""
         # Run the synchronous tool execution in a thread pool to not block
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: _execute_tool(agent, tool_name, kwargs))
 
     # Also create a sync version for simpler use cases
