@@ -55,7 +55,6 @@ Tool calls made: 3
 ### 5. Security Features
 - Code validation for potentially dangerous patterns
 - User confirmation required (unless `BYPASS_TOOL_CONSENT=true`)
-- Optional tool filtering via `allowed_tools` parameter
 - Safe imports provided (json, re, datetime, math, etc.)
 
 ## Usage Example
@@ -88,21 +87,35 @@ result = agent.tool.programmatic_tool_caller(
 - **_validate_code function**: Validates code for security concerns
 
 ### Integration with Strands
-- Uses the `@tool` decorator for proper Strands integration
+- Uses the `@tool(context=True)` decorator to receive `tool_context`
+- Gets agent from `tool_context.agent` (proper Strands pattern)
 - Calls tools directly with keyword arguments (compatible with DecoratedFunctionTool)
 - Handles both string and dict return values from tools
+- Combines all text content blocks when tool returns multiple content items
 - Automatically excludes itself from available tools to prevent recursion
 
 ## Testing
 
-The PR includes comprehensive unit tests covering:
-- ToolProxy functionality (list, call, history, errors)
-- Code validation (dangerous patterns detection)
-- Tool execution (success, errors, result handling)
-- Full integration tests with real tools
-- Edge cases (empty code, only comments, exceptions)
+### Unit Tests (43 tests)
+- `TestOutputCapture`: stdout/stderr capture
+- `TestToolProxy`: tool listing, calling, history, errors
+- `TestValidateCode`: security pattern detection
+- `TestExecuteTool`: tool execution and result handling (including multiple content blocks)
+- `TestProgrammaticToolCaller`: main function tests
+- `TestIntegrationWithRealTools`: real tool integration tests
+- `TestEdgeCases`: empty code, exceptions, etc.
 
-**39 tests, all passing.**
+### Integration Tests (10 tests)
+- Simple calculation with tools
+- Multiple tool calls in one execution
+- Loops with tool calls
+- Conditional logic with tools
+- Chained tool results
+- Tool listing and info
+- Error handling
+- Module availability
+
+**53 tests total, all passing.**
 
 ## Checklist
 
@@ -114,10 +127,12 @@ The PR includes comprehensive unit tests covering:
 - [x] Integration tests included
 - [x] Linting passes (ruff check)
 - [x] Formatting passes (ruff format)
+- [x] Uses `tool_context` pattern (not `agent` parameter)
+- [x] Handles multiple content blocks in tool results
 
 ## Related Research
 
 This implementation draws inspiration from:
 - [Anthropic's Programmatic Tool Calling](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/programmatic-tool-calling)
 - [Advanced Tool Use announcement](https://www.anthropic.com/engineering/advanced-tool-use)
-- Existing Strands tools patterns (python_repl, use_agent)
+- Existing Strands tools patterns (python_repl, use_agent, think)
