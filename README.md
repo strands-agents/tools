@@ -111,7 +111,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) that combines neural and keyword search for optimal results |
 | exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
-| programmatic_tool_caller* | `agent.tool.programmatic_tool_caller(code="result = tools.calculator(expression='2+2'); print(result)")` | Execute Python code with access to agent tools as callable functions, enabling complex multi-tool orchestration |
+| programmatic_tool_caller* | `agent.tool.programmatic_tool_caller(code="result = calculator_sync(expression='2+2'); print(result)")` | Execute Python code with access to agent tools as callable async/sync functions, enabling complex multi-tool orchestration |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
@@ -423,20 +423,25 @@ agent = Agent(tools=[programmatic_tool_caller, calculator, file_read])
 # Execute Python code that calls other tools programmatically
 result = agent.tool.programmatic_tool_caller(
     code="""
-# Tools are available as callable functions via 'tools' namespace
-result = tools.calculator(expression="2 + 2")
-print(f"Calculator result: {result}")
+import asyncio
 
-# Complex orchestration with loops
-total = 0
-for i in range(1, 6):
-    square = tools.calculator(expression=f"{i} ** 2")
-    total += int(square)
-    print(f"{i}² = {square}")
-print(f"Sum of squares: {total}")
+async def main():
+    # Tools are available as async functions
+    result = await calculator(expression="2 + 2")
+    print(f"Calculator result: {result}")
 
-# List available tools
-print(f"Available tools: {tools.list_tools()}")
+    # Complex orchestration with loops
+    total = 0
+    for i in range(1, 6):
+        square = await calculator(expression=f"{i} ** 2")
+        total += int(square)
+        print(f"{i}² = {square}")
+    print(f"Sum of squares: {total}")
+
+asyncio.run(main())
+
+# Or use sync versions for simpler cases:
+# result = calculator_sync(expression="2 + 2")
 """
 )
 ```
