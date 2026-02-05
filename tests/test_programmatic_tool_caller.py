@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent, tool
+from strands.types.tools import ToolContext
 
 from strands_tools.programmatic_tool_caller import (
     OutputCapture,
@@ -28,7 +29,6 @@ def mock_agent():
         "description": "Evaluates mathematical expressions",
         "inputSchema": {"json": {"properties": {"expression": {"type": "string"}}}},
     }
-    mock_calculator.__call__ = MagicMock(return_value={"status": "success", "content": [{"text": "4"}]})
 
     mock_file_read = MagicMock()
     mock_file_read.tool_spec = {
@@ -36,7 +36,6 @@ def mock_agent():
         "description": "Reads file content",
         "inputSchema": {"json": {"properties": {"path": {"type": "string"}}}},
     }
-    mock_file_read.__call__ = MagicMock(return_value={"status": "success", "content": [{"text": "file content"}]})
 
     agent.tool_registry.registry = {
         "calculator": mock_calculator,
@@ -45,6 +44,14 @@ def mock_agent():
     }
 
     return agent
+
+
+@pytest.fixture
+def mock_tool_context(mock_agent):
+    """Create a mock tool context with the mock agent."""
+    context = MagicMock(spec=ToolContext)
+    context.agent = mock_agent
+    return context
 
 
 @pytest.fixture
@@ -104,14 +111,6 @@ class TestToolProxy:
         assert "calculator" in tools
         assert "file_read" in tools
         assert "programmatic_tool_caller" not in tools  # Should be excluded
-
-    def test_list_tools_with_filter(self, mock_agent):
-        """Test listing available tools with filter."""
-        callback = MagicMock(return_value="result")
-        proxy = ToolProxy(mock_agent.tool_registry, callback, allowed_tools=["calculator"])
-
-        tools = proxy.list_tools()
-        assert tools == ["calculator"]
 
     def test_call_tool_success(self, mock_agent):
         """Test calling a tool successfully."""
@@ -270,6 +269,17 @@ class TestExecuteTool:
         result = _execute_tool(mock_agent, "calculator", {"expression": "6*7"})
         assert result == "42"
 
+    def test_execute_tool_dict_result_with_multiple_content(self, mock_agent):
+        """Test handling of dict result with multiple content blocks."""
+        mock_agent.tool_registry.registry["calculator"].return_value = {
+            "status": "success",
+            "content": [{"text": "First result"}, {"text": "Second result"}, {"text": "Third result"}],
+        }
+        result = _execute_tool(mock_agent, "calculator", {"expression": "multi"})
+        assert "First result" in result
+        assert "Second result" in result
+        assert "Third result" in result
+
     def test_execute_tool_direct_string_result(self, mock_agent):
         """Test handling of direct string result."""
         mock_agent.tool_registry.registry["calculator"].return_value = "direct result"
@@ -280,79 +290,76 @@ class TestExecuteTool:
 class TestProgrammaticToolCaller:
     """Test the main programmatic_tool_caller function."""
 
-    def test_basic_execution(self, mock_agent, mock_console):
+    def test_basic_execution(self, mock_tool_context, mock_console):
         """Test basic code execution."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code='print("Hello, World!")',
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
         assert "Hello, World!" in result["content"][0]["text"]
 
-    def test_tool_call_in_code(self, mock_agent, mock_console):
+    def test_tool_call_in_code(self, mock_tool_context, mock_console):
         """Test calling a tool from within the code."""
         # Setup mock to return when called
-        mock_agent.tool_registry.registry["calculator"].return_value = {
-            "status": "success",
-            "content": [{"text": "4"}],
-        }
+        mock_tool_context.agent.tool_registry.registry["calculator"].return_value = "4"
 
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code='result = tools.calculator(expression="2+2"); print(f"Result: {result}")',
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
 
-    def test_no_agent_error(self, mock_console):
-        """Test that missing agent returns error."""
+    def test_no_tool_context_error(self, mock_console):
+        """Test that missing tool_context returns error."""
         result = programmatic_tool_caller(
             code='print("test")',
-            agent=None,
+            tool_context=None,
         )
 
         assert result["status"] == "error"
         assert "No agent context" in result["content"][0]["text"]
 
-    def test_syntax_error(self, mock_agent, mock_console):
+    def test_no_agent_in_context_error(self, mock_console):
+        """Test that missing agent in context returns error."""
+        mock_context = MagicMock(spec=ToolContext)
+        mock_context.agent = None
+
+        result = programmatic_tool_caller(
+            code='print("test")',
+            tool_context=mock_context,
+        )
+
+        assert result["status"] == "error"
+        assert "No agent context" in result["content"][0]["text"]
+
+    def test_syntax_error(self, mock_tool_context, mock_console):
         """Test handling of syntax errors."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code="this is not valid python",
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "error"
         assert "Syntax error" in result["content"][0]["text"]
 
-    def test_runtime_error(self, mock_agent, mock_console):
+    def test_runtime_error(self, mock_tool_context, mock_console):
         """Test handling of runtime errors."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code="1/0",  # ZeroDivisionError
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "error"
         assert "ZeroDivisionError" in result["content"][0]["text"]
 
-    def test_allowed_tools_filter(self, mock_agent, mock_console):
-        """Test that allowed_tools filter works."""
-        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
-            # Try to access a tool that's not in allowed list
-            result = programmatic_tool_caller(
-                code="tools.file_read(path='test.txt')",
-                allowed_tools=["calculator"],  # Only calculator allowed
-                agent=mock_agent,
-            )
-
-        assert result["status"] == "error"
-        assert "not available" in result["content"][0]["text"]
-
-    def test_user_cancellation(self, mock_agent, mock_console):
+    def test_user_cancellation(self, mock_tool_context, mock_console):
         """Test user cancellation of execution."""
         with (
             patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false"}),
@@ -363,13 +370,13 @@ class TestProgrammaticToolCaller:
         ):
             result = programmatic_tool_caller(
                 code='print("Should not run")',
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "error"
         assert "cancelled" in result["content"][0]["text"]
 
-    def test_execution_with_imports(self, mock_agent, mock_console):
+    def test_execution_with_imports(self, mock_tool_context, mock_console):
         """Test that allowed imports are available."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
@@ -379,19 +386,16 @@ import math
 data = json.dumps({"pi": math.pi})
 print(data)
 """,
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
         assert "pi" in result["content"][0]["text"]
 
-    def test_tool_call_history_tracking(self, mock_agent, mock_console):
+    def test_tool_call_history_tracking(self, mock_tool_context, mock_console):
         """Test that tool calls are tracked and reported."""
         # Setup mock to return when called
-        mock_agent.tool_registry.registry["calculator"].return_value = {
-            "status": "success",
-            "content": [{"text": "10"}],
-        }
+        mock_tool_context.agent.tool_registry.registry["calculator"].return_value = "10"
 
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
@@ -400,7 +404,7 @@ for i in range(3):
     result = tools.calculator(expression=f"{i} * 2")
 print("Done")
 """,
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
@@ -408,7 +412,7 @@ print("Done")
         assert "Tool calls made:" in result["content"][0]["text"]
 
 
-class TestIntegration:
+class TestIntegrationWithRealTools:
     """Integration tests with real tools."""
 
     @pytest.fixture
@@ -440,7 +444,19 @@ class TestIntegration:
             """
             return text.upper()
 
-        return Agent(tools=[programmatic_tool_caller, simple_calculator, string_tool])
+        @tool
+        def list_numbers(count: int) -> str:
+            """Generate a list of numbers.
+
+            Args:
+                count: How many numbers to generate.
+
+            Returns:
+                Comma-separated numbers.
+            """
+            return ", ".join(str(i) for i in range(count))
+
+        return Agent(tools=[programmatic_tool_caller, simple_calculator, string_tool, list_numbers])
 
     def test_integration_simple_tool_call(self, real_agent):
         """Test calling a real tool through programmatic execution."""
@@ -499,31 +515,99 @@ print(f"Available tools: {available}")
         # programmatic_tool_caller should be excluded
         assert "programmatic_tool_caller" not in content
 
+    def test_integration_loop_with_tools(self, real_agent):
+        """Test loop with multiple tool calls."""
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            result = real_agent.tool.programmatic_tool_caller(
+                code="""
+total = 0
+for i in range(1, 6):
+    square = tools.simple_calculator(expression=f"{i} ** 2")
+    total += int(square)
+    print(f"{i}² = {square}")
+print(f"Sum of squares: {total}")
+"""
+            )
+
+        if isinstance(result, dict) and "content" in result:
+            content = result["content"][0]["text"]
+        else:
+            content = str(result)
+
+        # 1² + 2² + 3² + 4² + 5² = 1 + 4 + 9 + 16 + 25 = 55
+        assert "55" in content
+        assert "Tool calls made: 5" in content
+
+    def test_integration_chained_tools(self, real_agent):
+        """Test chaining tool results."""
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            result = real_agent.tool.programmatic_tool_caller(
+                code="""
+# Get a list of numbers
+numbers = tools.list_numbers(count=3)
+print(f"Numbers: {numbers}")
+
+# Make them uppercase (just for fun)
+upper = tools.string_tool(text=numbers)
+print(f"Uppercase: {upper}")
+"""
+            )
+
+        if isinstance(result, dict) and "content" in result:
+            content = result["content"][0]["text"]
+        else:
+            content = str(result)
+
+        assert "0, 1, 2" in content
+        assert "0, 1, 2".upper() in content
+
+    def test_integration_conditional_logic(self, real_agent):
+        """Test conditional logic with tools."""
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            result = real_agent.tool.programmatic_tool_caller(
+                code="""
+value = int(tools.simple_calculator(expression="10 + 5"))
+if value > 10:
+    msg = tools.string_tool(text="greater")
+else:
+    msg = tools.string_tool(text="smaller")
+print(f"Value {value} is {msg} than 10")
+"""
+            )
+
+        if isinstance(result, dict) and "content" in result:
+            content = result["content"][0]["text"]
+        else:
+            content = str(result)
+
+        assert "15" in content
+        assert "GREATER" in content
+
 
 class TestEdgeCases:
     """Test edge cases and error scenarios."""
 
-    def test_empty_code(self, mock_agent, mock_console):
+    def test_empty_code(self, mock_tool_context, mock_console):
         """Test execution of empty code."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code="",
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
 
-    def test_only_comments(self, mock_agent, mock_console):
+    def test_only_comments(self, mock_tool_context, mock_console):
         """Test execution of code with only comments."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code="# This is just a comment\n# Another comment",
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
 
-    def test_multiline_string_output(self, mock_agent, mock_console):
+    def test_multiline_string_output(self, mock_tool_context, mock_console):
         """Test capturing multiline output."""
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
@@ -532,7 +616,7 @@ print("Line 1")
 print("Line 2")
 print("Line 3")
 """,
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "success"
@@ -541,15 +625,41 @@ print("Line 3")
         assert "Line 2" in content
         assert "Line 3" in content
 
-    def test_exception_in_tool(self, mock_agent, mock_console):
+    def test_exception_in_tool(self, mock_tool_context, mock_console):
         """Test handling of exception raised by a tool."""
-        mock_agent.tool_registry.registry["calculator"].side_effect = Exception("Tool crashed")
+        mock_tool_context.agent.tool_registry.registry["calculator"].side_effect = Exception("Tool crashed")
 
         with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
             result = programmatic_tool_caller(
                 code='tools.calculator(expression="crash")',
-                agent=mock_agent,
+                tool_context=mock_tool_context,
             )
 
         assert result["status"] == "error"
         assert "Tool crashed" in result["content"][0]["text"] or "Execution error" in result["content"][0]["text"]
+
+    def test_multiple_content_blocks_combined(self, mock_tool_context, mock_console):
+        """Test that multiple content blocks are combined properly."""
+        mock_tool_context.agent.tool_registry.registry["file_read"].return_value = {
+            "status": "success",
+            "content": [
+                {"text": "Part 1: Header info"},
+                {"text": "Part 2: Main content"},
+                {"text": "Part 3: Footer info"},
+            ],
+        }
+
+        with patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"}):
+            result = programmatic_tool_caller(
+                code="""
+result = tools.file_read(path="test.txt")
+print(result)
+""",
+                tool_context=mock_tool_context,
+            )
+
+        assert result["status"] == "success"
+        content = result["content"][0]["text"]
+        assert "Part 1" in content
+        assert "Part 2" in content
+        assert "Part 3" in content

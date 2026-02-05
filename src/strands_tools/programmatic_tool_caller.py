@@ -56,6 +56,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from strands import tool
+from strands.types.tools import ToolContext
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
@@ -83,7 +84,6 @@ class ToolProxy:
         self,
         tool_registry: Any,
         callback: Callable[[str, Dict[str, Any]], Any],
-        allowed_tools: Optional[List[str]] = None,
     ):
         """
         Initialize the ToolProxy.
@@ -92,21 +92,13 @@ class ToolProxy:
             tool_registry: The agent's tool registry containing available tools.
             callback: Function to execute tool calls. Should accept tool name and
                      input dict, returning the tool result.
-            allowed_tools: Optional list of tool names to expose. If None, all
-                          registered tools are available.
         """
         self._tool_registry = tool_registry
         self._callback = callback
         self._tool_calls: List[Dict[str, Any]] = []
 
-        # Determine which tools are available
-        if allowed_tools is not None:
-            self._available_tools = set(allowed_tools) & set(tool_registry.registry.keys())
-        else:
-            # Exclude the programmatic_tool_caller itself to avoid recursion
-            self._available_tools = {
-                name for name in tool_registry.registry.keys() if name != "programmatic_tool_caller"
-            }
+        # Exclude the programmatic_tool_caller itself to avoid recursion
+        self._available_tools = {name for name in tool_registry.registry.keys() if name != "programmatic_tool_caller"}
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
         """
@@ -131,7 +123,7 @@ class ToolProxy:
         def tool_caller(**kwargs: Any) -> Any:
             """Execute the tool with the given arguments."""
             # Record the tool call
-            call_record = {
+            call_record: Dict[str, Any] = {
                 "tool_name": name,
                 "input": kwargs,
                 "timestamp": datetime.now().isoformat(),
@@ -263,7 +255,7 @@ def _execute_tool(
         else:
             raise RuntimeError(f"Tool '{tool_name}' is not callable")
 
-        # Handle the result
+        # Handle the result - could be various types
         if isinstance(result, dict):
             # Check for error status in dict result
             if result.get("status") == "error":
@@ -271,12 +263,16 @@ def _execute_tool(
                 error_text = error_content[0].get("text", "Unknown error") if error_content else "Unknown error"
                 raise RuntimeError(f"Tool error: {error_text}")
 
-            # Extract text content if available
+            # Extract all text content if available
             content = result.get("content", [])
-            if content and isinstance(content, list) and len(content) > 0:
-                first_content = content[0]
-                if isinstance(first_content, dict) and "text" in first_content:
-                    return first_content["text"]
+            if content and isinstance(content, list):
+                # Combine all text content blocks
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict) and "text" in item:
+                        text_parts.append(item["text"])
+                if text_parts:
+                    return "\n".join(text_parts)
             return str(result)
 
         # Return non-dict results directly (could be string, int, etc.)
@@ -340,12 +336,11 @@ def _validate_code(code: str) -> List[str]:
     return warnings
 
 
-@tool
+@tool(context=True)
 def programmatic_tool_caller(
     code: str,
-    allowed_tools: Optional[List[str]] = None,
     timeout: int = 30,
-    agent: Optional[Any] = None,
+    tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
     """
     Execute Python code with access to agent tools as callable functions.
@@ -393,10 +388,8 @@ def programmatic_tool_caller(
     Args:
         code: Python code to execute. The code has access to a `tools` object
             that provides callable methods for each available tool.
-        allowed_tools: Optional list of tool names to make available. If None,
-            all tools except programmatic_tool_caller are available.
         timeout: Maximum execution time in seconds. Default is 30.
-        agent: The Strands agent instance (automatically injected).
+        tool_context: The Strands tool context (automatically injected via @tool decorator).
 
     Returns:
         Dict with status and content:
@@ -426,8 +419,7 @@ def programmatic_tool_caller(
     ...     files = tools.file_read(path=".", mode="find")
     ...     for f in files.split("\\n")[:5]:
     ...         print(f"File: {f}")
-    ...     ''',
-    ...     allowed_tools=["file_read"]
+    ...     '''
     ... )
     """
     console = console_util.create()
@@ -436,12 +428,14 @@ def programmatic_tool_caller(
     bypass_consent = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
     try:
-        # Validate agent is available
-        if agent is None:
+        # Get agent from tool_context
+        if tool_context is None or tool_context.agent is None:
             return {
                 "status": "error",
                 "content": [{"text": "No agent context available. This tool requires an agent."}],
             }
+
+        agent = tool_context.agent
 
         # Validate code
         code_warnings = _validate_code(code)
@@ -455,10 +449,8 @@ def programmatic_tool_caller(
             )
         )
 
-        # Show available tools
+        # Show available tools (excluding self)
         available_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
-        if allowed_tools:
-            available_tools = available_tools & set(allowed_tools)
 
         tools_table = Table(show_header=True, header_style="bold cyan", box=box.SIMPLE)
         tools_table.add_column("Available Tools", style="green")
@@ -520,7 +512,6 @@ def programmatic_tool_caller(
         tools_proxy = ToolProxy(
             tool_registry=agent.tool_registry,
             callback=tool_callback,
-            allowed_tools=list(allowed_tools) if allowed_tools else None,
         )
 
         # Create the execution namespace
