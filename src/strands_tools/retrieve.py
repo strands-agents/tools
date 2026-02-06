@@ -226,14 +226,26 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
 
     formatted = []
     for result in results:
-        # Extract document location - handle both s3Location and customDocumentLocation
+        # Extract document location - handle all RetrievalResultLocation types
+        # Ref: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalResultLocation.html
         location = result.get("location", {})
         doc_id = "Unknown"
         if "customDocumentLocation" in location:
             doc_id = location["customDocumentLocation"].get("id", "Unknown")
         elif "s3Location" in location:
-            # Extract meaningful part from S3 URI
             doc_id = location["s3Location"].get("uri", "")
+        elif "webLocation" in location:
+            doc_id = location["webLocation"].get("url", "")
+        elif "confluenceLocation" in location:
+            doc_id = location["confluenceLocation"].get("url", "")
+        elif "salesforceLocation" in location:
+            doc_id = location["salesforceLocation"].get("url", "")
+        elif "sharePointLocation" in location:
+            doc_id = location["sharePointLocation"].get("url", "")
+        elif "kendraDocumentLocation" in location:
+            doc_id = location["kendraDocumentLocation"].get("uri", "")
+        elif "sqlLocation" in location:
+            doc_id = location["sqlLocation"].get("query", "SQL Query")
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
