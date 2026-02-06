@@ -49,17 +49,20 @@ class TestExecuteTool:
     """Tests for _execute_tool function."""
 
     def test_executes_callable_tool(self):
-        mock_tool = MagicMock(return_value={"status": "success", "content": [{"text": "result"}]})
+        mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "result"}]})
         mock_agent = MagicMock()
-        mock_agent.tool_registry.registry = {"test_tool": mock_tool}
+        # Mock agent.tool.test_tool() which is what _execute_tool now uses
+        mock_agent.tool = MagicMock()
+        mock_agent.tool.test_tool = mock_tool_func
 
         result = _execute_tool(mock_agent, "test_tool", {"arg": "value"})
-        mock_tool.assert_called_once_with(arg="value")
+        mock_tool_func.assert_called_once_with(record_direct_tool_call=False, arg="value")
         assert result == "result"
 
     def test_raises_error_for_missing_tool(self):
         mock_agent = MagicMock()
-        mock_agent.tool_registry.registry = {}
+        # Simulate AttributeError when tool doesn't exist
+        mock_agent.tool = MagicMock(spec=[])  # Empty spec means no attributes
 
         with pytest.raises(RuntimeError, match="not found"):
             _execute_tool(mock_agent, "missing", {})
@@ -75,9 +78,11 @@ class TestCreateAsyncToolFunction:
     def test_creates_async_function(self):
         import asyncio
 
-        mock_tool = MagicMock(return_value={"status": "success", "content": [{"text": "async result"}]})
+        mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "async result"}]})
         mock_agent = MagicMock()
-        mock_agent.tool_registry.registry = {"test_tool": mock_tool}
+        # Mock agent.tool.test_tool() which is what _execute_tool now uses
+        mock_agent.tool = MagicMock()
+        mock_agent.tool.test_tool = mock_tool_func
 
         async_func = _create_async_tool_function(mock_agent, "test_tool")
         assert asyncio.iscoroutinefunction(async_func)
@@ -171,9 +176,12 @@ class TestProgrammaticToolCaller:
     @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
     def test_async_tool_execution(self, mock_console, mock_input):
         mock_console.create.return_value = MagicMock()
-        mock_tool = MagicMock(return_value={"status": "success", "content": [{"text": "42"}]})
+        mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "42"}]})
         mock_context = MagicMock()
-        mock_context.agent.tool_registry.registry = {"calculator": mock_tool}
+        mock_context.agent.tool_registry.registry = {"calculator": MagicMock()}
+        # Mock agent.tool.calculator() which is what _execute_tool now uses
+        mock_context.agent.tool = MagicMock()
+        mock_context.agent.tool.calculator = mock_tool_func
 
         result = programmatic_tool_caller(
             code='result = await calculator(expression="6*7")\nprint(f"Result: {result}")',
@@ -188,11 +196,14 @@ class TestProgrammaticToolCaller:
     def test_asyncio_gather_works(self, mock_console, mock_input):
         mock_console.create.return_value = MagicMock()
 
-        def mock_calc(**kwargs):
+        def mock_calc(record_direct_tool_call=False, **kwargs):
             return {"status": "success", "content": [{"text": str(eval(kwargs["expression"]))}]}
 
         mock_context = MagicMock()
-        mock_context.agent.tool_registry.registry = {"calculator": mock_calc}
+        mock_context.agent.tool_registry.registry = {"calculator": MagicMock()}
+        # Mock agent.tool.calculator() which is what _execute_tool now uses
+        mock_context.agent.tool = MagicMock()
+        mock_context.agent.tool.calculator = mock_calc
 
         result = programmatic_tool_caller(
             code="""
@@ -213,11 +224,15 @@ print(f"Results: {results}")
     @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true", "PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS": "calculator"})
     def test_respects_allowed_tools_env_var(self, mock_console, mock_input):
         mock_console.create.return_value = MagicMock()
+        mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "4"}]})
         mock_context = MagicMock()
         mock_context.agent.tool_registry.registry = {
-            "calculator": MagicMock(return_value={"status": "success", "content": [{"text": "4"}]}),
+            "calculator": MagicMock(),
             "shell": MagicMock(),
         }
+        # Mock agent.tool.calculator() which is what _execute_tool now uses
+        mock_context.agent.tool = MagicMock()
+        mock_context.agent.tool.calculator = mock_tool_func
 
         # Should work - calculator is allowed
         result = programmatic_tool_caller(

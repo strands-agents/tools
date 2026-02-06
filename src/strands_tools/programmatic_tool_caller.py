@@ -141,19 +141,18 @@ class LocalAsyncExecutor(Executor):
 
 
 def _execute_tool(agent: Any, tool_name: str, tool_input: Dict[str, Any]) -> Any:
-    """Execute a tool through the agent's tool registry."""
+    """Execute a tool through the agent's tool caller.
+
+    Uses agent.tool.<name>() which properly handles all tool types including MCP tools.
+    """
     if agent is None:
         raise RuntimeError("No agent available for tool execution")
 
-    tool_impl = agent.tool_registry.registry.get(tool_name)
-    if tool_impl is None:
-        raise RuntimeError(f"Tool '{tool_name}' not found in registry")
-
     try:
-        if callable(tool_impl):
-            result = tool_impl(**tool_input)
-        else:
-            raise RuntimeError(f"Tool '{tool_name}' is not callable")
+        # Use agent.tool.<name>() which works for ALL tool types (including MCP tools)
+        # record_direct_tool_call=False prevents polluting message history during programmatic calls
+        tool_func = getattr(agent.tool, tool_name)
+        result = tool_func(record_direct_tool_call=False, **tool_input)
 
         if isinstance(result, dict):
             if result.get("status") == "error":
@@ -170,6 +169,8 @@ def _execute_tool(agent: Any, tool_name: str, tool_input: Dict[str, Any]) -> Any
 
         return result
 
+    except AttributeError as e:
+        raise RuntimeError(f"Tool '{tool_name}' not found in registry") from e
     except RuntimeError:
         raise
     except Exception as e:
