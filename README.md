@@ -147,6 +147,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
+| get_aws_service_commands | `agent.tool.get_aws_service_commands(service="s3")` | Retrieve list of available AWS CLI commands for a given service from official documentation |
+| get_aws_command_details | `agent.tool.get_aws_command_details(service="s3", command="ls")` | Get detailed documentation for a specific AWS CLI command including syntax, options, and examples |
 
 \* *These tools do not work on windows*
 
@@ -958,6 +960,22 @@ result = agent.tool.mongodb_memory(
     collection_name="user_memories",
     namespace="user_123"
 )
+```
+
+### AWS CLI Documentation
+
+```python
+from strands import Agent
+from strands_tools.get_aws_service_commands import get_aws_service_commands
+from strands_tools.get_aws_command_details import get_aws_command_details
+
+agent = Agent(tools=[get_aws_service_commands, get_aws_command_details])
+
+# Get all available commands for S3 service
+commands = agent.tool.get_aws_service_commands(service="s3")
+
+# Get detailed documentation for a specific command
+details = agent.tool.get_aws_command_details(service="s3", command="ls")
 ```
 
 ## 🌍 Environment Variables Configuration
