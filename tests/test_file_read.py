@@ -324,3 +324,31 @@ def test_file_read_error_message_brackets():
     result = file_read.file_read(tool=tool_use)
 
     assert result["status"] == "error"
+
+
+def test_search_no_results_found_exception(temp_test_file):
+    """Test that NoResultsFound exception is raised when search finds no matches."""
+    console = Console(file=io.StringIO())
+    
+    with pytest.raises(file_read.NoResultsFound) as exc_info:
+        file_read.search_file(console, temp_test_file, "NonExistentPattern")
+    
+    assert "No matches found" in str(exc_info.value)
+    assert "NonExistentPattern" in str(exc_info.value)
+
+
+def test_search_no_results_via_tool(temp_test_file):
+    """Test that search mode handles NoResultsFound exception gracefully via tool interface."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "path": temp_test_file,
+            "mode": "search",
+            "search_pattern": "PatternThatDoesNotExist",
+        },
+    }
+    
+    result = file_read.file_read(tool=tool_use)
+    
+    assert result["status"] == "error"
+    assert "No matches found" in result["content"][0]["text"] or "Error processing file" in result["content"][0]["text"]
