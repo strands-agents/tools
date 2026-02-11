@@ -42,6 +42,7 @@ For more information about Agent Skills:
 import logging
 import os
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -54,6 +55,12 @@ logger = logging.getLogger(__name__)
 
 # Maximum file size for resources (10MB)
 MAX_RESOURCE_SIZE = 10 * 1024 * 1024
+
+_EXPERIMENTAL_WARNING = (
+    "⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. "
+    "The recommended path for production use will be the SDK's native skills feature (coming soon). "
+    "APIs and behavior may change without notice."
+)
 
 
 @dataclass
@@ -223,7 +230,7 @@ def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
             "content": [{"text": f"No skills found in {skills_dir}"}],
         }
 
-    lines = [f"Available skills ({len(cache.skills)}):\n"]
+    lines = [_EXPERIMENTAL_WARNING, "", f"Available skills ({len(cache.skills)}):\n"]
     for name, metadata in sorted(cache.skills.items()):
         lines.append(f"  • {name}")
         desc = metadata.description[:100] + "..." if len(metadata.description) > 100 else metadata.description
@@ -254,7 +261,9 @@ def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
         metadata = cache.skills[skill_name]
         instructions = _load_skill_instructions(metadata.path)
 
-        result = f"""## Skill: {metadata.name}
+        result = f"""{_EXPERIMENTAL_WARNING}
+
+## Skill: {metadata.name}
 
 {metadata.description}
 
@@ -338,11 +347,59 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
+def _action_import(skills_dir: str, import_dir: str = None, **kwargs) -> Dict[str, Any]:
+    """Import skills from an additional directory."""
+    if not import_dir:
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        "import_dir parameter is required for import action. "
+                        "Provide the path to a skills directory to import from."
+                    )
+                }
+            ],
+        }
+
+    import_path = Path(import_dir).expanduser().resolve()
+
+    if not import_path.exists() or not import_path.is_dir():
+        return {
+            "status": "error",
+            "content": [{"text": f"Import directory not found or not a directory: {import_dir}"}],
+        }
+
+    cache = _get_or_create_cache(skills_dir)
+    new_skills = _discover_skills(import_path)
+
+    imported = []
+    skipped = []
+
+    for name, metadata in new_skills.items():
+        if name in cache.skills:
+            skipped.append(name)
+            logger.warning(f"Skill '{name}' already exists, skipping import")
+        else:
+            cache.skills[name] = metadata
+            imported.append(name)
+
+    lines = [f"Imported {len(imported)} skill(s) from {import_dir}:"]
+    if imported:
+        for name in sorted(imported):
+            lines.append(f"  + {name}")
+    if skipped:
+        lines.append(f"\nSkipped {len(skipped)} (already exist): {', '.join(sorted(skipped))}")
+
+    return {"status": "success", "content": [{"text": "\n".join(lines)}]}
+
+
 _ACTIONS = {
     "list": _action_list,
     "use": _action_use,
     "get_resource": _action_get_resource,
     "list_resources": _action_list_resources,
+    "import": _action_import,
 }
 
 
@@ -400,12 +457,17 @@ def get_skills_prompt(skills_dir: Optional[str] = None) -> str:
 
 @tool
 def skills(
-    action: Literal["list", "use", "get_resource", "list_resources"],
+    action: Literal["list", "use", "get_resource", "list_resources", "import"],
     skill_name: Optional[str] = None,
     resource_path: Optional[str] = None,
+    import_dir: Optional[str] = None,
     STRANDS_SKILLS_DIR: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Load and use Agent Skills - modular packages of specialized instructions.
+    """⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. \
+The recommended path for production use will be the SDK's native skills feature (coming soon). \
+APIs and behavior may change without notice.
+
+    Load and use Agent Skills - modular packages of specialized instructions.
 
     Skills are folders containing SKILL.md files with instructions that help you
     perform specific tasks effectively. Skills are auto-discovered from STRANDS_SKILLS_DIR.
@@ -415,11 +477,13 @@ def skills(
     - use: Load a skill's full instructions (returns them for you to follow)
     - get_resource: Load a specific file from a skill (scripts, references, etc.)
     - list_resources: List all files available in a skill
+    - import: Dynamically import skills from an additional directory at runtime
 
     Args:
         action: The action to perform
         skill_name: Name of the skill (required for use, get_resource, list_resources)
         resource_path: Path to resource file (required for get_resource)
+        import_dir: Path to directory to import skills from (required for import action)
         STRANDS_SKILLS_DIR: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
 
     Returns:
@@ -434,7 +498,16 @@ def skills(
 
         # Get a resource file
         skills(action="get_resource", skill_name="code-reviewer", resource_path="scripts/analyze.py")
+
+        # Import skills from another directory
+        skills(action="import", import_dir="/path/to/more/skills")
     """
+    warnings.warn(
+        "The skills tool is experimental. The recommended path for production use will be "
+        "the SDK's native skills feature. APIs and behavior may change without notice.",
+        stacklevel=2,
+    )
+
     skills_dir = STRANDS_SKILLS_DIR or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
 
     if action not in _ACTIONS:
@@ -445,6 +518,7 @@ def skills(
             skills_dir=skills_dir,
             skill_name=skill_name,
             resource_path=resource_path,
+            import_dir=import_dir,
         )
     except Exception as e:
         logger.error(f"Error in skills tool: {e}", exc_info=True)

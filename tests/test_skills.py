@@ -7,7 +7,11 @@ Tests cover:
 - Resource loading
 - Error handling
 - get_skills_prompt helper
+- Import action
+- Experimental warning
 """
+
+import warnings
 
 import pytest
 from strands import Agent
@@ -333,3 +337,128 @@ class TestGetSkillsPrompt:
             cache_size_after_prompt = len(_cache)
 
         assert cache_size_after_tool == cache_size_after_prompt
+
+
+class TestImportAction:
+    """Tests for the import action."""
+
+    @pytest.fixture
+    def import_dir(self, tmp_path):
+        """Create a second skills directory with skills to import."""
+        import_path = tmp_path / "import-skills"
+        import_path.mkdir()
+
+        # Create a new skill in the import directory
+        test_writer = import_path / "test-writer"
+        test_writer.mkdir()
+        (test_writer / "SKILL.md").write_text("""---
+name: test-writer
+description: Writes and manages test cases for code quality.
+---
+
+# Test Writer Skill
+
+## Overview
+
+This skill helps write comprehensive test cases.
+""")
+
+        return import_path
+
+    def test_import_skills(self, agent, skills_dir, import_dir):
+        """Test importing skills from another directory."""
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        result = agent.tool.skills(
+            action="import",
+            import_dir=str(import_dir),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Imported 1 skill(s)" in text
+        assert "test-writer" in text
+
+    def test_import_with_conflicts(self, agent, skills_dir, import_dir):
+        """Test importing skills that already exist (conflicts)."""
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+        # Create a conflicting skill in import_dir
+        conflict = import_dir / "code-reviewer"
+        conflict.mkdir()
+        (conflict / "SKILL.md").write_text("""---
+name: code-reviewer
+description: A duplicate code reviewer skill.
+---
+
+# Duplicate
+""")
+
+        # First populate cache by listing
+        agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+
+        result = agent.tool.skills(
+            action="import",
+            import_dir=str(import_dir),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Skipped 1" in text
+        assert "code-reviewer" in text
+
+    def test_import_nonexistent_directory(self, agent, skills_dir, tmp_path):
+        """Test importing from a non-existent directory."""
+        nonexistent = str(tmp_path / "nonexistent")
+
+        result = agent.tool.skills(
+            action="import",
+            import_dir=nonexistent,
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        text = extract_text(result)
+        assert "not found" in text.lower() or "not a directory" in text.lower()
+
+    def test_import_empty_import_dir(self, agent, skills_dir):
+        """Test importing with empty import_dir parameter."""
+        result = agent.tool.skills(
+            action="import",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        text = extract_text(result)
+        assert "import_dir" in text.lower()
+
+
+class TestExperimentalWarning:
+    """Tests for the experimental warning."""
+
+    def test_warning_emitted(self, agent, skills_dir):
+        """Test that experimental warning is emitted when using the skills tool."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+
+            skill_warnings = [x for x in w if "experimental" in str(x.message).lower()]
+            assert len(skill_warnings) >= 1, "Expected at least one experimental warning"
+
+    def test_warning_message_content(self, agent, skills_dir):
+        """Test that the experimental warning has the expected content."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+
+            skill_warnings = [x for x in w if "experimental" in str(x.message).lower()]
+            assert len(skill_warnings) >= 1
+            assert "native skills feature" in str(skill_warnings[0].message).lower()

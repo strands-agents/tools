@@ -133,7 +133,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
-| skills | `agent.tool.skills(action="use", skill_name="code-reviewer")` | Load and use Agent Skills - modular packages of specialized instructions following the AgentSkills.io specification |
+| skills | `agent.tool.skills(action="use", skill_name="code-reviewer")` | ⚠️ **Experimental**: Load and use Agent Skills - modular packages of specialized instructions following the AgentSkills.io specification. The recommended path for production use will be the SDK's native skills feature (coming soon). |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
@@ -790,6 +790,8 @@ latest_news = agent.tool.rss(
 
 ### Agent Skills
 
+> ⚠️ **Experimental**: This tool is an early experiment for working with Agent Skills. The recommended path for production use will be the SDK's native skills feature (coming soon). APIs and behavior may change without notice.
+
 ```python
 from strands import Agent
 from strands_tools import skills
@@ -812,6 +814,12 @@ result = agent.tool.skills(
     action="get_resource",
     skill_name="code-reviewer",
     resource_path="scripts/analyze.py"
+)
+
+# Import skills from another directory at runtime
+result = agent.tool.skills(
+    action="import",
+    import_dir="/path/to/additional/skills"
 )
 
 # Use a different skills directory
