@@ -52,15 +52,13 @@ import yaml
 from strands import tool
 
 logger = logging.getLogger(__name__)
+logger.warning(
+    "The skills tool is experimental. The recommended path for production use will be "
+    "the SDK's native skills feature. APIs and behavior may change without notice."
+)
 
 # Maximum file size for resources (10MB)
 MAX_RESOURCE_SIZE = 10 * 1024 * 1024
-
-_EXPERIMENTAL_WARNING = (
-    "⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. "
-    "The recommended path for production use will be the SDK's native skills feature (coming soon). "
-    "APIs and behavior may change without notice."
-)
 
 
 @dataclass
@@ -230,7 +228,7 @@ def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
             "content": [{"text": f"No skills found in {skills_dir}"}],
         }
 
-    lines = [_EXPERIMENTAL_WARNING, "", f"Available skills ({len(cache.skills)}):\n"]
+    lines = [f"Available skills ({len(cache.skills)}):\n"]
     for name, metadata in sorted(cache.skills.items()):
         lines.append(f"  • {name}")
         desc = metadata.description[:100] + "..." if len(metadata.description) > 100 else metadata.description
@@ -261,9 +259,7 @@ def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
         metadata = cache.skills[skill_name]
         instructions = _load_skill_instructions(metadata.path)
 
-        result = f"""{_EXPERIMENTAL_WARNING}
-
-## Skill: {metadata.name}
+        result = f"""## Skill: {metadata.name}
 
 {metadata.description}
 
