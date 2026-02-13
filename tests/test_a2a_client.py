@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from a2a.types import Message
+from strands.types.tools import ToolContext
 
 from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider
 
@@ -328,7 +329,7 @@ async def test_send_message_with_message_id():
         result = await provider.a2a_send_message("Hello", "http://test.com", "test_id")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id")
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id", None)
 
 
 @pytest.mark.asyncio
@@ -348,7 +349,7 @@ async def test_send_message_without_message_id():
         result = await provider.a2a_send_message("Hello", "http://test.com")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", None)
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", None, None)
 
 
 @pytest.mark.asyncio
@@ -379,7 +380,7 @@ async def test_send_message_success(mock_ensure, mock_factory, mock_discover, mo
     mock_response = Mock(spec=Message)
     mock_response.model_dump.return_value = {"result": "success"}
 
-    async def mock_send_message_iter(message):
+    async def mock_send_message_iter(message, **kwargs):
         yield mock_response
 
     mock_client.send_message = mock_send_message_iter
@@ -509,7 +510,7 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
     mock_update_event = Mock()
     mock_update_event.model_dump.return_value = {"event": "finished"}
 
-    async def mock_send_message_iter(message):
+    async def mock_send_message_iter(message, **kwargs):
         yield (mock_task, mock_update_event)
 
     mock_client.send_message = mock_send_message_iter
@@ -556,7 +557,7 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
     mock_task = Mock()
     mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
 
-    async def mock_send_message_iter(message):
+    async def mock_send_message_iter(message, **kwargs):
         yield (mock_task, None)
 
     mock_client.send_message = mock_send_message_iter
@@ -570,3 +571,120 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
         "target_agent_url": "http://test.com",
     }
     assert result == expected
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_metadata_from_tool_context():
+    """Test a2a_send_message extracts metadata from tool_context and passes to _send_message."""
+    provider = A2AClientToolProvider()
+    test_metadata = {"session_id": "abc", "priority": "high"}
+    tool_context: ToolContext = {"invocation_state": {"metadata": test_metadata}}
+
+    with patch.object(provider, "_send_message") as mock_send_message:
+        mock_send_message.return_value = {"status": "success"}
+
+        await provider.a2a_send_message("Hello", "http://test.com", "id1", tool_context)
+
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "id1", test_metadata)
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_metadata_passed_to_client(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message passes metadata as request_metadata to client.send_message."""
+    provider = A2AClientToolProvider()
+    test_metadata = {"trace_id": "xyz"}
+
+    mock_message_uuid = Mock()
+    mock_message_uuid.hex = "msg_123"
+    mock_uuid.return_value = mock_message_uuid
+
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    mock_response = Mock(spec=Message)
+    mock_response.model_dump.return_value = {"result": "ok"}
+
+    captured_kwargs = {}
+
+    async def mock_send_message_iter(message, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield mock_response
+
+    mock_client.send_message = mock_send_message_iter
+
+    await provider._send_message("Hello", "http://test.com", None, test_metadata)
+
+    assert captured_kwargs["request_metadata"] == test_metadata
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_none_metadata_passed_to_client(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message passes None metadata when not provided."""
+    provider = A2AClientToolProvider()
+
+    mock_message_uuid = Mock()
+    mock_message_uuid.hex = "msg_456"
+    mock_uuid.return_value = mock_message_uuid
+
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    mock_response = Mock(spec=Message)
+    mock_response.model_dump.return_value = {"result": "ok"}
+
+    captured_kwargs = {}
+
+    async def mock_send_message_iter(message, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield mock_response
+
+    mock_client.send_message = mock_send_message_iter
+
+    await provider._send_message("Hello", "http://test.com")
+
+    assert captured_kwargs["request_metadata"] is None
+
+
+@pytest.mark.asyncio
+async def test_send_message_without_tool_context():
+    """Test a2a_send_message passes None metadata when tool_context is not provided."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_send_message") as mock_send_message:
+        mock_send_message.return_value = {"status": "success"}
+
+        await provider.a2a_send_message("Hello", "http://test.com", "id1", None)
+
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "id1", None)
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_empty_tool_context():
+    """Test a2a_send_message passes None metadata when tool_context has no metadata."""
+    provider = A2AClientToolProvider()
+    tool_context: ToolContext = {"invocation_state": {}}
+
+    with patch.object(provider, "_send_message") as mock_send_message:
+        mock_send_message.return_value = {"status": "success"}
+
+        await provider.a2a_send_message("Hello", "http://test.com", "id1", tool_context)
+
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "id1", None)
