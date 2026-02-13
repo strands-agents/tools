@@ -34,7 +34,7 @@ from uuid import uuid4
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
-from strands import tool
+from strands import tool, ToolContext
 from strands.types.tools import AgentTool
 
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
@@ -250,9 +250,13 @@ class A2AClientToolProvider:
                 "total_count": 0,
             }
 
-    @tool
+    @tool(context=True)
     async def a2a_send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        tool_context: ToolContext | None = None,
     ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
@@ -266,6 +270,8 @@ class A2AClientToolProvider:
             target_agent_url: The exact URL of the target A2A agent
                 (user-provided URL or from a2a_list_discovered_agents)
             message_id: Optional message ID for tracking (generates UUID if not provided)
+            tool_context: Tool execution context (automatically injected by Strands
+                framework when the tool is called)
 
         Returns:
             dict: Response data including:
@@ -275,10 +281,19 @@ class A2AClientToolProvider:
                 - message_id: The message ID used
                 - target_agent_url: The agent URL that was contacted
         """
-        return await self._send_message(message_text, target_agent_url, message_id)
+        # Extract metadata from tool_context only
+        metadata = None
+        if tool_context is not None:
+            metadata = tool_context.get("invocation_state", {}).get("metadata")
+
+        return await self._send_message(message_text, target_agent_url, message_id, metadata)
 
     async def _send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Internal async implementation for send_message."""
 
@@ -303,7 +318,7 @@ class A2AClientToolProvider:
             logger.info(f"Sending message to {target_agent_url}")
 
             # With streaming=False, this will yield exactly one result
-            async for event in client.send_message(message):
+            async for event in client.send_message(message, request_metadata=metadata):
                 if isinstance(event, Message):
                     # Direct message response
                     return {
