@@ -99,6 +99,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
+| a2a_registry_client | `provider = AgentRegistryToolProvider(registry_url="http://localhost:8000"); agent = Agent(tools=provider.tools)` | Find and communicate with agents through a centralized registry, search by skills, find best matches |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -696,6 +697,30 @@ response = agent("discover available agents and send a greeting message")
 # - discover_agent(url) to find agents
 # - list_discovered_agents() to see all discovered agents
 # - send_message(message_text, target_agent_url) to communicate
+```
+
+### A2A Registry Client
+
+```python
+from strands import Agent
+from strands_tools.a2a_registry_client import AgentRegistryToolProvider
+
+# Initialize the registry client provider
+provider = AgentRegistryToolProvider(registry_url="http://localhost:8000")
+agent = Agent(tools=provider.tools)
+
+# Use natural language to interact with the agent registry
+response = agent("find agents that can help with python development")
+response = agent("send a message to an agent with data processor skills asking it to process this dataset")
+response = agent("find the best agent for machine learning tasks and ask it to train a model")
+
+# The agent will automatically use the available tools:
+# - registry_find_agents_by_skill(skill) to search by skills
+# - registry_find_best_agent_for_task(skills) to find optimal matches
+# - registry_send_message_to_agent(name, message) to communicate
+# - registry_find_and_message_agent(skills, message) for combined operations
+# - registry_get_all_agents() to list all available agents
+# - registry_find_similar_agents(agent_id) to find similar agents
 ```
 
 ### Diagram
