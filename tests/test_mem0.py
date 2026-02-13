@@ -346,7 +346,7 @@ def test_invalid_action(mock_opensearch, mock_mem0_client, mock_tool):
     assert "Invalid action" in str(result["content"][0]["text"])
 
 
-@patch.dict(os.environ, {})
+@patch.dict(os.environ, {}, clear=True)
 def test_missing_opensearch_host(mock_tool):
     """Test missing OpenSearch host defaults to FAISS."""
     mock_tool.get.side_effect = lambda key, default=None: {
@@ -420,18 +420,19 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
     mock_credentials.secret_key = "test-secret-key"
     mock_session.return_value.get_credentials.return_value = mock_credentials
 
-    # Test with default parameters (OpenSearch)
-    with patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"}):
+    # Test with default parameters (OpenSearch) - clean environment first
+    with patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"}, clear=True):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
 
-    # Test with conflict scenario
+    # Test with conflict scenario - clean environment first
     with patch.dict(
         os.environ,
         {
             "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
             "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234",
         },
+        clear=True,
     ):
         with pytest.raises(RuntimeError):
             Mem0ServiceClient()
@@ -442,6 +443,7 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
         {
             "NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER": "g-5aaaaa1234",
         },
+        clear=True,
     ):
         client = Mem0ServiceClient()
         assert client.mem0 is not None
@@ -453,6 +455,7 @@ def test_mem0_service_client_init(mock_opensearch, mock_mem0_memory, mock_sessio
             "OPENSEARCH_HOST": "test.opensearch.amazonaws.com",
             "NEPTUNE_DATABASE_ENDPOINT": "xxx.us-west-2.neptune.amazonaws.com",
         },
+        clear=True,
     ):
         client = Mem0ServiceClient()
         assert client.region == os.environ.get("AWS_REGION", "us-west-2")
