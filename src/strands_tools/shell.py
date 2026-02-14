@@ -11,6 +11,7 @@ Features:
 - Real-time interactive terminal emulation
 - Error handling and timeout control
 - Working directory specification
+- Configurable key sequence callbacks for raw mode interaction
 
 Usage with Strands Agent:
 ```python
@@ -45,6 +46,15 @@ Configuration:
 - BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
   user confirmation prompt, even in an otherwise interactive session.
 
+Key Sequence Callbacks:
+    When running in interactive (raw) mode, the tool can detect configured key
+    sequences and invoke callbacks. This is useful for implementing cancellation
+    or other control features. Pass key_sequence_callbacks via tool context's
+    invocation_state as a dict mapping bytes to callables.
+    
+    For multi-character sequences (like Alt+C which sends ESC then 'c'), a short
+    timeout (~50ms) disambiguates between standalone keypresses and sequences.
+
 """
 
 import json
@@ -59,7 +69,7 @@ import termios
 import time
 import tty
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from rich import box
 from rich.box import ROUNDED
@@ -73,6 +83,10 @@ from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+# Timeout for key sequence detection (seconds)
+# Used to disambiguate between standalone Escape and Alt+key sequences
+KEY_SEQUENCE_TIMEOUT = 0.05  # 50ms
 
 
 def read_output(fd: int) -> str:
@@ -99,14 +113,161 @@ def validate_command(command: Union[str, Dict]) -> Tuple[str, Dict]:
         raise ValueError("Command must be string or dict")
 
 
-class CommandExecutor:
-    """Handles execution of shell commands with timeout."""
+class KeySequenceMatcher:
+    """Matches input against configured key sequences with timeout support.
+    
+    Optimized for minimal allocations in the hot path. Pre-computes all
+    lookup structures at initialization time.
+    
+    This class handles the complexity of detecting multi-character key sequences
+    (like Alt+C which sends ESC, 'c') while still allowing single characters
+    that happen to be prefixes (like standalone ESC) to pass through after
+    a short timeout.
+    
+    When a sequence is both a complete match AND a prefix of a longer sequence,
+    the matcher waits for timeout before matching the shorter sequence. This
+    ensures longer sequences are preferred when input arrives quickly.
+    """
+    
+    __slots__ = ('_callbacks', '_prefixes', '_sequences_by_len', '_max_seq_len',
+                 '_buffer', '_buffer_len', '_last_input_time')
+    
+    def __init__(self, callbacks: Optional[Dict[bytes, Callable[[], None]]] = None):
+        """Initialize matcher with sequence-to-callback mappings.
+        
+        Args:
+            callbacks: Dict mapping byte sequences to callables
+        """
+        self._callbacks = callbacks or {}
+        self._max_seq_len = max((len(seq) for seq in self._callbacks), default=0)
+        
+        # Use bytearray for mutable buffer - avoids allocations on append
+        self._buffer = bytearray(self._max_seq_len) if self._max_seq_len else bytearray()
+        self._buffer_len = 0
+        self._last_input_time = 0.0
+        
+        # Pre-compute prefixes as frozenset for O(1) lookup
+        prefixes = set()
+        for seq in self._callbacks:
+            for i in range(1, len(seq)):
+                prefixes.add(seq[:i])
+        self._prefixes = frozenset(prefixes)
+        
+        # Pre-sort sequences by length (longest first) - done once at init
+        self._sequences_by_len = tuple(sorted(self._callbacks.keys(), key=len, reverse=True))
+    
+    def _find_match(self, buf: bytes) -> Optional[Callable[[], None]]:
+        """Find a matching sequence callback for the given buffer.
+        
+        Args:
+            buf: Buffer contents to match against
+            
+        Returns:
+            Callback if match found, None otherwise
+        """
+        for seq in self._sequences_by_len:
+            if buf.endswith(seq):
+                return self._callbacks[seq]
+        return None
+    
+    def process_input(self, data: bytes) -> Tuple[Optional[Callable[[], None]], bytes]:
+        """Process input bytes and detect key sequences.
+        
+        Optimized to handle multiple bytes at once when possible.
+        
+        Args:
+            data: Input bytes to process
+            
+        Returns:
+            Tuple of (callback_to_invoke, bytes_to_forward)
+            - callback_to_invoke: Callable if sequence matched, None otherwise  
+            - bytes_to_forward: Bytes that should be forwarded to subprocess
+        """
+        if not self._callbacks:
+            # Fast path: no sequences configured, forward everything
+            return None, data
+        
+        self._last_input_time = time.time()
+        to_forward = bytearray()
+        
+        for byte in data:
+            # Add byte to buffer
+            if self._buffer_len < self._max_seq_len:
+                self._buffer[self._buffer_len] = byte
+                self._buffer_len += 1
+            else:
+                # Buffer full - shift left and append
+                to_forward.append(self._buffer[0])
+                self._buffer[:-1] = self._buffer[1:]
+                self._buffer[-1] = byte
+            
+            # Get current buffer contents as bytes for matching
+            buf = bytes(self._buffer[:self._buffer_len])
+            
+            # If buffer is a prefix of a longer sequence, keep waiting
+            # (even if it matches a shorter sequence - prefer longer matches)
+            if buf in self._prefixes:
+                continue
+            
+            # Check for complete sequence match (longest first, pre-sorted)
+            callback = self._find_match(buf)
+            if callback:
+                self._buffer_len = 0  # Clear buffer
+                return callback, bytes(to_forward)
+            
+            # Not a prefix and no match - flush buffer
+            to_forward.extend(self._buffer[:self._buffer_len])
+            self._buffer_len = 0
+        
+        return None, bytes(to_forward)
+    
+    def check_timeout(self) -> Tuple[Optional[Callable[[], None]], bytes]:
+        """Check if buffered input should be processed due to timeout.
+        
+        On timeout, if the buffer matches a sequence, returns the callback.
+        Otherwise returns the buffered bytes to forward.
+        
+        Returns:
+            Tuple of (callback_to_invoke, bytes_to_forward)
+        """
+        if self._buffer_len == 0:
+            return None, b''
+        
+        if time.time() - self._last_input_time >= KEY_SEQUENCE_TIMEOUT:
+            buf = bytes(self._buffer[:self._buffer_len])
+            self._buffer_len = 0
+            
+            # Check if buffer matches a sequence
+            callback = self._find_match(buf)
+            if callback:
+                return callback, b''
+            
+            # No match - forward the buffer
+            return None, buf
+        
+        return None, b''
 
-    def __init__(self, timeout: int = None) -> None:
+
+class CommandExecutor:
+    """Handles execution of shell commands with timeout and optional key sequence detection."""
+
+    def __init__(
+        self,
+        timeout: Optional[int] = None,
+        key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None
+    ) -> None:
+        """Initialize executor with timeout and optional key sequence callbacks.
+        
+        Args:
+            timeout: Command timeout in seconds (default from SHELL_DEFAULT_TIMEOUT env var)
+            key_sequence_callbacks: Optional dict mapping byte sequences to callbacks
+                                   for detection during raw PTY mode
+        """
         self.timeout = int(os.environ.get("SHELL_DEFAULT_TIMEOUT", "900")) if timeout is None else timeout
         self.output_queue: queue.Queue = queue.Queue()
         self.exit_code = None
         self.error = None
+        self.key_sequence_callbacks = key_sequence_callbacks
 
     def execute_with_pty(self, command: str, cwd: str, non_interactive_mode: bool) -> Tuple[int, str, str]:
         """Execute command with PTY and timeout support."""
@@ -114,6 +275,8 @@ class CommandExecutor:
         start_time = time.time()
         old_tty = None
         pid = -1
+        matcher = KeySequenceMatcher(self.key_sequence_callbacks)
+        
         # Save original terminal settings
         if not non_interactive_mode:
             try:
@@ -134,21 +297,26 @@ class CommandExecutor:
             else:  # Parent process
                 if not non_interactive_mode and old_tty:
                     tty.setraw(sys.stdin.fileno())
+                
+                # Cache for hot loop
+                timeout_val = self.timeout
+                stdin_fd = sys.stdin.fileno() if not non_interactive_mode else -1
+                
                 while True:
-                    if time.time() - start_time > self.timeout:
+                    if time.time() - start_time > timeout_val:
                         try:
                             # This kill entire group, not just parent shell.
                             os.killpg(os.getpgid(pid), signal.SIGTERM)
                         except ProcessLookupError:
                             pass
-                        raise TimeoutError(f"Command timed out after {self.timeout} seconds")
+                        raise TimeoutError(f"Command timed out after {timeout_val} seconds")
 
                     fds_to_watch = [fd]
                     if not non_interactive_mode:
                         fds_to_watch.append(sys.stdin)
 
                     try:
-                        readable, _, _ = select.select(fds_to_watch, [], [], 0.1)
+                        readable, _, _ = select.select(fds_to_watch, [], [], 0.01)
                     except (select.error, ValueError):
                         logger.debug("select() failed, assuming process ended.")
                         break
@@ -164,13 +332,61 @@ class CommandExecutor:
                         except OSError:
                             break
 
-                    # Handle interactive input from user
+                    # Handle interactive input from user with key sequence detection
                     if not non_interactive_mode and sys.stdin in readable:
                         try:
-                            stdin_data = os.read(sys.stdin.fileno(), 1024)
-                            os.write(fd, stdin_data)
+                            stdin_data = os.read(stdin_fd, 1024)
+                            callback, to_forward = matcher.process_input(stdin_data)
+                            
+                            # Forward non-sequence bytes
+                            if to_forward:
+                                os.write(fd, to_forward)
+                            
+                            # Handle matched sequence
+                            if callback:
+                                logger.debug("Key sequence matched - invoking callback")
+                                
+                                # Restore terminal first
+                                if old_tty:
+                                    try:
+                                        termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
+                                        old_tty = None  # Mark as restored
+                                    except Exception:
+                                        pass
+                                
+                                try:
+                                    callback()
+                                except Exception as e:
+                                    logger.error(f"Key sequence callback failed: {e}")
+                                
                         except OSError:
                             break
+                    
+                    # Check for sequence timeout (flush buffered chars or invoke callback)
+                    if not non_interactive_mode:
+                        callback, timed_out = matcher.check_timeout()
+                        
+                        if callback:
+                            logger.debug("Key sequence matched on timeout - invoking callback")
+                            
+                            # Restore terminal first
+                            if old_tty:
+                                try:
+                                    termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
+                                    old_tty = None
+                                except Exception:
+                                    pass
+                            
+                            try:
+                                callback()
+                            except Exception as e:
+                                logger.error(f"Key sequence callback failed: {e}")
+                        elif timed_out:
+                            try:
+                                os.write(fd, timed_out)
+                            except OSError:
+                                pass
+
                 try:
                     _, status = os.waitpid(pid, 0)
                     if os.WIFEXITED(status):
@@ -191,11 +407,15 @@ class CommandExecutor:
 
 
 def execute_single_command(
-    command: Union[str, Dict], work_dir: str, timeout: int, non_interactive_mode: bool
+    command: Union[str, Dict],
+    work_dir: str,
+    timeout: int,
+    non_interactive_mode: bool,
+    key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None
 ) -> Dict[str, Any]:
     """Execute a single command and return its results."""
     cmd_str, cmd_opts = validate_command(command)
-    executor = CommandExecutor(timeout=timeout)
+    executor = CommandExecutor(timeout=timeout, key_sequence_callbacks=key_sequence_callbacks)
 
     try:
         exit_code, output, error = executor.execute_with_pty(
@@ -261,6 +481,7 @@ def execute_commands(
     work_dir: str,
     timeout: int,
     non_interactive_mode: bool,
+    key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None,
 ) -> List[Dict[str, Any]]:
     """Execute multiple commands either sequentially or in parallel."""
     results = []
@@ -270,7 +491,9 @@ def execute_commands(
         # For parallel execution, use the initial work_dir for all commands
         with ThreadPoolExecutor() as executor:
             futures = [
-                executor.submit(execute_single_command, cmd, work_dir, timeout, non_interactive_mode)
+                executor.submit(
+                    execute_single_command, cmd, work_dir, timeout, non_interactive_mode, key_sequence_callbacks
+                )
                 for cmd in commands
             ]
 
@@ -290,7 +513,9 @@ def execute_commands(
 
             # Execute in current context directory
             result = execute_single_command(
-                cmd, context.current_dir, timeout, non_interactive_mode=non_interactive_mode
+                cmd, context.current_dir, timeout,
+                non_interactive_mode=non_interactive_mode,
+                key_sequence_callbacks=key_sequence_callbacks
             )
             results.append(result)
 
@@ -403,7 +628,7 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
     )
 
 
-@tool
+@tool(context=True)
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],
     parallel: bool = False,
@@ -411,6 +636,7 @@ def shell(
     timeout: int = None,
     work_dir: str = None,
     non_interactive: bool = False,
+    tool_context: Any = None,
 ) -> Dict[str, Any]:
     """Interactive shell with PTY support for real-time command execution and interaction. Features:
 
@@ -477,11 +703,19 @@ def shell(
         timeout: Timeout in seconds for each command (default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)
         work_dir: Working directory for command execution (default: current)
         non_interactive: Run in non-interactive mode without user prompts (default: False)
+        tool_context: Framework context for accessing invocation_state (automatically injected)
 
     Returns:
         Dict containing status and response content
+
+    Supports interactive mode with cancellation via configurable key sequences.
     """
     console = console_util.create()
+
+    # Extract key_sequence_callbacks from tool_context if available
+    key_sequence_callbacks = None
+    if tool_context and hasattr(tool_context, 'invocation_state'):
+        key_sequence_callbacks = tool_context.invocation_state.get('key_sequence_callbacks')
 
     is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
     # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
@@ -548,7 +782,9 @@ def shell(
             console.print("\n[bold green]⏳ Starting Command Execution...[/bold green]\n")
 
         results = execute_commands(
-            commands, parallel, ignore_errors, work_dir, timeout, non_interactive_mode=non_interactive_mode
+            commands, parallel, ignore_errors, work_dir, timeout,
+            non_interactive_mode=non_interactive_mode,
+            key_sequence_callbacks=key_sequence_callbacks
         )
 
         if not non_interactive_mode:
