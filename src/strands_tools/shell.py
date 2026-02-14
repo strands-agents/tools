@@ -51,7 +51,7 @@ Key Sequence Callbacks:
     sequences and invoke callbacks. This is useful for implementing cancellation
     or other control features. Pass key_sequence_callbacks via tool context's
     invocation_state as a dict mapping bytes to callables.
-    
+
     For multi-character sequences (like Alt+C which sends ESC then 'c'), a short
     timeout (~50ms) disambiguates between standalone keypresses and sequences.
 
@@ -115,53 +115,60 @@ def validate_command(command: Union[str, Dict]) -> Tuple[str, Dict]:
 
 class KeySequenceMatcher:
     """Matches input against configured key sequences with timeout support.
-    
+
     Optimized for minimal allocations in the hot path. Pre-computes all
     lookup structures at initialization time.
-    
+
     This class handles the complexity of detecting multi-character key sequences
     (like Alt+C which sends ESC, 'c') while still allowing single characters
     that happen to be prefixes (like standalone ESC) to pass through after
     a short timeout.
-    
+
     When a sequence is both a complete match AND a prefix of a longer sequence,
     the matcher waits for timeout before matching the shorter sequence. This
     ensures longer sequences are preferred when input arrives quickly.
     """
-    
-    __slots__ = ('_callbacks', '_prefixes', '_sequences_by_len', '_max_seq_len',
-                 '_buffer', '_buffer_len', '_last_input_time')
-    
+
+    __slots__ = (
+        "_callbacks",
+        "_prefixes",
+        "_sequences_by_len",
+        "_max_seq_len",
+        "_buffer",
+        "_buffer_len",
+        "_last_input_time",
+    )
+
     def __init__(self, callbacks: Optional[Dict[bytes, Callable[[], None]]] = None):
         """Initialize matcher with sequence-to-callback mappings.
-        
+
         Args:
             callbacks: Dict mapping byte sequences to callables
         """
         self._callbacks = callbacks or {}
         self._max_seq_len = max((len(seq) for seq in self._callbacks), default=0)
-        
+
         # Use bytearray for mutable buffer - avoids allocations on append
         self._buffer = bytearray(self._max_seq_len) if self._max_seq_len else bytearray()
         self._buffer_len = 0
         self._last_input_time = 0.0
-        
+
         # Pre-compute prefixes as frozenset for O(1) lookup
         prefixes = set()
         for seq in self._callbacks:
             for i in range(1, len(seq)):
                 prefixes.add(seq[:i])
         self._prefixes = frozenset(prefixes)
-        
+
         # Pre-sort sequences by length (longest first) - done once at init
         self._sequences_by_len = tuple(sorted(self._callbacks.keys(), key=len, reverse=True))
-    
+
     def _find_match(self, buf: bytes) -> Optional[Callable[[], None]]:
         """Find a matching sequence callback for the given buffer.
-        
+
         Args:
             buf: Buffer contents to match against
-            
+
         Returns:
             Callback if match found, None otherwise
         """
@@ -169,27 +176,27 @@ class KeySequenceMatcher:
             if buf.endswith(seq):
                 return self._callbacks[seq]
         return None
-    
+
     def process_input(self, data: bytes) -> Tuple[Optional[Callable[[], None]], bytes]:
         """Process input bytes and detect key sequences.
-        
+
         Optimized to handle multiple bytes at once when possible.
-        
+
         Args:
             data: Input bytes to process
-            
+
         Returns:
             Tuple of (callback_to_invoke, bytes_to_forward)
-            - callback_to_invoke: Callable if sequence matched, None otherwise  
+            - callback_to_invoke: Callable if sequence matched, None otherwise
             - bytes_to_forward: Bytes that should be forwarded to subprocess
         """
         if not self._callbacks:
             # Fast path: no sequences configured, forward everything
             return None, data
-        
+
         self._last_input_time = time.time()
         to_forward = bytearray()
-        
+
         for byte in data:
             # Add byte to buffer
             if self._buffer_len < self._max_seq_len:
@@ -200,64 +207,62 @@ class KeySequenceMatcher:
                 to_forward.append(self._buffer[0])
                 self._buffer[:-1] = self._buffer[1:]
                 self._buffer[-1] = byte
-            
+
             # Get current buffer contents as bytes for matching
-            buf = bytes(self._buffer[:self._buffer_len])
-            
+            buf = bytes(self._buffer[: self._buffer_len])
+
             # If buffer is a prefix of a longer sequence, keep waiting
             # (even if it matches a shorter sequence - prefer longer matches)
             if buf in self._prefixes:
                 continue
-            
+
             # Check for complete sequence match (longest first, pre-sorted)
             callback = self._find_match(buf)
             if callback:
                 self._buffer_len = 0  # Clear buffer
                 return callback, bytes(to_forward)
-            
+
             # Not a prefix and no match - flush buffer
-            to_forward.extend(self._buffer[:self._buffer_len])
+            to_forward.extend(self._buffer[: self._buffer_len])
             self._buffer_len = 0
-        
+
         return None, bytes(to_forward)
-    
+
     def check_timeout(self) -> Tuple[Optional[Callable[[], None]], bytes]:
         """Check if buffered input should be processed due to timeout.
-        
+
         On timeout, if the buffer matches a sequence, returns the callback.
         Otherwise returns the buffered bytes to forward.
-        
+
         Returns:
             Tuple of (callback_to_invoke, bytes_to_forward)
         """
         if self._buffer_len == 0:
-            return None, b''
-        
+            return None, b""
+
         if time.time() - self._last_input_time >= KEY_SEQUENCE_TIMEOUT:
-            buf = bytes(self._buffer[:self._buffer_len])
+            buf = bytes(self._buffer[: self._buffer_len])
             self._buffer_len = 0
-            
+
             # Check if buffer matches a sequence
             callback = self._find_match(buf)
             if callback:
-                return callback, b''
-            
+                return callback, b""
+
             # No match - forward the buffer
             return None, buf
-        
-        return None, b''
+
+        return None, b""
 
 
 class CommandExecutor:
     """Handles execution of shell commands with timeout and optional key sequence detection."""
 
     def __init__(
-        self,
-        timeout: Optional[int] = None,
-        key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None
+        self, timeout: Optional[int] = None, key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None
     ) -> None:
         """Initialize executor with timeout and optional key sequence callbacks.
-        
+
         Args:
             timeout: Command timeout in seconds (default from SHELL_DEFAULT_TIMEOUT env var)
             key_sequence_callbacks: Optional dict mapping byte sequences to callbacks
@@ -276,7 +281,7 @@ class CommandExecutor:
         old_tty = None
         pid = -1
         matcher = KeySequenceMatcher(self.key_sequence_callbacks)
-        
+
         # Save original terminal settings
         if not non_interactive_mode:
             try:
@@ -297,11 +302,11 @@ class CommandExecutor:
             else:  # Parent process
                 if not non_interactive_mode and old_tty:
                     tty.setraw(sys.stdin.fileno())
-                
+
                 # Cache for hot loop
                 timeout_val = self.timeout
                 stdin_fd = sys.stdin.fileno() if not non_interactive_mode else -1
-                
+
                 while True:
                     if time.time() - start_time > timeout_val:
                         try:
@@ -337,15 +342,15 @@ class CommandExecutor:
                         try:
                             stdin_data = os.read(stdin_fd, 1024)
                             callback, to_forward = matcher.process_input(stdin_data)
-                            
+
                             # Forward non-sequence bytes
                             if to_forward:
                                 os.write(fd, to_forward)
-                            
+
                             # Handle matched sequence
                             if callback:
                                 logger.debug("Key sequence matched - invoking callback")
-                                
+
                                 # Restore terminal first
                                 if old_tty:
                                     try:
@@ -353,22 +358,22 @@ class CommandExecutor:
                                         old_tty = None  # Mark as restored
                                     except Exception:
                                         pass
-                                
+
                                 try:
                                     callback()
                                 except Exception as e:
                                     logger.error(f"Key sequence callback failed: {e}")
-                                
+
                         except OSError:
                             break
-                    
+
                     # Check for sequence timeout (flush buffered chars or invoke callback)
                     if not non_interactive_mode:
                         callback, timed_out = matcher.check_timeout()
-                        
+
                         if callback:
                             logger.debug("Key sequence matched on timeout - invoking callback")
-                            
+
                             # Restore terminal first
                             if old_tty:
                                 try:
@@ -376,7 +381,7 @@ class CommandExecutor:
                                     old_tty = None
                                 except Exception:
                                     pass
-                            
+
                             try:
                                 callback()
                             except Exception as e:
@@ -411,7 +416,7 @@ def execute_single_command(
     work_dir: str,
     timeout: int,
     non_interactive_mode: bool,
-    key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None
+    key_sequence_callbacks: Optional[Dict[bytes, Callable[[], None]]] = None,
 ) -> Dict[str, Any]:
     """Execute a single command and return its results."""
     cmd_str, cmd_opts = validate_command(command)
@@ -513,9 +518,11 @@ def execute_commands(
 
             # Execute in current context directory
             result = execute_single_command(
-                cmd, context.current_dir, timeout,
+                cmd,
+                context.current_dir,
+                timeout,
                 non_interactive_mode=non_interactive_mode,
-                key_sequence_callbacks=key_sequence_callbacks
+                key_sequence_callbacks=key_sequence_callbacks,
             )
             results.append(result)
 
@@ -714,8 +721,8 @@ def shell(
 
     # Extract key_sequence_callbacks from tool_context if available
     key_sequence_callbacks = None
-    if tool_context and hasattr(tool_context, 'invocation_state'):
-        key_sequence_callbacks = tool_context.invocation_state.get('key_sequence_callbacks')
+    if tool_context and hasattr(tool_context, "invocation_state"):
+        key_sequence_callbacks = tool_context.invocation_state.get("key_sequence_callbacks")
 
     is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
     # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
@@ -782,9 +789,13 @@ def shell(
             console.print("\n[bold green]⏳ Starting Command Execution...[/bold green]\n")
 
         results = execute_commands(
-            commands, parallel, ignore_errors, work_dir, timeout,
+            commands,
+            parallel,
+            ignore_errors,
+            work_dir,
+            timeout,
             non_interactive_mode=non_interactive_mode,
-            key_sequence_callbacks=key_sequence_callbacks
+            key_sequence_callbacks=key_sequence_callbacks,
         )
 
         if not non_interactive_mode:
