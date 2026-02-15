@@ -324,3 +324,51 @@ def test_file_read_error_message_brackets():
     result = file_read.file_read(tool=tool_use)
 
     assert result["status"] == "error"
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["view", "preview", "stats", "lines", "chunk", "search", "diff"],
+)
+@pytest.mark.parametrize(
+    "tool_encoding,file_encoding,content",
+    [
+        (None, "utf-8", "Hello 世界"),
+        ("utf-8", "utf-8", "Hello 世界"),
+        ("cp932", "cp932", "Hello 世界"),
+        ("latin-1", "latin-1", "Hello world"),
+    ],
+)
+def test_file_read_encoding(tmp_path, mode, tool_encoding, file_encoding, content):
+    """Test file read with text encoding option."""
+    # Create test file with specified encoding
+    file1_path = tmp_path / "test1.txt"
+    file1_path.write_text(content, encoding=file_encoding)
+
+    tool_input = {
+        "path": str(file1_path),
+        "mode": mode,
+        "encoding": tool_encoding,
+    }
+    expected_content = content
+
+    if mode == "search":
+        expected_content = content.split()[-1]  # Use the last word from content
+        tool_input["search_pattern"] = expected_content
+
+    if mode == "diff":
+        # Create a second file for diffing
+        file2_path = tmp_path / "test2.md"
+        file2_path.write_text("Different content", encoding=file_encoding)
+        tool_input["comparison_path"] = str(file2_path)
+
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": tool_input,
+    }
+
+    result = file_read.file_read(tool=tool_use)
+    result_text = extract_result_text(result)
+
+    assert result["status"] == "success"
+    assert expected_content in result_text
