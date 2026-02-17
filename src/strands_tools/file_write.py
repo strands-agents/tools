@@ -62,9 +62,11 @@ from rich import box
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
+from strands import tool, ToolContext
 from strands.types.tools import ToolResult, ToolUse
 
 from strands_tools.utils import console_util
+from strands_tools.utils.file_info import get_file_info, format_file_info
 from strands_tools.utils.user_input import get_user_input
 
 TOOL_SPEC = {
@@ -106,7 +108,9 @@ def detect_language(file_path: str) -> str:
     return file_extension if file_extension else "text"
 
 
-def create_rich_panel(content: str, title: Optional[str] = None, syntax_language: Optional[str] = None) -> Panel:
+def create_rich_panel(
+    content: str, title: Optional[str] = None, syntax_language: Optional[str] = None
+) -> Panel:
     """
     Create a Rich panel with optional syntax highlighting.
 
@@ -137,7 +141,9 @@ def create_rich_panel(content: str, title: Optional[str] = None, syntax_language
     )
 
 
-def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
+def file_write(
+    tool: ToolUse, tool_context: Optional[ToolContext] = None, **kwargs: Any
+) -> ToolResult:
     """
     Write content to a file with interactive confirmation and rich feedback.
 
@@ -153,7 +159,8 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
     3. In non-development environments, requests user confirmation before writing
     4. Creates any necessary parent directories if they don't exist
     5. Writes the content to the file with proper encoding
-    6. Provides rich visual feedback on operation success or failure
+    6. Tracks file information in agent.state for state management
+    7. Provides rich visual feedback on operation success or failure
 
     Common Usage Scenarios:
     ---------------------
@@ -168,6 +175,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - path: The path to the file to write. User paths with tilde (~)
                     are automatically expanded.
             - content: The content to write to the file.
+        tool_context: ToolContext providing access to agent state and configuration
         **kwargs: Additional keyword arguments (not used currently)
 
     Returns:
@@ -183,6 +191,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Parent directories are automatically created if they don't exist
         - File content is previewed with syntax highlighting based on file extension
         - User can cancel the write operation and provide a reason for cancellation
+        - File information is stored in agent.state (accessible via agent.state.get("files_written"))
         - All operations use rich formatting for clear visual feedback
     """
     console = console_util.create()
@@ -221,12 +230,18 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         console.print(content_panel)
 
         # Confirm write operation
-        user_input = get_user_input("<red><bold>Do you want to proceed with the file write?</bold> [y/*]</red>")
+        user_input = get_user_input(
+            "<red><bold>Do you want to proceed with the file write?</bold> [y/*]</red>"
+        )
         if user_input.lower().strip() != "y":
             cancellation_reason = (
-                user_input if user_input.strip() != "n" else get_user_input("Please provide a reason for cancellation:")
+                user_input
+                if user_input.strip() != "n"
+                else get_user_input("Please provide a reason for cancellation:")
             )
-            error_message = f"File write cancelled by the user. Reason: {cancellation_reason}"
+            error_message = (
+                f"File write cancelled by the user. Reason: {cancellation_reason}"
+            )
             error_panel = Panel(
                 Text(error_message, style="bold blue"),
                 title="[bold blue]Operation Cancelled",
@@ -260,6 +275,25 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         with open(path, "w") as file:
             file.write(content)
 
+        # Get file info for state tracking
+        file_info = get_file_info(path, mode="write")
+        file_info_text = format_file_info(file_info)
+
+        # Store file info in agent state if tool_context is available
+        if tool_context and tool_context.agent:
+            # Get existing files_written list or create new one
+            files_written = tool_context.agent.state.get("files_written") or []
+            files_written.append(file_info)
+            tool_context.agent.state.set("files_written", files_written)
+
+            # Also track the last file written
+            tool_context.agent.state.set("last_file_written", file_info)
+
+            # Store in files dict keyed by path
+            files_dict = tool_context.agent.state.get("files") or {}
+            files_dict[file_info["path"]] = file_info
+            tool_context.agent.state.set("files", files_dict)
+
         success_message = f"File written successfully to {path}"
         success_panel = Panel(
             Text(success_message, style="bold green"),
@@ -269,10 +303,16 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
             expand=False,
         )
         console.print(success_panel)
+
+        # Return response
+        response_text = (
+            f"File write success: {success_message}\n\n" f"File Info:\n{file_info_text}"
+        )
+
         return {
             "toolUseId": tool_use_id,
             "status": "success",
-            "content": [{"text": f"File write success: {success_message}"}],
+            "content": [{"text": response_text}],
         }
     except Exception as e:
         error_message = f"Error writing file: {str(e)}"
