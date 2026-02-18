@@ -39,6 +39,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
 - 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🔍 **Intelligent Search** - OpenSearch agentic search with natural language query processing using Amazon Bedrock Claude for intelligent query translation and optimization
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -71,7 +72,7 @@ pip install strands-agents-tools
 To install the dependencies for optional tools:
 
 ```bash
-pip install strands-agents-tools[mem0_memory, use_browser, rss, use_computer]
+pip install strands-agents-tools[mem0_memory, use_browser, rss, use_computer, opensearch_agentic]
 ```
 
 ### Development Install
@@ -118,6 +119,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| opensearch_agentic_search | `agent.tool.opensearch_agentic_search_tool(query_text="Find me shoes under $100", host="https://cluster.us-west-2.aos.amazonaws.com", role_arn="arn:aws:iam::123456789:role/BedrockAccess")` | Intelligent search using OpenSearch and Amazon Bedrock Claude for natural language query processing with agentic search capabilities |
 | bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
@@ -385,6 +387,46 @@ result = agent.tool.exa_get_contents(
     }
 )
 
+```
+
+### OpenSearch Agentic Search
+
+```python
+from strands import Agent
+from strands_tools.opensearch_agentic_search import opensearch_agentic_search_tool
+
+agent = Agent(tools=[opensearch_agentic_search_tool])
+
+# Basic natural language search with specific index
+result = agent.tool.opensearch_agentic_search_tool(
+    query_text="Find me laptops under $1500 with good reviews",
+    host="https://my-cluster.us-west-2.aos.amazonaws.com",
+    index="products",
+    role_arn="arn:aws:iam::123456789:role/BedrockAccess"
+)
+
+# Cross-index search (searches all indices)
+result = agent.tool.opensearch_agentic_search_tool(
+    query_text="Show me customer complaints from last week",
+    host="https://my-cluster.us-west-2.aos.amazonaws.com",
+    role_arn="arn:aws:iam::123456789:role/BedrockAccess"
+    # No index specified - searches across all indices
+)
+
+# Using environment variables for cleaner configuration
+# Set: OPENSEARCH_HOST, OPENSEARCH_INDEX, BEDROCK_ROLE_ARN, AWS_REGION
+result = agent.tool.opensearch_agentic_search_tool(
+    query_text="Find wireless headphones with noise cancellation"
+    # Configuration loaded from environment variables
+)
+
+# Self-managed OpenSearch with basic authentication
+# Set: OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
+result = agent.tool.opensearch_agentic_search_tool(
+    query_text="Search for API documentation",
+    host="https://my-opensearch-cluster.com:9200",
+    index="docs"
+)
 ```
 
 ### Python Code Execution
@@ -1016,6 +1058,25 @@ These variables affect multiple tools:
 |----------------------|-------------|---------|
 | EXA_API_KEY | Exa API key (required for all Exa functionality) | None |
 - Visit https://dashboard.exa.ai/api-keys to create a free account and API key.
+
+#### OpenSearch Agentic Search Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| OPENSEARCH_HOST | OpenSearch cluster endpoint URL | None |
+| OPENSEARCH_INDEX | Default index to search (optional - can search all indices if not set) | None |
+| BEDROCK_ROLE_ARN | AWS IAM role ARN with Bedrock access permissions | None |
+| AWS_REGION | AWS region for OpenSearch and Bedrock | us-west-2 |
+| AWS_PROFILE | AWS profile for authentication | None |
+| OPENSEARCH_CACHE_FILE | Custom cache file location for storing model/agent/pipeline state | ~/.opensearch_agentic_cache.json |
+| OPENSEARCH_USERNAME | Username for self-managed OpenSearch basic auth | admin |
+| OPENSEARCH_PASSWORD | Password for self-managed OpenSearch basic auth | None |
+
+**Requirements**:
+- For AWS-managed OpenSearch: `OPENSEARCH_HOST` and `BEDROCK_ROLE_ARN` are required
+- For self-managed OpenSearch: `OPENSEARCH_HOST`, `OPENSEARCH_USERNAME`, and `OPENSEARCH_PASSWORD` are required
+- OpenSearch 3.3+ with ML plugin enabled
+- Access to Amazon Bedrock Claude model (`us.anthropic.claude-sonnet-4-20250514-v1:0`)
 
 #### Mem0 Memory Tool
 
