@@ -47,6 +47,12 @@ class MyExecutor(Executor):
 # Set custom executor
 programmatic_tool_caller.executor = MyExecutor()
 ```
+
+Limitations: Tools that use interrupts (human-in-the-loop) are not supported. The SDK 
+blocks interrupts during direct/programmatic tool calls — there is no mechanism to pause 
+execution, collect human input, and resume in this context. If an interrupt-capable tool 
+is called, it will raise a RuntimeError which surfaces as a failed tool result back to 
+the agent.
 """
 
 import asyncio
