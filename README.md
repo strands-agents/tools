@@ -412,8 +412,6 @@ processed.head()
 
 ### Programmatic Tool Calling
 
-*Note: `programmatic_tool_caller` does not work on Windows.*
-
 ```python
 from strands import Agent
 from strands_tools import programmatic_tool_caller, calculator

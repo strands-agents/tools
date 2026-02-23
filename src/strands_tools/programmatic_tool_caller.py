@@ -48,16 +48,19 @@ class MyExecutor(Executor):
 programmatic_tool_caller.executor = MyExecutor()
 ```
 
-Limitations: Tools that use interrupts (human-in-the-loop) are not supported. The SDK 
-blocks interrupts during direct/programmatic tool calls — there is no mechanism to pause 
-execution, collect human input, and resume in this context. If an interrupt-capable tool 
-is called, it will raise a RuntimeError which surfaces as a failed tool result back to 
+Limitations: Tools that use interrupts (human-in-the-loop) are not supported. The SDK
+blocks interrupts during direct/programmatic tool calls — there is no mechanism to pause
+execution, collect human input, and resume in this context. If an interrupt-capable tool
+is called, it will raise a RuntimeError which surfaces as a failed tool result back to
 the agent.
 """
 
 import asyncio
+import json
 import logging
+import math
 import os
+import re
 import sys
 import textwrap
 import traceback
@@ -212,8 +215,6 @@ def _validate_code(code: str) -> List[str]:
         r"os\.rmdir",
     ]
 
-    import re
-
     for pattern in dangerous_patterns:
         if re.search(pattern, code):
             warnings.append(f"Potentially dangerous pattern: {pattern}")
@@ -221,7 +222,7 @@ def _validate_code(code: str) -> List[str]:
     return warnings
 
 
-def _get_allowed_tools(agent: Any) -> set:
+def _get_allowed_tools(agent: Any) -> set[str]:
     """Get allowed tools from env var or default to all (except self)."""
     all_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
 
@@ -336,9 +337,9 @@ def programmatic_tool_caller(
         exec_namespace: Dict[str, Any] = {
             "__builtins__": __builtins__,
             "asyncio": asyncio,
-            "json": __import__("json"),
-            "re": __import__("re"),
-            "math": __import__("math"),
+            "json": json,
+            "re": re,
+            "math": math,
         }
 
         # Inject tools as async functions
