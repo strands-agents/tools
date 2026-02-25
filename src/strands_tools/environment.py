@@ -147,7 +147,7 @@ Key Features:
 
 
 # Protected variables that can't be modified
-PROTECTED_VARS = {"PATH", "PYTHONPATH", "STRANDS_HOME", "SHELL", "USER", "HOME"}
+PROTECTED_VARS = {"PATH", "PYTHONPATH", "STRANDS_HOME", "SHELL", "USER", "HOME", "BYPASS_TOOL_CONSENT"}
 
 
 def mask_sensitive_value(name: str, value: str) -> str:
