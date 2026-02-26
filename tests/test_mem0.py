@@ -548,3 +548,166 @@ def test_faiss_client(mock_mem0_memory, mock_tool):
     # Assertions
     assert result["status"] == "success"
     assert "Test memory content" in str(result["content"][0]["text"])
+
+
+# Tests for PostgreSQL/PGVector backend functionality
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "localhost",
+        "POSTGRESQL_PORT": "5432",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+        "DB_NAME": "test_db",
+        "DB_COLLECTION_NAME": "test_collection",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0Memory")
+@patch("boto3.Session")
+def test_postgresql_backend_initialization(mock_session, mock_mem0_memory):
+    """Test PGVector backend initializes correctly with required environment variables."""
+    # Mock session and credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test-access-key"
+    mock_credentials.secret_key = "test-secret-key"
+    mock_session.return_value.get_credentials.return_value = mock_credentials
+
+    mock_client = MagicMock()
+    mock_mem0_memory.from_config.return_value = mock_client
+
+    Mem0ServiceClient()
+
+    # Verify that from_config was called
+    assert mock_mem0_memory.from_config.called
+    call_args = mock_mem0_memory.from_config.call_args
+    config = call_args[1]["config_dict"]
+
+    # Verify PGVector configuration
+    assert "vector_store" in config
+    assert config["vector_store"]["provider"] == "pgvector"
+    assert config["vector_store"]["config"]["host"] == "localhost"
+    assert config["vector_store"]["config"]["port"] == 5432
+    assert config["vector_store"]["config"]["user"] == "test_user"
+    assert config["vector_store"]["config"]["password"] == "test_password"
+    assert config["vector_store"]["config"]["dbname"] == "test_db"
+    assert config["vector_store"]["config"]["collection_name"] == "test_collection"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "localhost",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0Memory")
+@patch("boto3.Session")
+def test_postgresql_backend_with_defaults(mock_session, mock_mem0_memory):
+    """Test PGVector backend uses default values when optional env vars are not set."""
+    # Mock session and credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test-access-key"
+    mock_credentials.secret_key = "test-secret-key"
+    mock_session.return_value.get_credentials.return_value = mock_credentials
+
+    mock_client = MagicMock()
+    mock_mem0_memory.from_config.return_value = mock_client
+
+    Mem0ServiceClient()
+
+    # Verify that from_config was called
+    assert mock_mem0_memory.from_config.called
+    call_args = mock_mem0_memory.from_config.call_args
+    config = call_args[1]["config_dict"]
+
+    # Verify PGVector configuration with defaults
+    assert "vector_store" in config
+    assert config["vector_store"]["provider"] == "pgvector"
+    assert config["vector_store"]["config"]["host"] == "localhost"
+    assert config["vector_store"]["config"]["port"] == 5432  # Default
+    assert config["vector_store"]["config"]["dbname"] == "postgres"  # Default
+    assert config["vector_store"]["config"]["collection_name"] == "mem0_memories"  # Default
+
+
+@patch("strands_tools.mem0_memory.Mem0Memory")
+@patch("boto3.Session")
+def test_append_pgvector_config_method(mock_session, mock_mem0_memory):
+    """Test the _append_pgvector_config method directly."""
+    # Mock session and credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test-access-key"
+    mock_credentials.secret_key = "test-secret-key"
+    mock_session.return_value.get_credentials.return_value = mock_credentials
+
+    with patch.dict(
+        os.environ,
+        {
+            "POSTGRESQL_HOST": "pg.example.com",
+            "POSTGRESQL_PORT": "5433",
+            "POSTGRESQL_USER": "admin",
+            "POSTGRESQL_PASSWORD": "secret",
+            "DB_NAME": "custom_db",
+            "DB_COLLECTION_NAME": "custom_collection",
+        },
+    ):
+        client = Mem0ServiceClient()
+
+        # Create a test config
+        test_config = {
+            "llm": {"provider": "test", "config": {"model": "test-model"}},
+            "embedder": {"provider": "test", "config": {"model": "test-embedder"}},
+        }
+
+        # Call the method
+        result = client._append_pgvector_config(test_config)
+
+        # Verify the result
+        assert result["vector_store"]["provider"] == "pgvector"
+        assert result["vector_store"]["config"]["host"] == "pg.example.com"
+        assert result["vector_store"]["config"]["port"] == 5433
+        assert result["vector_store"]["config"]["user"] == "admin"
+        assert result["vector_store"]["config"]["password"] == "secret"
+        assert result["vector_store"]["config"]["dbname"] == "custom_db"
+        assert result["vector_store"]["config"]["collection_name"] == "custom_collection"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "POSTGRESQL_HOST": "localhost",
+        "POSTGRESQL_USER": "test_user",
+        "POSTGRESQL_PASSWORD": "test_password",
+    },
+)
+@patch("strands_tools.mem0_memory.Mem0Memory")
+@patch("boto3.Session")
+def test_postgresql_with_custom_config(mock_session, mock_mem0_memory):
+    """Test PGVector backend merges custom config with PostgreSQL config."""
+    # Mock session and credentials
+    mock_credentials = MagicMock()
+    mock_credentials.access_key = "test-access-key"
+    mock_credentials.secret_key = "test-secret-key"
+    mock_session.return_value.get_credentials.return_value = mock_credentials
+
+    mock_client = MagicMock()
+    mock_mem0_memory.from_config.return_value = mock_client
+
+    custom_config = {
+        "embedder": {"provider": "custom", "config": {"model": "custom-model"}},
+        "llm": {"provider": "custom", "config": {"model": "custom-llm"}},
+    }
+
+    Mem0ServiceClient(config=custom_config)
+
+    # Verify that from_config was called
+    assert mock_mem0_memory.from_config.called
+    call_args = mock_mem0_memory.from_config.call_args
+    config = call_args[1]["config_dict"]
+
+    # Verify both custom config and PGVector config are present
+    assert config["embedder"]["provider"] == "custom"
+    assert config["llm"]["provider"] == "custom"
+    assert config["llm"]["config"]["model"] == "custom-llm"
+    assert config["vector_store"]["provider"] == "pgvector"
+    assert config["vector_store"]["config"]["host"] == "localhost"
