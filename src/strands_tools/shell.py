@@ -185,6 +185,12 @@ class CommandExecutor:
                 return exit_code, "".join(output), ""
 
         finally:
+            # Close the PTY file descriptor
+            if "fd" in locals() and pid > 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             # Restore terminal settings only if they were saved and changed.
             if not non_interactive_mode and old_tty:
                 termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
