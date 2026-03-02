@@ -133,6 +133,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
+| skills | `agent.tool.skills(action="use", skill_name="code-reviewer")` | ⚠️ **Experimental**: Load and use Agent Skills - modular packages of specialized instructions following the AgentSkills.io specification. The recommended path for production use will be the SDK's native skills feature (coming soon). |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
@@ -787,6 +788,47 @@ latest_news = agent.tool.rss(
 )
 ```
 
+### Agent Skills
+
+> ⚠️ **Experimental**: This tool is an early experiment for working with Agent Skills. The recommended path for production use will be the SDK's native skills feature (coming soon). APIs and behavior may change without notice.
+
+```python
+from strands import Agent
+from strands_tools import skills
+
+# Skills are auto-discovered from STRANDS_SKILLS_DIR (default: ./skills)
+agent = Agent(tools=[skills])
+
+# List available skills
+result = agent.tool.skills(action="list")
+
+# Use a skill - loads its instructions into the conversation
+result = agent.tool.skills(action="use", skill_name="code-reviewer")
+# The agent now has the skill's instructions and will follow them
+
+# List resources available in a skill (scripts, references, assets)
+result = agent.tool.skills(action="list_resources", skill_name="code-reviewer")
+
+# Load a specific resource file
+result = agent.tool.skills(
+    action="get_resource",
+    skill_name="code-reviewer",
+    resource_path="scripts/analyze.py"
+)
+
+# Import skills from another directory at runtime
+result = agent.tool.skills(
+    action="import",
+    import_dir="/path/to/additional/skills"
+)
+
+# Use a different skills directory
+result = agent.tool.skills(
+    action="list",
+    STRANDS_SKILLS_DIR="/path/to/custom/skills"
+)
+```
+
 ### Use Computer
 
 ```python
@@ -1113,6 +1155,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 | SLACK_DEFAULT_EVENT_COUNT | Default number of events to retrieve | 42 |
 | STRANDS_SLACK_AUTO_REPLY | Enable automatic replies to messages | false |
 | STRANDS_SLACK_LISTEN_ONLY_TAG | Only process messages containing this tag | None |
+
+#### Skills Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_SKILLS_DIR | Directory containing skill folders | ./skills |
 
 #### Speak Tool
 
