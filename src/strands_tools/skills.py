@@ -42,11 +42,15 @@ For more information about Agent Skills:
 import logging
 import os
 import re
+import ssl
+import urllib.error
+import urllib.request
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import urlparse
 
 import yaml
 from strands import tool
@@ -60,6 +64,12 @@ logger.warning(
 # Maximum file size for resources (10MB)
 MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 
+# Maximum size for a single SKILL.md file imported via file path or URL (1MB)
+MAX_SKILL_FILE_SIZE = 1 * 1024 * 1024
+
+# Timeout for fetching a SKILL.md from a URL (seconds)
+URL_FETCH_TIMEOUT = 30
+
 
 @dataclass
 class SkillMetadata:
@@ -70,6 +80,8 @@ class SkillMetadata:
     path: Path
     license: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
+    instructions: Optional[str] = None  # Pre-cached instructions for file/URL imports
+    virtual: bool = False  # True when imported from a single file or URL
 
 
 @dataclass
@@ -257,7 +269,12 @@ def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
 
     try:
         metadata = cache.skills[skill_name]
-        instructions = _load_skill_instructions(metadata.path)
+
+        # Virtual skills (imported from file/URL) have pre-cached instructions
+        if metadata.virtual and metadata.instructions is not None:
+            instructions = metadata.instructions
+        else:
+            instructions = _load_skill_instructions(metadata.path)
 
         result = f"""## Skill: {metadata.name}
 
@@ -286,8 +303,22 @@ def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, *
     if skill_name not in cache.skills:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
+    metadata = cache.skills[skill_name]
+
+    if metadata.virtual:
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        f"Skill '{skill_name}' was imported from a single file or URL "
+                        "and has no local resources. Only directory-based skills support get_resource."
+                    )
+                }
+            ],
+        }
+
     try:
-        metadata = cache.skills[skill_name]
         content = _load_resource(metadata.path, resource_path)
 
         return {
@@ -311,6 +342,20 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
     metadata = cache.skills[skill_name]
+
+    if metadata.virtual:
+        return {
+            "status": "success",
+            "content": [
+                {
+                    "text": (
+                        f"Skill '{skill_name}' was imported from a single file or URL.\n"
+                        "No local resources available. Only the skill instructions are loaded."
+                    )
+                }
+            ],
+        }
+
     resources = {"scripts": [], "references": [], "assets": [], "other": []}
 
     for item in metadata.path.rglob("*"):
@@ -343,30 +388,220 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _action_import(skills_dir: str, import_dir: str = None, **kwargs) -> Dict[str, Any]:
-    """Import skills from an additional directory."""
-    if not import_dir:
+def _import_from_content(content: str, source_label: str, cache: SkillsCache) -> Dict[str, Any]:
+    """Parse SKILL.md content and register a virtual skill in the cache.
+
+    Shared parser for both file and URL imports. Parses frontmatter,
+    validates the skill name, and creates a virtual SkillMetadata entry.
+
+    Args:
+        content: Raw SKILL.md text (frontmatter + body).
+        source_label: Human-readable origin (file path or URL) for logging/messages.
+        cache: The SkillsCache to add the skill to.
+
+    Returns:
+        Standard success/error dict.
+    """
+    try:
+        frontmatter, instructions = _parse_frontmatter(content)
+    except ValueError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Invalid SKILL.md format from {source_label}: {e}"}],
+        }
+
+    name = frontmatter.get("name")
+    if not name:
+        return {
+            "status": "error",
+            "content": [{"text": f"SKILL.md from {source_label} is missing required 'name' in frontmatter"}],
+        }
+    if not _validate_skill_name(name):
         return {
             "status": "error",
             "content": [
                 {
                     "text": (
-                        "import_dir parameter is required for import action. "
-                        "Provide the path to a skills directory to import from."
+                        f"Invalid skill name '{name}' from {source_label}. "
+                        "Names must be kebab-case, lowercase alphanumeric, max 64 chars."
                     )
                 }
             ],
         }
 
-    import_path = Path(import_dir).expanduser().resolve()
+    description = frontmatter.get("description", "")
+
+    with _CACHE_LOCK:
+        if name in cache.skills:
+            return {
+                "status": "error",
+                "content": [{"text": f"Skill '{name}' already exists, cannot import from {source_label}"}],
+            }
+
+        cache.skills[name] = SkillMetadata(
+            name=name,
+            description=description,
+            path=Path(source_label),
+            license=frontmatter.get("license"),
+            allowed_tools=frontmatter.get("allowed-tools"),
+            instructions=instructions,
+            virtual=True,
+        )
+
+    logger.info(f"Imported virtual skill '{name}' from {source_label}")
+    return {
+        "status": "success",
+        "content": [{"text": f"Imported skill '{name}' from {source_label}"}],
+    }
+
+
+def _import_from_file(source: str, cache: SkillsCache) -> Dict[str, Any]:
+    """Import a single skill from a local SKILL.md file path.
+
+    Validates the path, enforces size limit, reads content, then delegates
+    to _import_from_content() for parsing and registration.
+
+    Args:
+        source: Path to a SKILL.md file (may contain ~ or relative segments).
+        cache: The SkillsCache to add the skill to.
+
+    Returns:
+        Standard success/error dict.
+    """
+    file_path = Path(source).expanduser().resolve()
+
+    if not file_path.exists():
+        return {
+            "status": "error",
+            "content": [{"text": f"Source file not found: {source}"}],
+        }
+    if not file_path.is_file():
+        return {
+            "status": "error",
+            "content": [{"text": f"Source is not a file: {source}"}],
+        }
+    if file_path.stat().st_size > MAX_SKILL_FILE_SIZE:
+        return {
+            "status": "error",
+            "content": [{"text": f"Source file too large (max {MAX_SKILL_FILE_SIZE} bytes): {source}"}],
+        }
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return {
+            "status": "error",
+            "content": [{"text": f"Source file is not valid UTF-8: {source}"}],
+        }
+    except OSError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Error reading source file {source}: {e}"}],
+        }
+
+    return _import_from_content(content, source_label=str(file_path), cache=cache)
+
+
+def _import_from_url(source: str, cache: SkillsCache) -> Dict[str, Any]:
+    """Import a single skill from an HTTPS URL pointing to a SKILL.md file.
+
+    Validates the URL (HTTPS only), fetches with timeout and size limit,
+    checks for non-HTTPS redirects, then delegates to _import_from_content().
+
+    Args:
+        source: HTTPS URL to a SKILL.md file.
+        cache: The SkillsCache to add the skill to.
+
+    Returns:
+        Standard success/error dict.
+    """
+    parsed = urlparse(source)
+    if parsed.scheme != "https":
+        return {
+            "status": "error",
+            "content": [{"text": "Only HTTPS URLs are supported for skill import"}],
+        }
+    if not parsed.hostname:
+        return {
+            "status": "error",
+            "content": [{"text": f"Invalid URL (no hostname): {source}"}],
+        }
+
+    try:
+        req = urllib.request.Request(
+            source,
+            headers={"User-Agent": "strands-agents-skills/1.0"},
+        )
+        ssl_context = ssl.create_default_context()
+
+        with urllib.request.urlopen(req, timeout=URL_FETCH_TIMEOUT, context=ssl_context) as resp:
+            # Guard against redirect to non-HTTPS
+            if hasattr(resp, "url") and resp.url and not resp.url.startswith("https://"):
+                return {
+                    "status": "error",
+                    "content": [{"text": f"URL redirected to non-HTTPS location: {resp.url}"}],
+                }
+
+            # Size-limited read: read one byte more than the limit to detect overflow
+            data = resp.read(MAX_SKILL_FILE_SIZE + 1)
+            if len(data) > MAX_SKILL_FILE_SIZE:
+                return {
+                    "status": "error",
+                    "content": [{"text": f"URL content too large (max {MAX_SKILL_FILE_SIZE} bytes)"}],
+                }
+
+        content = data.decode("utf-8")
+
+    except urllib.error.HTTPError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"HTTP error fetching URL: {e.code} {e.reason}"}],
+        }
+    except urllib.error.URLError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Error fetching URL: {e.reason}"}],
+        }
+    except TimeoutError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Timeout fetching URL (limit {URL_FETCH_TIMEOUT}s): {e}"}],
+        }
+    except UnicodeDecodeError:
+        return {
+            "status": "error",
+            "content": [{"text": "URL content is not valid UTF-8"}],
+        }
+    except OSError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Network error fetching URL: {e}"}],
+        }
+
+    return _import_from_content(content, source_label=source, cache=cache)
+
+
+def _import_from_directory(source: str, cache: SkillsCache) -> Dict[str, Any]:
+    """Import all skills from a directory.
+
+    Discovers skills in the directory and merges them into the cache,
+    skipping any that already exist.
+
+    Args:
+        source: Path to a directory containing skill folders.
+        cache: The SkillsCache to add skills to.
+
+    Returns:
+        Standard success/error dict.
+    """
+    import_path = Path(source).expanduser().resolve()
 
     if not import_path.exists() or not import_path.is_dir():
         return {
             "status": "error",
-            "content": [{"text": f"Import directory not found or not a directory: {import_dir}"}],
+            "content": [{"text": f"Import directory not found or not a directory: {source}"}],
         }
 
-    cache = _get_or_create_cache(skills_dir)
     new_skills = _discover_skills(import_path)
 
     imported = []
@@ -380,7 +615,7 @@ def _action_import(skills_dir: str, import_dir: str = None, **kwargs) -> Dict[st
             cache.skills[name] = metadata
             imported.append(name)
 
-    lines = [f"Imported {len(imported)} skill(s) from {import_dir}:"]
+    lines = [f"Imported {len(imported)} skill(s) from {source}:"]
     if imported:
         for name in sorted(imported):
             lines.append(f"  + {name}")
@@ -388,6 +623,62 @@ def _action_import(skills_dir: str, import_dir: str = None, **kwargs) -> Dict[st
         lines.append(f"\nSkipped {len(skipped)} (already exist): {', '.join(sorted(skipped))}")
 
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
+
+
+def _action_import(skills_dir: str, source: str = None, **kwargs) -> Dict[str, Any]:
+    """Import skills from a directory, file path, or URL.
+
+    The source parameter is auto-detected:
+    - HTTPS URL: Fetches a single SKILL.md from the URL
+    - File path: Reads a single SKILL.md from disk
+    - Directory path: Discovers all skills in the directory (existing behavior)
+
+    Args:
+        skills_dir: The main skills directory (for cache lookup).
+        source: Path to a directory, SKILL.md file, or HTTPS URL.
+
+    Returns:
+        Standard success/error dict.
+    """
+    if not source:
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        "source parameter is required for import action. "
+                        "Provide a path to a skills directory, a SKILL.md file, or an HTTPS URL."
+                    )
+                }
+            ],
+        }
+
+    cache = _get_or_create_cache(skills_dir)
+
+    # HTTPS URL
+    if source.startswith("https://"):
+        return _import_from_url(source, cache)
+
+    # Reject non-HTTPS URL schemes explicitly
+    if source.startswith(("http://", "ftp://", "file://")):
+        return {
+            "status": "error",
+            "content": [{"text": "Only HTTPS URLs are supported for skill import"}],
+        }
+
+    # Local path — determine if it's a file or directory
+    local_path = Path(source).expanduser().resolve()
+
+    if local_path.is_dir():
+        return _import_from_directory(source, cache)
+
+    if local_path.is_file():
+        return _import_from_file(source, cache)
+
+    return {
+        "status": "error",
+        "content": [{"text": f"Source not found: {source}"}],
+    }
 
 
 _ACTIONS = {
@@ -456,7 +747,7 @@ def skills(
     action: Literal["list", "use", "get_resource", "list_resources", "import"],
     skill_name: Optional[str] = None,
     resource_path: Optional[str] = None,
-    import_dir: Optional[str] = None,
+    source: Optional[str] = None,
     STRANDS_SKILLS_DIR: Optional[str] = None,
 ) -> Dict[str, Any]:
     """⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. \
@@ -473,13 +764,16 @@ APIs and behavior may change without notice.
     - use: Load a skill's full instructions (returns them for you to follow)
     - get_resource: Load a specific file from a skill (scripts, references, etc.)
     - list_resources: List all files available in a skill
-    - import: Dynamically import skills from an additional directory at runtime
+    - import: Import skills from a directory, file path, or HTTPS URL
 
     Args:
         action: The action to perform
         skill_name: Name of the skill (required for use, get_resource, list_resources)
         resource_path: Path to resource file (required for get_resource)
-        import_dir: Path to directory to import skills from (required for import action)
+        source: Source to import from (required for import action). Accepts:
+            - Directory path: imports all skills from the directory
+            - File path: imports a single skill from a SKILL.md file
+            - HTTPS URL: imports a single skill from a remote SKILL.md
         STRANDS_SKILLS_DIR: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
 
     Returns:
@@ -495,8 +789,14 @@ APIs and behavior may change without notice.
         # Get a resource file
         skills(action="get_resource", skill_name="code-reviewer", resource_path="scripts/analyze.py")
 
-        # Import skills from another directory
-        skills(action="import", import_dir="/path/to/more/skills")
+        # Import skills from a directory
+        skills(action="import", source="/path/to/more/skills")
+
+        # Import a single skill from a file
+        skills(action="import", source="/path/to/my-skill/SKILL.md")
+
+        # Import a skill from a URL
+        skills(action="import", source="https://raw.githubusercontent.com/org/repo/main/skills/my-skill/SKILL.md")
     """
     warnings.warn(
         "The skills tool is experimental. The recommended path for production use will be "
@@ -514,7 +814,7 @@ APIs and behavior may change without notice.
             skills_dir=skills_dir,
             skill_name=skill_name,
             resource_path=resource_path,
-            import_dir=import_dir,
+            source=source,
         )
     except Exception as e:
         logger.error(f"Error in skills tool: {e}", exc_info=True)

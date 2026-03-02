@@ -7,11 +7,13 @@ Tests cover:
 - Resource loading
 - Error handling
 - get_skills_prompt helper
-- Import action
+- Import action (directory, file, URL)
+- Virtual skill behavior
 - Experimental warning
 """
 
 import warnings
+from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
@@ -340,7 +342,7 @@ class TestGetSkillsPrompt:
 
 
 class TestImportAction:
-    """Tests for the import action."""
+    """Tests for the import action with directory source."""
 
     @pytest.fixture
     def import_dir(self, tmp_path):
@@ -374,7 +376,7 @@ This skill helps write comprehensive test cases.
 
         result = agent.tool.skills(
             action="import",
-            import_dir=str(import_dir),
+            source=str(import_dir),
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
         text = extract_text(result)
@@ -406,7 +408,7 @@ description: A duplicate code reviewer skill.
 
         result = agent.tool.skills(
             action="import",
-            import_dir=str(import_dir),
+            source=str(import_dir),
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
         text = extract_text(result)
@@ -421,16 +423,16 @@ description: A duplicate code reviewer skill.
 
         result = agent.tool.skills(
             action="import",
-            import_dir=nonexistent,
+            source=nonexistent,
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
 
         assert result["status"] == "error"
         text = extract_text(result)
-        assert "not found" in text.lower() or "not a directory" in text.lower()
+        assert "not found" in text.lower()
 
-    def test_import_empty_import_dir(self, agent, skills_dir):
-        """Test importing with empty import_dir parameter."""
+    def test_import_missing_source(self, agent, skills_dir):
+        """Test importing with no source parameter."""
         result = agent.tool.skills(
             action="import",
             STRANDS_SKILLS_DIR=str(skills_dir),
@@ -438,7 +440,390 @@ description: A duplicate code reviewer skill.
 
         assert result["status"] == "error"
         text = extract_text(result)
-        assert "import_dir" in text.lower()
+        assert "source" in text.lower()
+
+
+class TestImportFromFile:
+    """Tests for importing a single skill from a SKILL.md file."""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        """Clear the skills cache before each test."""
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+    def _make_skill_file(self, tmp_path, name="my-skill", description="A test skill.", body="# Instructions\n\nDo stuff."):
+        """Helper to create a standalone SKILL.md file."""
+        skill_file = tmp_path / "SKILL.md"
+        skill_file.write_text(f"""---
+name: {name}
+description: {description}
+---
+
+{body}
+""")
+        return skill_file
+
+    def test_import_from_file_success(self, agent, skills_dir, tmp_path):
+        """Test importing a single skill from a SKILL.md file."""
+        skill_file = self._make_skill_file(tmp_path)
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(skill_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "my-skill" in text
+
+    def test_import_from_file_then_use(self, agent, skills_dir, tmp_path):
+        """Test that a file-imported skill can be used."""
+        skill_file = self._make_skill_file(tmp_path, body="# Review\n\nCheck for bugs.")
+
+        agent.tool.skills(action="import", source=str(skill_file), STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(action="use", skill_name="my-skill", STRANDS_SKILLS_DIR=str(skills_dir))
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Check for bugs" in text
+
+    def test_import_from_file_appears_in_list(self, agent, skills_dir, tmp_path):
+        """Test that a file-imported skill shows up in list."""
+        skill_file = self._make_skill_file(tmp_path)
+
+        agent.tool.skills(action="import", source=str(skill_file), STRANDS_SKILLS_DIR=str(skills_dir))
+        result = agent.tool.skills(action="list", STRANDS_SKILLS_DIR=str(skills_dir))
+        text = extract_text(result)
+
+        assert "my-skill" in text
+
+    def test_import_from_file_not_found(self, agent, skills_dir, tmp_path):
+        """Test importing from a non-existent file."""
+        result = agent.tool.skills(
+            action="import",
+            source=str(tmp_path / "nonexistent" / "SKILL.md"),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "not found" in extract_text(result).lower()
+
+    def test_import_from_file_invalid_frontmatter(self, agent, skills_dir, tmp_path):
+        """Test importing a file without valid frontmatter."""
+        bad_file = tmp_path / "BAD.md"
+        bad_file.write_text("# No frontmatter here\n\nJust markdown.")
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(bad_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "invalid" in extract_text(result).lower() or "frontmatter" in extract_text(result).lower()
+
+    def test_import_from_file_missing_name(self, agent, skills_dir, tmp_path):
+        """Test importing a SKILL.md with no name in frontmatter."""
+        skill_file = tmp_path / "SKILL.md"
+        skill_file.write_text("""---
+description: No name field here.
+---
+
+# Instructions
+""")
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(skill_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "name" in extract_text(result).lower()
+
+    def test_import_from_file_invalid_skill_name(self, agent, skills_dir, tmp_path):
+        """Test importing a SKILL.md with an invalid (non-kebab-case) name."""
+        skill_file = self._make_skill_file(tmp_path, name="Invalid_Name")
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(skill_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "invalid skill name" in extract_text(result).lower()
+
+    def test_import_from_file_name_collision(self, agent, skills_dir, tmp_path):
+        """Test importing a file whose skill name already exists in cache."""
+        # code-reviewer already exists from skills_dir fixture
+        skill_file = self._make_skill_file(tmp_path, name="code-reviewer")
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(skill_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "already exists" in extract_text(result).lower()
+
+    def test_import_from_file_too_large(self, agent, skills_dir, tmp_path):
+        """Test importing a file that exceeds the size limit."""
+        from strands_tools.skills import MAX_SKILL_FILE_SIZE
+
+        big_file = tmp_path / "SKILL.md"
+        big_file.write_text("---\nname: big\n---\n" + "x" * (MAX_SKILL_FILE_SIZE + 1))
+
+        result = agent.tool.skills(
+            action="import",
+            source=str(big_file),
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "too large" in extract_text(result).lower()
+
+
+class TestImportFromUrl:
+    """Tests for importing a single skill from an HTTPS URL."""
+
+    VALID_SKILL_CONTENT = b"""---
+name: remote-skill
+description: A skill fetched from a URL.
+---
+
+# Remote Skill
+
+Do remote things.
+"""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        """Clear the skills cache before each test."""
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+    def _mock_response(self, data=None, url="https://example.com/SKILL.md"):
+        """Create a mock urllib response."""
+        if data is None:
+            data = self.VALID_SKILL_CONTENT
+        resp = MagicMock()
+        resp.read.return_value = data
+        resp.url = url
+        resp.__enter__ = MagicMock(return_value=resp)
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_success(self, mock_urlopen, agent, skills_dir):
+        """Test importing a skill from a valid HTTPS URL."""
+        mock_urlopen.return_value = self._mock_response()
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/skills/remote-skill/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "remote-skill" in text
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_then_use(self, mock_urlopen, agent, skills_dir):
+        """Test that a URL-imported skill can be used."""
+        mock_urlopen.return_value = self._mock_response()
+
+        agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        result = agent.tool.skills(
+            action="use",
+            skill_name="remote-skill",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Do remote things" in text
+
+    def test_import_from_url_http_rejected(self, agent, skills_dir):
+        """Test that non-HTTPS URLs are rejected."""
+        result = agent.tool.skills(
+            action="import",
+            source="http://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "https" in extract_text(result).lower()
+
+    def test_import_from_url_no_hostname(self, agent, skills_dir):
+        """Test that URLs without a hostname are rejected."""
+        result = agent.tool.skills(
+            action="import",
+            source="https://",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "hostname" in extract_text(result).lower() or "invalid" in extract_text(result).lower()
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_too_large(self, mock_urlopen, agent, skills_dir):
+        """Test that oversized URL content is rejected."""
+        from strands_tools.skills import MAX_SKILL_FILE_SIZE
+
+        oversized = b"x" * (MAX_SKILL_FILE_SIZE + 1)
+        mock_urlopen.return_value = self._mock_response(data=oversized)
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "too large" in extract_text(result).lower()
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_http_error(self, mock_urlopen, agent, skills_dir):
+        """Test handling of HTTP errors (e.g., 404)."""
+        import urllib.error
+
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://example.com/SKILL.md",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=None,
+        )
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "404" in extract_text(result)
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_timeout(self, mock_urlopen, agent, skills_dir):
+        """Test handling of request timeout."""
+        mock_urlopen.side_effect = TimeoutError("Connection timed out")
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "timeout" in extract_text(result).lower()
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_not_utf8(self, mock_urlopen, agent, skills_dir):
+        """Test handling of non-UTF-8 content from URL."""
+        mock_urlopen.return_value = self._mock_response(data=b"\xff\xfe\x00\x01")
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "utf-8" in extract_text(result).lower()
+
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_import_from_url_redirect_to_http(self, mock_urlopen, agent, skills_dir):
+        """Test that redirect to non-HTTPS is rejected."""
+        mock_urlopen.return_value = self._mock_response(url="http://evil.com/SKILL.md")
+
+        result = agent.tool.skills(
+            action="import",
+            source="https://example.com/SKILL.md",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        assert "non-https" in extract_text(result).lower() or "redirect" in extract_text(result).lower()
+
+
+class TestVirtualSkillBehavior:
+    """Tests for virtual skill (file/URL imported) behavior with other actions."""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        """Clear the skills cache before each test."""
+        from strands_tools.skills import _CACHE_LOCK, _cache
+
+        with _CACHE_LOCK:
+            _cache.clear()
+
+    @pytest.fixture
+    def virtual_skill(self, agent, skills_dir, tmp_path):
+        """Import a virtual skill from a file for testing."""
+        skill_file = tmp_path / "SKILL.md"
+        skill_file.write_text("""---
+name: virtual-test
+description: A virtual skill for testing.
+---
+
+# Virtual Instructions
+
+Follow these steps.
+""")
+        agent.tool.skills(action="import", source=str(skill_file), STRANDS_SKILLS_DIR=str(skills_dir))
+        return "virtual-test"
+
+    def test_virtual_skill_get_resource_error(self, agent, skills_dir, virtual_skill):
+        """Test that get_resource on a virtual skill returns a clear error."""
+        result = agent.tool.skills(
+            action="get_resource",
+            skill_name=virtual_skill,
+            resource_path="scripts/test.py",
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+
+        assert result["status"] == "error"
+        text = extract_text(result)
+        assert "single file or url" in text.lower() or "no local resources" in text.lower()
+
+    def test_virtual_skill_list_resources_empty(self, agent, skills_dir, virtual_skill):
+        """Test that list_resources on a virtual skill returns an informative message."""
+        result = agent.tool.skills(
+            action="list_resources",
+            skill_name=virtual_skill,
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        # Should succeed but indicate no resources
+        assert result["status"] == "success"
+        assert "no local resources" in text.lower() or "single file or url" in text.lower()
+
+    def test_virtual_skill_use_returns_instructions(self, agent, skills_dir, virtual_skill):
+        """Test that use action works correctly for virtual skills."""
+        result = agent.tool.skills(
+            action="use",
+            skill_name=virtual_skill,
+            STRANDS_SKILLS_DIR=str(skills_dir),
+        )
+        text = extract_text(result)
+
+        assert result["status"] == "success"
+        assert "Follow these steps" in text
 
 
 class TestExperimentalWarning:
