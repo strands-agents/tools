@@ -501,6 +501,33 @@ description: {description}
 
         assert "my-skill" in text
 
+    def test_import_from_file_resources_accessible(self, agent, skills_dir, tmp_path):
+        """Test that resources in the same directory as the SKILL.md are accessible."""
+        skill_file = self._make_skill_file(tmp_path)
+
+        # Create a resource alongside the SKILL.md
+        scripts_dir = tmp_path / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "helper.py").write_text("def helper(): pass\n")
+
+        agent.tool.skills(action="import", source=str(skill_file), STRANDS_SKILLS_DIR=str(skills_dir))
+
+        # list_resources should find the script
+        result = agent.tool.skills(
+            action="list_resources", skill_name="my-skill", STRANDS_SKILLS_DIR=str(skills_dir)
+        )
+        text = extract_text(result)
+        assert "helper.py" in text
+
+        # get_resource should load it
+        result = agent.tool.skills(
+            action="get_resource", skill_name="my-skill",
+            resource_path="scripts/helper.py", STRANDS_SKILLS_DIR=str(skills_dir)
+        )
+        text = extract_text(result)
+        assert result["status"] == "success"
+        assert "def helper" in text
+
     def test_import_from_file_not_found(self, agent, skills_dir, tmp_path):
         """Test importing from a non-existent file."""
         result = agent.tool.skills(
@@ -761,7 +788,17 @@ Do remote things.
 
 
 class TestVirtualSkillBehavior:
-    """Tests for virtual skill (file/URL imported) behavior with other actions."""
+    """Tests for virtual skill (URL-imported) behavior with other actions."""
+
+    VIRTUAL_SKILL_CONTENT = b"""---
+name: virtual-test
+description: A virtual skill for testing.
+---
+
+# Virtual Instructions
+
+Follow these steps.
+"""
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
@@ -771,53 +808,57 @@ class TestVirtualSkillBehavior:
         with _CACHE_LOCK:
             _cache.clear()
 
-    @pytest.fixture
-    def virtual_skill(self, agent, skills_dir, tmp_path):
-        """Import a virtual skill from a file for testing."""
-        skill_file = tmp_path / "SKILL.md"
-        skill_file.write_text("""---
-name: virtual-test
-description: A virtual skill for testing.
----
+    def _mock_response(self):
+        """Create a mock urllib response with the virtual skill content."""
+        resp = MagicMock()
+        resp.read.return_value = self.VIRTUAL_SKILL_CONTENT
+        resp.url = "https://example.com/SKILL.md"
+        resp.__enter__ = MagicMock(return_value=resp)
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
 
-# Virtual Instructions
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_virtual_skill_get_resource_error(self, mock_urlopen, agent, skills_dir):
+        """Test that get_resource on a URL-imported skill returns a clear error."""
+        mock_urlopen.return_value = self._mock_response()
+        agent.tool.skills(action="import", source="https://example.com/SKILL.md", STRANDS_SKILLS_DIR=str(skills_dir))
 
-Follow these steps.
-""")
-        agent.tool.skills(action="import", source=str(skill_file), STRANDS_SKILLS_DIR=str(skills_dir))
-        return "virtual-test"
-
-    def test_virtual_skill_get_resource_error(self, agent, skills_dir, virtual_skill):
-        """Test that get_resource on a virtual skill returns a clear error."""
         result = agent.tool.skills(
             action="get_resource",
-            skill_name=virtual_skill,
+            skill_name="virtual-test",
             resource_path="scripts/test.py",
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
 
         assert result["status"] == "error"
         text = extract_text(result)
-        assert "single file or url" in text.lower() or "no local resources" in text.lower()
+        assert "url" in text.lower() and "no local resources" in text.lower()
 
-    def test_virtual_skill_list_resources_empty(self, agent, skills_dir, virtual_skill):
-        """Test that list_resources on a virtual skill returns an informative message."""
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_virtual_skill_list_resources_empty(self, mock_urlopen, agent, skills_dir):
+        """Test that list_resources on a URL-imported skill returns an informative message."""
+        mock_urlopen.return_value = self._mock_response()
+        agent.tool.skills(action="import", source="https://example.com/SKILL.md", STRANDS_SKILLS_DIR=str(skills_dir))
+
         result = agent.tool.skills(
             action="list_resources",
-            skill_name=virtual_skill,
+            skill_name="virtual-test",
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
         text = extract_text(result)
 
-        # Should succeed but indicate no resources
         assert result["status"] == "success"
-        assert "no local resources" in text.lower() or "single file or url" in text.lower()
+        assert "no local resources" in text.lower()
 
-    def test_virtual_skill_use_returns_instructions(self, agent, skills_dir, virtual_skill):
-        """Test that use action works correctly for virtual skills."""
+    @patch("strands_tools.skills.urllib.request.urlopen")
+    def test_virtual_skill_use_returns_instructions(self, mock_urlopen, agent, skills_dir):
+        """Test that use action works correctly for URL-imported skills."""
+        mock_urlopen.return_value = self._mock_response()
+        agent.tool.skills(action="import", source="https://example.com/SKILL.md", STRANDS_SKILLS_DIR=str(skills_dir))
+
         result = agent.tool.skills(
             action="use",
-            skill_name=virtual_skill,
+            skill_name="virtual-test",
             STRANDS_SKILLS_DIR=str(skills_dir),
         )
         text = extract_text(result)

@@ -311,7 +311,7 @@ def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, *
             "content": [
                 {
                     "text": (
-                        f"Skill '{skill_name}' was imported from a single file or URL "
+                        f"Skill '{skill_name}' was imported from a URL "
                         "and has no local resources. Only directory-based skills support get_resource."
                     )
                 }
@@ -349,7 +349,7 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
             "content": [
                 {
                     "text": (
-                        f"Skill '{skill_name}' was imported from a single file or URL.\n"
+                        f"Skill '{skill_name}' was imported from a URL.\n"
                         "No local resources available. Only the skill instructions are loaded."
                     )
                 }
@@ -391,8 +391,8 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
 def _import_from_content(content: str, source_label: str, cache: SkillsCache) -> Dict[str, Any]:
     """Parse SKILL.md content and register a virtual skill in the cache.
 
-    Shared parser for both file and URL imports. Parses frontmatter,
-    validates the skill name, and creates a virtual SkillMetadata entry.
+    Used for URL imports where there is no local directory. The skill is
+    marked as virtual, meaning get_resource and list_resources won't work.
 
     Args:
         content: Raw SKILL.md text (frontmatter + body).
@@ -458,8 +458,9 @@ def _import_from_content(content: str, source_label: str, cache: SkillsCache) ->
 def _import_from_file(source: str, cache: SkillsCache) -> Dict[str, Any]:
     """Import a single skill from a local SKILL.md file path.
 
-    Validates the path, enforces size limit, reads content, then delegates
-    to _import_from_content() for parsing and registration.
+    The skill's parent directory is used as the skill path, so resources
+    (scripts/, references/, etc.) in that directory are accessible just
+    like directory-discovered skills.
 
     Args:
         source: Path to a SKILL.md file (may contain ~ or relative segments).
@@ -499,7 +500,56 @@ def _import_from_file(source: str, cache: SkillsCache) -> Dict[str, Any]:
             "content": [{"text": f"Error reading source file {source}: {e}"}],
         }
 
-    return _import_from_content(content, source_label=str(file_path), cache=cache)
+    try:
+        frontmatter, _ = _parse_frontmatter(content)
+    except ValueError as e:
+        return {
+            "status": "error",
+            "content": [{"text": f"Invalid SKILL.md format from {source}: {e}"}],
+        }
+
+    name = frontmatter.get("name")
+    if not name:
+        return {
+            "status": "error",
+            "content": [{"text": f"SKILL.md from {source} is missing required 'name' in frontmatter"}],
+        }
+    if not _validate_skill_name(name):
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        f"Invalid skill name '{name}' from {source}. "
+                        "Names must be kebab-case, lowercase alphanumeric, max 64 chars."
+                    )
+                }
+            ],
+        }
+
+    description = frontmatter.get("description", "")
+    skill_dir = file_path.parent
+
+    with _CACHE_LOCK:
+        if name in cache.skills:
+            return {
+                "status": "error",
+                "content": [{"text": f"Skill '{name}' already exists, cannot import from {source}"}],
+            }
+
+        cache.skills[name] = SkillMetadata(
+            name=name,
+            description=description,
+            path=skill_dir,
+            license=frontmatter.get("license"),
+            allowed_tools=frontmatter.get("allowed-tools"),
+        )
+
+    logger.info(f"Imported skill '{name}' from {file_path}")
+    return {
+        "status": "success",
+        "content": [{"text": f"Imported skill '{name}' from {source}"}],
+    }
 
 
 def _import_from_url(source: str, cache: SkillsCache) -> Dict[str, Any]:
