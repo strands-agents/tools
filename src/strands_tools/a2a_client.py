@@ -34,7 +34,7 @@ from uuid import uuid4
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
-from strands import tool
+from strands import tool, ToolContext
 from strands.types.tools import AgentTool
 
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
@@ -250,9 +250,13 @@ class A2AClientToolProvider:
                 "total_count": 0,
             }
 
-    @tool
+    @tool(context=True)
     async def a2a_send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        tool_context: ToolContext | None = None,
     ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
@@ -275,10 +279,20 @@ class A2AClientToolProvider:
                 - message_id: The message ID used
                 - target_agent_url: The agent URL that was contacted
         """
-        return await self._send_message(message_text, target_agent_url, message_id)
+        # Retrieve a2a_tool_metadata from tool_context.
+        # The Strands framework automatically injects tool_context when the tool is invoked.
+        a2a_tool_metadata = None
+        if tool_context is not None and tool_context.invocation_state:
+            a2a_tool_metadata = tool_context.invocation_state.get("metadata")
+
+        return await self._send_message(message_text, target_agent_url, message_id, a2a_tool_metadata)
 
     async def _send_message(
-        self, message_text: str, target_agent_url: str, message_id: str | None = None
+        self,
+        message_text: str,
+        target_agent_url: str,
+        message_id: str | None = None,
+        a2a_tool_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Internal async implementation for send_message."""
 
@@ -303,7 +317,7 @@ class A2AClientToolProvider:
             logger.info(f"Sending message to {target_agent_url}")
 
             # With streaming=False, this will yield exactly one result
-            async for event in client.send_message(message):
+            async for event in client.send_message(message, request_metadata=a2a_tool_metadata):
                 if isinstance(event, Message):
                     # Direct message response
                     return {
