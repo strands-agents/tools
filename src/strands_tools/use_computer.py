@@ -451,7 +451,7 @@ def create_screenshot(region: Optional[List[int]] = None) -> str:
     Returns:
         str: Path to the saved screenshot file.
     """
-    screenshots_dir = "screenshots"
+    screenshots_dir = "/tmp/screenshots"
     if not os.path.exists(screenshots_dir):
         os.makedirs(screenshots_dir)
 
