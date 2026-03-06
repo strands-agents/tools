@@ -38,7 +38,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with Mem0, MemMachine, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -118,6 +118,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| memmachine_memory | `agent.tool.memmachine_memory(action="store", content="I like to play tennis")` | Store and search memories using the MemMachine Platform with episodic and semantic memory types |
 | bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
@@ -1067,6 +1068,71 @@ The Mem0 Memory Tool supports three different backend configurations:
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 - If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
+
+#### MemMachine Memory Tool
+
+The MemMachine Memory Tool provides persistent memory for AI agents using [MemMachine](https://memmachine.ai) with support for episodic (conversational) and semantic (factual) memory types.
+
+The tool supports two deployment modes:
+
+1. **MemMachine Platform (Cloud)** — Default. Uses the hosted API at `https://api.memmachine.ai`. Sign up at [memmachine.ai](https://console.memmachine.ai) to get an API key.
+
+2. **Self-Hosted** — Run your own MemMachine server (e.g., via Docker) and point the tool to it by setting `MEMMACHINE_BASE_URL=http://localhost:8080`.
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| MEMMACHINE_API_KEY | MemMachine API key (required) | None |
+| MEMMACHINE_BASE_URL | MemMachine API base URL | https://api.memmachine.ai |
+
+**Actions:**
+- `store`: Store new memories with metadata, producer context, and memory type selection (episodic, semantic, or both)
+- `search`: Semantic search across memories with top-k results, type filtering, and metadata filtering
+- `list`: List memories with pagination, type filtering, and metadata filtering
+- `delete`: Delete episodic or semantic memories by ID (single or bulk)
+
+**Usage:**
+
+```python
+from strands import Agent
+from strands_tools import memmachine_memory
+
+agent = Agent(tools=[memmachine_memory])
+
+# Store a memory
+agent.tool.memmachine_memory(
+    action="store",
+    content="User prefers aisle seats on flights",
+    metadata={"user_id": "alice", "category": "travel"}
+)
+
+# Search memories
+agent.tool.memmachine_memory(
+    action="search",
+    query="What are the flight preferences?",
+    top_k=5
+)
+
+# List memories with metadata filter
+agent.tool.memmachine_memory(
+    action="list",
+    filter="metadata.user_id=alice",
+    page_size=20
+)
+
+# Delete a memory
+agent.tool.memmachine_memory(
+    action="delete",
+    memory_type="episodic",
+    memory_id="mem-123"
+)
+```
+
+**Note**:
+- By default, the tool connects to the MemMachine Platform at `https://api.memmachine.ai`
+- Set `MEMMACHINE_BASE_URL` to use a self-hosted instance (e.g., `http://localhost:8080`)
+- Metadata filtering uses the format `metadata.key=value` with `AND` for multiple conditions
+- See the [MemMachine API docs](https://api.memmachine.ai/docs) for full endpoint details
+- See the [MemMachine GitHub repo](https://github.com/MemMachine/MemMachine) for self-hosting and integration guides
 
 #### Bright Data Tool
 
