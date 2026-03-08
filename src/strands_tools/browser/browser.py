@@ -171,6 +171,8 @@ class Browser(ABC):
             return self.network_intercept(action)
         elif isinstance(action, ExecuteCdpAction):
             return self.execute_cdp(action)
+        elif isinstance(action, PressKeyAction):
+            return self.press_key(action)
         elif isinstance(action, CloseAction):
             return self.close(action)
         else:
