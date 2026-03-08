@@ -693,9 +693,13 @@ agent = Agent(tools=provider.tools)
 response = agent("discover available agents and send a greeting message")
 
 # The agent will automatically use the available tools:
-# - discover_agent(url) to find agents
-# - list_discovered_agents() to see all discovered agents
-# - send_message(message_text, target_agent_url) to communicate
+# - a2a_discover_agent(url) to find agents
+# - a2a_list_discovered_agents() to see all discovered agents
+# - a2a_send_message(message_text, target_agent_url) to communicate
+# - a2a_get_task(target_agent_url, task_id) to monitor task status and retrieve history
+# - a2a_cancel_task(target_agent_url, task_id) to cancel running tasks
+# - a2a_get_conversation_state(target_agent_url) to check current conversation state
+# - a2a_clear_conversation_state(target_agent_url) to start a fresh conversation
 ```
 
 ### Diagram
