@@ -6,6 +6,8 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
+- Task monitoring and status retrieval with history and artifacts
+- Task cancellation with terminal state validation
 - Push notification support for real-time task completion alerts
 - Custom authentication support via httpx client arguments
 - Context and task ID persistence for multi-turn conversations
