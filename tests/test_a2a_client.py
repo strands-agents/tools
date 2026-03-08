@@ -991,12 +991,24 @@ async def test_get_task_with_history_length(mock_ensure, mock_factory, mock_disc
 
 @pytest.mark.asyncio
 @patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
 @patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
-async def test_get_task_not_found(mock_ensure, mock_discover):
+async def test_get_task_not_found(mock_ensure, mock_factory, mock_discover):
     """Test _get_task when task is not found."""
     provider = A2AClientToolProvider()
 
-    mock_discover.side_effect = Exception("Task not found")
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task to raise exception
+    mock_client.get_task = AsyncMock(side_effect=Exception("Task not found"))
 
     result = await provider._get_task("http://test.com", "task-123")
 

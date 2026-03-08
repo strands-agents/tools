@@ -34,6 +34,20 @@ Usage Examples:
         >>> result1 = await provider.a2a_send_message("Start a task", "http://agent.example.com")
         >>> # Second message - context_id is automatically reused for the same agent
         >>> result2 = await provider.a2a_send_message("Continue the task", "http://agent.example.com")
+
+    Task monitoring and status retrieval:
+        >>> provider = A2AClientToolProvider(known_agent_urls=["http://agent.example.com"])
+        >>> # Get task status with full history
+        >>> task_status = await provider.a2a_get_task("http://agent.example.com", "task-123")
+        >>> # Get task status with limited history for better performance
+        >>> task_status = await provider.a2a_get_task("http://agent.example.com", "task-456", history_length=10)
+
+    Task cancellation:
+        >>> provider = A2AClientToolProvider(known_agent_urls=["http://agent.example.com"])
+        >>> # Cancel a running task
+        >>> result = await provider.a2a_cancel_task("http://agent.example.com", "task-123")
+        >>> # Cancel with context_id validation for security
+        >>> result = await provider.a2a_cancel_task("http://agent.example.com", "task-456", context_id="ctx-789")
 """
 
 import asyncio
