@@ -42,14 +42,14 @@ from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
+from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TaskIdParams, TaskQueryParams, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
 
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 # Terminal task states - tasks in these states should not be continued
-TERMINAL_TASK_STATES = {"completed", "canceled", "failed"}
+TERMINAL_TASK_STATES = {"completed", "canceled", "failed", "rejected"}
 
 logger = logging.getLogger(__name__)
 
@@ -573,3 +573,240 @@ class A2AClientToolProvider:
             "status": "success",
             "target_agent_url": target_agent_url,
         }
+
+    @tool
+    async def a2a_get_task(
+        self,
+        target_agent_url: str,
+        task_id: str,
+        history_length: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Get the current state and details of a specific task.
+
+        This retrieves comprehensive information about a task including its
+        status, history, artifacts, and metadata. Useful for monitoring task
+        progress, debugging, or checking completion status.
+
+        Args:
+            target_agent_url: The URL of the target A2A agent
+            task_id: The ID of the task to retrieve
+            history_length: Optional number of recent history items to include.
+                If not specified, returns full history. Use lower values for
+                better performance on tasks with extensive history.
+
+        Returns:
+            dict: Task retrieval result including:
+                - status: "success" or "error"
+                - task: The complete task data (if successful)
+                - task_state: The current state of the task
+                - context_id: The task's context ID
+                - error: Error message (if failed)
+                - target_agent_url: The agent URL contacted
+                - task_id: The task ID queried
+        """
+        return await self._get_task(target_agent_url, task_id, history_length)
+
+    async def _get_task(
+        self,
+        target_agent_url: str,
+        task_id: str,
+        history_length: int | None = None,
+    ) -> dict[str, Any]:
+        """Internal async implementation for get_task."""
+        try:
+            await self._ensure_discovered_known_agents()
+
+            # Get the agent card and create client
+            agent_card = await self._discover_agent_card(target_agent_url)
+            client_factory = self._get_client_factory()
+            client = client_factory.create(agent_card)
+
+            # Build task query parameters
+            task_params = TaskQueryParams(id=task_id, history_length=history_length)
+
+            logger.info(
+                f"Retrieving task {task_id} from {target_agent_url}"
+                f"{f' (history_length={history_length})' if history_length else ''}"
+            )
+
+            # Get the task
+            task = await client.get_task(task_params)
+
+            # Extract task state and context
+            task_state_value = task.status.state
+            if hasattr(task_state_value, "value"):
+                task_state_value = task_state_value.value
+
+            task_context_id = getattr(task, "context_id", None)
+
+            # Update conversation state with current task info
+            logger.info(f"Updating the conversation state for {task.id}, state: {task_state_value}")
+            self._update_conversation_state(
+                target_agent_url,
+                context_id=task_context_id,
+                task_id=task.id,
+                task_state=task_state_value,
+            )
+
+            logger.info(f"Successfully retrieved task {task_id}, state: {task_state_value}")
+
+            return {
+                "status": "success",
+                "task": task.model_dump(mode="python", exclude_none=True),
+                "task_id": task_id,
+                "task_state": task_state_value,
+                "context_id": task_context_id,
+                "target_agent_url": target_agent_url,
+            }
+
+        except Exception as e:
+            logger.exception(f"Error retrieving task {task_id} from {target_agent_url}")
+            error_type = type(e).__name__
+
+            # Check if it's a "task not found" error
+            error_message = str(e)
+            if "not found" in error_message.lower() or "404" in error_message:
+                return {
+                    "status": "error",
+                    "error": f"Task not found: {error_message}",
+                    "error_type": error_type,
+                    "task_id": task_id,
+                    "target_agent_url": target_agent_url,
+                }
+
+            return {
+                "status": "error",
+                "error": str(e),
+                "error_type": error_type,
+                "task_id": task_id,
+                "target_agent_url": target_agent_url,
+            }
+
+    @tool
+    async def a2a_cancel_task(
+        self,
+        target_agent_url: str,
+        task_id: str,
+        context_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Cancel a running task on a specific A2A agent.
+
+        This attempts to cancel an active task. It validates that the task
+        is not already in a terminal state before attempting cancellation.
+
+        IMPORTANT: Task must be in a non-terminal state (not completed, canceled,
+        failed, or rejected) to be cancelable.
+
+        Args:
+            target_agent_url: The URL of the target A2A agent
+            task_id: The ID of the task to cancel
+            context_id: Optional context ID for validation against the task's context
+
+        Returns:
+            dict: Cancellation result including:
+                - status: "success" or "error"
+                - task: The canceled task data (if successful)
+                - task_state: The current/final state of the task
+                - error: Error message (if failed)
+                - target_agent_url: The agent URL contacted
+                - task_id: The task ID that was canceled
+        """
+        return await self._cancel_task(target_agent_url, task_id, context_id)
+
+    async def _cancel_task(
+        self,
+        target_agent_url: str,
+        task_id: str,
+        context_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Internal async implementation for cancel_task."""
+        try:
+            await self._ensure_discovered_known_agents()
+
+            # Get the agent card and create client
+            agent_card = await self._discover_agent_card(target_agent_url)
+            client_factory = self._get_client_factory()
+            client = client_factory.create(agent_card)
+
+            # First, get the task to check its current state
+            try:
+                current_task = await client.get_task(TaskQueryParams(id=task_id))
+            except Exception as e:
+                logger.error(f"Failed to retrieve task {task_id} before cancellation: {e}")
+                return {
+                    "status": "error",
+                    "error": f"Task not found or inaccessible: {str(e)}",
+                    "task_id": task_id,
+                    "target_agent_url": target_agent_url,
+                }
+
+            # Check if task is in a terminal state
+            task_state_value = current_task.status.state
+            if hasattr(task_state_value, "value"):
+                task_state_value = task_state_value.value
+
+            if task_state_value in TERMINAL_TASK_STATES:
+                logger.warning(f"Task {task_id} cannot be canceled - already in terminal state: {task_state_value}")
+                return {
+                    "status": "error",
+                    "error": f"Task cannot be canceled - current state: {task_state_value}",
+                    "task_id": task_id,
+                    "target_agent_url": target_agent_url,
+                    "task_state": task_state_value,
+                }
+
+            # Validate context_id if provided
+            if context_id and current_task.context_id != context_id:
+                logger.error(
+                    f"Context ID mismatch for task {task_id}: expected {context_id}, got {current_task.context_id}"
+                )
+                return {
+                    "status": "error",
+                    "error": f"Context ID mismatch: expected {context_id}, got {current_task.context_id}",
+                    "task_id": task_id,
+                    "target_agent_url": target_agent_url,
+                }
+
+            logger.info(f"Canceling task {task_id} on {target_agent_url}")
+
+            # Cancel the task
+            task_params = TaskIdParams(id=task_id)
+
+            canceled_task = await client.cancel_task(task_params)
+
+            # Extract final state
+            final_state = canceled_task.status.state
+            if hasattr(final_state, "value"):
+                final_state = final_state.value
+
+            # Cancellation should always result in a terminal state.
+            if final_state in TERMINAL_TASK_STATES:  # should be true, if canceled successfully
+                self._update_conversation_state(
+                    target_agent_url,
+                    context_id=canceled_task.context_id,
+                    task_id=canceled_task.id,
+                    task_state=final_state,
+                )
+
+            logger.info(f"Successfully canceled task {task_id}, final state: {final_state}")
+
+            return {
+                "status": "success",
+                "task": canceled_task.model_dump(mode="python", exclude_none=True),
+                "task_id": task_id,
+                "target_agent_url": target_agent_url,
+                "task_state": final_state,
+            }
+
+        except Exception as e:
+            logger.exception(f"Error canceling task {task_id} on {target_agent_url}")
+            error_type = type(e).__name__
+            return {
+                "status": "error",
+                "error": str(e),
+                "error_type": error_type,
+                "task_id": task_id,
+                "target_agent_url": target_agent_url,
+            }
