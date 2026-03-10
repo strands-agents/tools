@@ -89,7 +89,7 @@ mem0-memory = [
     "opensearch-py>=2.8.0,<3.0.0", 
 ]
 
-mem0_memory_pgvector = [
+mem0-memory-pgvector = [
     # Need to be optional if using other vector_storage providers
     "mem0ai>=0.1.99,<1.0.0",
     "psycopg>=3.2.8",
