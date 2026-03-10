@@ -1019,7 +1019,7 @@ These variables affect multiple tools:
 
 #### Mem0 Memory Tool
 
-The Mem0 Memory Tool supports three different backend configurations:
+The Mem0 Memory Tool supports four different backend configurations:
 
 1. **Mem0 Platform**:
    - Uses the Mem0 Platform API for memory management
@@ -1033,7 +1033,12 @@ The Mem0 Memory Tool supports three different backend configurations:
    - Uses FAISS as the local vector store backend
    - Requires faiss-cpu package for local vector storage
 
-4. **Neptune Analytics** (Optional Graph backend for search enhancement):
+4. **PostgreSQL** (For PostgreSQL-based deployments):
+   - Uses pgvector extension as the vector store backend
+   - Requires PostgreSQL with pgvector extension installed
+   - Configure connection via environment variables (POSTGRESQL_HOST, POSTGRESQL_PORT, POSTGRESQL_USER, POSTGRESQL_PASSWORD)
+
+5. **Neptune Analytics** (Optional Graph backend for search enhancement):
    - Uses Neptune Analytics as the graph store backend to enhance memory recall.
    - Requires AWS credentials and Neptune Analytics configuration
    ```
@@ -1051,6 +1056,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 | MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
+| POSTGRESQL_HOST | PostgreSQL server hostname | None | PostgreSQL |
+| POSTGRESQL_PORT | PostgreSQL server port | 5432 | PostgreSQL |
+| POSTGRESQL_USER | PostgreSQL username | None | PostgreSQL |
+| POSTGRESQL_PASSWORD | PostgreSQL password | None | PostgreSQL |
+| DB_NAME | PostgreSQL database name | postgres | PostgreSQL |
+| DB_COLLECTION_NAME | PostgreSQL collection/table name for memories | mem0_memories | PostgreSQL |
 | NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER | Neptune Analytics Graph Identifier | None | Neptune Analytics |
 | DEV | Enable development mode (bypasses confirmations) | false | All modes |
 | MEM0_LLM_PROVIDER | LLM provider for memory processing | aws_bedrock | All modes |
@@ -1064,7 +1075,8 @@ The Mem0 Memory Tool supports three different backend configurations:
 **Note**:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
-- If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
+- If `POSTGRESQL_HOST` is set, the tool will use PostgreSQL with pgvector
+- If none of the above are set, the tool will default to FAISS (requires `faiss-cpu` package)
 - If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
 
