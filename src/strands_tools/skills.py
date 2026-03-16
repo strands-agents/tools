@@ -10,7 +10,7 @@ Skills follow the AgentSkills.io specification and use progressive disclosure:
 - Phase 3: Load resources (scripts, references, assets) as needed via 'get_resource'
 
 Environment Variables:
-    STRANDS_SKILLS_DIR: Directory containing skills (default: ./skills)
+    STRANDS_SKILLS_DIR: Comma-separated list of directories containing skills (default: ./skills)
 
 Usage Examples:
 --------------
@@ -18,20 +18,19 @@ Usage Examples:
 from strands import Agent
 from strands_tools import skills
 
-# Set skills directory via env var or parameter
-import os
-os.environ["STRANDS_SKILLS_DIR"] = "./my-skills"
-
+# Skills are auto-discovered at import time if STRANDS_SKILLS_DIR is set
 agent = Agent(tools=[skills])
+```
 
-# List available skills
-agent.tool.skills(action="list")
+Or call `sync_skills` explicitly before creating the agent (e.g. after fetching skills dynamically):
 
-# Use a skill - loads its instructions
-agent.tool.skills(action="use", skill_name="code-reviewer")
+```python
+from strands import Agent
+from strands_tools import skills
+from strands_tools.skills import sync_skills
 
-# Get a resource file from a skill
-agent.tool.skills(action="get_resource", skill_name="code-reviewer", resource_path="scripts/analyze.py")
+sync_skills(skills_dir="./my-skills,~/.agents/skills")
+agent = Agent(tools=[skills])
 ```
 
 For more information about Agent Skills:
@@ -41,25 +40,19 @@ For more information about Agent Skills:
 
 import logging
 import os
-import re
 import ssl
 import urllib.error
 import urllib.request
-import warnings
-from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlparse
+from xml.sax.saxutils import escape
 
-import yaml
 from strands import tool
+from strands.types.tools import ToolContext
+from strands.vended_plugins.skills.skill import Skill
 
 logger = logging.getLogger(__name__)
-logger.warning(
-    "The skills tool is experimental. The recommended path for production use will be "
-    "the SDK's native skills feature. APIs and behavior may change without notice."
-)
 
 # Maximum file size for resources (10MB)
 MAX_RESOURCE_SIZE = 10 * 1024 * 1024
@@ -70,44 +63,224 @@ MAX_SKILL_FILE_SIZE = 1 * 1024 * 1024
 # Timeout for fetching a SKILL.md from a URL (seconds)
 URL_FETCH_TIMEOUT = 30
 
+# Module-level skills cache (matches pattern used by other tools in this package)
+_cache: Dict[str, Skill] = {}
 
-@dataclass
-class SkillMetadata:
-    """Skill metadata from SKILL.md frontmatter."""
+# Resource directories to scan (matches the plugin)
+_RESOURCE_DIRS = ("scripts", "references", "assets")
 
-    name: str
-    description: str
-    path: Path
-    license: Optional[str] = None
-    allowed_tools: Optional[List[str]] = None
-    instructions: Optional[str] = None  # Pre-cached instructions for file/URL imports
-    virtual: bool = False  # True when imported from a single file or URL
+# Maximum number of resource files to list in skill responses
+_DEFAULT_MAX_RESOURCE_FILES = 20
 
 
-@dataclass
-class SkillsCache:
-    """Cache for discovered skills in a directory."""
+def _resolve_skills(sources: List[str]) -> Dict[str, Skill]:
+    """Resolve a list of skill source paths into Skill instances.
 
-    skills_dir: Path
-    skills: Dict[str, SkillMetadata] = field(default_factory=dict)
+    Each source can be:
+    - A path to a skill directory (containing SKILL.md)
+    - A path to a parent directory (containing skill subdirectories)
+    - A path to a SKILL.md file directly
+
+    Matches the SDK plugin's resolution logic.
+
+    Args:
+        sources: List of path strings to resolve.
+
+    Returns:
+        Dict mapping skill names to Skill instances.
+    """
+    resolved: Dict[str, Skill] = {}
+
+    for source in sources:
+        path = Path(source).expanduser().resolve()
+        if not path.exists():
+            logger.warning("path=<%s> | skill source path does not exist, skipping", path)
+            continue
+
+        if path.is_dir():
+            has_skill_md = (path / "SKILL.md").is_file() or (path / "skill.md").is_file()
+
+            if has_skill_md:
+                try:
+                    skill = Skill.from_file(path)
+                    if skill.name in resolved:
+                        logger.warning("name=<%s> | duplicate skill name, overwriting previous skill", skill.name)
+                    resolved[skill.name] = skill
+                except (ValueError, FileNotFoundError) as e:
+                    logger.warning("path=<%s> | failed to load skill: %s", path, e)
+            else:
+                try:
+                    for skill in Skill.from_directory(path):
+                        if skill.name in resolved:
+                            logger.warning("name=<%s> | duplicate skill name, overwriting previous skill", skill.name)
+                        resolved[skill.name] = skill
+                except FileNotFoundError:
+                    logger.warning("path=<%s> | skills directory not found, skipping", path)
+
+        elif path.is_file() and path.name.lower() == "skill.md":
+            try:
+                skill = Skill.from_file(path)
+                if skill.name in resolved:
+                    logger.warning("name=<%s> | duplicate skill name, overwriting previous skill", skill.name)
+                resolved[skill.name] = skill
+            except (ValueError, FileNotFoundError) as e:
+                logger.warning("path=<%s> | failed to load skill: %s", path, e)
+
+    logger.debug("source_count=<%d>, resolved_count=<%d> | skills resolved", len(sources), len(resolved))
+    return resolved
 
 
-# Thread-safe cache storage
-_cache: Dict[str, SkillsCache] = {}
-_CACHE_LOCK = Lock()
+def _sync_skills(skills_dir: str) -> Dict[str, Skill]:
+    """Synchronize the skills cache by discovering from all configured paths.
+
+    Splits skills_dir on commas and resolves each path. If the cache is empty,
+    populates it from the discovered skills.
+
+    Args:
+        skills_dir: Comma-separated list of skill source paths.
+
+    Returns:
+        The skills cache dict.
+    """
+    if not _cache:
+        sources = [s.strip() for s in skills_dir.split(",") if s.strip()]
+        discovered = _resolve_skills(sources)
+        _cache.update(discovered)
+    return _cache
 
 
-def _get_or_create_cache(skills_dir: str) -> SkillsCache:
-    """Get or create a cache for the given skills directory."""
-    skills_dir = str(Path(skills_dir).expanduser().resolve())
-    with _CACHE_LOCK:
-        if skills_dir not in _cache:
-            cache = SkillsCache(skills_dir=Path(skills_dir))
-            # Auto-discover skills
-            if cache.skills_dir.exists():
-                cache.skills = _discover_skills(cache.skills_dir)
-            _cache[skills_dir] = cache
-        return _cache[skills_dir]
+def _update_tool_spec(cache: Dict[str, Skill]) -> None:
+    """Update the skills tool's description to include the available skills catalog.
+
+    Directly updates the module-level `skills` DecoratedFunctionTool's tool_spec.
+
+    Args:
+        cache: The current skills cache.
+    """
+    skills_xml = _generate_skills_xml(cache)
+
+    base_description = (
+        "⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. "
+        "The recommended path for production use will be the SDK's native skills feature (coming soon). "
+        "APIs and behavior may change without notice.\n\n"
+        "Load and use Agent Skills - modular packages of specialized instructions.\n\n"
+        "Skills are folders containing SKILL.md files with instructions that help you "
+        "perform specific tasks effectively. Skills are auto-discovered from STRANDS_SKILLS_DIR.\n\n"
+        "Actions:\n"
+        "- list: Show all available skills with descriptions\n"
+        "- use: Activate a skill and load its full instructions (returns them for you to follow)\n"
+        "- get_resource: Load a specific file from a skill (scripts, references, etc.)\n"
+        "- list_resources: List all files available in a skill\n"
+        "- import: Import skills from a directory, file path, or HTTPS URL\n\n"
+        "When a task matches a skill's description, call this tool with action='use' "
+        "and the skill's name to load its full instructions."
+    )
+
+    full_description = f"{base_description}\n\n{skills_xml}"
+
+    try:
+        current_spec = skills.tool_spec
+        skills.tool_spec = {
+            "name": current_spec["name"],
+            "description": full_description,
+            "inputSchema": current_spec["inputSchema"],
+        }
+    except (AttributeError, KeyError, ValueError) as e:
+        logger.debug("Failed to update tool spec: %s", e)
+
+
+def _generate_skills_xml(cache: Dict[str, Skill]) -> str:
+    """Generate the XML block listing available skills.
+
+    Matches the SDK plugin's _generate_skills_xml format.
+
+    Args:
+        cache: The skills cache dict.
+
+    Returns:
+        XML-formatted string with skill metadata.
+    """
+    if not cache:
+        return "<available_skills>\nNo skills are currently available.\n</available_skills>"
+
+    lines: List[str] = ["<available_skills>"]
+
+    for skill in sorted(cache.values(), key=lambda s: s.name):
+        lines.append("<skill>")
+        lines.append(f"<name>{escape(skill.name)}</name>")
+        lines.append(f"<description>{escape(skill.description)}</description>")
+        if skill.path is not None:
+            lines.append(f"<location>{escape(str(skill.path / 'SKILL.md'))}</location>")
+        lines.append("</skill>")
+
+    lines.append("</available_skills>")
+    return "\n".join(lines)
+
+
+def _list_skill_resources(skill_path: Path) -> List[str]:
+    """List resource files in a skill's optional directories.
+
+    Scans scripts/, references/, and assets/ subdirectories for files.
+    Results are capped at _DEFAULT_MAX_RESOURCE_FILES.
+
+    Args:
+        skill_path: Path to the skill directory.
+
+    Returns:
+        List of relative file paths.
+    """
+    files: List[str] = []
+
+    for dir_name in _RESOURCE_DIRS:
+        resource_dir = skill_path / dir_name
+        if not resource_dir.is_dir():
+            continue
+
+        for file_path in sorted(resource_dir.rglob("*")):
+            if not file_path.is_file():
+                continue
+            files.append(file_path.relative_to(skill_path).as_posix())
+            if len(files) >= _DEFAULT_MAX_RESOURCE_FILES:
+                files.append(f"... (truncated at {_DEFAULT_MAX_RESOURCE_FILES} files)")
+                return files
+
+    return files
+
+
+def _format_skill_response(skill: Skill) -> str:
+    """Format the tool response when a skill is activated.
+
+    Includes full instructions, metadata, and resource listing.
+    Matches the SDK plugin's _format_skill_response format.
+
+    Args:
+        skill: The activated skill.
+
+    Returns:
+        Formatted string with skill instructions and metadata.
+    """
+    if not skill.instructions:
+        return f"Skill '{skill.name}' activated (no instructions available)."
+
+    parts: List[str] = [skill.instructions]
+
+    metadata_lines: List[str] = []
+    if skill.allowed_tools:
+        metadata_lines.append(f"Allowed tools: {', '.join(skill.allowed_tools)}")
+    if skill.compatibility:
+        metadata_lines.append(f"Compatibility: {skill.compatibility}")
+    if skill.path is not None:
+        metadata_lines.append(f"Location: {skill.path / 'SKILL.md'}")
+
+    if metadata_lines:
+        parts.append("\n---\n" + "\n".join(metadata_lines))
+
+    if skill.path is not None:
+        resources = _list_skill_resources(skill.path)
+        if resources:
+            parts.append("\nAvailable resources:\n" + "\n".join(f"  {r}" for r in resources))
+
+    return "\n".join(parts)
 
 
 def _is_safe_path(path: Path, base_dir: Path) -> bool:
@@ -119,93 +292,6 @@ def _is_safe_path(path: Path, base_dir: Path) -> bool:
         return True
     except (ValueError, OSError, RuntimeError):
         return False
-
-
-def _parse_frontmatter(content: str) -> tuple[dict, str]:
-    """Parse YAML frontmatter from SKILL.md content."""
-    match = re.match(r"^---\n(.*?)\n---\n(.*)$", content, re.DOTALL)
-    if not match:
-        raise ValueError("Invalid SKILL.md format - missing YAML frontmatter")
-
-    frontmatter = yaml.safe_load(match.group(1)) or {}
-    body = match.group(2).strip()
-
-    return frontmatter, body
-
-
-def _validate_skill_name(name: str) -> bool:
-    """Validate skill name follows AgentSkills.io spec (kebab-case, max 64 chars)."""
-    if not name or len(name) > 64:
-        return False
-    return bool(re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$", name))
-
-
-def _discover_skills(skills_dir: Path) -> Dict[str, SkillMetadata]:
-    """Discover all skills in a directory (Phase 1 - metadata only)."""
-    discovered = {}
-
-    if not skills_dir.exists() or not skills_dir.is_dir():
-        return discovered
-
-    for skill_folder in skills_dir.iterdir():
-        if not skill_folder.is_dir():
-            continue
-
-        if not _is_safe_path(skill_folder, skills_dir):
-            logger.warning(f"Skipping unsafe path: {skill_folder}")
-            continue
-
-        # Find SKILL.md (case-insensitive)
-        skill_md = None
-        for f in skill_folder.iterdir():
-            if f.name.upper() == "SKILL.MD":
-                skill_md = f
-                break
-
-        if not skill_md or not _is_safe_path(skill_md, skills_dir):
-            continue
-
-        try:
-            content = skill_md.read_text(encoding="utf-8")
-            frontmatter, _ = _parse_frontmatter(content)
-
-            name = frontmatter.get("name", skill_folder.name)
-            description = frontmatter.get("description", "")
-
-            if not _validate_skill_name(name):
-                logger.warning(f"Invalid skill name '{name}' in {skill_folder}")
-                continue
-
-            discovered[name] = SkillMetadata(
-                name=name,
-                description=description,
-                path=skill_folder,
-                license=frontmatter.get("license"),
-                allowed_tools=frontmatter.get("allowed-tools"),
-            )
-            logger.debug(f"Discovered skill: {name}")
-
-        except Exception as e:
-            logger.warning(f"Error parsing skill in {skill_folder}: {e}")
-
-    logger.info(f"Discovered {len(discovered)} skills in {skills_dir}")
-    return discovered
-
-
-def _load_skill_instructions(skill_path: Path) -> str:
-    """Load full instructions from a skill's SKILL.md (Phase 2)."""
-    skill_md = None
-    for f in skill_path.iterdir():
-        if f.name.upper() == "SKILL.MD":
-            skill_md = f
-            break
-
-    if not skill_md or not skill_md.exists():
-        raise FileNotFoundError(f"SKILL.md not found in {skill_path}")
-
-    content = skill_md.read_text(encoding="utf-8")
-    _, instructions = _parse_frontmatter(content)
-    return instructions
 
 
 def _load_resource(skill_path: Path, resource_path: str) -> str:
@@ -230,60 +316,46 @@ def _load_resource(skill_path: Path, resource_path: str) -> str:
 # Action handlers
 
 
-def _action_list(skills_dir: str, **kwargs) -> Dict[str, Any]:
+def _action_list(skills_dir: str, **kwargs: Any) -> Dict[str, Any]:
     """List all available skills with their descriptions."""
-    cache = _get_or_create_cache(skills_dir)
+    cache = _sync_skills(skills_dir)
 
-    if not cache.skills:
+    if not cache:
         return {
             "status": "success",
             "content": [{"text": f"No skills found in {skills_dir}"}],
         }
 
-    lines = [f"Available skills ({len(cache.skills)}):\n"]
-    for name, metadata in sorted(cache.skills.items()):
+    lines = [f"Available skills ({len(cache)}):\n"]
+    for name, skill in sorted(cache.items()):
         lines.append(f"  • {name}")
-        desc = metadata.description[:100] + "..." if len(metadata.description) > 100 else metadata.description
+        desc = skill.description[:100] + "..." if len(skill.description) > 100 else skill.description
         lines.append(f"    {desc}")
-        if metadata.allowed_tools:
-            lines.append(f"    Allowed tools: {', '.join(metadata.allowed_tools)}")
+        if skill.allowed_tools:
+            lines.append(f"    Allowed tools: {', '.join(skill.allowed_tools)}")
 
     lines.append("\nUse skills(action='use', skill_name='<name>') to load a skill's instructions.")
 
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
-    """Load a skill's full instructions."""
+def _action_use(skills_dir: str, skill_name: str, **kwargs: Any) -> Dict[str, Any]:
+    """Activate a skill and load its full instructions."""
     if not skill_name:
         return {"status": "error", "content": [{"text": "skill_name is required"}]}
 
-    cache = _get_or_create_cache(skills_dir)
+    cache = _sync_skills(skills_dir)
 
-    if skill_name not in cache.skills:
-        available = ", ".join(sorted(cache.skills.keys())) if cache.skills else "none"
+    if skill_name not in cache:
+        available = ", ".join(sorted(cache.keys())) if cache else "none"
         return {
             "status": "error",
             "content": [{"text": f"Skill '{skill_name}' not found. Available: {available}"}],
         }
 
     try:
-        metadata = cache.skills[skill_name]
-
-        # Virtual skills (imported from file/URL) have pre-cached instructions
-        if metadata.virtual and metadata.instructions is not None:
-            instructions = metadata.instructions
-        else:
-            instructions = _load_skill_instructions(metadata.path)
-
-        result = f"""## Skill: {metadata.name}
-
-{metadata.description}
-
-### Instructions
-
-{instructions}
-"""
+        skill = cache[skill_name]
+        result = _format_skill_response(skill)
         return {"status": "success", "content": [{"text": result}]}
 
     except Exception as e:
@@ -291,21 +363,21 @@ def _action_use(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
         return {"status": "error", "content": [{"text": f"Failed to load skill: {e}"}]}
 
 
-def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, **kwargs) -> Dict[str, Any]:
+def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, **kwargs: Any) -> Dict[str, Any]:
     """Load a resource file from a skill."""
     if not skill_name:
         return {"status": "error", "content": [{"text": "skill_name is required"}]}
     if not resource_path:
         return {"status": "error", "content": [{"text": "resource_path is required"}]}
 
-    cache = _get_or_create_cache(skills_dir)
+    cache = _sync_skills(skills_dir)
 
-    if skill_name not in cache.skills:
+    if skill_name not in cache:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
-    metadata = cache.skills[skill_name]
+    skill = cache[skill_name]
 
-    if metadata.virtual:
+    if skill.path is None:
         return {
             "status": "error",
             "content": [
@@ -319,7 +391,7 @@ def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, *
         }
 
     try:
-        content = _load_resource(metadata.path, resource_path)
+        content = _load_resource(skill.path, resource_path)
 
         return {
             "status": "success",
@@ -331,19 +403,19 @@ def _action_get_resource(skills_dir: str, skill_name: str, resource_path: str, *
         return {"status": "error", "content": [{"text": f"Failed to load resource: {e}"}]}
 
 
-def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[str, Any]:
+def _action_list_resources(skills_dir: str, skill_name: str, **kwargs: Any) -> Dict[str, Any]:
     """List available resources in a skill."""
     if not skill_name:
         return {"status": "error", "content": [{"text": "skill_name is required"}]}
 
-    cache = _get_or_create_cache(skills_dir)
+    cache = _sync_skills(skills_dir)
 
-    if skill_name not in cache.skills:
+    if skill_name not in cache:
         return {"status": "error", "content": [{"text": f"Skill '{skill_name}' not found"}]}
 
-    metadata = cache.skills[skill_name]
+    skill = cache[skill_name]
 
-    if metadata.virtual:
+    if skill.path is None:
         return {
             "status": "success",
             "content": [
@@ -358,12 +430,10 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
 
     resources = {"scripts": [], "references": [], "assets": [], "other": []}
 
-    for item in metadata.path.rglob("*"):
+    for item in skill.path.rglob("*"):
         if item.is_file() and item.name.upper() != "SKILL.MD":
-            rel_path = item.relative_to(metadata.path)
-            # Use Path.parts for cross-platform directory detection
+            rel_path = item.relative_to(skill.path)
             top_dir = rel_path.parts[0] if len(rel_path.parts) > 1 else None
-            # Use as_posix() for consistent display format
             rel_path_str = rel_path.as_posix()
 
             if top_dir == "scripts":
@@ -388,83 +458,51 @@ def _action_list_resources(skills_dir: str, skill_name: str, **kwargs) -> Dict[s
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _import_from_content(content: str, source_label: str, cache: SkillsCache) -> Dict[str, Any]:
+def _import_from_content(content: str, source_label: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
     """Parse SKILL.md content and register a virtual skill in the cache.
 
     Used for URL imports where there is no local directory. The skill is
-    marked as virtual, meaning get_resource and list_resources won't work.
+    marked as virtual (path=None), meaning get_resource and list_resources won't work.
 
     Args:
         content: Raw SKILL.md text (frontmatter + body).
         source_label: Human-readable origin (file path or URL) for logging/messages.
-        cache: The SkillsCache to add the skill to.
+        cache: The skills cache dict to add the skill to.
 
     Returns:
         Standard success/error dict.
     """
     try:
-        frontmatter, instructions = _parse_frontmatter(content)
+        skill = Skill.from_content(content)
     except ValueError as e:
         return {
             "status": "error",
             "content": [{"text": f"Invalid SKILL.md format from {source_label}: {e}"}],
         }
 
-    name = frontmatter.get("name")
-    if not name:
+    if skill.name in cache:
         return {
             "status": "error",
-            "content": [{"text": f"SKILL.md from {source_label} is missing required 'name' in frontmatter"}],
-        }
-    if not _validate_skill_name(name):
-        return {
-            "status": "error",
-            "content": [
-                {
-                    "text": (
-                        f"Invalid skill name '{name}' from {source_label}. "
-                        "Names must be kebab-case, lowercase alphanumeric, max 64 chars."
-                    )
-                }
-            ],
+            "content": [{"text": f"Skill '{skill.name}' already exists, cannot import from {source_label}"}],
         }
 
-    description = frontmatter.get("description", "")
+    # Virtual skill — no local path
+    skill.path = None
+    cache[skill.name] = skill
 
-    with _CACHE_LOCK:
-        if name in cache.skills:
-            return {
-                "status": "error",
-                "content": [{"text": f"Skill '{name}' already exists, cannot import from {source_label}"}],
-            }
-
-        cache.skills[name] = SkillMetadata(
-            name=name,
-            description=description,
-            path=Path(source_label),
-            license=frontmatter.get("license"),
-            allowed_tools=frontmatter.get("allowed-tools"),
-            instructions=instructions,
-            virtual=True,
-        )
-
-    logger.info(f"Imported virtual skill '{name}' from {source_label}")
+    logger.info(f"Imported virtual skill '{skill.name}' from {source_label}")
     return {
         "status": "success",
-        "content": [{"text": f"Imported skill '{name}' from {source_label}"}],
+        "content": [{"text": f"Imported skill '{skill.name}' from {source_label}"}],
     }
 
 
-def _import_from_file(source: str, cache: SkillsCache) -> Dict[str, Any]:
+def _import_from_file(source: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
     """Import a single skill from a local SKILL.md file path.
-
-    The skill's parent directory is used as the skill path, so resources
-    (scripts/, references/, etc.) in that directory are accessible just
-    like directory-discovered skills.
 
     Args:
         source: Path to a SKILL.md file (may contain ~ or relative segments).
-        cache: The SkillsCache to add the skill to.
+        cache: The skills cache dict to add the skill to.
 
     Returns:
         Standard success/error dict.
@@ -501,66 +539,37 @@ def _import_from_file(source: str, cache: SkillsCache) -> Dict[str, Any]:
         }
 
     try:
-        frontmatter, _ = _parse_frontmatter(content)
+        skill = Skill.from_content(content)
     except ValueError as e:
         return {
             "status": "error",
             "content": [{"text": f"Invalid SKILL.md format from {source}: {e}"}],
         }
 
-    name = frontmatter.get("name")
-    if not name:
+    # Set path to the parent directory so resources are accessible
+    skill.path = file_path.parent
+
+    if skill.name in cache:
         return {
             "status": "error",
-            "content": [{"text": f"SKILL.md from {source} is missing required 'name' in frontmatter"}],
-        }
-    if not _validate_skill_name(name):
-        return {
-            "status": "error",
-            "content": [
-                {
-                    "text": (
-                        f"Invalid skill name '{name}' from {source}. "
-                        "Names must be kebab-case, lowercase alphanumeric, max 64 chars."
-                    )
-                }
-            ],
+            "content": [{"text": f"Skill '{skill.name}' already exists, cannot import from {source}"}],
         }
 
-    description = frontmatter.get("description", "")
-    skill_dir = file_path.parent
+    cache[skill.name] = skill
 
-    with _CACHE_LOCK:
-        if name in cache.skills:
-            return {
-                "status": "error",
-                "content": [{"text": f"Skill '{name}' already exists, cannot import from {source}"}],
-            }
-
-        cache.skills[name] = SkillMetadata(
-            name=name,
-            description=description,
-            path=skill_dir,
-            license=frontmatter.get("license"),
-            allowed_tools=frontmatter.get("allowed-tools"),
-        )
-
-    logger.info(f"Imported skill '{name}' from {file_path}")
+    logger.info(f"Imported skill '{skill.name}' from {file_path}")
     return {
         "status": "success",
-        "content": [{"text": f"Imported skill '{name}' from {source}"}],
+        "content": [{"text": f"Imported skill '{skill.name}' from {source}"}],
     }
 
 
-def _import_from_url(source: str, cache: SkillsCache) -> Dict[str, Any]:
+def _import_from_url(source: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
     """Import a single skill from an HTTPS URL pointing to a SKILL.md file.
-
-    Validates the URL (HTTPS only), fetches with timeout and size limit,
-    checks for non-HTTPS redirects, then delegates to _import_from_content().
 
     Args:
         source: HTTPS URL to a SKILL.md file.
-        cache: The SkillsCache to add the skill to.
+        cache: The skills cache dict to add the skill to.
 
     Returns:
         Standard success/error dict.
@@ -592,7 +601,6 @@ def _import_from_url(source: str, cache: SkillsCache) -> Dict[str, Any]:
                     "content": [{"text": f"URL redirected to non-HTTPS location: {resp.url}"}],
                 }
 
-            # Size-limited read: read one byte more than the limit to detect overflow
             data = resp.read(MAX_SKILL_FILE_SIZE + 1)
             if len(data) > MAX_SKILL_FILE_SIZE:
                 return {
@@ -631,15 +639,12 @@ def _import_from_url(source: str, cache: SkillsCache) -> Dict[str, Any]:
     return _import_from_content(content, source_label=source, cache=cache)
 
 
-def _import_from_directory(source: str, cache: SkillsCache) -> Dict[str, Any]:
+def _import_from_directory(source: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
     """Import all skills from a directory.
-
-    Discovers skills in the directory and merges them into the cache,
-    skipping any that already exist.
 
     Args:
         source: Path to a directory containing skill folders.
-        cache: The SkillsCache to add skills to.
+        cache: The skills cache dict to add skills to.
 
     Returns:
         Standard success/error dict.
@@ -652,18 +657,24 @@ def _import_from_directory(source: str, cache: SkillsCache) -> Dict[str, Any]:
             "content": [{"text": f"Import directory not found or not a directory: {source}"}],
         }
 
-    new_skills = _discover_skills(import_path)
+    try:
+        new_skills = Skill.from_directory(import_path)
+    except FileNotFoundError:
+        return {
+            "status": "error",
+            "content": [{"text": f"Import directory not found: {source}"}],
+        }
 
     imported = []
     skipped = []
 
-    for name, metadata in new_skills.items():
-        if name in cache.skills:
-            skipped.append(name)
-            logger.warning(f"Skill '{name}' already exists, skipping import")
+    for skill in new_skills:
+        if skill.name in cache:
+            skipped.append(skill.name)
+            logger.warning(f"Skill '{skill.name}' already exists, skipping import")
         else:
-            cache.skills[name] = metadata
-            imported.append(name)
+            cache[skill.name] = skill
+            imported.append(skill.name)
 
     lines = [f"Imported {len(imported)} skill(s) from {source}:"]
     if imported:
@@ -675,13 +686,8 @@ def _import_from_directory(source: str, cache: SkillsCache) -> Dict[str, Any]:
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
 
 
-def _action_import(skills_dir: str, source: str = None, **kwargs) -> Dict[str, Any]:
+def _action_import(skills_dir: str, source: str = None, **kwargs: Any) -> Dict[str, Any]:
     """Import skills from a directory, file path, or URL.
-
-    The source parameter is auto-detected:
-    - HTTPS URL: Fetches a single SKILL.md from the URL
-    - File path: Reads a single SKILL.md from disk
-    - Directory path: Discovers all skills in the directory (existing behavior)
 
     Args:
         skills_dir: The main skills directory (for cache lookup).
@@ -703,7 +709,7 @@ def _action_import(skills_dir: str, source: str = None, **kwargs) -> Dict[str, A
             ],
         }
 
-    cache = _get_or_create_cache(skills_dir)
+    cache = _sync_skills(skills_dir)
 
     # HTTPS URL
     if source.startswith("https://"):
@@ -731,6 +737,33 @@ def _action_import(skills_dir: str, source: str = None, **kwargs) -> Dict[str, A
     }
 
 
+def sync_skills(skills_dir: Optional[str] = None) -> None:
+    """Pre-load skills into the cache and update the tool spec.
+
+    Call this before or after creating an Agent to eagerly discover skills and
+    populate the tool description with the skills catalog, so the model sees
+    available skills from the first turn.
+
+    Args:
+        skills_dir: Comma-separated skills directories.
+            Defaults to STRANDS_SKILLS_DIR env var or ./skills.
+
+    Example::
+
+        from strands import Agent
+        from strands_tools import skills
+        from strands_tools.skills import sync_skills
+
+        sync_skills(skills_dir="./my-skills,~/.agents/skills")
+        agent = Agent(tools=[skills])
+    """
+    resolved_dir = skills_dir or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
+    sources = [s.strip() for s in resolved_dir.split(",") if s.strip()]
+    discovered = _resolve_skills(sources)
+    _cache.update(discovered)
+    _update_tool_spec(_cache)
+
+
 _ACTIONS = {
     "list": _action_list,
     "use": _action_use,
@@ -740,65 +773,14 @@ _ACTIONS = {
 }
 
 
-def get_skills_prompt(skills_dir: Optional[str] = None) -> str:
-    """Generate a skills prompt for injection into agent system prompts.
-
-    This is an optional helper for users who want proactive skill awareness.
-    It returns an XML-formatted list of available skills that can be appended
-    to your agent's system prompt.
-
-    Uses the same cache as the skills tool, so no duplicate discovery.
-
-    Args:
-        skills_dir: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
-
-    Returns:
-        XML-formatted string with available skills, or empty string if none found.
-
-    Example:
-        ```python
-        from strands import Agent
-        from strands_tools.skills import skills, get_skills_prompt
-
-        # Optional: Add skills to system prompt for proactive awareness
-        base_prompt = "You are a helpful assistant."
-        agent = Agent(
-            tools=[skills],
-            system_prompt=base_prompt + get_skills_prompt()
-        )
-        ```
-    """
-    skills_dir = skills_dir or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
-    cache = _get_or_create_cache(skills_dir)
-
-    if not cache.skills:
-        return ""
-
-    lines = [
-        "\n\n## Available Skills\n",
-        "You have access to specialized skills. Use `skills(action='list')` to see details,",
-        "or `skills(action='use', skill_name='<name>')` to load one.\n",
-        "<available_skills>",
-    ]
-
-    for name, metadata in sorted(cache.skills.items()):
-        lines.append("  <skill>")
-        lines.append(f"    <name>{name}</name>")
-        lines.append(f"    <description>{metadata.description}</description>")
-        lines.append("  </skill>")
-
-    lines.append("</available_skills>")
-
-    return "\n".join(lines)
-
-
-@tool
+@tool(context=True)
 def skills(
+    tool_context: ToolContext,
     action: Literal["list", "use", "get_resource", "list_resources", "import"],
     skill_name: Optional[str] = None,
     resource_path: Optional[str] = None,
     source: Optional[str] = None,
-    STRANDS_SKILLS_DIR: Optional[str] = None,
+    skills_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. \
 The recommended path for production use will be the SDK's native skills feature (coming soon). \
@@ -811,12 +793,16 @@ APIs and behavior may change without notice.
 
     Actions:
     - list: Show all available skills with descriptions
-    - use: Load a skill's full instructions (returns them for you to follow)
+    - use: Activate a skill and load its full instructions (returns them for you to follow)
     - get_resource: Load a specific file from a skill (scripts, references, etc.)
     - list_resources: List all files available in a skill
     - import: Import skills from a directory, file path, or HTTPS URL
 
+    When a task matches a skill's description, call this tool with action='use'
+    and the skill's name to load its full instructions.
+
     Args:
+        tool_context: The tool context (automatically injected)
         action: The action to perform
         skill_name: Name of the skill (required for use, get_resource, list_resources)
         resource_path: Path to resource file (required for get_resource)
@@ -824,7 +810,7 @@ APIs and behavior may change without notice.
             - Directory path: imports all skills from the directory
             - File path: imports a single skill from a SKILL.md file
             - HTTPS URL: imports a single skill from a remote SKILL.md
-        STRANDS_SKILLS_DIR: Skills directory. Defaults to STRANDS_SKILLS_DIR env var or ./skills
+        skills_dir: Comma-separated skills directories. Defaults to STRANDS_SKILLS_DIR env var or ./skills
 
     Returns:
         Dict with status and content
@@ -848,24 +834,29 @@ APIs and behavior may change without notice.
         # Import a skill from a URL
         skills(action="import", source="https://raw.githubusercontent.com/org/repo/main/skills/my-skill/SKILL.md")
     """
-    warnings.warn(
-        "The skills tool is experimental. The recommended path for production use will be "
-        "the SDK's native skills feature. APIs and behavior may change without notice.",
-        stacklevel=2,
-    )
-
-    skills_dir = STRANDS_SKILLS_DIR or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
+    skills_dir = skills_dir or os.environ.get("STRANDS_SKILLS_DIR", "./skills")
 
     if action not in _ACTIONS:
         return {"status": "error", "content": [{"text": f"Invalid action. Valid: {', '.join(_ACTIONS.keys())}"}]}
 
     try:
-        return _ACTIONS[action](
+        result = _ACTIONS[action](
+            tool_context=tool_context,
             skills_dir=skills_dir,
             skill_name=skill_name,
             resource_path=resource_path,
             source=source,
         )
+
+        # Update tool spec after action so imports are reflected immediately
+        _update_tool_spec(_cache)
+
+        return result
     except Exception as e:
         logger.error(f"Error in skills tool: {e}", exc_info=True)
         return {"status": "error", "content": [{"text": f"Error: {e}"}]}
+
+
+# Auto-discover skills at import time if STRANDS_SKILLS_DIR is set
+if os.environ.get("STRANDS_SKILLS_DIR"):
+    sync_skills()
