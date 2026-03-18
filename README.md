@@ -99,6 +99,10 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
+| apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor by ID with arbitrary input |
+| apify_get_dataset_items | `agent.tool.apify_get_dataset_items(dataset_id="abc123", limit=50)` | Fetch items from an Apify Dataset |
+| apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its Dataset results in one step |
+| apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
