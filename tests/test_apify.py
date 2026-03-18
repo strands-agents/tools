@@ -99,7 +99,10 @@ def test_client_uses_env_token(mock_apify_env):
     """ApifyToolClient passes the env token to ApifyClient."""
     with patch("strands_tools.apify.ApifyClient") as MockClient:
         ApifyToolClient()
-        MockClient.assert_called_once_with("test-token-12345")
+        MockClient.assert_called_once_with(
+            "test-token-12345",
+            headers={"x-apify-integration-platform": "strands-agents"},
+        )
 
 
 # --- apify_run_actor ---

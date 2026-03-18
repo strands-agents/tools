@@ -75,7 +75,7 @@ except ImportError:
     HAS_APIFY_CLIENT = False
 
 WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
-TRACKING_HEADER = {"x-apify-integration-platform": "strands"}
+TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
 
 
 def _check_dependency() -> None:
