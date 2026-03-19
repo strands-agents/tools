@@ -964,6 +964,43 @@ result = agent.tool.mongodb_memory(
 )
 ```
 
+### Apify Core Tools
+
+```python
+from strands import Agent
+from strands_tools import apify
+
+agent = Agent(tools=[
+    apify.apify_run_actor,
+    apify.apify_get_dataset_items,
+    apify.apify_run_actor_and_get_dataset,
+    apify.apify_scrape_url,
+])
+
+# Scrape a single URL and get markdown content
+content = agent.tool.apify_scrape_url(url="https://example.com")
+
+# Run an Actor and get results in one step
+result = agent.tool.apify_run_actor_and_get_dataset(
+    actor_id="apify/website-content-crawler",
+    run_input={"startUrls": [{"url": "https://example.com"}]},
+    dataset_items_limit=50,
+)
+
+# Run an Actor (get metadata only)
+run_info = agent.tool.apify_run_actor(
+    actor_id="apify/google-search-scraper",
+    run_input={"queries": "AI agent frameworks"},
+)
+
+# Fetch Dataset items separately
+items = agent.tool.apify_get_dataset_items(
+    dataset_id="abc123",
+    limit=100,
+)
+```
+
+
 ## 🌍 Environment Variables Configuration
 
 Agents Tools provides extensive customization through environment variables. This allows you to configure tool behavior without modifying code, making it ideal for different environments (development, testing, production).
@@ -1071,6 +1108,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
 - If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
+
+#### Apify Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| APIFY_API_TOKEN | Apify API token for authentication (required) | None |
 
 #### Bright Data Tool
 

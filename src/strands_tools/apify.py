@@ -1,56 +1,16 @@
-"""Apify platform integration tool for Strands Agents.
+"""Core Apify platform tools for Strands Agents.
 
-Provides capabilities to run Apify Actors, retrieve Datasets, and scrape URLs
-using the Apify platform programmatically.
+Provides the foundational building blocks for interacting with the Apify platform:
+run any Actor by ID, fetch Dataset results, and scrape individual URLs.
+For domain-specific wrappers see apify_social_media.py and apify_search.py.
 
-Available tools:
-- apify_run_actor: Run any Apify Actor by ID with arbitrary input
-- apify_get_dataset_items: Fetch items from an Apify Dataset
-- apify_run_actor_and_get_dataset: Run an Actor and fetch its Dataset results in one step
-- apify_scrape_url: Scrape a URL and return its content as markdown
+Setup:
+    1. Create an Apify account at https://apify.com
+    2. Get your API token: Console > Settings > API & Integrations
+    3. export APIFY_API_TOKEN=your_token
+    4. pip install strands-agents-tools[apify]
 
-Setup Requirements:
-------------------
-1. Create an Apify account at https://apify.com
-2. Obtain your API token: Apify Console → Settings → API & Integrations → Personal API tokens
-3. Install the optional dependency: pip install -e ".[apify]"
-4. Set the environment variable:
-   APIFY_API_TOKEN=your_api_token_here
-
-Usage with Strands Agent:
-```python
-from strands import Agent
-from strands_tools import apify
-
-agent = Agent(tools=[
-    apify.apify_run_actor,
-    apify.apify_get_dataset_items,
-    apify.apify_run_actor_and_get_dataset,
-    apify.apify_scrape_url,
-])
-
-# Run an Actor
-result = agent.tool.apify_run_actor(
-    actor_id="apify/website-content-crawler",
-    run_input={"startUrls": [{"url": "https://example.com"}]},
-)
-
-# Scrape a single URL
-content = agent.tool.apify_scrape_url(url="https://example.com")
-```
-
-!!!!!!!!!!!!! IMPORTANT: !!!!!!!!!!!!!
-
-Environment Variables:
-- APIFY_API_TOKEN: Your Apify API token (required)
-  Obtain from https://console.apify.com/account/integrations
-
-Example .env configuration:
-    APIFY_API_TOKEN=apify_api_1a2B3cD4eF5gH6iJ7kL8m
-
-!!!!!!!!!!!!! IMPORTANT: !!!!!!!!!!!!!
-
-See the function docstrings for complete parameter documentation.
+See docs/apify_tool.md for usage examples, parameter reference, and troubleshooting.
 """
 
 import json
