@@ -1,6 +1,6 @@
 # Apify
 
-The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) by ID, fetching Dataset results, and scraping individual URLs.
+The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [Task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching Dataset results, and scraping individual URLs.
 
 ## Installation
 
@@ -26,9 +26,11 @@ from strands_tools import apify
 
 agent = Agent(tools=[
     apify.apify_run_actor,
+    apify.apify_run_task,
     apify.apify_scrape_url,
     apify.apify_get_dataset_items,
     apify.apify_run_actor_and_get_dataset,
+    apify.apify_run_task_and_get_dataset,
 ])
 ```
 
@@ -62,6 +64,31 @@ Combine running an Actor and fetching its Dataset results in a single call:
 result = agent.tool.apify_run_actor_and_get_dataset(
     actor_id="apify/website-content-crawler",
     run_input={"startUrls": [{"url": "https://example.com"}]},
+    dataset_items_limit=50,
+)
+```
+
+### Run a Task
+
+Execute a saved [Actor Task](https://docs.apify.com/platform/actors/running/tasks) — a pre-configured Actor with preset inputs. Use this when a Task has already been set up in the Apify Console:
+
+```python
+result = agent.tool.apify_run_task(
+    task_id="user~my-task",
+    task_input={"query": "override input"},
+    timeout_secs=300,
+)
+```
+
+The result is a JSON string containing run metadata: `run_id`, `status`, `dataset_id`, `started_at`, and `finished_at`.
+
+### Run a Task and Get Results
+
+Combine running a Task and fetching its Dataset results in a single call:
+
+```python
+result = agent.tool.apify_run_task_and_get_dataset(
+    task_id="user~my-task",
     dataset_items_limit=50,
 )
 ```
@@ -100,6 +127,29 @@ items = agent.tool.apify_get_dataset_items(
 
 **Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
 
+### apify_run_task
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a Task ID) |
+| `task_input` | dict | No | None | JSON-serializable input to override the Task's default input |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Task Run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Task Run (uses Task default if not set) |
+
+**Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
+
+### apify_run_task_and_get_dataset
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a Task ID) |
+| `task_input` | dict | No | None | JSON-serializable input to override the Task's default input |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Task Run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Task Run (uses Task default if not set) |
+| `dataset_items_limit` | int | No | 100 | Maximum number of Dataset items to return |
+
+**Returns:** JSON string with run metadata plus an `items` array containing the Dataset results.
+
 ### apify_get_dataset_items
 
 | Parameter | Type | Required | Default | Description |
@@ -129,7 +179,9 @@ items = agent.tool.apify_get_dataset_items(
 | `APIFY_API_TOKEN environment variable is not set` | Token not configured | Set the `APIFY_API_TOKEN` environment variable |
 | `apify-client package is required` | Optional dependency not installed | Run `pip install strands-agents-tools[apify]` |
 | `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in the [Apify Console](https://console.apify.com) |
-| `Actor ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
+| `Task ... finished with status FAILED` | Task execution error | Check Task configuration and run logs in the [Apify Console](https://console.apify.com) |
+| `Actor/Task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
+| `Task ... returned no run data` | Task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
 
 ## References

@@ -102,6 +102,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor by ID with arbitrary input |
 | apify_get_dataset_items | `agent.tool.apify_get_dataset_items(dataset_id="abc123", limit=50)` | Fetch items from an Apify Dataset |
 | apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its Dataset results in one step |
+| apify_run_task | `agent.tool.apify_run_task(task_id="user~my-task")` | Run a saved Apify Task by ID with optional input overrides |
+| apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user~my-task", dataset_items_limit=50)` | Run a Task and fetch its Dataset results in one step |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
@@ -972,8 +974,10 @@ from strands_tools import apify
 
 agent = Agent(tools=[
     apify.apify_run_actor,
+    apify.apify_run_task,
     apify.apify_get_dataset_items,
     apify.apify_run_actor_and_get_dataset,
+    apify.apify_run_task_and_get_dataset,
     apify.apify_scrape_url,
 ])
 
@@ -984,6 +988,16 @@ content = agent.tool.apify_scrape_url(url="https://example.com")
 result = agent.tool.apify_run_actor_and_get_dataset(
     actor_id="apify/website-content-crawler",
     run_input={"startUrls": [{"url": "https://example.com"}]},
+    dataset_items_limit=50,
+)
+
+# Run a saved Task (pre-configured Actor with default inputs)
+run_info = agent.tool.apify_run_task(task_id="user~my-task")
+
+# Run a Task and get results in one step
+result = agent.tool.apify_run_task_and_get_dataset(
+    task_id="user~my-task",
+    task_input={"query": "override default input"},
     dataset_items_limit=50,
 )
 

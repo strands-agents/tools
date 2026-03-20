@@ -440,7 +440,7 @@ def apify_run_task(
     the full Actor input every time.
 
     Args:
-        task_id: Task identifier, e.g. "janedoe~my-task" or a Task ID string.
+        task_id: Task identifier, e.g. "user~my-task" or a Task ID string.
         task_input: Optional JSON-serializable input to override the Task's default input.
         timeout_secs: Maximum time in seconds to wait for the Task Run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Task Run. Uses Task default if not set.
@@ -488,7 +488,7 @@ def apify_run_task_and_get_dataset(
     result data without making two separate tool calls.
 
     Args:
-        task_id: Task identifier, e.g. "janedoe~my-task" or a Task ID string.
+        task_id: Task identifier, e.g. "user~my-task" or a Task ID string.
         task_input: Optional JSON-serializable input to override the Task's default input.
         timeout_secs: Maximum time in seconds to wait for the Task Run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Task Run.
