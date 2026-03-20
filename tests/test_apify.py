@@ -11,6 +11,8 @@ from strands_tools.apify import (
     apify_get_dataset_items,
     apify_run_actor,
     apify_run_actor_and_get_dataset,
+    apify_run_task,
+    apify_run_task_and_get_dataset,
     apify_scrape_url,
 )
 
@@ -71,6 +73,10 @@ def mock_apify_client():
     mock_actor = MagicMock()
     mock_actor.call.return_value = MOCK_ACTOR_RUN
     client.actor.return_value = mock_actor
+
+    mock_task = MagicMock()
+    mock_task.call.return_value = MOCK_ACTOR_RUN
+    client.task.return_value = mock_task
 
     mock_dataset = MagicMock()
     mock_list_result = MagicMock()
@@ -280,6 +286,105 @@ def test_run_actor_and_get_dataset_actor_failure(mock_apify_env, mock_apify_clie
     assert "FAILED" in result["content"][0]["text"]
 
 
+# --- apify_run_task ---
+
+
+def test_run_task_success(mock_apify_env, mock_apify_client):
+    """Successful Task Run returns structured result with run metadata."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task(task_id="janedoe~my-task", task_input={"query": "test"})
+
+    assert result["status"] == "success"
+    data = json.loads(result["content"][0]["text"])
+    assert data["run_id"] == "run-HG7ml5fB1hCp8YEBA"
+    assert data["status"] == "SUCCEEDED"
+    assert data["dataset_id"] == "dataset-WkC9gct8rq1uR5vDZ"
+    mock_apify_client.task.assert_called_once_with("janedoe~my-task")
+
+
+def test_run_task_no_input(mock_apify_env, mock_apify_client):
+    """Task Run omits task_input kwarg when not provided."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "success"
+    call_kwargs = mock_apify_client.task.return_value.call.call_args.kwargs
+    assert "task_input" not in call_kwargs
+
+
+def test_run_task_with_memory(mock_apify_env, mock_apify_client):
+    """Task Run passes memory_mbytes when provided."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        apify_run_task(task_id="janedoe~my-task", memory_mbytes=1024)
+
+    call_kwargs = mock_apify_client.task.return_value.call.call_args.kwargs
+    assert call_kwargs["memory_mbytes"] == 1024
+
+
+def test_run_task_failure(mock_apify_env, mock_apify_client):
+    """Task Run returns error dict when Task fails."""
+    mock_apify_client.task.return_value.call.return_value = MOCK_FAILED_RUN
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "FAILED" in result["content"][0]["text"]
+
+
+def test_run_task_none_response(mock_apify_env, mock_apify_client):
+    """Task Run returns error dict when TaskClient.call() returns None."""
+    mock_apify_client.task.return_value.call.return_value = None
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "no run data" in result["content"][0]["text"]
+
+
+def test_run_task_apify_api_error_401(mock_apify_env, mock_apify_client):
+    """Task Run returns friendly message for 401 authentication errors."""
+    error = _make_apify_api_error(401, "Unauthorized")
+    mock_apify_client.task.return_value.call.side_effect = error
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "Authentication failed" in result["content"][0]["text"]
+
+
+# --- apify_run_task_and_get_dataset ---
+
+
+def test_run_task_and_get_dataset_success(mock_apify_env, mock_apify_client):
+    """Combined Task run + dataset fetch returns structured result with metadata and items."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task_and_get_dataset(
+            task_id="janedoe~my-task",
+            task_input={"query": "test"},
+            dataset_items_limit=50,
+        )
+
+    assert result["status"] == "success"
+    data = json.loads(result["content"][0]["text"])
+    assert data["run_id"] == "run-HG7ml5fB1hCp8YEBA"
+    assert len(data["items"]) == 3
+    assert data["items"][0]["title"] == "Widget A"
+
+
+def test_run_task_and_get_dataset_task_failure(mock_apify_env, mock_apify_client):
+    """Combined Task tool returns error dict when the Task fails."""
+    mock_apify_client.task.return_value.call.return_value = MOCK_FAILED_RUN
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task_and_get_dataset(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "FAILED" in result["content"][0]["text"]
+
+
 # --- apify_scrape_url ---
 
 
@@ -381,6 +486,24 @@ def test_missing_apify_client_run_and_get(mock_apify_env):
     assert "apify-client" in result["content"][0]["text"]
 
 
+def test_missing_apify_client_run_task(mock_apify_env):
+    """apify_run_task returns error dict when apify-client is not installed."""
+    with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
+        result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
+
+
+def test_missing_apify_client_run_task_and_get(mock_apify_env):
+    """apify_run_task_and_get_dataset returns error dict when apify-client is not installed."""
+    with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
+        result = apify_run_task_and_get_dataset(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
+
+
 def test_missing_apify_client_scrape_url(mock_apify_env):
     """apify_scrape_url returns error dict when apify-client is not installed."""
     with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
@@ -415,6 +538,24 @@ def test_run_actor_and_get_dataset_missing_token(monkeypatch):
     """apify_run_actor_and_get_dataset returns error dict when APIFY_API_TOKEN is missing."""
     monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
     result = apify_run_actor_and_get_dataset(actor_id="test/actor")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]
+
+
+def test_run_task_missing_token(monkeypatch):
+    """apify_run_task returns error dict when APIFY_API_TOKEN is missing."""
+    monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
+    result = apify_run_task(task_id="janedoe~my-task")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]
+
+
+def test_run_task_and_get_dataset_missing_token(monkeypatch):
+    """apify_run_task_and_get_dataset returns error dict when APIFY_API_TOKEN is missing."""
+    monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
+    result = apify_run_task_and_get_dataset(task_id="janedoe~my-task")
 
     assert result["status"] == "error"
     assert "APIFY_API_TOKEN" in result["content"][0]["text"]

@@ -10,11 +10,15 @@ Key Features:
    • apify_run_actor: Run any Apify Actor by ID with custom input
    • apify_run_actor_and_get_dataset: Run an Actor and fetch results in one step
 
-2. Data Retrieval:
+2. Task Execution:
+   • apify_run_task: Run a saved Actor Task by ID with optional input overrides
+   • apify_run_task_and_get_dataset: Run a Task and fetch results in one step
+
+3. Data Retrieval:
    • apify_get_dataset_items: Fetch items from an Apify Dataset with pagination
    • apify_scrape_url: Scrape a single URL and return content as Markdown
 
-3. Error Handling:
+4. Error Handling:
    • Graceful API error handling with descriptive messages
    • Dependency checking (apify-client optional install)
    • Timeout management for Actor Runs
@@ -38,8 +42,10 @@ from strands_tools import apify
 
 agent = Agent(tools=[
     apify.apify_run_actor,
+    apify.apify_run_task,
     apify.apify_get_dataset_items,
     apify.apify_run_actor_and_get_dataset,
+    apify.apify_run_task_and_get_dataset,
     apify.apify_scrape_url,
 ])
 
@@ -162,6 +168,7 @@ class ApifyToolClient:
         call_kwargs: Dict[str, Any] = {
             "run_input": run_input or {},
             "timeout_secs": timeout_secs,
+            "logger": None,
         }
         if memory_mbytes is not None:
             call_kwargs["memory_mbytes"] = memory_mbytes
@@ -203,6 +210,56 @@ class ApifyToolClient:
             memory_mbytes=memory_mbytes,
         )
         dataset_id = run_metadata["dataset_id"]
+        if not dataset_id:
+            raise RuntimeError(f"Actor {actor_id} run has no default Dataset.")
+        items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit)
+        return {**run_metadata, "items": items}
+
+    def run_task(
+        self,
+        task_id: str,
+        task_input: Optional[Dict[str, Any]] = None,
+        timeout_secs: int = 300,
+        memory_mbytes: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Run an Apify Task synchronously and return run metadata."""
+        call_kwargs: Dict[str, Any] = {"timeout_secs": timeout_secs}
+        if task_input is not None:
+            call_kwargs["task_input"] = task_input
+        if memory_mbytes is not None:
+            call_kwargs["memory_mbytes"] = memory_mbytes
+
+        task_run = self.client.task(task_id).call(**call_kwargs)
+        if task_run is None:
+            raise RuntimeError(f"Task {task_id} returned no run data (possible wait timeout).")
+        self._check_run_status(task_run, f"Task {task_id}")
+
+        return {
+            "run_id": task_run.get("id"),
+            "status": task_run.get("status"),
+            "dataset_id": task_run.get("defaultDatasetId"),
+            "started_at": task_run.get("startedAt"),
+            "finished_at": task_run.get("finishedAt"),
+        }
+
+    def run_task_and_get_dataset(
+        self,
+        task_id: str,
+        task_input: Optional[Dict[str, Any]] = None,
+        timeout_secs: int = 300,
+        memory_mbytes: Optional[int] = None,
+        dataset_items_limit: int = 100,
+    ) -> Dict[str, Any]:
+        """Run a Task synchronously, then fetch its default Dataset items."""
+        run_metadata = self.run_task(
+            task_id=task_id,
+            task_input=task_input,
+            timeout_secs=timeout_secs,
+            memory_mbytes=memory_mbytes,
+        )
+        dataset_id = run_metadata["dataset_id"]
+        if not dataset_id:
+            raise RuntimeError(f"Task {task_id} run has no default Dataset.")
         items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit)
         return {**run_metadata, "items": items}
 
@@ -215,6 +272,7 @@ class ApifyToolClient:
         actor_run = self.client.actor(WEBSITE_CONTENT_CRAWLER).call(
             run_input=run_input,
             timeout_secs=timeout_secs,
+            logger=None,
         )
         self._check_run_status(actor_run, "Website Content Crawler")
 
@@ -366,6 +424,104 @@ def apify_run_actor_and_get_dataset(
         )
     except Exception as e:
         return _error_result(e, "apify_run_actor_and_get_dataset")
+
+
+@tool
+def apify_run_task(
+    task_id: str,
+    task_input: Optional[Dict[str, Any]] = None,
+    timeout_secs: int = 300,
+    memory_mbytes: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Run an Apify Task by its ID or name and return the run metadata as JSON.
+
+    Tasks are saved Actor configurations with preset inputs. Use this when a Task
+    has already been configured in the Apify Console, so you don't need to specify
+    the full Actor input every time.
+
+    Args:
+        task_id: Task identifier, e.g. "janedoe~my-task" or a Task ID string.
+        task_input: Optional JSON-serializable input to override the Task's default input.
+        timeout_secs: Maximum time in seconds to wait for the Task Run to finish. Defaults to 300.
+        memory_mbytes: Memory allocation in MB for the Task Run. Uses Task default if not set.
+
+    Returns:
+        Dict with status and content containing run metadata: run_id, status, dataset_id,
+        started_at, finished_at.
+    """
+    try:
+        _check_dependency()
+        client = ApifyToolClient()
+        result = client.run_task(
+            task_id=task_id,
+            task_input=task_input,
+            timeout_secs=timeout_secs,
+            memory_mbytes=memory_mbytes,
+        )
+        return _success_result(
+            text=json.dumps(result, indent=2, default=str),
+            panel_body=(
+                f"[green]Task Run completed[/green]\n"
+                f"Task: {task_id}\n"
+                f"Run ID: {result['run_id']}\n"
+                f"Status: {result['status']}\n"
+                f"Dataset ID: {result['dataset_id']}"
+            ),
+            panel_title="Apify: Run Task",
+        )
+    except Exception as e:
+        return _error_result(e, "apify_run_task")
+
+
+@tool
+def apify_run_task_and_get_dataset(
+    task_id: str,
+    task_input: Optional[Dict[str, Any]] = None,
+    timeout_secs: int = 300,
+    memory_mbytes: Optional[int] = None,
+    dataset_items_limit: int = 100,
+) -> Dict[str, Any]:
+    """Run an Apify Task and fetch its Dataset results in one step.
+
+    Convenience tool that combines running a Task and fetching its default Dataset
+    items into a single call. Use this when you want both the run metadata and the
+    result data without making two separate tool calls.
+
+    Args:
+        task_id: Task identifier, e.g. "janedoe~my-task" or a Task ID string.
+        task_input: Optional JSON-serializable input to override the Task's default input.
+        timeout_secs: Maximum time in seconds to wait for the Task Run to finish. Defaults to 300.
+        memory_mbytes: Memory allocation in MB for the Task Run.
+        dataset_items_limit: Maximum number of Dataset items to return. Defaults to 100.
+
+    Returns:
+        Dict with status and content containing run metadata (run_id, status, dataset_id,
+        started_at, finished_at) plus an "items" array containing the Dataset results.
+    """
+    try:
+        _check_dependency()
+        client = ApifyToolClient()
+        result = client.run_task_and_get_dataset(
+            task_id=task_id,
+            task_input=task_input,
+            timeout_secs=timeout_secs,
+            memory_mbytes=memory_mbytes,
+            dataset_items_limit=dataset_items_limit,
+        )
+        return _success_result(
+            text=json.dumps(result, indent=2, default=str),
+            panel_body=(
+                f"[green]Task Run completed with dataset[/green]\n"
+                f"Task: {task_id}\n"
+                f"Run ID: {result['run_id']}\n"
+                f"Status: {result['status']}\n"
+                f"Dataset ID: {result['dataset_id']}\n"
+                f"Items returned: {len(result['items'])}"
+            ),
+            panel_title="Apify: Run Task + Dataset",
+        )
+    except Exception as e:
+        return _error_result(e, "apify_run_task_and_get_dataset")
 
 
 @tool
