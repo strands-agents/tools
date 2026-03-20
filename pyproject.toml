@@ -62,7 +62,7 @@ Documentation = "https://strandsagents.com/"
 
 [project.optional-dependencies]
 apify = [
-    "apify-client>=1.0.0",
+    "apify-client>=2.5.0,<3.0.0",
 ]
 build = [
     "hatch>=1.16.5",

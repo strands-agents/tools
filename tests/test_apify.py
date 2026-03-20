@@ -16,7 +16,7 @@ from strands_tools.apify import (
 
 MOCK_ACTOR_RUN = {
     "id": "run-HG7ml5fB1hCp8YEBA",
-    "actId": "janedoe~my-scraper",
+    "actId": "aimee~my-scraper",
     "userId": "user-abc123",
     "startedAt": "2026-03-15T14:30:00.000Z",
     "finishedAt": "2026-03-15T14:35:22.000Z",
@@ -50,6 +50,17 @@ MOCK_SCRAPED_ITEM = {
     "markdown": "# Example Domain\n\nThis domain is for use in illustrative examples.",
     "text": "Example Domain. This domain is for use in illustrative examples.",
 }
+
+
+def _make_apify_api_error(status_code: int, message: str) -> Exception:
+    """Create an ApifyApiError instance for testing without calling its real __init__."""
+    from apify_client.errors import ApifyApiError
+
+    error = ApifyApiError.__new__(ApifyApiError)
+    Exception.__init__(error, message)
+    error.status_code = status_code
+    error.message = message
+    return error
 
 
 @pytest.fixture
@@ -109,64 +120,106 @@ def test_client_uses_env_token(mock_apify_env):
 
 
 def test_run_actor_success(mock_apify_env, mock_apify_client):
-    """Successful Actor Run returns JSON with run metadata."""
+    """Successful Actor Run returns structured result with run metadata."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        result = apify_run_actor(actor_id="janedoe/my-scraper", run_input={"url": "https://example.com"})
+        result = apify_run_actor(actor_id="aimee/my-scraper", run_input={"url": "https://example.com"})
 
-    data = json.loads(result)
+    assert result["status"] == "success"
+    data = json.loads(result["content"][0]["text"])
     assert data["run_id"] == "run-HG7ml5fB1hCp8YEBA"
     assert data["status"] == "SUCCEEDED"
     assert data["dataset_id"] == "dataset-WkC9gct8rq1uR5vDZ"
     assert "started_at" in data
     assert "finished_at" in data
-    mock_apify_client.actor.assert_called_once_with("janedoe/my-scraper")
+    mock_apify_client.actor.assert_called_once_with("aimee/my-scraper")
+
+
+def test_run_actor_default_input(mock_apify_env, mock_apify_client):
+    """Actor Run defaults run_input to empty dict when not provided."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "success"
+    call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
+    assert call_kwargs["run_input"] == {}
 
 
 def test_run_actor_with_memory(mock_apify_env, mock_apify_client):
     """Actor Run passes memory_mbytes when provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        apify_run_actor(actor_id="janedoe/my-scraper", memory_mbytes=512)
+        apify_run_actor(actor_id="aimee/my-scraper", memory_mbytes=512)
 
     call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
     assert call_kwargs["memory_mbytes"] == 512
 
 
 def test_run_actor_failure(mock_apify_env, mock_apify_client):
-    """Actor Run raises RuntimeError when Actor fails."""
+    """Actor Run returns error dict when Actor fails."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(RuntimeError, match="FAILED"):
-            apify_run_actor(actor_id="janedoe/my-scraper")
+        result = apify_run_actor(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "error"
+    assert "FAILED" in result["content"][0]["text"]
 
 
 def test_run_actor_timeout(mock_apify_env, mock_apify_client):
-    """Actor Run raises RuntimeError when Actor times out."""
+    """Actor Run returns error dict when Actor times out."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_TIMED_OUT_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(RuntimeError, match="TIMED-OUT"):
-            apify_run_actor(actor_id="janedoe/my-scraper")
+        result = apify_run_actor(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "error"
+    assert "TIMED-OUT" in result["content"][0]["text"]
 
 
 def test_run_actor_api_exception(mock_apify_env, mock_apify_client):
-    """Actor Run re-raises exceptions from the Apify client."""
+    """Actor Run returns error dict on API exceptions."""
     mock_apify_client.actor.return_value.call.side_effect = Exception("Connection failed")
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(Exception, match="Connection failed"):
-            apify_run_actor(actor_id="janedoe/my-scraper")
+        result = apify_run_actor(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "error"
+    assert "Connection failed" in result["content"][0]["text"]
+
+
+def test_run_actor_apify_api_error_401(mock_apify_env, mock_apify_client):
+    """Actor Run returns friendly message for 401 authentication errors."""
+    error = _make_apify_api_error(401, "Unauthorized")
+    mock_apify_client.actor.return_value.call.side_effect = error
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "error"
+    assert "Authentication failed" in result["content"][0]["text"]
+
+
+def test_run_actor_apify_api_error_404(mock_apify_env, mock_apify_client):
+    """Actor Run returns friendly message for 404 not-found errors."""
+    error = _make_apify_api_error(404, "Actor not found")
+    mock_apify_client.actor.return_value.call.side_effect = error
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor(actor_id="aimee/nonexistent")
+
+    assert result["status"] == "error"
+    assert "Resource not found" in result["content"][0]["text"]
 
 
 # --- apify_get_dataset_items ---
 
 
 def test_get_dataset_items_success(mock_apify_env, mock_apify_client):
-    """Successful dataset retrieval returns JSON array of items."""
+    """Successful dataset retrieval returns structured result with items."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_get_dataset_items(dataset_id="dataset-WkC9gct8rq1uR5vDZ")
 
-    items = json.loads(result)
+    assert result["status"] == "success"
+    items = json.loads(result["content"][0]["text"])
     assert len(items) == 3
     assert items[0]["title"] == "Widget A"
     assert items[2]["currency"] == "EUR"
@@ -182,7 +235,7 @@ def test_get_dataset_items_with_pagination(mock_apify_env, mock_apify_client):
 
 
 def test_get_dataset_items_empty(mock_apify_env, mock_apify_client):
-    """Empty dataset returns an empty JSON array."""
+    """Empty dataset returns a structured result with empty JSON array."""
     mock_list_result = MagicMock()
     mock_list_result.items = []
     mock_apify_client.dataset.return_value.list_items.return_value = mock_list_result
@@ -190,7 +243,8 @@ def test_get_dataset_items_empty(mock_apify_env, mock_apify_client):
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_get_dataset_items(dataset_id="dataset-empty")
 
-    items = json.loads(result)
+    assert result["status"] == "success"
+    items = json.loads(result["content"][0]["text"])
     assert items == []
 
 
@@ -198,15 +252,16 @@ def test_get_dataset_items_empty(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_and_get_dataset_success(mock_apify_env, mock_apify_client):
-    """Combined run + dataset fetch returns run metadata and items."""
+    """Combined run + dataset fetch returns structured result with metadata and items."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_actor_and_get_dataset(
-            actor_id="janedoe/my-scraper",
+            actor_id="aimee/my-scraper",
             run_input={"url": "https://example.com"},
             dataset_items_limit=50,
         )
 
-    data = json.loads(result)
+    assert result["status"] == "success"
+    data = json.loads(result["content"][0]["text"])
     assert data["run_id"] == "run-HG7ml5fB1hCp8YEBA"
     assert data["status"] == "SUCCEEDED"
     assert data["dataset_id"] == "dataset-WkC9gct8rq1uR5vDZ"
@@ -215,19 +270,21 @@ def test_run_actor_and_get_dataset_success(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_and_get_dataset_actor_failure(mock_apify_env, mock_apify_client):
-    """Combined tool raises when the Actor fails."""
+    """Combined tool returns error dict when the Actor fails."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(RuntimeError, match="FAILED"):
-            apify_run_actor_and_get_dataset(actor_id="janedoe/my-scraper")
+        result = apify_run_actor_and_get_dataset(actor_id="aimee/my-scraper")
+
+    assert result["status"] == "error"
+    assert "FAILED" in result["content"][0]["text"]
 
 
 # --- apify_scrape_url ---
 
 
 def test_scrape_url_success(mock_apify_env, mock_apify_client):
-    """Scrape URL returns markdown content from the crawled page."""
+    """Scrape URL returns structured result with markdown content."""
     mock_list_result = MagicMock()
     mock_list_result.items = [MOCK_SCRAPED_ITEM]
     mock_apify_client.dataset.return_value.list_items.return_value = mock_list_result
@@ -235,28 +292,33 @@ def test_scrape_url_success(mock_apify_env, mock_apify_client):
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_scrape_url(url="https://example.com")
 
-    assert "Example Domain" in result
+    assert result["status"] == "success"
+    assert "Example Domain" in result["content"][0]["text"]
     mock_apify_client.actor.assert_called_once_with("apify/website-content-crawler")
 
 
 def test_scrape_url_no_content(mock_apify_env, mock_apify_client):
-    """Scrape URL raises when no content is returned."""
+    """Scrape URL returns error dict when no content is returned."""
     mock_list_result = MagicMock()
     mock_list_result.items = []
     mock_apify_client.dataset.return_value.list_items.return_value = mock_list_result
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(RuntimeError, match="No content returned"):
-            apify_scrape_url(url="https://example.com")
+        result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "No content returned" in result["content"][0]["text"]
 
 
 def test_scrape_url_crawler_failure(mock_apify_env, mock_apify_client):
-    """Scrape URL raises when the crawler Actor fails."""
+    """Scrape URL returns error dict when the crawler Actor fails."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
-        with pytest.raises(RuntimeError, match="FAILED"):
-            apify_scrape_url(url="https://example.com")
+        result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "FAILED" in result["content"][0]["text"]
 
 
 def test_scrape_url_falls_back_to_text(mock_apify_env, mock_apify_client):
@@ -269,52 +331,99 @@ def test_scrape_url_falls_back_to_text(mock_apify_env, mock_apify_client):
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_scrape_url(url="https://example.com")
 
-    assert result == "Plain text content"
+    assert result["status"] == "success"
+    assert result["content"][0]["text"] == "Plain text content"
+
+
+def test_scrape_url_invalid_url_scheme(mock_apify_env):
+    """apify_scrape_url returns error for invalid URL scheme."""
+    result = apify_scrape_url(url="ftp://example.com")
+
+    assert result["status"] == "error"
+    assert "Invalid URL scheme" in result["content"][0]["text"]
+
+
+def test_scrape_url_missing_scheme(mock_apify_env):
+    """apify_scrape_url returns error for URL without http/https scheme."""
+    result = apify_scrape_url(url="example.com")
+
+    assert result["status"] == "error"
+    assert "Invalid URL scheme" in result["content"][0]["text"]
 
 
 # --- Dependency guard ---
 
 
 def test_missing_apify_client_run_actor(mock_apify_env):
-    """apify_run_actor raises ImportError when apify-client is not installed."""
+    """apify_run_actor returns error dict when apify-client is not installed."""
     with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
-        with pytest.raises(ImportError, match="apify-client"):
-            apify_run_actor(actor_id="test/actor")
+        result = apify_run_actor(actor_id="test/actor")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
 
 
 def test_missing_apify_client_get_dataset(mock_apify_env):
-    """apify_get_dataset_items raises ImportError when apify-client is not installed."""
+    """apify_get_dataset_items returns error dict when apify-client is not installed."""
     with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
-        with pytest.raises(ImportError, match="apify-client"):
-            apify_get_dataset_items(dataset_id="dataset-123")
+        result = apify_get_dataset_items(dataset_id="dataset-123")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
 
 
 def test_missing_apify_client_run_and_get(mock_apify_env):
-    """apify_run_actor_and_get_dataset raises ImportError when apify-client is not installed."""
+    """apify_run_actor_and_get_dataset returns error dict when apify-client is not installed."""
     with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
-        with pytest.raises(ImportError, match="apify-client"):
-            apify_run_actor_and_get_dataset(actor_id="test/actor")
+        result = apify_run_actor_and_get_dataset(actor_id="test/actor")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
 
 
 def test_missing_apify_client_scrape_url(mock_apify_env):
-    """apify_scrape_url raises ImportError when apify-client is not installed."""
+    """apify_scrape_url returns error dict when apify-client is not installed."""
     with patch("strands_tools.apify.HAS_APIFY_CLIENT", False):
-        with pytest.raises(ImportError, match="apify-client"):
-            apify_scrape_url(url="https://example.com")
+        result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "apify-client" in result["content"][0]["text"]
 
 
 # --- Missing token from tool entry points ---
 
 
 def test_run_actor_missing_token(monkeypatch):
-    """apify_run_actor raises ValueError when APIFY_API_TOKEN is missing."""
+    """apify_run_actor returns error dict when APIFY_API_TOKEN is missing."""
     monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
-    with pytest.raises(ValueError, match="APIFY_API_TOKEN"):
-        apify_run_actor(actor_id="test/actor")
+    result = apify_run_actor(actor_id="test/actor")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]
+
+
+def test_get_dataset_items_missing_token(monkeypatch):
+    """apify_get_dataset_items returns error dict when APIFY_API_TOKEN is missing."""
+    monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
+    result = apify_get_dataset_items(dataset_id="dataset-123")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]
+
+
+def test_run_actor_and_get_dataset_missing_token(monkeypatch):
+    """apify_run_actor_and_get_dataset returns error dict when APIFY_API_TOKEN is missing."""
+    monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
+    result = apify_run_actor_and_get_dataset(actor_id="test/actor")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]
 
 
 def test_scrape_url_missing_token(monkeypatch):
-    """apify_scrape_url raises ValueError when APIFY_API_TOKEN is missing."""
+    """apify_scrape_url returns error dict when APIFY_API_TOKEN is missing."""
     monkeypatch.delenv("APIFY_API_TOKEN", raising=False)
-    with pytest.raises(ValueError, match="APIFY_API_TOKEN"):
-        apify_scrape_url(url="https://example.com")
+    result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "APIFY_API_TOKEN" in result["content"][0]["text"]

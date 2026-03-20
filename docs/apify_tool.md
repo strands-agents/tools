@@ -1,10 +1,6 @@
-# Apify Core Tools
+# Apify
 
-The Apify core tools (`apify.py`) provide the foundational building blocks for interacting with the [Apify](https://apify.com) platform from Strands Agents. These generic tools let you run any [Actor](https://apify.com/store) by ID, fetch Dataset results, and scrape individual URLs.
-
-For higher-level, domain-specific tools see:
-- [Apify Social Media Tools](apify_social_media_tool.md) — simplified wrappers for Instagram, LinkedIn, Twitter/X, TikTok, and Facebook scrapers
-- [Apify Search Tools](apify_search_tool.md) — simplified wrappers for Google Search, Google Maps, YouTube, web crawling, and e-commerce scrapers
+The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) by ID, fetching Dataset results, and scraping individual URLs.
 
 ## Installation
 
@@ -98,9 +94,9 @@ items = agent.tool.apify_get_dataset_items(
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `actor_id` | string | Yes | — | Actor identifier (e.g., `apify/website-content-crawler`) |
-| `run_input` | dict | No | `{}` | JSON-serializable input for the Actor |
+| `run_input` | dict | No | None | JSON-serializable input for the Actor |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor Run to finish |
-| `memory_mbytes` | int | No | Actor default | Memory allocation in MB for the Actor Run |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor Run (uses Actor default if not set) |
 
 **Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
 
@@ -119,9 +115,9 @@ items = agent.tool.apify_get_dataset_items(
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `actor_id` | string | Yes | — | Actor identifier (e.g., `apify/website-content-crawler`) |
-| `run_input` | dict | No | `{}` | JSON-serializable input for the Actor |
+| `run_input` | dict | No | None | JSON-serializable input for the Actor |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor Run to finish |
-| `memory_mbytes` | int | No | Actor default | Memory allocation in MB for the Actor Run |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor Run (uses Actor default if not set) |
 | `dataset_items_limit` | int | No | 100 | Maximum number of Dataset items to return |
 
 **Returns:** JSON string with run metadata plus an `items` array containing the Dataset results.

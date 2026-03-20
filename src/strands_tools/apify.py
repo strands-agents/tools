@@ -1,22 +1,64 @@
-"""Core Apify platform tools for Strands Agents.
+"""Apify platform tools for Strands Agents.
 
-Provides the foundational building blocks for interacting with the Apify platform:
-run any Actor by ID, fetch Dataset results, and scrape individual URLs.
-For domain-specific wrappers see apify_social_media.py and apify_search.py.
+This module provides web scraping, data extraction, and automation capabilities
+using the Apify platform. It lets you run any Actor by ID, fetch Dataset results,
+and scrape individual URLs.
 
-Setup:
-    1. Create an Apify account at https://apify.com
-    2. Get your API token: Console > Settings > API & Integrations
-    3. export APIFY_API_TOKEN=your_token
-    4. pip install strands-agents-tools[apify]
+Key Features:
+------------
+1. Actor Execution:
+   • apify_run_actor: Run any Apify Actor by ID with custom input
+   • apify_run_actor_and_get_dataset: Run an Actor and fetch results in one step
 
-See docs/apify_tool.md for usage examples, parameter reference, and troubleshooting.
+2. Data Retrieval:
+   • apify_get_dataset_items: Fetch items from an Apify Dataset with pagination
+   • apify_scrape_url: Scrape a single URL and return content as Markdown
+
+3. Error Handling:
+   • Graceful API error handling with descriptive messages
+   • Dependency checking (apify-client optional install)
+   • Timeout management for Actor Runs
+
+Setup Requirements:
+------------------
+1. Create an Apify account at https://apify.com
+2. Obtain your API token: Apify Console > Settings > API & Integrations > Personal API tokens
+3. Install the optional dependency: pip install strands-agents-tools[apify]
+4. Set the environment variable:
+   APIFY_API_TOKEN=your_api_token_here
+
+Example .env configuration:
+    APIFY_API_TOKEN=apify_api_1a2B3cD4eF5gH6iJ7kL8m
+
+Usage Examples:
+--------------
+```python
+from strands import Agent
+from strands_tools import apify
+
+agent = Agent(tools=[
+    apify.apify_run_actor,
+    apify.apify_get_dataset_items,
+    apify.apify_run_actor_and_get_dataset,
+    apify.apify_scrape_url,
+])
+
+# Scrape a single URL
+content = agent.tool.apify_scrape_url(url="https://example.com")
+
+# Run an Actor
+result = agent.tool.apify_run_actor(
+    actor_id="apify/website-content-crawler",
+    run_input={"startUrls": [{"url": "https://example.com"}]},
+)
+```
 """
 
 import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from rich.panel import Panel
 from rich.text import Text
@@ -29,6 +71,7 @@ console = console_util.create()
 
 try:
     from apify_client import ApifyClient
+    from apify_client.errors import ApifyApiError
 
     HAS_APIFY_CLIENT = True
 except ImportError:
@@ -36,12 +79,56 @@ except ImportError:
 
 WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
 TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
+ERROR_PANEL_TITLE = "[bold red]Apify Error[/bold red]"
 
 
 def _check_dependency() -> None:
     """Raise ImportError if apify-client is not installed."""
     if not HAS_APIFY_CLIENT:
         raise ImportError("apify-client package is required. Install with: pip install strands-agents-tools[apify]")
+
+
+def _validate_url(url: str) -> None:
+    """Raise ValueError if the URL does not have a valid HTTP(S) scheme and domain."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https URLs are supported.")
+    if not parsed.netloc:
+        raise ValueError(f"Invalid URL '{url}'. A domain is required.")
+
+
+def _format_error(e: Exception) -> str:
+    """Map exceptions to user-friendly error messages, with special handling for ApifyApiError."""
+    if HAS_APIFY_CLIENT and isinstance(e, ApifyApiError):
+        status_code = getattr(e, "status_code", None)
+        msg = getattr(e, "message", str(e))
+        match status_code:
+            case 401:
+                return "Authentication failed. Verify your APIFY_API_TOKEN is valid."
+            case 404:
+                return f"Resource not found: {msg}"
+            case 429:
+                return (
+                    "Rate limit exceeded. The Apify client retries automatically; "
+                    "if this persists, reduce request frequency."
+                )
+            case _:
+                return f"Apify API error ({status_code}): {msg}"
+    return str(e)
+
+
+def _error_result(e: Exception, tool_name: str) -> Dict[str, Any]:
+    """Build a structured error response and display an error panel."""
+    message = _format_error(e)
+    logger.error("%s failed: %s", tool_name, message)
+    console.print(Panel(Text(message, style="red"), title=ERROR_PANEL_TITLE, border_style="red"))
+    return {"status": "error", "content": [{"text": message}]}
+
+
+def _success_result(text: str, panel_body: str, panel_title: str) -> Dict[str, Any]:
+    """Build a structured success response and display a success panel."""
+    console.print(Panel(panel_body, title=f"[bold cyan]{panel_title}[/bold cyan]", border_style="green"))
+    return {"status": "success", "content": [{"text": text}]}
 
 
 class ApifyToolClient:
@@ -55,6 +142,14 @@ class ApifyToolClient:
                 "Get your token at https://console.apify.com/account/integrations"
             )
         self.client: "ApifyClient" = ApifyClient(token, headers=TRACKING_HEADER)
+
+    @staticmethod
+    def _check_run_status(actor_run: Dict[str, Any], label: str) -> None:
+        """Raise RuntimeError if the Actor Run did not succeed."""
+        status = actor_run.get("status", "UNKNOWN")
+        if status != "SUCCEEDED":
+            run_id = actor_run.get("id", "N/A")
+            raise RuntimeError(f"{label} finished with status {status}. Run ID: {run_id}")
 
     def run_actor(
         self,
@@ -72,14 +167,11 @@ class ApifyToolClient:
             call_kwargs["memory_mbytes"] = memory_mbytes
 
         actor_run = self.client.actor(actor_id).call(**call_kwargs)
-
-        status = actor_run.get("status", "UNKNOWN")
-        if status not in ("SUCCEEDED",):
-            raise RuntimeError(f"Actor {actor_id} finished with status {status}. Run ID: {actor_run.get('id', 'N/A')}")
+        self._check_run_status(actor_run, f"Actor {actor_id}")
 
         return {
             "run_id": actor_run.get("id"),
-            "status": status,
+            "status": actor_run.get("status"),
             "dataset_id": actor_run.get("defaultDatasetId"),
             "started_at": actor_run.get("startedAt"),
             "finished_at": actor_run.get("finishedAt"),
@@ -116,7 +208,7 @@ class ApifyToolClient:
 
     def scrape_url(self, url: str, timeout_secs: int = 120) -> str:
         """Scrape a single URL using Website Content Crawler and return markdown."""
-        run_input = {
+        run_input: Dict[str, Any] = {
             "startUrls": [{"url": url}],
             "maxCrawlPages": 1,
         }
@@ -124,12 +216,7 @@ class ApifyToolClient:
             run_input=run_input,
             timeout_secs=timeout_secs,
         )
-
-        status = actor_run.get("status", "UNKNOWN")
-        if status not in ("SUCCEEDED",):
-            raise RuntimeError(
-                f"Website Content Crawler finished with status {status}. Run ID: {actor_run.get('id', 'N/A')}"
-            )
+        self._check_run_status(actor_run, "Website Content Crawler")
 
         dataset_id = actor_run.get("defaultDatasetId")
         result = self.client.dataset(dataset_id).list_items(limit=1)
@@ -150,7 +237,7 @@ def apify_run_actor(
     run_input: Optional[Dict[str, Any]] = None,
     timeout_secs: int = 300,
     memory_mbytes: Optional[int] = None,
-) -> str:
+) -> Dict[str, Any]:
     """Run any Apify Actor by its ID or name and return the run metadata as JSON.
 
     Executes the Actor synchronously - blocks until the Actor Run finishes or the timeout
@@ -169,10 +256,11 @@ def apify_run_actor(
         memory_mbytes: Memory allocation in MB for the Actor Run. Uses Actor default if not set.
 
     Returns:
-        JSON string with run metadata: run_id, status, dataset_id, started_at, finished_at.
+        Dict with status and content containing run metadata: run_id, status, dataset_id,
+        started_at, finished_at.
     """
-    _check_dependency()
     try:
+        _check_dependency()
         client = ApifyToolClient()
         result = client.run_actor(
             actor_id=actor_id,
@@ -180,25 +268,19 @@ def apify_run_actor(
             timeout_secs=timeout_secs,
             memory_mbytes=memory_mbytes,
         )
-        panel = Panel(
-            f"[green]Actor Run completed[/green]\n"
-            f"Actor: {actor_id}\n"
-            f"Run ID: {result['run_id']}\n"
-            f"Status: {result['status']}\n"
-            f"Dataset ID: {result['dataset_id']}",
-            title="[bold cyan]Apify: Run Actor[/bold cyan]",
-            border_style="green",
+        return _success_result(
+            text=json.dumps(result, indent=2, default=str),
+            panel_body=(
+                f"[green]Actor Run completed[/green]\n"
+                f"Actor: {actor_id}\n"
+                f"Run ID: {result['run_id']}\n"
+                f"Status: {result['status']}\n"
+                f"Dataset ID: {result['dataset_id']}"
+            ),
+            panel_title="Apify: Run Actor",
         )
-        console.print(panel)
-        return json.dumps(result, indent=2, default=str)
     except Exception as e:
-        error_panel = Panel(
-            Text(str(e), style="red"),
-            title="[bold red]Apify Error[/bold red]",
-            border_style="red",
-        )
-        console.print(error_panel)
-        raise
+        return _error_result(e, "apify_run_actor")
 
 
 @tool
@@ -206,7 +288,7 @@ def apify_get_dataset_items(
     dataset_id: str,
     limit: int = 100,
     offset: int = 0,
-) -> str:
+) -> Dict[str, Any]:
     """Fetch items from an existing Apify Dataset and return them as JSON.
 
     Use this after running an Actor to retrieve the structured results from its
@@ -218,27 +300,21 @@ def apify_get_dataset_items(
         offset: Number of items to skip for pagination. Defaults to 0.
 
     Returns:
-        JSON string containing an array of Dataset items.
+        Dict with status and content containing an array of Dataset items.
     """
-    _check_dependency()
     try:
+        _check_dependency()
         client = ApifyToolClient()
         items = client.get_dataset_items(dataset_id=dataset_id, limit=limit, offset=offset)
-        panel = Panel(
-            f"[green]Dataset items retrieved[/green]\nDataset ID: {dataset_id}\nItems returned: {len(items)}",
-            title="[bold cyan]Apify: Dataset Items[/bold cyan]",
-            border_style="green",
+        return _success_result(
+            text=json.dumps(items, indent=2, default=str),
+            panel_body=(
+                f"[green]Dataset items retrieved[/green]\nDataset ID: {dataset_id}\nItems returned: {len(items)}"
+            ),
+            panel_title="Apify: Dataset Items",
         )
-        console.print(panel)
-        return json.dumps(items, indent=2, default=str)
     except Exception as e:
-        error_panel = Panel(
-            Text(str(e), style="red"),
-            title="[bold red]Apify Error[/bold red]",
-            border_style="red",
-        )
-        console.print(error_panel)
-        raise
+        return _error_result(e, "apify_get_dataset_items")
 
 
 @tool
@@ -248,7 +324,7 @@ def apify_run_actor_and_get_dataset(
     timeout_secs: int = 300,
     memory_mbytes: Optional[int] = None,
     dataset_items_limit: int = 100,
-) -> str:
+) -> Dict[str, Any]:
     """Run an Apify Actor and fetch its Dataset results in one step.
 
     Convenience tool that combines running an Actor and fetching its default Dataset
@@ -263,11 +339,11 @@ def apify_run_actor_and_get_dataset(
         dataset_items_limit: Maximum number of Dataset items to return. Defaults to 100.
 
     Returns:
-        JSON string with run metadata (run_id, status, dataset_id, started_at, finished_at)
-        plus an "items" array containing the Dataset results.
+        Dict with status and content containing run metadata (run_id, status, dataset_id,
+        started_at, finished_at) plus an "items" array containing the Dataset results.
     """
-    _check_dependency()
     try:
+        _check_dependency()
         client = ApifyToolClient()
         result = client.run_actor_and_get_dataset(
             actor_id=actor_id,
@@ -276,33 +352,27 @@ def apify_run_actor_and_get_dataset(
             memory_mbytes=memory_mbytes,
             dataset_items_limit=dataset_items_limit,
         )
-        panel = Panel(
-            f"[green]Actor Run completed with dataset[/green]\n"
-            f"Actor: {actor_id}\n"
-            f"Run ID: {result['run_id']}\n"
-            f"Status: {result['status']}\n"
-            f"Dataset ID: {result['dataset_id']}\n"
-            f"Items returned: {len(result['items'])}",
-            title="[bold cyan]Apify: Run Actor + Dataset[/bold cyan]",
-            border_style="green",
+        return _success_result(
+            text=json.dumps(result, indent=2, default=str),
+            panel_body=(
+                f"[green]Actor Run completed with dataset[/green]\n"
+                f"Actor: {actor_id}\n"
+                f"Run ID: {result['run_id']}\n"
+                f"Status: {result['status']}\n"
+                f"Dataset ID: {result['dataset_id']}\n"
+                f"Items returned: {len(result['items'])}"
+            ),
+            panel_title="Apify: Run Actor + Dataset",
         )
-        console.print(panel)
-        return json.dumps(result, indent=2, default=str)
     except Exception as e:
-        error_panel = Panel(
-            Text(str(e), style="red"),
-            title="[bold red]Apify Error[/bold red]",
-            border_style="red",
-        )
-        console.print(error_panel)
-        raise
+        return _error_result(e, "apify_run_actor_and_get_dataset")
 
 
 @tool
 def apify_scrape_url(
     url: str,
     timeout_secs: int = 120,
-) -> str:
+) -> Dict[str, Any]:
     """Scrape a single URL and return its content as markdown.
 
     Uses the Apify Website Content Crawler Actor under the hood, pre-configured for
@@ -314,24 +384,19 @@ def apify_scrape_url(
         timeout_secs: Maximum time in seconds to wait for scraping to finish. Defaults to 120.
 
     Returns:
-        Markdown content of the scraped page as a plain string.
+        Dict with status and content containing the markdown content of the scraped page.
     """
-    _check_dependency()
     try:
+        _validate_url(url)
+        _check_dependency()
         client = ApifyToolClient()
         content = client.scrape_url(url=url, timeout_secs=timeout_secs)
-        panel = Panel(
-            f"[green]URL scraped successfully[/green]\nURL: {url}\nContent length: {len(content)} characters",
-            title="[bold cyan]Apify: Scrape URL[/bold cyan]",
-            border_style="green",
+        return _success_result(
+            text=content,
+            panel_body=(
+                f"[green]URL scraped successfully[/green]\nURL: {url}\nContent length: {len(content)} characters"
+            ),
+            panel_title="Apify: Scrape URL",
         )
-        console.print(panel)
-        return content
     except Exception as e:
-        error_panel = Panel(
-            Text(str(e), style="red"),
-            title="[bold red]Apify Error[/bold red]",
-            border_style="red",
-        )
-        console.print(error_panel)
-        raise
+        return _error_result(e, "apify_scrape_url")

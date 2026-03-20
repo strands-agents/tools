@@ -964,7 +964,7 @@ result = agent.tool.mongodb_memory(
 )
 ```
 
-### Apify Core Tools
+### Apify
 
 ```python
 from strands import Agent
@@ -999,7 +999,6 @@ items = agent.tool.apify_get_dataset_items(
     limit=100,
 )
 ```
-
 
 ## 🌍 Environment Variables Configuration
 
