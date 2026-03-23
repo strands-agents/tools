@@ -456,6 +456,145 @@ def test_scrape_url_missing_scheme(mock_apify_env):
     assert "Invalid URL scheme" in result["content"][0]["text"]
 
 
+# --- Parameter validation ---
+
+
+def test_run_actor_empty_actor_id(mock_apify_env):
+    """apify_run_actor returns error for whitespace-only actor_id."""
+    result = apify_run_actor(actor_id="   ")
+
+    assert result["status"] == "error"
+    assert "actor_id" in result["content"][0]["text"]
+
+
+def test_run_actor_zero_timeout(mock_apify_env):
+    """apify_run_actor returns error for non-positive timeout_secs."""
+    result = apify_run_actor(actor_id="actor/valid", timeout_secs=0)
+
+    assert result["status"] == "error"
+    assert "timeout_secs" in result["content"][0]["text"]
+
+
+def test_run_actor_negative_timeout(mock_apify_env):
+    """apify_run_actor returns error for negative timeout_secs."""
+    result = apify_run_actor(actor_id="actor/valid", timeout_secs=-5)
+
+    assert result["status"] == "error"
+    assert "timeout_secs" in result["content"][0]["text"]
+
+
+def test_run_actor_zero_memory(mock_apify_env):
+    """apify_run_actor returns error for non-positive memory_mbytes."""
+    result = apify_run_actor(actor_id="actor/valid", memory_mbytes=0)
+
+    assert result["status"] == "error"
+    assert "memory_mbytes" in result["content"][0]["text"]
+
+
+def test_run_task_empty_task_id(mock_apify_env):
+    """apify_run_task returns error for whitespace-only task_id."""
+    result = apify_run_task(task_id="  ")
+
+    assert result["status"] == "error"
+    assert "task_id" in result["content"][0]["text"]
+
+
+def test_run_task_zero_timeout(mock_apify_env):
+    """apify_run_task returns error for non-positive timeout_secs."""
+    result = apify_run_task(task_id="user~my-task", timeout_secs=0)
+
+    assert result["status"] == "error"
+    assert "timeout_secs" in result["content"][0]["text"]
+
+
+def test_run_task_zero_memory(mock_apify_env):
+    """apify_run_task returns error for non-positive memory_mbytes."""
+    result = apify_run_task(task_id="user~my-task", memory_mbytes=0)
+
+    assert result["status"] == "error"
+    assert "memory_mbytes" in result["content"][0]["text"]
+
+
+def test_get_dataset_items_empty_dataset_id(mock_apify_env):
+    """apify_get_dataset_items returns error for whitespace-only dataset_id."""
+    result = apify_get_dataset_items(dataset_id="  ")
+
+    assert result["status"] == "error"
+    assert "dataset_id" in result["content"][0]["text"]
+
+
+def test_get_dataset_items_zero_limit(mock_apify_env):
+    """apify_get_dataset_items returns error for non-positive limit."""
+    result = apify_get_dataset_items(dataset_id="dataset-abc", limit=0)
+
+    assert result["status"] == "error"
+    assert "limit" in result["content"][0]["text"]
+
+
+def test_get_dataset_items_negative_offset(mock_apify_env):
+    """apify_get_dataset_items returns error for negative offset."""
+    result = apify_get_dataset_items(dataset_id="dataset-abc", offset=-1)
+
+    assert result["status"] == "error"
+    assert "offset" in result["content"][0]["text"]
+
+
+def test_run_actor_and_get_dataset_zero_dataset_limit(mock_apify_env):
+    """apify_run_actor_and_get_dataset returns error for non-positive dataset_items_limit."""
+    result = apify_run_actor_and_get_dataset(actor_id="actor/valid", dataset_items_limit=0)
+
+    assert result["status"] == "error"
+    assert "dataset_items_limit" in result["content"][0]["text"]
+
+
+def test_run_actor_and_get_dataset_negative_dataset_offset(mock_apify_env):
+    """apify_run_actor_and_get_dataset returns error for negative dataset_items_offset."""
+    result = apify_run_actor_and_get_dataset(actor_id="actor/valid", dataset_items_offset=-1)
+
+    assert result["status"] == "error"
+    assert "dataset_items_offset" in result["content"][0]["text"]
+
+
+def test_run_task_and_get_dataset_zero_dataset_limit(mock_apify_env):
+    """apify_run_task_and_get_dataset returns error for non-positive dataset_items_limit."""
+    result = apify_run_task_and_get_dataset(task_id="user~my-task", dataset_items_limit=0)
+
+    assert result["status"] == "error"
+    assert "dataset_items_limit" in result["content"][0]["text"]
+
+
+def test_run_task_and_get_dataset_negative_dataset_offset(mock_apify_env):
+    """apify_run_task_and_get_dataset returns error for negative dataset_items_offset."""
+    result = apify_run_task_and_get_dataset(task_id="user~my-task", dataset_items_offset=-1)
+
+    assert result["status"] == "error"
+    assert "dataset_items_offset" in result["content"][0]["text"]
+
+
+def test_scrape_url_zero_timeout(mock_apify_env):
+    """apify_scrape_url returns error for non-positive timeout_secs."""
+    result = apify_scrape_url(url="https://example.com", timeout_secs=0)
+
+    assert result["status"] == "error"
+    assert "timeout_secs" in result["content"][0]["text"]
+
+
+def test_scrape_url_invalid_crawler_type(mock_apify_env):
+    """apify_scrape_url returns error for unsupported crawler_type."""
+    result = apify_scrape_url(url="https://example.com", crawler_type="invalid")
+
+    assert result["status"] == "error"
+    assert "crawler_type" in result["content"][0]["text"]
+
+
+def test_scrape_url_missing_domain(mock_apify_env):
+    """apify_scrape_url returns error for URL with no domain."""
+    result = apify_scrape_url(url="https://")
+
+    assert result["status"] == "error"
+    assert "domain" in result["content"][0]["text"].lower()
+
+
 # --- Dependency guard ---
 
 
