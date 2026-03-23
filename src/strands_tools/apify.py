@@ -86,6 +86,13 @@ except ImportError:
 WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
 TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
 ERROR_PANEL_TITLE = "[bold red]Apify Error[/bold red]"
+DEFAULT_TIMEOUT_SECS = 300
+DEFAULT_SCRAPE_TIMEOUT_SECS = 120
+DEFAULT_DATASET_ITEMS_LIMIT = 100
+VALID_CRAWLER_TYPES = ("playwright:adaptive", "playwright:firefox", "cheerio")
+
+
+# --- Helper functions ---
 
 
 def _check_dependency() -> None:
@@ -94,25 +101,22 @@ def _check_dependency() -> None:
         raise ImportError("apify-client package is required. Install with: pip install strands-agents-tools[apify]")
 
 
-def _validate_url(url: str) -> None:
-    """Raise ValueError if the URL does not have a valid HTTP(S) scheme and domain."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https URLs are supported.")
-    if not parsed.netloc:
-        raise ValueError(f"Invalid URL '{url}'. A domain is required.")
-
-
 def _format_error(e: Exception) -> str:
     """Map exceptions to user-friendly error messages, with special handling for ApifyApiError."""
     if HAS_APIFY_CLIENT and isinstance(e, ApifyApiError):
         status_code = getattr(e, "status_code", None)
         msg = getattr(e, "message", str(e))
         match status_code:
+            case 400:
+                return f"Invalid request: {msg}"
             case 401:
                 return "Authentication failed. Verify your APIFY_API_TOKEN is valid."
+            case 402:
+                return "Insufficient Apify plan credits or subscription limits exceeded."
             case 404:
                 return f"Resource not found: {msg}"
+            case 408:
+                return f"Actor Run timed out: {msg}"
             case 429:
                 return (
                     "Rate limit exceeded. The Apify client retries automatically; "
@@ -157,23 +161,60 @@ class ApifyToolClient:
             run_id = actor_run.get("id", "N/A")
             raise RuntimeError(f"{label} finished with status {status}. Run ID: {run_id}")
 
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        """Raise ValueError if the URL does not have a valid HTTP(S) scheme and domain."""
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https URLs are supported.")
+        if not parsed.netloc:
+            raise ValueError(f"Invalid URL '{url}'. A domain is required.")
+
+    @staticmethod
+    def _validate_identifier(value: str, name: str) -> None:
+        """Raise ValueError if a required string identifier is empty or whitespace-only."""
+        if not value.strip():
+            raise ValueError(f"'{name}' must be a non-empty string.")
+
+    @staticmethod
+    def _validate_positive(value: int, name: str) -> None:
+        """Raise ValueError if the value is not a positive integer (> 0)."""
+        if value <= 0:
+            raise ValueError(f"'{name}' must be a positive integer, got {value}.")
+
+    @staticmethod
+    def _validate_non_negative(value: int, name: str) -> None:
+        """Raise ValueError if the value is negative."""
+        if value < 0:
+            raise ValueError(f"'{name}' must be a non-negative integer, got {value}.")
+
     def run_actor(
         self,
         actor_id: str,
         run_input: Optional[Dict[str, Any]] = None,
-        timeout_secs: int = 300,
+        timeout_secs: int = DEFAULT_TIMEOUT_SECS,
         memory_mbytes: Optional[int] = None,
+        build: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run an Apify Actor synchronously and return run metadata."""
+        self._validate_identifier(actor_id, "actor_id")
+        self._validate_positive(timeout_secs, "timeout_secs")
+        if memory_mbytes is not None:
+            self._validate_positive(memory_mbytes, "memory_mbytes")
+
         call_kwargs: Dict[str, Any] = {
             "run_input": run_input or {},
             "timeout_secs": timeout_secs,
-            "logger": None,
+            "logger": None,  # Suppress verbose apify-client logging not useful to end users
         }
         if memory_mbytes is not None:
             call_kwargs["memory_mbytes"] = memory_mbytes
+        if build is not None:
+            call_kwargs["build"] = build
 
         actor_run = self.client.actor(actor_id).call(**call_kwargs)
+        if actor_run is None:
+            raise RuntimeError(f"Actor {actor_id} returned no run data (possible wait timeout).")
         self._check_run_status(actor_run, f"Actor {actor_id}")
 
         return {
@@ -187,10 +228,14 @@ class ApifyToolClient:
     def get_dataset_items(
         self,
         dataset_id: str,
-        limit: int = 100,
+        limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Fetch items from an Apify Dataset."""
+        self._validate_identifier(dataset_id, "dataset_id")
+        self._validate_positive(limit, "limit")
+        self._validate_non_negative(offset, "offset")
+
         result = self.client.dataset(dataset_id).list_items(limit=limit, offset=offset)
         return list(result.items)
 
@@ -198,31 +243,42 @@ class ApifyToolClient:
         self,
         actor_id: str,
         run_input: Optional[Dict[str, Any]] = None,
-        timeout_secs: int = 300,
+        timeout_secs: int = DEFAULT_TIMEOUT_SECS,
         memory_mbytes: Optional[int] = None,
-        dataset_items_limit: int = 100,
+        build: Optional[str] = None,
+        dataset_items_limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
+        dataset_items_offset: int = 0,
     ) -> Dict[str, Any]:
         """Run an Actor synchronously, then fetch its default Dataset items."""
+        self._validate_positive(dataset_items_limit, "dataset_items_limit")
+        self._validate_non_negative(dataset_items_offset, "dataset_items_offset")
+
         run_metadata = self.run_actor(
             actor_id=actor_id,
             run_input=run_input,
             timeout_secs=timeout_secs,
             memory_mbytes=memory_mbytes,
+            build=build,
         )
         dataset_id = run_metadata["dataset_id"]
         if not dataset_id:
             raise RuntimeError(f"Actor {actor_id} run has no default Dataset.")
-        items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit)
+        items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit, offset=dataset_items_offset)
         return {**run_metadata, "items": items}
 
     def run_task(
         self,
         task_id: str,
         task_input: Optional[Dict[str, Any]] = None,
-        timeout_secs: int = 300,
+        timeout_secs: int = DEFAULT_TIMEOUT_SECS,
         memory_mbytes: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Run an Apify Task synchronously and return run metadata."""
+        self._validate_identifier(task_id, "task_id")
+        self._validate_positive(timeout_secs, "timeout_secs")
+        if memory_mbytes is not None:
+            self._validate_positive(memory_mbytes, "memory_mbytes")
+
         call_kwargs: Dict[str, Any] = {"timeout_secs": timeout_secs}
         if task_input is not None:
             call_kwargs["task_input"] = task_input
@@ -246,11 +302,15 @@ class ApifyToolClient:
         self,
         task_id: str,
         task_input: Optional[Dict[str, Any]] = None,
-        timeout_secs: int = 300,
+        timeout_secs: int = DEFAULT_TIMEOUT_SECS,
         memory_mbytes: Optional[int] = None,
-        dataset_items_limit: int = 100,
+        dataset_items_limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
+        dataset_items_offset: int = 0,
     ) -> Dict[str, Any]:
         """Run a Task synchronously, then fetch its default Dataset items."""
+        self._validate_positive(dataset_items_limit, "dataset_items_limit")
+        self._validate_non_negative(dataset_items_offset, "dataset_items_offset")
+
         run_metadata = self.run_task(
             task_id=task_id,
             task_input=task_input,
@@ -260,19 +320,32 @@ class ApifyToolClient:
         dataset_id = run_metadata["dataset_id"]
         if not dataset_id:
             raise RuntimeError(f"Task {task_id} run has no default Dataset.")
-        items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit)
+        items = self.get_dataset_items(dataset_id=dataset_id, limit=dataset_items_limit, offset=dataset_items_offset)
         return {**run_metadata, "items": items}
 
-    def scrape_url(self, url: str, timeout_secs: int = 120) -> str:
+    def scrape_url(
+        self,
+        url: str,
+        timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
+        crawler_type: str = "cheerio",
+    ) -> str:
         """Scrape a single URL using Website Content Crawler and return markdown."""
+        self._validate_url(url)
+        self._validate_positive(timeout_secs, "timeout_secs")
+        if crawler_type not in VALID_CRAWLER_TYPES:
+            raise ValueError(
+                f"Invalid crawler_type '{crawler_type}'. Must be one of: {', '.join(VALID_CRAWLER_TYPES)}."
+            )
+
         run_input: Dict[str, Any] = {
             "startUrls": [{"url": url}],
             "maxCrawlPages": 1,
+            "crawlerType": crawler_type,
         }
         actor_run = self.client.actor(WEBSITE_CONTENT_CRAWLER).call(
             run_input=run_input,
             timeout_secs=timeout_secs,
-            logger=None,
+            logger=None,  # Suppress verbose apify-client logging not useful to end users
         )
         self._check_run_status(actor_run, "Website Content Crawler")
 
@@ -293,8 +366,9 @@ class ApifyToolClient:
 def apify_run_actor(
     actor_id: str,
     run_input: Optional[Dict[str, Any]] = None,
-    timeout_secs: int = 300,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
     memory_mbytes: Optional[int] = None,
+    build: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run any Apify Actor by its ID or name and return the run metadata as JSON.
 
@@ -312,6 +386,7 @@ def apify_run_actor(
         run_input: JSON-serializable input for the Actor. Each Actor defines its own input schema.
         timeout_secs: Maximum time in seconds to wait for the Actor Run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Actor Run. Uses Actor default if not set.
+        build: Actor Build tag or number to run a specific version. Uses latest Build if not set.
 
     Returns:
         Dict with status and content containing run metadata: run_id, status, dataset_id,
@@ -325,6 +400,7 @@ def apify_run_actor(
             run_input=run_input,
             timeout_secs=timeout_secs,
             memory_mbytes=memory_mbytes,
+            build=build,
         )
         return _success_result(
             text=json.dumps(result, indent=2, default=str),
@@ -344,7 +420,7 @@ def apify_run_actor(
 @tool
 def apify_get_dataset_items(
     dataset_id: str,
-    limit: int = 100,
+    limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Fetch items from an existing Apify Dataset and return them as JSON.
@@ -379,9 +455,11 @@ def apify_get_dataset_items(
 def apify_run_actor_and_get_dataset(
     actor_id: str,
     run_input: Optional[Dict[str, Any]] = None,
-    timeout_secs: int = 300,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
     memory_mbytes: Optional[int] = None,
-    dataset_items_limit: int = 100,
+    build: Optional[str] = None,
+    dataset_items_limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
+    dataset_items_offset: int = 0,
 ) -> Dict[str, Any]:
     """Run an Apify Actor and fetch its Dataset results in one step.
 
@@ -394,7 +472,9 @@ def apify_run_actor_and_get_dataset(
         run_input: JSON-serializable input for the Actor.
         timeout_secs: Maximum time in seconds to wait for the Actor Run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Actor Run.
+        build: Actor Build tag or number to run a specific version. Uses latest Build if not set.
         dataset_items_limit: Maximum number of Dataset items to return. Defaults to 100.
+        dataset_items_offset: Number of Dataset items to skip for pagination. Defaults to 0.
 
     Returns:
         Dict with status and content containing run metadata (run_id, status, dataset_id,
@@ -408,7 +488,9 @@ def apify_run_actor_and_get_dataset(
             run_input=run_input,
             timeout_secs=timeout_secs,
             memory_mbytes=memory_mbytes,
+            build=build,
             dataset_items_limit=dataset_items_limit,
+            dataset_items_offset=dataset_items_offset,
         )
         return _success_result(
             text=json.dumps(result, indent=2, default=str),
@@ -430,7 +512,7 @@ def apify_run_actor_and_get_dataset(
 def apify_run_task(
     task_id: str,
     task_input: Optional[Dict[str, Any]] = None,
-    timeout_secs: int = 300,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
     memory_mbytes: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run an Apify Task by its ID or name and return the run metadata as JSON.
@@ -477,9 +559,10 @@ def apify_run_task(
 def apify_run_task_and_get_dataset(
     task_id: str,
     task_input: Optional[Dict[str, Any]] = None,
-    timeout_secs: int = 300,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
     memory_mbytes: Optional[int] = None,
-    dataset_items_limit: int = 100,
+    dataset_items_limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
+    dataset_items_offset: int = 0,
 ) -> Dict[str, Any]:
     """Run an Apify Task and fetch its Dataset results in one step.
 
@@ -493,6 +576,7 @@ def apify_run_task_and_get_dataset(
         timeout_secs: Maximum time in seconds to wait for the Task Run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Task Run.
         dataset_items_limit: Maximum number of Dataset items to return. Defaults to 100.
+        dataset_items_offset: Number of Dataset items to skip for pagination. Defaults to 0.
 
     Returns:
         Dict with status and content containing run metadata (run_id, status, dataset_id,
@@ -507,6 +591,7 @@ def apify_run_task_and_get_dataset(
             timeout_secs=timeout_secs,
             memory_mbytes=memory_mbytes,
             dataset_items_limit=dataset_items_limit,
+            dataset_items_offset=dataset_items_offset,
         )
         return _success_result(
             text=json.dumps(result, indent=2, default=str),
@@ -527,7 +612,8 @@ def apify_run_task_and_get_dataset(
 @tool
 def apify_scrape_url(
     url: str,
-    timeout_secs: int = 120,
+    timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
+    crawler_type: str = "cheerio",
 ) -> Dict[str, Any]:
     """Scrape a single URL and return its content as markdown.
 
@@ -538,15 +624,17 @@ def apify_scrape_url(
     Args:
         url: The URL to scrape, e.g. "https://example.com".
         timeout_secs: Maximum time in seconds to wait for scraping to finish. Defaults to 120.
+        crawler_type: Crawler engine to use. One of "playwright:adaptive" (fast, renders JS if
+            present, recommended default), "playwright:firefox" (reliable, renders JS, best at
+            avoiding blocking but slower), or "cheerio" (fastest, no JS rendering).
 
     Returns:
         Dict with status and content containing the markdown content of the scraped page.
     """
     try:
-        _validate_url(url)
         _check_dependency()
         client = ApifyToolClient()
-        content = client.scrape_url(url=url, timeout_secs=timeout_secs)
+        content = client.scrape_url(url=url, timeout_secs=timeout_secs, crawler_type=crawler_type)
         return _success_result(
             text=content,
             panel_body=(
