@@ -640,10 +640,14 @@ def _import_from_url(source: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
 
 
 def _import_from_directory(source: str, cache: Dict[str, Skill]) -> Dict[str, Any]:
-    """Import all skills from a directory.
+    """Import skills from a directory.
+
+    Handles two cases:
+    - If the directory itself contains SKILL.md, imports it as a single skill
+    - Otherwise, scans child subdirectories for SKILL.md files
 
     Args:
-        source: Path to a directory containing skill folders.
+        source: Path to a skill directory or a parent directory containing skill folders.
         cache: The skills cache dict to add skills to.
 
     Returns:
@@ -656,6 +660,12 @@ def _import_from_directory(source: str, cache: Dict[str, Skill]) -> Dict[str, An
             "status": "error",
             "content": [{"text": f"Import directory not found or not a directory: {source}"}],
         }
+
+    # Check if the directory itself is a skill (contains SKILL.md)
+    has_skill_md = (import_path / "SKILL.md").is_file() or (import_path / "skill.md").is_file()
+    if has_skill_md:
+        skill_file = "SKILL.md" if (import_path / "SKILL.md").is_file() else "skill.md"
+        return _import_from_file(str(import_path / skill_file), cache)
 
     try:
         new_skills = Skill.from_directory(import_path)

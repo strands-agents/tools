@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
+    "strands-agents>=1.32.0,<2.0.0",
     "rich>=14.0.0,<15.0.0",
     "sympy>=1.12.0,<2.0.0",
     "prompt_toolkit>=3.0.51,<4.0.0",
@@ -125,7 +125,7 @@ mongodb-memory = [
 [tool.hatch.envs.hatch-static-analysis]
 features = ["mem0-memory", "local-chromium-browser", "agent-core-browser", "agent-core-code-interpreter", "a2a-client", "diagram", "rss", "use-computer", "twelvelabs", "elasticsearch-memory", "mongodb-memory"]
 dependencies = [
-    "strands-agents @ git+https://github.com/strands-agents/sdk-python.git",
+    "strands-agents>=1.32.0,<2.0.0",
     "mypy>=0.981,<1.0.0",
     "ruff>=0.13.0,<0.14.0",
 ]

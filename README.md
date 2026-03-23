@@ -819,13 +819,13 @@ result = agent.tool.skills(
 # Import skills from another directory at runtime
 result = agent.tool.skills(
     action="import",
-    import_dir="/path/to/additional/skills"
+    source="/path/to/additional/skills"
 )
 
 # Use a different skills directory
 result = agent.tool.skills(
     action="list",
-    STRANDS_SKILLS_DIR="/path/to/custom/skills"
+    skills_dir="/path/to/custom/skills"
 )
 ```
 
