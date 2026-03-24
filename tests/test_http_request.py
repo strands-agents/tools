@@ -1092,3 +1092,147 @@ def test_proxy_support():
     assert result["status"] == "success"
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
+
+
+@responses.activate
+def test_payment_required_header_in_response():
+    """Test that Payment-Required header is captured in response."""
+    # Set up mock response with Payment-Required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/premium-feature",
+        json={"error": "payment required"},
+        status=402,
+        headers={"Payment-Required": "true"},
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-payment-required-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/premium-feature",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify Payment-Required header is in the response
+    assert "Payment-Required" in result_text
+    assert "true" in result_text
+    assert "Status Code: 402" in result_text
+
+
+@responses.activate
+def test_payment_required_header_with_other_headers():
+    """Test Payment-Required header is captured alongside other important headers."""
+    # Set up mock response with multiple important headers
+    responses.add(
+        responses.GET,
+        "https://api.example.com/data",
+        json={"data": "test"},
+        status=200,
+        headers={
+            "Date": "Mon, 24 Mar 2026 12:00:00 GMT",
+            "Server": "nginx/1.20.0",
+            "Payment-Required": "false",
+            "X-Custom-Header": "should-not-appear",
+        },
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-multiple-headers-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/data",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify important headers are present
+    assert "Content-Type" in result_text
+    assert "Server" in result_text
+    assert "Payment-Required" in result_text
+
+    # Verify custom headers are not included
+    assert "X-Custom-Header" not in result_text
+
+
+@responses.activate
+def test_payment_required_header_case_insensitive():
+    """Test that Payment-Required header is matched case-insensitively."""
+    # Set up mock response with lowercase payment-required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/check",
+        json={"status": "ok"},
+        status=200,
+        headers={"payment-required": "false"},
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-case-insensitive-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/check",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify the header is captured regardless of case
+    assert "payment-required" in result_text.lower()
+
+
+@responses.activate
+def test_payment_required_header_missing():
+    """Test response when Payment-Required header is not present."""
+    # Set up mock response without Payment-Required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/free-feature",
+        json={"data": "free content"},
+        status=200,
+        headers={
+            "Server": "nginx",
+        },
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-no-payment-header-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/free-feature",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify response is successful even without Payment-Required header
+    assert "Status Code: 200" in result_text
+    # The headers dict should still be present but without Payment-Required
+    assert "Headers:" in result_text

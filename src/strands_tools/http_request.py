@@ -905,8 +905,10 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             result_text.append(f"Redirects: {redirect_count} redirects followed ({redirect_chain})")
 
         # Add minimal headers to text response
-        important_headers = ["Content-Type", "Content-Length", "Date", "Server"]
-        headers_text = {k: v for k, v in response.headers.items() if k in important_headers}
+        important_headers = ["Content-Type", "Content-Length", "Date", "Server", "Payment-Required"]
+        headers_text = {
+            k: v for k, v in response.headers.items() if k.lower() in [h.lower() for h in important_headers]
+        }
         result_text.append(f"Headers: {headers_text}")
 
         # Add body to text response
