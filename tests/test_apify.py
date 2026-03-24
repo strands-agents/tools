@@ -126,7 +126,7 @@ def test_client_uses_env_token(mock_apify_env):
 
 
 def test_run_actor_success(mock_apify_env, mock_apify_client):
-    """Successful Actor Run returns structured result with run metadata."""
+    """Successful Actor run returns structured result with run metadata."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_actor(actor_id="actor/my-scraper", run_input={"url": "https://example.com"})
 
@@ -141,7 +141,7 @@ def test_run_actor_success(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_default_input(mock_apify_env, mock_apify_client):
-    """Actor Run defaults run_input to empty dict when not provided."""
+    """Actor run defaults run_input to empty dict when not provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_actor(actor_id="actor/my-scraper")
 
@@ -151,7 +151,7 @@ def test_run_actor_default_input(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_with_memory(mock_apify_env, mock_apify_client):
-    """Actor Run passes memory_mbytes when provided."""
+    """Actor run passes memory_mbytes when provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         apify_run_actor(actor_id="actor/my-scraper", memory_mbytes=512)
 
@@ -160,7 +160,7 @@ def test_run_actor_with_memory(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_failure(mock_apify_env, mock_apify_client):
-    """Actor Run returns error dict when Actor fails."""
+    """Actor run returns error dict when Actor fails."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
@@ -171,7 +171,7 @@ def test_run_actor_failure(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_timeout(mock_apify_env, mock_apify_client):
-    """Actor Run returns error dict when Actor times out."""
+    """Actor run returns error dict when Actor times out."""
     mock_apify_client.actor.return_value.call.return_value = MOCK_TIMED_OUT_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
@@ -182,7 +182,7 @@ def test_run_actor_timeout(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_api_exception(mock_apify_env, mock_apify_client):
-    """Actor Run returns error dict on API exceptions."""
+    """Actor run returns error dict on API exceptions."""
     mock_apify_client.actor.return_value.call.side_effect = Exception("Connection failed")
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
@@ -193,7 +193,7 @@ def test_run_actor_api_exception(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_apify_api_error_401(mock_apify_env, mock_apify_client):
-    """Actor Run returns friendly message for 401 authentication errors."""
+    """Actor run returns friendly message for 401 authentication errors."""
     error = _make_apify_api_error(401, "Unauthorized")
     mock_apify_client.actor.return_value.call.side_effect = error
 
@@ -205,7 +205,7 @@ def test_run_actor_apify_api_error_401(mock_apify_env, mock_apify_client):
 
 
 def test_run_actor_apify_api_error_404(mock_apify_env, mock_apify_client):
-    """Actor Run returns friendly message for 404 not-found errors."""
+    """Actor run returns friendly message for 404 not-found errors."""
     error = _make_apify_api_error(404, "Actor not found")
     mock_apify_client.actor.return_value.call.side_effect = error
 
@@ -233,7 +233,7 @@ def test_get_dataset_items_success(mock_apify_env, mock_apify_client):
 
 
 def test_get_dataset_items_with_pagination(mock_apify_env, mock_apify_client):
-    """Dataset retrieval passes limit and offset."""
+    """dataset retrieval passes limit and offset."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         apify_get_dataset_items(dataset_id="dataset-xyz", limit=50, offset=10)
 
@@ -290,7 +290,7 @@ def test_run_actor_and_get_dataset_actor_failure(mock_apify_env, mock_apify_clie
 
 
 def test_run_task_success(mock_apify_env, mock_apify_client):
-    """Successful Task Run returns structured result with run metadata."""
+    """Successful task run returns structured result with run metadata."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_task(task_id="user~my-task", task_input={"query": "test"})
 
@@ -303,7 +303,7 @@ def test_run_task_success(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_no_input(mock_apify_env, mock_apify_client):
-    """Task Run omits task_input kwarg when not provided."""
+    """task run omits task_input kwarg when not provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_task(task_id="user~my-task")
 
@@ -313,7 +313,7 @@ def test_run_task_no_input(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_with_memory(mock_apify_env, mock_apify_client):
-    """Task Run passes memory_mbytes when provided."""
+    """task run passes memory_mbytes when provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         apify_run_task(task_id="user~my-task", memory_mbytes=1024)
 
@@ -322,7 +322,7 @@ def test_run_task_with_memory(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_failure(mock_apify_env, mock_apify_client):
-    """Task Run returns error dict when Task fails."""
+    """task run returns error dict when task fails."""
     mock_apify_client.task.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
@@ -333,7 +333,7 @@ def test_run_task_failure(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_none_response(mock_apify_env, mock_apify_client):
-    """Task Run returns error dict when TaskClient.call() returns None."""
+    """task run returns error dict when TaskClient.call() returns None."""
     mock_apify_client.task.return_value.call.return_value = None
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
@@ -344,7 +344,7 @@ def test_run_task_none_response(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_apify_api_error_401(mock_apify_env, mock_apify_client):
-    """Task Run returns friendly message for 401 authentication errors."""
+    """task run returns friendly message for 401 authentication errors."""
     error = _make_apify_api_error(401, "Unauthorized")
     mock_apify_client.task.return_value.call.side_effect = error
 
@@ -359,7 +359,7 @@ def test_run_task_apify_api_error_401(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_and_get_dataset_success(mock_apify_env, mock_apify_client):
-    """Combined Task run + dataset fetch returns structured result with metadata and items."""
+    """Combined task run + dataset fetch returns structured result with metadata and items."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_run_task_and_get_dataset(
             task_id="user~my-task",
@@ -375,7 +375,7 @@ def test_run_task_and_get_dataset_success(mock_apify_env, mock_apify_client):
 
 
 def test_run_task_and_get_dataset_task_failure(mock_apify_env, mock_apify_client):
-    """Combined Task tool returns error dict when the Task fails."""
+    """Combined task tool returns error dict when the task fails."""
     mock_apify_client.task.return_value.call.return_value = MOCK_FAILED_RUN
 
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):

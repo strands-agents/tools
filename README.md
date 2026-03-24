@@ -100,10 +100,10 @@ Below is a comprehensive table of all available tools, how to use them with an a
 |------|-------------|----------|
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
 | apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor by ID with arbitrary input |
-| apify_get_dataset_items | `agent.tool.apify_get_dataset_items(dataset_id="abc123", limit=50)` | Fetch items from an Apify Dataset |
-| apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its Dataset results in one step |
-| apify_run_task | `agent.tool.apify_run_task(task_id="user~my-task")` | Run a saved Apify Task by ID with optional input overrides |
-| apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user~my-task", dataset_items_limit=50)` | Run a Task and fetch its Dataset results in one step |
+| apify_get_dataset_items | `agent.tool.apify_get_dataset_items(dataset_id="abc123", limit=50)` | Fetch items from an Apify dataset |
+| apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its dataset results in one step |
+| apify_run_task | `agent.tool.apify_run_task(task_id="user/my-task")` | Run a saved Apify task by ID with optional input overrides |
+| apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user/my-task", dataset_items_limit=50)` | Run a task and fetch its dataset results in one step |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
@@ -991,12 +991,12 @@ result = agent.tool.apify_run_actor_and_get_dataset(
     dataset_items_limit=50,
 )
 
-# Run a saved Task (pre-configured Actor with default inputs)
-run_info = agent.tool.apify_run_task(task_id="user~my-task")
+# Run a saved task (pre-configured Actor with default inputs)
+run_info = agent.tool.apify_run_task(task_id="user/my-task")
 
-# Run a Task and get results in one step
+# Run a task and get results in one step
 result = agent.tool.apify_run_task_and_get_dataset(
-    task_id="user~my-task",
+    task_id="user/my-task",
     task_input={"query": "override default input"},
     dataset_items_limit=50,
 )
@@ -1007,7 +1007,7 @@ run_info = agent.tool.apify_run_actor(
     run_input={"queries": "AI agent frameworks"},
 )
 
-# Fetch Dataset items separately
+# Fetch dataset items separately
 items = agent.tool.apify_get_dataset_items(
     dataset_id="abc123",
     limit=100,

@@ -1,6 +1,6 @@
 # Apify
 
-The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [Task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching Dataset results, and scraping individual URLs.
+The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, and scraping individual URLs.
 
 ## Installation
 
@@ -16,7 +16,7 @@ Set your Apify API token as an environment variable:
 export APIFY_API_TOKEN=apify_api_your_token_here
 ```
 
-Get your token from the [Apify Console](https://console.apify.com/account/integrations) → Settings → API & Integrations → Personal API tokens.
+Get your token from [Apify Console](https://console.apify.com/account/integrations) → Settings → API & Integrations → Personal API tokens.
 
 ## Usage
 
@@ -44,7 +44,7 @@ content = agent.tool.apify_scrape_url(url="https://example.com")
 
 ### Run an Actor
 
-Execute any Actor from the [Apify Store](https://apify.com/store) by its ID. The call blocks until the Actor Run finishes or the timeout is reached:
+Execute any Actor from [Apify Store](https://apify.com/store) by its ID. The call blocks until the Actor run finishes or the timeout is reached:
 
 ```python
 result = agent.tool.apify_run_actor(
@@ -58,7 +58,7 @@ The result is a JSON string containing run metadata: `run_id`, `status`, `datase
 
 ### Run an Actor and Get Results
 
-Combine running an Actor and fetching its Dataset results in a single call:
+Combine running an Actor and fetching its dataset results in a single call:
 
 ```python
 result = agent.tool.apify_run_actor_and_get_dataset(
@@ -68,9 +68,9 @@ result = agent.tool.apify_run_actor_and_get_dataset(
 )
 ```
 
-### Run a Task
+### Run a task
 
-Execute a saved [Actor Task](https://docs.apify.com/platform/actors/running/tasks) — a pre-configured Actor with preset inputs. Use this when a Task has already been set up in the Apify Console:
+Execute a saved [Actor task](https://docs.apify.com/platform/actors/running/tasks) — a pre-configured Actor with preset inputs. Use this when a task has already been set up in Apify Console:
 
 ```python
 result = agent.tool.apify_run_task(
@@ -82,9 +82,9 @@ result = agent.tool.apify_run_task(
 
 The result is a JSON string containing run metadata: `run_id`, `status`, `dataset_id`, `started_at`, and `finished_at`.
 
-### Run a Task and Get Results
+### Run a task and get results
 
-Combine running a Task and fetching its Dataset results in a single call:
+Combine running a task and fetching its dataset results in a single call:
 
 ```python
 result = agent.tool.apify_run_task_and_get_dataset(
@@ -93,9 +93,9 @@ result = agent.tool.apify_run_task_and_get_dataset(
 )
 ```
 
-### Fetch Dataset Items
+### Fetch dataset items
 
-Retrieve results from a Dataset by its ID. Useful after running an Actor to get the structured results separately, or to access any existing Dataset:
+Retrieve results from a dataset by its ID. Useful after running an Actor to get the structured results separately, or to access any existing dataset:
 
 ```python
 items = agent.tool.apify_get_dataset_items(
@@ -122,8 +122,8 @@ items = agent.tool.apify_get_dataset_items(
 |-----------|------|----------|---------|-------------|
 | `actor_id` | string | Yes | — | Actor identifier (e.g., `apify/website-content-crawler`) |
 | `run_input` | dict | No | None | JSON-serializable input for the Actor |
-| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor Run to finish |
-| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor Run (uses Actor default if not set) |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor run (uses Actor default if not set) |
 
 **Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
 
@@ -131,10 +131,10 @@ items = agent.tool.apify_get_dataset_items(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a Task ID) |
-| `task_input` | dict | No | None | JSON-serializable input to override the Task's default input |
-| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Task Run to finish |
-| `memory_mbytes` | int | No | None | Memory allocation in MB for the Task Run (uses Task default if not set) |
+| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a task ID) |
+| `task_input` | dict | No | None | JSON-serializable input to override the task's default input |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the task run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the task run (uses task default if not set) |
 
 **Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
 
@@ -142,23 +142,23 @@ items = agent.tool.apify_get_dataset_items(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a Task ID) |
-| `task_input` | dict | No | None | JSON-serializable input to override the Task's default input |
-| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Task Run to finish |
-| `memory_mbytes` | int | No | None | Memory allocation in MB for the Task Run (uses Task default if not set) |
-| `dataset_items_limit` | int | No | 100 | Maximum number of Dataset items to return |
+| `task_id` | string | Yes | — | Task identifier (e.g., `user~my-task` or a task ID) |
+| `task_input` | dict | No | None | JSON-serializable input to override the task's default input |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the task run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the task run (uses task default if not set) |
+| `dataset_items_limit` | int | No | 100 | Maximum number of dataset items to return |
 
-**Returns:** JSON string with run metadata plus an `items` array containing the Dataset results.
+**Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
 ### apify_get_dataset_items
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `dataset_id` | string | Yes | — | The Apify Dataset ID to fetch items from |
+| `dataset_id` | string | Yes | — | The Apify dataset ID to fetch items from |
 | `limit` | int | No | 100 | Maximum number of items to return |
 | `offset` | int | No | 0 | Number of items to skip for pagination |
 
-**Returns:** JSON string containing an array of Dataset items.
+**Returns:** JSON string containing an array of dataset items.
 
 ### apify_run_actor_and_get_dataset
 
@@ -166,11 +166,11 @@ items = agent.tool.apify_get_dataset_items(
 |-----------|------|----------|---------|-------------|
 | `actor_id` | string | Yes | — | Actor identifier (e.g., `apify/website-content-crawler`) |
 | `run_input` | dict | No | None | JSON-serializable input for the Actor |
-| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor Run to finish |
-| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor Run (uses Actor default if not set) |
-| `dataset_items_limit` | int | No | 100 | Maximum number of Dataset items to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run to finish |
+| `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor run (uses Actor default if not set) |
+| `dataset_items_limit` | int | No | 100 | Maximum number of dataset items to return |
 
-**Returns:** JSON string with run metadata plus an `items` array containing the Dataset results.
+**Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
 ## Troubleshooting
 
@@ -178,10 +178,10 @@ items = agent.tool.apify_get_dataset_items(
 |-------|-------|-----|
 | `APIFY_API_TOKEN environment variable is not set` | Token not configured | Set the `APIFY_API_TOKEN` environment variable |
 | `apify-client package is required` | Optional dependency not installed | Run `pip install strands-agents-tools[apify]` |
-| `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in the [Apify Console](https://console.apify.com) |
-| `Task ... finished with status FAILED` | Task execution error | Check Task configuration and run logs in the [Apify Console](https://console.apify.com) |
-| `Actor/Task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
-| `Task ... returned no run data` | Task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
+| `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in [Apify Console](https://console.apify.com) |
+| `Task ... finished with status FAILED` | task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
+| `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
+| `Task ... returned no run data` | task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
 
 ## References
