@@ -105,6 +105,13 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | apify_run_task | `agent.tool.apify_run_task(task_id="user/my-task")` | Run a saved Apify task by ID with optional input overrides |
 | apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user/my-task", dataset_items_limit=50)` | Run a task and fetch its dataset results in one step |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
+| apify_instagram_scraper | `agent.tool.apify_instagram_scraper(search_query="apify", results_limit=10)` | Scrape Instagram profiles, posts, or hashtags |
+| apify_linkedin_profile_posts | `agent.tool.apify_linkedin_profile_posts(profile_url="https://linkedin.com/in/user")` | Scrape posts from a LinkedIn profile |
+| apify_linkedin_profile_search | `agent.tool.apify_linkedin_profile_search(search_query="software engineer SF")` | Search for LinkedIn profiles by keywords |
+| apify_linkedin_profile_detail | `agent.tool.apify_linkedin_profile_detail(profile_url="https://linkedin.com/in/user")` | Get detailed LinkedIn profile information |
+| apify_twitter_scraper | `agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=20)` | Scrape tweets from Twitter/X |
+| apify_tiktok_scraper | `agent.tool.apify_tiktok_scraper(search_query="cooking", results_limit=10)` | Scrape TikTok videos, profiles, or hashtags |
+| apify_facebook_posts_scraper | `agent.tool.apify_facebook_posts_scraper(page_url="https://facebook.com/page")` | Scrape posts from Facebook pages |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
