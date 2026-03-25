@@ -977,8 +977,7 @@ result = agent.tool.mongodb_memory(
 
 ```python
 from strands import Agent
-from strands_tools.apify_core import APIFY_CORE_TOOLS
-from strands_tools.apify_social import APIFY_SOCIAL_TOOLS
+from strands_tools.apify import APIFY_CORE_TOOLS, APIFY_SOCIAL_TOOLS
 
 # Core tools: Actor/task execution, datasets, URL scraping
 agent = Agent(tools=APIFY_CORE_TOOLS)
