@@ -676,6 +676,11 @@ TIKTOK_SCRAPER = "clockworks/tiktok-scraper"
 FACEBOOK_POSTS_SCRAPER = "apify/facebook-posts-scraper"
 _MISSING_SEARCH_OR_URLS = "Provide at least one of 'search_query' or 'urls'."
 
+VALID_INSTAGRAM_SEARCH_TYPES = ("hashtag", "user", "place")
+VALID_INSTAGRAM_RESULTS_TYPES = ("posts", "comments", "details")
+VALID_TWITTER_SORT_OPTIONS = ("Latest", "Top")
+VALID_LINKEDIN_SCRAPER_MODES = ("Short", "Full")
+
 
 # --- Social media helper functions ---
 
@@ -725,8 +730,10 @@ def _social_media_result(
 def apify_instagram_scraper(
     search_query: Optional[str] = None,
     urls: Optional[List[str]] = None,
+    results_type: str = "posts",
     results_limit: int = DEFAULT_SOCIAL_MEDIA_RESULTS_LIMIT,
-    search_type: str = "user",
+    search_type: str = "hashtag",
+    search_limit: int = 10,
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
     """Scrape Instagram profiles, posts, reels, or hashtags.
@@ -738,8 +745,13 @@ def apify_instagram_scraper(
         search_query: Username, hashtag, or keyword to search for on Instagram.
             If the value looks like an Instagram URL it is treated as a direct URL instead.
         urls: One or more Instagram URLs to scrape directly (profiles, posts, reels, etc.).
-        results_limit: Maximum number of results to return. Defaults to 20.
-        search_type: What to search for: "user", "hashtag", or "place". Defaults to "user".
+        results_type: What to scrape from each page: "posts" (default), "comments", or
+            "details" (profile metadata only).
+        results_limit: Maximum number of items to return per URL or search hit. Defaults to 20.
+        search_type: What kind of search to perform: "hashtag" (default), "user", or "place".
+            Only used when search_query is a plain keyword (not a URL).
+        search_limit: How many search results (hashtags, users, or places) to process.
+            Defaults to 10. Each search hit then returns up to results_limit items.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
@@ -749,9 +761,20 @@ def apify_instagram_scraper(
         _check_dependency()
         if not search_query and not urls:
             raise ValueError(_MISSING_SEARCH_OR_URLS)
+        if results_type not in VALID_INSTAGRAM_RESULTS_TYPES:
+            raise ValueError(
+                f"Invalid results_type '{results_type}'. Must be one of: {', '.join(VALID_INSTAGRAM_RESULTS_TYPES)}."
+            )
+        if search_type not in VALID_INSTAGRAM_SEARCH_TYPES:
+            raise ValueError(
+                f"Invalid search_type '{search_type}'. Must be one of: {', '.join(VALID_INSTAGRAM_SEARCH_TYPES)}."
+            )
 
         client = ApifyToolClient()
-        run_input: Dict[str, Any] = {"resultsLimit": results_limit}
+        run_input: Dict[str, Any] = {
+            "resultsType": results_type,
+            "resultsLimit": results_limit,
+        }
 
         if urls:
             run_input["directUrls"] = urls
@@ -760,6 +783,7 @@ def apify_instagram_scraper(
         else:
             run_input["search"] = search_query
             run_input["searchType"] = search_type
+            run_input["searchLimit"] = search_limit
 
         return _social_media_result(
             actor_name="Instagram Scraper",
@@ -816,16 +840,29 @@ def apify_linkedin_profile_posts(
 def apify_linkedin_profile_search(
     search_query: str,
     results_limit: int = DEFAULT_SOCIAL_MEDIA_RESULTS_LIMIT,
+    locations: Optional[List[str]] = None,
+    current_job_titles: Optional[List[str]] = None,
+    profile_scraper_mode: str = "Short",
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
-    """Search for LinkedIn profiles by keywords.
+    """Search for LinkedIn profiles with filters.
 
-    Find people on LinkedIn using keywords like job titles, skills, company names,
-    or locations (e.g. "software engineer San Francisco").
+    Find people on LinkedIn using a keyword query combined with optional filters
+    for location and job title. Returns basic profile data in Short mode or
+    full details (experience, education, skills) in Full mode.
 
     Args:
-        search_query: Search keywords to find LinkedIn profiles.
+        search_query: Search keywords such as job titles, skills, or names
+            (e.g. "software engineer", "marketing manager"). Supports LinkedIn
+            search operators.
         results_limit: Maximum number of profiles to return. Defaults to 20.
+        locations: Filter by locations (e.g. ["San Francisco", "New York"]).
+            Use full names — LinkedIn may misinterpret abbreviations.
+        current_job_titles: Filter by current job titles
+            (e.g. ["Software Engineer", "Data Scientist"]).
+        profile_scraper_mode: Amount of detail to return. "Short" (default)
+            returns basic profile data from search results. "Full" opens each
+            profile to scrape complete details including experience and education.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
@@ -833,11 +870,23 @@ def apify_linkedin_profile_search(
     """
     try:
         _check_dependency()
+        if profile_scraper_mode not in VALID_LINKEDIN_SCRAPER_MODES:
+            raise ValueError(
+                f"Invalid profile_scraper_mode '{profile_scraper_mode}'. "
+                f"Must be one of: {', '.join(VALID_LINKEDIN_SCRAPER_MODES)}."
+            )
+
         client = ApifyToolClient()
         run_input: Dict[str, Any] = {
             "searchQuery": search_query,
             "maxItems": results_limit,
+            "profileScraperMode": profile_scraper_mode,
         }
+        if locations is not None:
+            run_input["locations"] = locations
+        if current_job_titles is not None:
+            run_input["currentJobTitles"] = current_job_titles
+
         return _social_media_result(
             actor_name="LinkedIn Profile Search",
             client=client,
@@ -853,26 +902,33 @@ def apify_linkedin_profile_search(
 @tool
 def apify_linkedin_profile_detail(
     profile_url: str,
+    include_email: bool = False,
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
     """Get detailed information from a LinkedIn profile.
 
     Accepts a LinkedIn profile URL (e.g. "https://www.linkedin.com/in/username") or
     a bare username. Returns full profile details including work experience, education,
-    skills, and more.
+    skills, and more. No LinkedIn account or cookies required.
 
     Args:
         profile_url: LinkedIn profile URL or username to scrape.
+        include_email: Whether to include the email address in results if publicly
+            available. Defaults to False.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
-        Dict with status and content containing detailed LinkedIn profile data.
+        Dict with status and content containing detailed LinkedIn profile data
+        (work experience, education, certifications, location, and optionally email).
     """
     try:
         _check_dependency()
         client = ApifyToolClient()
         username = _extract_linkedin_username(profile_url)
-        run_input: Dict[str, Any] = {"username": username}
+        run_input: Dict[str, Any] = {
+            "username": username,
+            "includeEmail": include_email,
+        }
         return _social_media_result(
             actor_name="LinkedIn Profile Detail",
             client=client,
@@ -889,18 +945,30 @@ def apify_linkedin_profile_detail(
 def apify_twitter_scraper(
     search_query: Optional[str] = None,
     urls: Optional[List[str]] = None,
+    twitter_handles: Optional[List[str]] = None,
     results_limit: int = DEFAULT_SOCIAL_MEDIA_RESULTS_LIMIT,
+    sort: str = "Latest",
+    tweet_language: Optional[str] = None,
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
-    """Scrape tweets from Twitter/X by search query or specific URLs.
+    """Scrape tweets from Twitter/X by search query, handles, or specific URLs.
 
-    Supports Twitter advanced search syntax (e.g. "from:NASA", "#AI min_faves:100").
-    Provide either a search query or direct tweet/profile/list URLs.
+    Supports Twitter advanced search syntax (e.g. "from:NASA", "#AI min_faves:100",
+    "bitcoin min_faves:1000 min_retweets:100"). Provide at least one of search_query,
+    urls, or twitter_handles.
 
     Args:
-        search_query: Search query or hashtag to find tweets. Supports Twitter advanced search.
-        urls: Specific tweet, profile, or list URLs to scrape.
+        search_query: Search query to find tweets. Supports Twitter advanced search
+            operators like "from:user", "#hashtag", "min_faves:N", date ranges with
+            "since:YYYY-MM-DD until:YYYY-MM-DD", and boolean operators.
+        urls: Specific tweet, profile, search, or list URLs to scrape directly.
+        twitter_handles: Twitter handles to scrape (without the @ symbol,
+            e.g. ["NASA", "elonmusk"]).
         results_limit: Maximum number of tweets to return. Defaults to 20.
+        sort: Sort order for search results: "Latest" (default, chronological) or
+            "Top" (most popular/relevant).
+        tweet_language: Restrict tweets to this language. Use an ISO 639-1 code
+            (e.g. "en", "es", "de"). Defaults to all languages.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
@@ -908,16 +976,25 @@ def apify_twitter_scraper(
     """
     try:
         _check_dependency()
-        if not search_query and not urls:
-            raise ValueError(_MISSING_SEARCH_OR_URLS)
+        if not search_query and not urls and not twitter_handles:
+            raise ValueError("Provide at least one of 'search_query', 'urls', or 'twitter_handles'.")
+        if sort not in VALID_TWITTER_SORT_OPTIONS:
+            raise ValueError(f"Invalid sort '{sort}'. Must be one of: {', '.join(VALID_TWITTER_SORT_OPTIONS)}.")
 
         client = ApifyToolClient()
-        run_input: Dict[str, Any] = {"maxItems": results_limit}
+        run_input: Dict[str, Any] = {
+            "maxItems": results_limit,
+            "sort": sort,
+        }
 
         if search_query:
             run_input["searchTerms"] = [search_query]
         if urls:
-            run_input["startUrls"] = urls
+            run_input["startUrls"] = [{"url": u} for u in urls]
+        if twitter_handles:
+            run_input["twitterHandles"] = twitter_handles
+        if tweet_language is not None:
+            run_input["tweetLanguage"] = tweet_language
 
         return _social_media_result(
             actor_name="Twitter Scraper",
@@ -934,34 +1011,48 @@ def apify_twitter_scraper(
 @tool
 def apify_tiktok_scraper(
     search_query: Optional[str] = None,
+    hashtags: Optional[List[str]] = None,
+    profiles: Optional[List[str]] = None,
     urls: Optional[List[str]] = None,
     results_limit: int = DEFAULT_SOCIAL_MEDIA_RESULTS_LIMIT,
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
-    """Scrape TikTok videos, profiles, or hashtags.
+    """Scrape TikTok videos by search, hashtag, profile, or direct post URL.
 
-    Provide a search query to find TikTok content or direct post URLs to scrape.
-    The search applies to both videos and profiles.
+    Use the input that best matches your intent:
+    - search_query: keyword search across videos and profiles
+    - hashtags: scrape videos tagged with specific hashtags (e.g. ["fyp", "cooking"])
+    - profiles: scrape videos from specific users (e.g. ["username1", "username2"])
+    - urls: scrape specific TikTok post URLs
+
+    Provide at least one of the above.
 
     Args:
-        search_query: Search query, username, or hashtag to find TikTok content.
+        search_query: Keyword to search TikTok. Applies to both videos and profiles.
+        hashtags: One or more TikTok hashtags (without #) to scrape videos from.
+        profiles: One or more TikTok usernames to scrape videos from.
         urls: Specific TikTok post URLs to scrape.
-        results_limit: Maximum number of results per query. Defaults to 20.
+        results_limit: Maximum number of videos per hashtag, profile, or search.
+            Defaults to 20.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
-        Dict with status and content containing scraped TikTok data.
+        Dict with status and content containing scraped TikTok video data.
     """
     try:
         _check_dependency()
-        if not search_query and not urls:
-            raise ValueError(_MISSING_SEARCH_OR_URLS)
+        if not search_query and not hashtags and not profiles and not urls:
+            raise ValueError("Provide at least one of 'search_query', 'hashtags', 'profiles', or 'urls'.")
 
         client = ApifyToolClient()
         run_input: Dict[str, Any] = {"resultsPerPage": results_limit}
 
         if search_query:
             run_input["searchQueries"] = [search_query]
+        if hashtags:
+            run_input["hashtags"] = hashtags
+        if profiles:
+            run_input["profiles"] = profiles
         if urls:
             run_input["postURLs"] = urls
 
@@ -981,15 +1072,20 @@ def apify_tiktok_scraper(
 def apify_facebook_posts_scraper(
     page_url: str,
     results_limit: int = DEFAULT_SOCIAL_MEDIA_RESULTS_LIMIT,
+    only_posts_newer_than: Optional[str] = None,
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
 ) -> Dict[str, Any]:
     """Scrape posts from a Facebook page or profile.
 
-    Provide a Facebook page or profile URL to scrape its posts.
+    Provide a Facebook page or profile URL to scrape its posts. Optionally filter
+    to only return recent posts.
 
     Args:
         page_url: Facebook page or profile URL to scrape posts from.
         results_limit: Maximum number of posts to return. Defaults to 20.
+        only_posts_newer_than: Only return posts newer than this date. Use a
+            natural-language date string like "2024-01-01", "1 week ago", or
+            "3 months ago". Defaults to no date filter.
         timeout_secs: Maximum time in seconds to wait for the Actor run. Defaults to 300.
 
     Returns:
@@ -1002,6 +1098,9 @@ def apify_facebook_posts_scraper(
             "startUrls": [{"url": page_url}],
             "resultsLimit": results_limit,
         }
+        if only_posts_newer_than is not None:
+            run_input["onlyPostsNewerThan"] = only_posts_newer_than
+
         return _social_media_result(
             actor_name="Facebook Posts Scraper",
             client=client,

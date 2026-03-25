@@ -201,11 +201,15 @@ All social media tools default to returning at most 20 results (`results_limit=2
 Search for Instagram profiles, hashtags, or places, or scrape specific Instagram URLs. Uses the [Instagram Scraper](https://apify.com/apify/instagram-scraper) Actor.
 
 ```python
-# Search for a user
-result = agent.tool.apify_instagram_scraper(search_query="apify", search_type="user", results_limit=10)
+# Search for a hashtag and get posts
+result = agent.tool.apify_instagram_scraper(
+    search_query="travel", search_type="hashtag", results_type="posts", results_limit=10,
+)
 
-# Scrape a specific profile URL
-result = agent.tool.apify_instagram_scraper(urls=["https://www.instagram.com/apify/"])
+# Get profile details (metadata only)
+result = agent.tool.apify_instagram_scraper(
+    urls=["https://www.instagram.com/apify/"], results_type="details",
+)
 
 # A URL passed as search_query is auto-detected
 result = agent.tool.apify_instagram_scraper(search_query="https://www.instagram.com/apify/")
@@ -224,32 +228,49 @@ result = agent.tool.apify_linkedin_profile_posts(
 
 ### Search LinkedIn profiles
 
-Find people on LinkedIn by keywords such as job titles, skills, companies, or locations. Uses the [LinkedIn Profile Search](https://apify.com/harvestapi/linkedin-profile-search) Actor.
+Find people on LinkedIn by keywords with optional filters for location and job title. Uses the [LinkedIn Profile Search](https://apify.com/harvestapi/linkedin-profile-search) Actor.
 
 ```python
+# Simple keyword search
 result = agent.tool.apify_linkedin_profile_search(
-    search_query="software engineer San Francisco",
+    search_query="software engineer",
     results_limit=25,
+)
+
+# Search with filters and full profile details
+result = agent.tool.apify_linkedin_profile_search(
+    search_query="marketing manager",
+    locations=["San Francisco", "New York"],
+    current_job_titles=["Marketing Manager", "Head of Marketing"],
+    profile_scraper_mode="Full",
 )
 ```
 
 ### Get LinkedIn profile details
 
-Retrieve full profile information including work experience, education, and skills. Accepts a profile URL or bare username. Uses the [LinkedIn Profile Detail](https://apify.com/apimaestro/linkedin-profile-detail) Actor.
+Retrieve full profile information including work experience, education, and skills. Accepts a profile URL or bare username. No LinkedIn account or cookies required. Uses the [LinkedIn Profile Detail](https://apify.com/apimaestro/linkedin-profile-detail) Actor.
 
 ```python
 result = agent.tool.apify_linkedin_profile_detail(
     profile_url="https://www.linkedin.com/in/neal-mohan",
+    include_email=True,
 )
 ```
 
 ### Scrape Twitter/X
 
-Search for tweets or scrape specific tweet, profile, or list URLs. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search) syntax. Uses the [Twitter Scraper Lite](https://apify.com/apidojo/twitter-scraper-lite) Actor.
+Search for tweets, scrape by handle, or scrape specific URLs. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search) syntax. Uses the [Twitter Scraper Lite](https://apify.com/apidojo/twitter-scraper-lite) Actor.
 
 ```python
-# Search tweets
-result = agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=30)
+# Search tweets with sort order
+result = agent.tool.apify_twitter_scraper(
+    search_query="from:NASA", results_limit=30, sort="Latest",
+)
+
+# Scrape by Twitter handles
+result = agent.tool.apify_twitter_scraper(
+    twitter_handles=["NASA", "SpaceX"], tweet_language="en",
+)
 
 # Scrape specific tweet URLs
 result = agent.tool.apify_twitter_scraper(
@@ -259,11 +280,17 @@ result = agent.tool.apify_twitter_scraper(
 
 ### Scrape TikTok
 
-Search for TikTok content or scrape specific post URLs. Uses the [TikTok Scraper](https://apify.com/clockworks/tiktok-scraper) Actor.
+Search by keyword, hashtag, profile, or specific post URL. Uses the [TikTok Scraper](https://apify.com/clockworks/tiktok-scraper) Actor.
 
 ```python
 # Search by keyword
 result = agent.tool.apify_tiktok_scraper(search_query="cooking", results_limit=15)
+
+# Scrape videos by hashtag
+result = agent.tool.apify_tiktok_scraper(hashtags=["fyp", "cooking"])
+
+# Scrape videos from specific profiles
+result = agent.tool.apify_tiktok_scraper(profiles=["charlidamelio"])
 
 # Scrape specific post URLs
 result = agent.tool.apify_tiktok_scraper(
@@ -273,12 +300,13 @@ result = agent.tool.apify_tiktok_scraper(
 
 ### Scrape Facebook posts
 
-Scrape posts from a Facebook page or profile. Uses the [Facebook Posts Scraper](https://apify.com/apify/facebook-posts-scraper) Actor.
+Scrape posts from a Facebook page or profile. Optionally filter by date. Uses the [Facebook Posts Scraper](https://apify.com/apify/facebook-posts-scraper) Actor.
 
 ```python
 result = agent.tool.apify_facebook_posts_scraper(
     page_url="https://www.facebook.com/apify",
     results_limit=10,
+    only_posts_newer_than="2024-01-01",
 )
 ```
 
@@ -290,8 +318,10 @@ result = agent.tool.apify_facebook_posts_scraper(
 |-----------|------|----------|---------|-------------|
 | `search_query` | string | No* | None | Username, hashtag, or keyword to search. URLs are auto-detected and routed to direct scraping. |
 | `urls` | list[str] | No* | None | One or more Instagram URLs to scrape directly |
-| `results_limit` | int | No | 20 | Maximum number of results to return |
-| `search_type` | string | No | "user" | What to search for: `"user"`, `"hashtag"`, or `"place"` |
+| `results_type` | string | No | `"posts"` | What to scrape: `"posts"`, `"comments"`, or `"details"` (profile metadata) |
+| `results_limit` | int | No | 20 | Maximum number of items per URL or search hit |
+| `search_type` | string | No | `"hashtag"` | What to search for: `"hashtag"`, `"user"`, or `"place"` |
+| `search_limit` | int | No | 10 | How many search results (hashtags/users/places) to process |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
 \* At least one of `search_query` or `urls` is required.
@@ -312,8 +342,11 @@ result = agent.tool.apify_facebook_posts_scraper(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `search_query` | string | Yes | — | Search keywords (e.g., `"software engineer San Francisco"`) |
+| `search_query` | string | Yes | — | Search keywords (e.g., `"software engineer"`, `"marketing manager"`) |
 | `results_limit` | int | No | 20 | Maximum number of profiles to return |
+| `locations` | list[str] | No | None | Filter by locations (e.g., `["San Francisco", "New York"]`) |
+| `current_job_titles` | list[str] | No | None | Filter by current job titles (e.g., `["Software Engineer"]`) |
+| `profile_scraper_mode` | string | No | `"Short"` | `"Short"` for basic data, `"Full"` for complete details (experience, education, skills) |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
 **Returns:** JSON string with run metadata and an `items` array containing matched LinkedIn profiles.
@@ -323,20 +356,24 @@ result = agent.tool.apify_facebook_posts_scraper(
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `profile_url` | string | Yes | — | LinkedIn profile URL or bare username |
+| `include_email` | bool | No | False | Include email address if publicly available |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
-**Returns:** JSON string with run metadata and an `items` array containing detailed profile data.
+**Returns:** JSON string with run metadata and an `items` array containing detailed profile data (work experience, education, certifications, location, and optionally email).
 
 ### apify_twitter_scraper
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `search_query` | string | No* | None | Search query or hashtag. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search). |
-| `urls` | list[str] | No* | None | Specific tweet, profile, or list URLs to scrape |
+| `search_query` | string | No* | None | Search query. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search) operators (`from:`, `#hashtag`, `min_faves:`, `since:`, `until:`) |
+| `urls` | list[str] | No* | None | Specific tweet, profile, search, or list URLs to scrape |
+| `twitter_handles` | list[str] | No* | None | Twitter handles to scrape (without `@`, e.g. `["NASA", "elonmusk"]`) |
 | `results_limit` | int | No | 20 | Maximum number of tweets to return |
+| `sort` | string | No | `"Latest"` | Sort order: `"Latest"` (chronological) or `"Top"` (popular) |
+| `tweet_language` | string | No | None | ISO 639-1 language code (e.g. `"en"`, `"es"`) |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
-\* At least one of `search_query` or `urls` is required.
+\* At least one of `search_query`, `urls`, or `twitter_handles` is required.
 
 **Returns:** JSON string with run metadata and an `items` array containing scraped tweet data.
 
@@ -344,14 +381,16 @@ result = agent.tool.apify_facebook_posts_scraper(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `search_query` | string | No* | None | Search query, username, or hashtag |
+| `search_query` | string | No* | None | Keyword to search across videos and profiles |
+| `hashtags` | list[str] | No* | None | Hashtags to scrape videos from (without `#`, e.g. `["fyp", "cooking"]`) |
+| `profiles` | list[str] | No* | None | TikTok usernames to scrape videos from |
 | `urls` | list[str] | No* | None | Specific TikTok post URLs to scrape |
-| `results_limit` | int | No | 20 | Maximum number of results per query |
+| `results_limit` | int | No | 20 | Maximum number of videos per hashtag, profile, or search |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
-\* At least one of `search_query` or `urls` is required.
+\* At least one of `search_query`, `hashtags`, `profiles`, or `urls` is required.
 
-**Returns:** JSON string with run metadata and an `items` array containing scraped TikTok data.
+**Returns:** JSON string with run metadata and an `items` array containing scraped TikTok video data.
 
 ### apify_facebook_posts_scraper
 
@@ -359,6 +398,7 @@ result = agent.tool.apify_facebook_posts_scraper(
 |-----------|------|----------|---------|-------------|
 | `page_url` | string | Yes | — | Facebook page or profile URL to scrape posts from |
 | `results_limit` | int | No | 20 | Maximum number of posts to return |
+| `only_posts_newer_than` | string | No | None | Only return posts newer than this date (e.g. `"2024-01-01"`, `"1 week ago"`) |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
 
 **Returns:** JSON string with run metadata and an `items` array containing scraped Facebook post data.

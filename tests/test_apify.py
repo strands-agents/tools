@@ -746,7 +746,7 @@ def test_extract_linkedin_username_non_profile_url():
 
 
 def test_instagram_scraper_search_success(mock_apify_env, mock_apify_client):
-    """Instagram scraper with search query maps to 'search' field."""
+    """Instagram scraper with search query maps to 'search' field with resultsType and searchLimit."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_instagram_scraper(search_query="apify", results_limit=10, search_type="user")
 
@@ -756,6 +756,8 @@ def test_instagram_scraper_search_success(mock_apify_env, mock_apify_client):
     assert run_input["search"] == "apify"
     assert run_input["searchType"] == "user"
     assert run_input["resultsLimit"] == 10
+    assert run_input["resultsType"] == "posts"
+    assert run_input["searchLimit"] == 10
     mock_apify_client.actor.assert_called_once_with("apify/instagram-scraper")
 
 
@@ -769,7 +771,34 @@ def test_instagram_scraper_with_urls(mock_apify_env, mock_apify_client):
     call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
     run_input = call_kwargs["run_input"]
     assert run_input["directUrls"] == urls
+    assert run_input["resultsType"] == "posts"
     assert "search" not in run_input
+
+
+def test_instagram_scraper_results_type(mock_apify_env, mock_apify_client):
+    """Instagram scraper passes results_type to Actor input."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_instagram_scraper(search_query="apify", results_type="comments")
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["resultsType"] == "comments"
+
+
+def test_instagram_scraper_invalid_results_type(mock_apify_env):
+    """Instagram scraper returns error for invalid results_type."""
+    result = apify_instagram_scraper(search_query="apify", results_type="invalid")
+
+    assert result["status"] == "error"
+    assert "results_type" in result["content"][0]["text"]
+
+
+def test_instagram_scraper_invalid_search_type(mock_apify_env):
+    """Instagram scraper returns error for invalid search_type."""
+    result = apify_instagram_scraper(search_query="apify", search_type="invalid")
+
+    assert result["status"] == "error"
+    assert "search_type" in result["content"][0]["text"]
 
 
 def test_instagram_scraper_url_in_search_query(mock_apify_env, mock_apify_client):
@@ -833,7 +862,35 @@ def test_linkedin_profile_search_success(mock_apify_env, mock_apify_client):
     run_input = call_kwargs["run_input"]
     assert run_input["searchQuery"] == "software engineer SF"
     assert run_input["maxItems"] == 25
+    assert run_input["profileScraperMode"] == "Short"
+    assert "locations" not in run_input
+    assert "currentJobTitles" not in run_input
     mock_apify_client.actor.assert_called_once_with("harvestapi/linkedin-profile-search")
+
+
+def test_linkedin_profile_search_with_filters(mock_apify_env, mock_apify_client):
+    """LinkedIn profile search passes locations and job title filters."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_linkedin_profile_search(
+            search_query="engineer",
+            locations=["San Francisco", "New York"],
+            current_job_titles=["Software Engineer"],
+            profile_scraper_mode="Full",
+        )
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["locations"] == ["San Francisco", "New York"]
+    assert run_input["currentJobTitles"] == ["Software Engineer"]
+    assert run_input["profileScraperMode"] == "Full"
+
+
+def test_linkedin_profile_search_invalid_mode(mock_apify_env):
+    """LinkedIn profile search returns error for invalid profile_scraper_mode."""
+    result = apify_linkedin_profile_search(search_query="test", profile_scraper_mode="Invalid")
+
+    assert result["status"] == "error"
+    assert "profile_scraper_mode" in result["content"][0]["text"]
 
 
 # --- apify_linkedin_profile_detail ---
@@ -848,6 +905,7 @@ def test_linkedin_profile_detail_success(mock_apify_env, mock_apify_client):
     call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
     run_input = call_kwargs["run_input"]
     assert run_input["username"] == "neal-mohan"
+    assert run_input["includeEmail"] is False
     mock_apify_client.actor.assert_called_once_with("apimaestro/linkedin-profile-detail")
 
 
@@ -861,11 +919,21 @@ def test_linkedin_profile_detail_bare_username(mock_apify_env, mock_apify_client
     assert call_kwargs["run_input"]["username"] == "neal-mohan"
 
 
+def test_linkedin_profile_detail_include_email(mock_apify_env, mock_apify_client):
+    """LinkedIn profile detail passes includeEmail when requested."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_linkedin_profile_detail(profile_url="neal-mohan", include_email=True)
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["includeEmail"] is True
+
+
 # --- apify_twitter_scraper ---
 
 
 def test_twitter_scraper_search_success(mock_apify_env, mock_apify_client):
-    """Twitter scraper maps search_query to searchTerms array and results_limit to maxItems."""
+    """Twitter scraper maps search_query to searchTerms array with sort and maxItems."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_twitter_scraper(search_query="from:NASA", results_limit=30)
 
@@ -874,22 +942,53 @@ def test_twitter_scraper_search_success(mock_apify_env, mock_apify_client):
     run_input = call_kwargs["run_input"]
     assert run_input["searchTerms"] == ["from:NASA"]
     assert run_input["maxItems"] == 30
+    assert run_input["sort"] == "Latest"
+    assert "tweetLanguage" not in run_input
     mock_apify_client.actor.assert_called_once_with("apidojo/twitter-scraper-lite")
 
 
 def test_twitter_scraper_with_urls(mock_apify_env, mock_apify_client):
-    """Twitter scraper maps urls to startUrls."""
+    """Twitter scraper maps urls to startUrls as objects."""
     tweet_urls = ["https://x.com/elonmusk/status/1728108619189874825"]
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
         result = apify_twitter_scraper(urls=tweet_urls)
 
     assert result["status"] == "success"
     call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
-    assert call_kwargs["run_input"]["startUrls"] == tweet_urls
+    assert call_kwargs["run_input"]["startUrls"] == [{"url": "https://x.com/elonmusk/status/1728108619189874825"}]
+
+
+def test_twitter_scraper_with_handles(mock_apify_env, mock_apify_client):
+    """Twitter scraper passes twitterHandles when provided."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_twitter_scraper(twitter_handles=["NASA", "elonmusk"])
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["twitterHandles"] == ["NASA", "elonmusk"]
+
+
+def test_twitter_scraper_sort_and_language(mock_apify_env, mock_apify_client):
+    """Twitter scraper passes sort and tweet_language parameters."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_twitter_scraper(search_query="AI", sort="Top", tweet_language="en")
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["sort"] == "Top"
+    assert run_input["tweetLanguage"] == "en"
+
+
+def test_twitter_scraper_invalid_sort(mock_apify_env):
+    """Twitter scraper returns error for invalid sort option."""
+    result = apify_twitter_scraper(search_query="test", sort="Invalid")
+
+    assert result["status"] == "error"
+    assert "sort" in result["content"][0]["text"]
 
 
 def test_twitter_scraper_missing_params(mock_apify_env):
-    """Twitter scraper returns error when neither search_query nor urls provided."""
+    """Twitter scraper returns error when no input provided."""
     result = apify_twitter_scraper()
 
     assert result["status"] == "error"
@@ -923,12 +1022,34 @@ def test_tiktok_scraper_with_urls(mock_apify_env, mock_apify_client):
     assert call_kwargs["run_input"]["postURLs"] == post_urls
 
 
+def test_tiktok_scraper_with_hashtags(mock_apify_env, mock_apify_client):
+    """TikTok scraper passes hashtags to the dedicated hashtags input."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_tiktok_scraper(hashtags=["fyp", "cooking"])
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["hashtags"] == ["fyp", "cooking"]
+    assert "searchQueries" not in run_input
+
+
+def test_tiktok_scraper_with_profiles(mock_apify_env, mock_apify_client):
+    """TikTok scraper passes profiles to the dedicated profiles input."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_tiktok_scraper(profiles=["charlidamelio", "khaby.lame"])
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["profiles"] == ["charlidamelio", "khaby.lame"]
+    assert "searchQueries" not in run_input
+
+
 def test_tiktok_scraper_missing_params(mock_apify_env):
-    """TikTok scraper returns error when neither search_query nor urls provided."""
+    """TikTok scraper returns error when no input provided."""
     result = apify_tiktok_scraper()
 
     assert result["status"] == "error"
-    assert "search_query" in result["content"][0]["text"] or "urls" in result["content"][0]["text"]
+    assert "search_query" in result["content"][0]["text"] or "hashtags" in result["content"][0]["text"]
 
 
 # --- apify_facebook_posts_scraper ---
@@ -947,7 +1068,21 @@ def test_facebook_posts_scraper_success(mock_apify_env, mock_apify_client):
     run_input = call_kwargs["run_input"]
     assert run_input["startUrls"] == [{"url": "https://www.facebook.com/apify"}]
     assert run_input["resultsLimit"] == 10
+    assert "onlyPostsNewerThan" not in run_input
     mock_apify_client.actor.assert_called_once_with("apify/facebook-posts-scraper")
+
+
+def test_facebook_posts_scraper_with_date_filter(mock_apify_env, mock_apify_client):
+    """Facebook posts scraper passes onlyPostsNewerThan when provided."""
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_facebook_posts_scraper(
+            page_url="https://www.facebook.com/apify",
+            only_posts_newer_than="2024-01-01",
+        )
+
+    assert result["status"] == "success"
+    run_input = mock_apify_client.actor.return_value.call.call_args.kwargs["run_input"]
+    assert run_input["onlyPostsNewerThan"] == "2024-01-01"
 
 
 # --- Social media: dependency and token guards ---
