@@ -1,5 +1,4 @@
-"""
-Programmatic Tool Calling for Strands Agents.
+"""Programmatic Tool Calling for Strands Agents.
 
 This module provides a tool that enables programmatic/code-based tool invocation,
 similar to Anthropic's Programmatic Tool Calling feature. It allows an agent to
@@ -35,19 +34,6 @@ Environment Variables:
 - PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS: Comma-separated list of allowed tools
 - BYPASS_TOOL_CONSENT: Skip user confirmation if "true"
 
-Custom Executors:
-```python
-from strands_tools.programmatic_tool_caller import programmatic_tool_caller, Executor
-
-class MyExecutor(Executor):
-    def execute(self, code: str, namespace: dict) -> str:
-        # Custom execution logic
-        ...
-
-# Set custom executor
-programmatic_tool_caller.executor = MyExecutor()
-```
-
 Limitations: Tools that use interrupts (human-in-the-loop) are not supported. The SDK
 blocks interrupts during direct/programmatic tool calls — there is no mechanism to pause
 execution, collect human input, and resume in this context. If an interrupt-capable tool
@@ -64,7 +50,6 @@ import re
 import sys
 import textwrap
 import traceback
-from abc import ABC, abstractmethod
 from io import StringIO
 from typing import Any, Callable, Dict, List, Optional
 
@@ -79,69 +64,6 @@ from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Executor Interface & Implementations
-# =============================================================================
-
-
-class Executor(ABC):
-    """Abstract base class for code executors.
-
-    Implement this interface to provide custom execution environments
-    (e.g., Docker, Lambda, smolagents, Code Interpreter).
-    """
-
-    @abstractmethod
-    def execute(self, code: str, namespace: Dict[str, Any]) -> str:
-        """Execute code and return captured output.
-
-        Args:
-            code: Python code to execute (already wrapped in async context)
-            namespace: Execution namespace with tools and builtins
-
-        Returns:
-            Captured stdout/stderr output
-
-        Raises:
-            SyntaxError: If code has syntax errors
-            Exception: If execution fails
-        """
-        pass
-
-
-class LocalAsyncExecutor(Executor):
-    """Default executor - runs code locally with asyncio."""
-
-    def execute(self, code: str, namespace: Dict[str, Any]) -> str:
-        """Execute code in local async context."""
-        # Wrap user code in async function
-        indented_code = textwrap.indent(code, "    ")
-        wrapped_code = f"async def __user_code__():\n{indented_code}\n"
-
-        # Capture output
-        stdout_capture = StringIO()
-        stderr_capture = StringIO()
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-
-        try:
-            sys.stdout = stdout_capture
-            sys.stderr = stderr_capture
-
-            # Define and run the async function
-            exec(wrapped_code, namespace)
-            asyncio.run(namespace["__user_code__"]())
-
-            output = stdout_capture.getvalue()
-            errors = stderr_capture.getvalue()
-            if errors:
-                output += f"\n[stderr]\n{errors}"
-            return output
-
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
 
 
 # =============================================================================
@@ -238,17 +160,13 @@ def _get_allowed_tools(agent: Any) -> set[str]:
 # Main Tool
 # =============================================================================
 
-# Default executor - can be swapped by users
-_default_executor = LocalAsyncExecutor()
-
 
 @tool(context=True)
 def programmatic_tool_caller(
     code: str,
     tool_context: Optional[ToolContext] = None,
 ) -> Dict[str, Any]:
-    """
-    Execute Python code with access to agent tools as async functions.
+    """Execute Python code with access to agent tools as async functions.
 
     Tools are available as async functions - use `await` to call them.
     Code runs in async context automatically, no boilerplate needed.
@@ -348,9 +266,32 @@ def programmatic_tool_caller(
 
         console.print("[green]Executing...[/]")
 
-        # Use the executor
-        executor = getattr(programmatic_tool_caller, "executor", _default_executor)
-        captured_output = executor.execute(code, exec_namespace)
+        # Execute code in async context
+        # Wrap user code in async function for await support
+        indented_code = textwrap.indent(code, "    ")
+        wrapped_code = f"async def __user_code__():\n{indented_code}\n"
+
+        # Capture output
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+
+        try:
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+
+            # Use compile() for better error tracebacks
+            compiled = compile(wrapped_code, "<programmatic_tool_caller>", "exec")
+            exec(compiled, exec_namespace)
+            asyncio.run(exec_namespace["__user_code__"]())
+
+            captured_output = stdout_capture.getvalue()
+            errors = stderr_capture.getvalue()
+            if errors:
+                captured_output += f"\n[stderr]\n{errors}"
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
         console.print("[bold green]✓ Done[/]")
         if captured_output.strip():
@@ -370,7 +311,3 @@ def programmatic_tool_caller(
         error_msg = f"Execution error:\n{traceback.format_exc()}"
         console.print(Panel(error_msg, title="[bold red]Error[/]", border_style="red"))
         return {"status": "error", "content": [{"text": error_msg}]}
-
-
-# Allow setting custom executor
-programmatic_tool_caller.executor = _default_executor

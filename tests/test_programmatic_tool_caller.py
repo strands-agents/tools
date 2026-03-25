@@ -6,43 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strands_tools.programmatic_tool_caller import (
-    Executor,
-    LocalAsyncExecutor,
     _create_async_tool_function,
     _execute_tool,
     _get_allowed_tools,
     _validate_code,
     programmatic_tool_caller,
 )
-
-
-class TestExecutor:
-    """Tests for Executor classes."""
-
-    def test_local_async_executor_runs_code(self):
-        executor = LocalAsyncExecutor()
-        output = executor.execute("print('hello')", {"__builtins__": __builtins__})
-        assert "hello" in output
-
-    def test_local_async_executor_captures_stderr(self):
-        executor = LocalAsyncExecutor()
-        output = executor.execute(
-            "import sys; print('error', file=sys.stderr)",
-            {
-                "__builtins__": __builtins__,
-                "sys": sys,
-            },
-        )
-        assert "[stderr]" in output
-        assert "error" in output
-
-    def test_custom_executor_can_be_implemented(self):
-        class CustomExecutor(Executor):
-            def execute(self, code, namespace):
-                return "custom output"
-
-        executor = CustomExecutor()
-        assert executor.execute("print('hi')", {}) == "custom output"
 
 
 class TestExecuteTool:
@@ -241,29 +210,6 @@ print(f"Results: {results}")
         )
         assert result["status"] == "success"
 
-    @patch("strands_tools.programmatic_tool_caller.get_user_input")
-    @patch("strands_tools.programmatic_tool_caller.console_util")
-    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
-    def test_custom_executor(self, mock_console, mock_input):
-        mock_console.create.return_value = MagicMock()
-        mock_context = MagicMock()
-        mock_context.agent.tool_registry.registry = {}
-
-        # Create and set custom executor
-        class TestExecutor(Executor):
-            def execute(self, code, namespace):
-                return "custom executor output"
-
-        original_executor = programmatic_tool_caller.executor
-        programmatic_tool_caller.executor = TestExecutor()
-
-        try:
-            result = programmatic_tool_caller(code="print('ignored')", tool_context=mock_context)
-            assert result["status"] == "success"
-            assert "custom executor output" in result["content"][0]["text"]
-        finally:
-            programmatic_tool_caller.executor = original_executor
-
     @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"})
     @patch("strands_tools.programmatic_tool_caller.get_user_input")
     @patch("strands_tools.programmatic_tool_caller.console_util")
@@ -276,3 +222,31 @@ print(f"Results: {results}")
         result = programmatic_tool_caller(code="print('hello')", tool_context=mock_context)
         assert result["status"] == "error"
         assert "cancelled" in result["content"][0]["text"].lower()
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_stderr_captured(self, mock_console, mock_input):
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(
+            code="import sys; print('error', file=sys.stderr)",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "success"
+        assert "[stderr]" in result["content"][0]["text"]
+        assert "error" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_syntax_error_handled(self, mock_console, mock_input):
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(code="def invalid(:", tool_context=mock_context)
+        assert result["status"] == "error"
+        assert "yntax" in result["content"][0]["text"]
