@@ -963,7 +963,7 @@ def apify_twitter_scraper(
             "since:YYYY-MM-DD until:YYYY-MM-DD", and boolean operators.
         urls: Specific tweet, profile, search, or list URLs to scrape directly.
         twitter_handles: Twitter handles to scrape (without the @ symbol,
-            e.g. ["NASA", "elonmusk"]).
+            e.g. ["NASA", "WHO"]).
         results_limit: Maximum number of tweets to return. Defaults to 20.
         sort: Sort order for search results: "Latest" (default, chronological) or
             "Top" (most popular/relevant).
