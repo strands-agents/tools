@@ -977,16 +977,11 @@ result = agent.tool.mongodb_memory(
 
 ```python
 from strands import Agent
-from strands_tools import apify
+from strands_tools.apify_core import APIFY_CORE_TOOLS
+from strands_tools.apify_social import APIFY_SOCIAL_TOOLS
 
-agent = Agent(tools=[
-    apify.apify_run_actor,
-    apify.apify_run_task,
-    apify.apify_get_dataset_items,
-    apify.apify_run_actor_and_get_dataset,
-    apify.apify_run_task_and_get_dataset,
-    apify.apify_scrape_url,
-])
+# Core tools: Actor/task execution, datasets, URL scraping
+agent = Agent(tools=APIFY_CORE_TOOLS)
 
 # Scrape a single URL and get markdown content
 content = agent.tool.apify_scrape_url(url="https://example.com")
@@ -1001,24 +996,14 @@ result = agent.tool.apify_run_actor_and_get_dataset(
 # Run a saved task (pre-configured Actor with default inputs)
 run_info = agent.tool.apify_run_task(task_id="user/my-task")
 
-# Run a task and get results in one step
-result = agent.tool.apify_run_task_and_get_dataset(
-    task_id="user/my-task",
-    task_input={"query": "override default input"},
-    dataset_items_limit=50,
-)
+# Social media tools: Instagram, LinkedIn, Twitter/X, TikTok, Facebook
+social_agent = Agent(tools=APIFY_SOCIAL_TOOLS)
 
-# Run an Actor (get metadata only)
-run_info = agent.tool.apify_run_actor(
-    actor_id="apify/google-search-scraper",
-    run_input={"queries": "AI agent frameworks"},
-)
+# Scrape Instagram
+posts = social_agent.tool.apify_instagram_scraper(search_query="apify", results_limit=10)
 
-# Fetch dataset items separately
-items = agent.tool.apify_get_dataset_items(
-    dataset_id="abc123",
-    limit=100,
-)
+# Scrape Twitter/X
+tweets = social_agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=20)
 ```
 
 ## 🌍 Environment Variables Configuration

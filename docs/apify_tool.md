@@ -1,6 +1,11 @@
 # Apify
 
-The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, scraping individual URLs, and scraping popular social media platforms with simplified interfaces.
+The Apify tools enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, scraping individual URLs, and scraping popular social media platforms.
+
+The tools are split into two modules:
+
+- **`apify_core`** — Actor execution, task execution, data retrieval, and URL scraping
+- **`apify_social`** — simplified wrappers for social media scraping Actors
 
 ## Installation
 
@@ -20,24 +25,35 @@ Get your token from [Apify Console](https://console.apify.com/account/integratio
 
 ## Usage
 
+Register all core tools at once:
+
 ```python
 from strands import Agent
-from strands_tools import apify
+from strands_tools.apify_core import APIFY_CORE_TOOLS
+
+agent = Agent(tools=APIFY_CORE_TOOLS)
+```
+
+Register all social media tools at once:
+
+```python
+from strands import Agent
+from strands_tools.apify_social import APIFY_SOCIAL_TOOLS
+
+agent = Agent(tools=APIFY_SOCIAL_TOOLS)
+```
+
+Or combine both, or pick individual tools:
+
+```python
+from strands import Agent
+from strands_tools.apify_core import APIFY_CORE_TOOLS
+from strands_tools import apify_social
 
 agent = Agent(tools=[
-    apify.apify_run_actor,
-    apify.apify_run_task,
-    apify.apify_scrape_url,
-    apify.apify_get_dataset_items,
-    apify.apify_run_actor_and_get_dataset,
-    apify.apify_run_task_and_get_dataset,
-    apify.apify_instagram_scraper,
-    apify.apify_linkedin_profile_posts,
-    apify.apify_linkedin_profile_search,
-    apify.apify_linkedin_profile_detail,
-    apify.apify_twitter_scraper,
-    apify.apify_tiktok_scraper,
-    apify.apify_facebook_posts_scraper,
+    *APIFY_CORE_TOOLS,
+    apify_social.apify_instagram_scraper,
+    apify_social.apify_twitter_scraper,
 ])
 ```
 

@@ -5,21 +5,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from strands_tools import apify
-from strands_tools.apify import (
-    ApifyToolClient,
-    _extract_linkedin_username,
-    apify_facebook_posts_scraper,
+from strands_tools import apify, apify_core, apify_social
+from strands_tools.apify import ApifyToolClient
+from strands_tools.apify_core import (
     apify_get_dataset_items,
-    apify_instagram_scraper,
-    apify_linkedin_profile_detail,
-    apify_linkedin_profile_posts,
-    apify_linkedin_profile_search,
     apify_run_actor,
     apify_run_actor_and_get_dataset,
     apify_run_task,
     apify_run_task_and_get_dataset,
     apify_scrape_url,
+)
+from strands_tools.apify_social import (
+    _extract_linkedin_username,
+    apify_facebook_posts_scraper,
+    apify_instagram_scraper,
+    apify_linkedin_profile_detail,
+    apify_linkedin_profile_posts,
+    apify_linkedin_profile_search,
     apify_tiktok_scraper,
     apify_twitter_scraper,
 )
@@ -104,10 +106,22 @@ def mock_apify_env(monkeypatch):
 # --- Module import ---
 
 
-def test_apify_module_is_importable():
-    """Verify that the apify tool module can be imported from strands_tools."""
+def test_apify_base_module_is_importable():
+    """Verify that the apify base module can be imported from strands_tools."""
     assert apify is not None
     assert apify.__name__ == "strands_tools.apify"
+
+
+def test_apify_core_module_is_importable():
+    """Verify that the apify_core tool module can be imported from strands_tools."""
+    assert apify_core is not None
+    assert apify_core.__name__ == "strands_tools.apify_core"
+
+
+def test_apify_social_module_is_importable():
+    """Verify that the apify_social tool module can be imported from strands_tools."""
+    assert apify_social is not None
+    assert apify_social.__name__ == "strands_tools.apify_social"
 
 
 # --- ApifyToolClient ---
