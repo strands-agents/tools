@@ -1,6 +1,6 @@
 # Apify
 
-The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, and scraping individual URLs.
+The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, scraping individual URLs, and scraping popular social media platforms with simplified interfaces.
 
 ## Installation
 
@@ -31,6 +31,13 @@ agent = Agent(tools=[
     apify.apify_get_dataset_items,
     apify.apify_run_actor_and_get_dataset,
     apify.apify_run_task_and_get_dataset,
+    apify.apify_instagram_scraper,
+    apify.apify_linkedin_profile_posts,
+    apify.apify_linkedin_profile_search,
+    apify.apify_linkedin_profile_detail,
+    apify.apify_twitter_scraper,
+    apify.apify_tiktok_scraper,
+    apify.apify_facebook_posts_scraper,
 ])
 ```
 
@@ -172,6 +179,179 @@ items = agent.tool.apify_get_dataset_items(
 
 **Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
+## Social Media Scraping
+
+The Apify module includes simplified wrappers for 7 popular social media scraping Actors. Each tool exposes a small set of LLM-friendly parameters instead of the full Actor input schema, runs the Actor synchronously, and returns the dataset results as JSON.
+
+All social media tools default to returning at most 20 results (`results_limit=20`) to keep the response concise for LLM consumption.
+
+### Scrape Instagram
+
+Search for Instagram profiles, hashtags, or places, or scrape specific Instagram URLs. Uses the [Instagram Scraper](https://apify.com/apify/instagram-scraper) Actor.
+
+```python
+# Search for a user
+result = agent.tool.apify_instagram_scraper(search_query="apify", search_type="user", results_limit=10)
+
+# Scrape a specific profile URL
+result = agent.tool.apify_instagram_scraper(urls=["https://www.instagram.com/apify/"])
+
+# A URL passed as search_query is auto-detected
+result = agent.tool.apify_instagram_scraper(search_query="https://www.instagram.com/apify/")
+```
+
+### Scrape LinkedIn profile posts
+
+Fetch recent posts from a LinkedIn profile. Accepts a profile URL or bare username. Uses the [LinkedIn Profile Posts](https://apify.com/apimaestro/linkedin-profile-posts) Actor.
+
+```python
+result = agent.tool.apify_linkedin_profile_posts(
+    profile_url="https://www.linkedin.com/in/neal-mohan",
+    results_limit=15,
+)
+```
+
+### Search LinkedIn profiles
+
+Find people on LinkedIn by keywords such as job titles, skills, companies, or locations. Uses the [LinkedIn Profile Search](https://apify.com/harvestapi/linkedin-profile-search) Actor.
+
+```python
+result = agent.tool.apify_linkedin_profile_search(
+    search_query="software engineer San Francisco",
+    results_limit=25,
+)
+```
+
+### Get LinkedIn profile details
+
+Retrieve full profile information including work experience, education, and skills. Accepts a profile URL or bare username. Uses the [LinkedIn Profile Detail](https://apify.com/apimaestro/linkedin-profile-detail) Actor.
+
+```python
+result = agent.tool.apify_linkedin_profile_detail(
+    profile_url="https://www.linkedin.com/in/neal-mohan",
+)
+```
+
+### Scrape Twitter/X
+
+Search for tweets or scrape specific tweet, profile, or list URLs. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search) syntax. Uses the [Twitter Scraper Lite](https://apify.com/apidojo/twitter-scraper-lite) Actor.
+
+```python
+# Search tweets
+result = agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=30)
+
+# Scrape specific tweet URLs
+result = agent.tool.apify_twitter_scraper(
+    urls=["https://x.com/elonmusk/status/1728108619189874825"],
+)
+```
+
+### Scrape TikTok
+
+Search for TikTok content or scrape specific post URLs. Uses the [TikTok Scraper](https://apify.com/clockworks/tiktok-scraper) Actor.
+
+```python
+# Search by keyword
+result = agent.tool.apify_tiktok_scraper(search_query="cooking", results_limit=15)
+
+# Scrape specific post URLs
+result = agent.tool.apify_tiktok_scraper(
+    urls=["https://www.tiktok.com/@user/video/123"],
+)
+```
+
+### Scrape Facebook posts
+
+Scrape posts from a Facebook page or profile. Uses the [Facebook Posts Scraper](https://apify.com/apify/facebook-posts-scraper) Actor.
+
+```python
+result = agent.tool.apify_facebook_posts_scraper(
+    page_url="https://www.facebook.com/apify",
+    results_limit=10,
+)
+```
+
+## Social Media Tool Parameters
+
+### apify_instagram_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | No* | None | Username, hashtag, or keyword to search. URLs are auto-detected and routed to direct scraping. |
+| `urls` | list[str] | No* | None | One or more Instagram URLs to scrape directly |
+| `results_limit` | int | No | 20 | Maximum number of results to return |
+| `search_type` | string | No | "user" | What to search for: `"user"`, `"hashtag"`, or `"place"` |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+\* At least one of `search_query` or `urls` is required.
+
+**Returns:** JSON string with run metadata and an `items` array containing scraped Instagram data.
+
+### apify_linkedin_profile_posts
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `profile_url` | string | Yes | — | LinkedIn profile URL or bare username |
+| `results_limit` | int | No | 20 | Maximum number of posts to return (capped at 100) |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+**Returns:** JSON string with run metadata and an `items` array containing LinkedIn post data.
+
+### apify_linkedin_profile_search
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | Yes | — | Search keywords (e.g., `"software engineer San Francisco"`) |
+| `results_limit` | int | No | 20 | Maximum number of profiles to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+**Returns:** JSON string with run metadata and an `items` array containing matched LinkedIn profiles.
+
+### apify_linkedin_profile_detail
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `profile_url` | string | Yes | — | LinkedIn profile URL or bare username |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+**Returns:** JSON string with run metadata and an `items` array containing detailed profile data.
+
+### apify_twitter_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | No* | None | Search query or hashtag. Supports [Twitter advanced search](https://github.com/igorbrigadir/twitter-advanced-search). |
+| `urls` | list[str] | No* | None | Specific tweet, profile, or list URLs to scrape |
+| `results_limit` | int | No | 20 | Maximum number of tweets to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+\* At least one of `search_query` or `urls` is required.
+
+**Returns:** JSON string with run metadata and an `items` array containing scraped tweet data.
+
+### apify_tiktok_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | No* | None | Search query, username, or hashtag |
+| `urls` | list[str] | No* | None | Specific TikTok post URLs to scrape |
+| `results_limit` | int | No | 20 | Maximum number of results per query |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+\* At least one of `search_query` or `urls` is required.
+
+**Returns:** JSON string with run metadata and an `items` array containing scraped TikTok data.
+
+### apify_facebook_posts_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `page_url` | string | Yes | — | Facebook page or profile URL to scrape posts from |
+| `results_limit` | int | No | 20 | Maximum number of posts to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run |
+
+**Returns:** JSON string with run metadata and an `items` array containing scraped Facebook post data.
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -183,6 +363,7 @@ items = agent.tool.apify_get_dataset_items(
 | `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
 | `Task ... returned no run data` | task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
+| `Provide at least one of 'search_query' or 'urls'` | Neither parameter was provided to a social media tool that requires one | Pass `search_query`, `urls`, or both |
 
 ## References
 
@@ -191,3 +372,13 @@ items = agent.tool.apify_get_dataset_items(
 - [Apify API Documentation](https://docs.apify.com/api/v2)
 - [Apify Store](https://apify.com/store)
 - [Apify Python Client](https://docs.apify.com/api/client/python/docs)
+
+### Social media Actors used
+
+- [Instagram Scraper](https://apify.com/apify/instagram-scraper)
+- [LinkedIn Profile Posts](https://apify.com/apimaestro/linkedin-profile-posts)
+- [LinkedIn Profile Search](https://apify.com/harvestapi/linkedin-profile-search)
+- [LinkedIn Profile Detail](https://apify.com/apimaestro/linkedin-profile-detail)
+- [Twitter Scraper Lite](https://apify.com/apidojo/twitter-scraper-lite)
+- [TikTok Scraper](https://apify.com/clockworks/tiktok-scraper)
+- [Facebook Posts Scraper](https://apify.com/apify/facebook-posts-scraper)
