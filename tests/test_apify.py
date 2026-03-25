@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from strands_tools import apify
-from strands_tools.apify import (
-    ApifyToolClient,
+from strands_tools import apify, apify_core
+from strands_tools.apify import ApifyToolClient
+from strands_tools.apify_core import (
     apify_get_dataset_items,
     apify_run_actor,
     apify_run_actor_and_get_dataset,
@@ -96,10 +96,16 @@ def mock_apify_env(monkeypatch):
 # --- Module import ---
 
 
-def test_apify_module_is_importable():
-    """Verify that the apify tool module can be imported from strands_tools."""
+def test_apify_base_module_is_importable():
+    """Verify that the apify base module can be imported from strands_tools."""
     assert apify is not None
     assert apify.__name__ == "strands_tools.apify"
+
+
+def test_apify_core_module_is_importable():
+    """Verify that the apify_core tool module can be imported from strands_tools."""
+    assert apify_core is not None
+    assert apify_core.__name__ == "strands_tools.apify_core"
 
 
 # --- ApifyToolClient ---

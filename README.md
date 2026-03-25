@@ -970,16 +970,9 @@ result = agent.tool.mongodb_memory(
 
 ```python
 from strands import Agent
-from strands_tools import apify
+from strands_tools.apify_core import APIFY_CORE_TOOLS
 
-agent = Agent(tools=[
-    apify.apify_run_actor,
-    apify.apify_run_task,
-    apify.apify_get_dataset_items,
-    apify.apify_run_actor_and_get_dataset,
-    apify.apify_run_task_and_get_dataset,
-    apify.apify_scrape_url,
-])
+agent = Agent(tools=APIFY_CORE_TOOLS)
 
 # Scrape a single URL and get markdown content
 content = agent.tool.apify_scrape_url(url="https://example.com")

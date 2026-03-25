@@ -1,6 +1,6 @@
 # Apify
 
-The Apify tools (`apify.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, and scraping individual URLs.
+The Apify core tools (`apify_core.py`) enable [Strands Agents](https://strandsagents.com/) to interact with the [Apify](https://apify.com) platform — running any [Actor](https://apify.com/store) or [task](https://docs.apify.com/platform/actors/running/tasks) by ID, fetching dataset results, and scraping individual URLs.
 
 ## Installation
 
@@ -20,17 +20,24 @@ Get your token from [Apify Console](https://console.apify.com/account/integratio
 
 ## Usage
 
+Register all core tools at once:
+
 ```python
 from strands import Agent
-from strands_tools import apify
+from strands_tools.apify_core import APIFY_CORE_TOOLS
+
+agent = Agent(tools=APIFY_CORE_TOOLS)
+```
+
+Or pick individual tools:
+
+```python
+from strands import Agent
+from strands_tools import apify_core
 
 agent = Agent(tools=[
-    apify.apify_run_actor,
-    apify.apify_run_task,
-    apify.apify_scrape_url,
-    apify.apify_get_dataset_items,
-    apify.apify_run_actor_and_get_dataset,
-    apify.apify_run_task_and_get_dataset,
+    apify_core.apify_run_actor,
+    apify_core.apify_scrape_url,
 ])
 ```
 
