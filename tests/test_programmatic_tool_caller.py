@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strands_tools.programmatic_tool_caller import (
+    _build_namespace,
     _create_async_tool_function,
     _execute_tool,
     _get_allowed_tools,
-    _validate_code,
     programmatic_tool_caller,
 )
 
@@ -20,7 +20,6 @@ class TestExecuteTool:
     def test_executes_callable_tool(self):
         mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "result"}]})
         mock_agent = MagicMock()
-        # Mock agent.tool.test_tool() which is what _execute_tool now uses
         mock_agent.tool = MagicMock()
         mock_agent.tool.test_tool = mock_tool_func
 
@@ -30,7 +29,6 @@ class TestExecuteTool:
 
     def test_raises_error_for_missing_tool(self):
         mock_agent = MagicMock()
-        # Simulate AttributeError when tool doesn't exist
         mock_agent.tool = MagicMock(spec=[])  # Empty spec means no attributes
 
         with pytest.raises(RuntimeError, match="not found"):
@@ -49,7 +47,6 @@ class TestCreateAsyncToolFunction:
 
         mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "async result"}]})
         mock_agent = MagicMock()
-        # Mock agent.tool.test_tool() which is what _execute_tool now uses
         mock_agent.tool = MagicMock()
         mock_agent.tool.test_tool = mock_tool_func
 
@@ -58,19 +55,6 @@ class TestCreateAsyncToolFunction:
 
         result = asyncio.run(async_func(arg="value"))
         assert result == "async result"
-
-
-class TestValidateCode:
-    """Tests for _validate_code function."""
-
-    def test_detects_dangerous_patterns(self):
-        assert any("subprocess" in w for w in _validate_code("import subprocess"))
-        assert any("eval" in w for w in _validate_code("eval('1+1')"))
-        assert any("exec" in w for w in _validate_code("exec('pass')"))
-
-    def test_safe_code_has_no_warnings(self):
-        code = "result = await calculator(expression='2+2')\nprint(result)"
-        assert len(_validate_code(code)) == 0
 
 
 class TestGetAllowedTools:
@@ -117,6 +101,81 @@ class TestGetAllowedTools:
         assert "nonexistent" not in allowed
 
 
+class TestBuildNamespace:
+    """Tests for _build_namespace function."""
+
+    def test_base_namespace_matches_python_repl(self):
+        """Base namespace should be {"__name__": "__main__"} like python_repl."""
+        import asyncio
+
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {}, clear=True):
+            ns = _build_namespace(set(), mock_agent)
+
+        assert ns["__name__"] == "__main__"
+        assert ns["asyncio"] is asyncio
+
+    def test_asyncio_always_present(self):
+        """asyncio must always be in namespace (required for async wrapping)."""
+        import asyncio
+
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {}, clear=True):
+            ns = _build_namespace(set(), mock_agent)
+
+        assert "asyncio" in ns
+        assert ns["asyncio"] is asyncio
+
+    def test_no_extra_modules_by_default(self):
+        """Without PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES, only __name__ and asyncio."""
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {}, clear=True):
+            ns = _build_namespace(set(), mock_agent)
+
+        # Only __name__ and asyncio should be present (no json, re, math etc.)
+        assert "json" not in ns
+        assert "re" not in ns
+        assert "math" not in ns
+
+    def test_extra_modules_from_env(self):
+        """PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES should inject specified modules."""
+        import json
+        import math
+        import re
+
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {"PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json,re,math"}):
+            ns = _build_namespace(set(), mock_agent)
+
+        assert ns["json"] is json
+        assert ns["re"] is re
+        assert ns["math"] is math
+
+    def test_extra_modules_ignores_invalid(self):
+        """Invalid module names should be skipped without error."""
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {"PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json,nonexistent_module_xyz"}):
+            ns = _build_namespace(set(), mock_agent)
+
+        import json
+
+        assert ns["json"] is json
+        assert "nonexistent_module_xyz" not in ns
+
+    def test_tools_injected_as_async_functions(self):
+        """Tool functions should be injected as async callables."""
+        import asyncio
+
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {}, clear=True):
+            ns = _build_namespace({"calculator", "shell"}, mock_agent)
+
+        assert "calculator" in ns
+        assert "shell" in ns
+        assert asyncio.iscoroutinefunction(ns["calculator"])
+        assert asyncio.iscoroutinefunction(ns["shell"])
+
+
 class TestProgrammaticToolCaller:
     """Tests for programmatic_tool_caller function."""
 
@@ -148,7 +207,6 @@ class TestProgrammaticToolCaller:
         mock_tool_func = MagicMock(return_value={"status": "success", "content": [{"text": "42"}]})
         mock_context = MagicMock()
         mock_context.agent.tool_registry.registry = {"calculator": MagicMock()}
-        # Mock agent.tool.calculator() which is what _execute_tool now uses
         mock_context.agent.tool = MagicMock()
         mock_context.agent.tool.calculator = mock_tool_func
 
@@ -170,7 +228,6 @@ class TestProgrammaticToolCaller:
 
         mock_context = MagicMock()
         mock_context.agent.tool_registry.registry = {"calculator": MagicMock()}
-        # Mock agent.tool.calculator() which is what _execute_tool now uses
         mock_context.agent.tool = MagicMock()
         mock_context.agent.tool.calculator = mock_calc
 
@@ -199,11 +256,9 @@ print(f"Results: {results}")
             "calculator": MagicMock(),
             "shell": MagicMock(),
         }
-        # Mock agent.tool.calculator() which is what _execute_tool now uses
         mock_context.agent.tool = MagicMock()
         mock_context.agent.tool.calculator = mock_tool_func
 
-        # Should work - calculator is allowed
         result = programmatic_tool_caller(
             code='r = await calculator(expression="2+2")\nprint(r)',
             tool_context=mock_context,
@@ -250,3 +305,35 @@ print(f"Results: {results}")
         result = programmatic_tool_caller(code="def invalid(:", tool_context=mock_context)
         assert result["status"] == "error"
         assert "yntax" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true", "PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json,math"})
+    def test_extra_modules_available_in_code(self, mock_console, mock_input):
+        """Modules from PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES should be usable in code."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(
+            code='print(json.dumps({"pi": math.pi}))',
+            tool_context=mock_context,
+        )
+        assert result["status"] == "success"
+        assert "3.14159" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_code_can_import_modules(self, mock_console, mock_input):
+        """Code should be able to import modules on its own (like python_repl)."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(
+            code="import json\nprint(json.dumps({'key': 'value'}))",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "success"
+        assert "key" in result["content"][0]["text"]

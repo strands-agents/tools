@@ -32,7 +32,15 @@ print(f"Parallel: {results}")
 
 Environment Variables:
 - PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS: Comma-separated list of allowed tools
+- PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES: Comma-separated list of extra modules to inject
+  into the namespace (e.g., "json,re,math,collections"). `asyncio` is always available.
 - BYPASS_TOOL_CONSENT: Skip user confirmation if "true"
+
+Namespace:
+    The execution namespace matches python_repl's base: `{"__name__": "__main__"}`.
+    `asyncio` is always injected (required for async tool calls).
+    Additional modules can be added via PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES env var.
+    Tool functions are injected as async callables (e.g., `await shell(command="ls")`).
 
 Limitations: Tools that use interrupts (human-in-the-loop) are not supported. The SDK
 blocks interrupts during direct/programmatic tool calls — there is no mechanism to pause
@@ -42,11 +50,9 @@ the agent.
 """
 
 import asyncio
-import json
+import importlib
 import logging
-import math
 import os
-import re
 import sys
 import textwrap
 import traceback
@@ -119,31 +125,6 @@ def _create_async_tool_function(agent: Any, tool_name: str) -> Callable:
     return tool_function
 
 
-def _validate_code(code: str) -> List[str]:
-    """Validate Python code for potential security issues."""
-    warnings: List[str] = []
-    dangerous_patterns = [
-        r"\bimport\s+subprocess\b",
-        r"\bfrom\s+subprocess\b",
-        r"\b__import__\s*\(",
-        r"\bexec\s*\(",
-        r"\beval\s*\(",
-        r"\bcompile\s*\(",
-        r"\bglobals\s*\(",
-        r"\blocals\s*\(",
-        r"open\s*\(",
-        r"os\.remove",
-        r"os\.unlink",
-        r"os\.rmdir",
-    ]
-
-    for pattern in dangerous_patterns:
-        if re.search(pattern, code):
-            warnings.append(f"Potentially dangerous pattern: {pattern}")
-
-    return warnings
-
-
 def _get_allowed_tools(agent: Any) -> set[str]:
     """Get allowed tools from env var or default to all (except self)."""
     all_tools = set(agent.tool_registry.registry.keys()) - {"programmatic_tool_caller"}
@@ -154,6 +135,46 @@ def _get_allowed_tools(agent: Any) -> set[str]:
         return all_tools & set(allowed_list)
 
     return all_tools
+
+
+def _build_namespace(available_tools: set[str], agent: Any) -> Dict[str, Any]:
+    """Build the execution namespace.
+
+    Base namespace matches python_repl: ``{"__name__": "__main__"}``.
+    ``asyncio`` is always injected (required for async tool wrappers).
+    Additional stdlib modules can be injected via the
+    ``PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES`` environment variable
+    (comma-separated module names, e.g. ``json,re,math,collections``).
+    Tool functions are injected as async callables.
+
+    Returns:
+        Namespace dict ready for ``exec()``.
+    """
+    # Base namespace — matches python_repl
+    namespace: Dict[str, Any] = {
+        "__name__": "__main__",
+    }
+
+    # asyncio is always required (async wrapper)
+    namespace["asyncio"] = asyncio
+
+    # Extra modules from env var
+    extra_modules = os.environ.get("PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES", "").strip()
+    if extra_modules:
+        for mod_name in extra_modules.split(","):
+            mod_name = mod_name.strip()
+            if not mod_name:
+                continue
+            try:
+                namespace[mod_name] = importlib.import_module(mod_name)
+            except ImportError:
+                logger.warning(f"Could not import extra module '{mod_name}', skipping")
+
+    # Inject tools as async functions
+    for tool_name in available_tools:
+        namespace[tool_name] = _create_async_tool_function(agent, tool_name)
+
+    return namespace
 
 
 # =============================================================================
@@ -192,6 +213,8 @@ def programmatic_tool_caller(
 
     Environment Variables:
         PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS: Comma-separated list of tools to expose
+        PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES: Comma-separated list of extra modules
+            to inject into the namespace (e.g., "json,re,math")
         BYPASS_TOOL_CONSENT: Skip confirmation if "true"
 
     Args:
@@ -212,7 +235,6 @@ def programmatic_tool_caller(
             }
 
         agent = tool_context.agent
-        code_warnings = _validate_code(code)
 
         # Show code preview
         console.print(
@@ -232,15 +254,6 @@ def programmatic_tool_caller(
             tools_table.add_row(f"await {tool_name}(...)")
         console.print(tools_table)
 
-        if code_warnings:
-            console.print(
-                Panel(
-                    "\n".join(f"⚠️ {w}" for w in code_warnings),
-                    title="[bold yellow]Warnings[/]",
-                    border_style="yellow",
-                )
-            )
-
         # User confirmation
         if not bypass_consent:
             user_input = get_user_input("<yellow><bold>Execute this code?</bold> [y/*]</yellow>")
@@ -251,18 +264,8 @@ def programmatic_tool_caller(
                     "content": [{"text": f"Cancelled. Reason: {cancel_reason}"}],
                 }
 
-        # Build execution namespace
-        exec_namespace: Dict[str, Any] = {
-            "__builtins__": __builtins__,
-            "asyncio": asyncio,
-            "json": json,
-            "re": re,
-            "math": math,
-        }
-
-        # Inject tools as async functions
-        for tool_name in available_tools:
-            exec_namespace[tool_name] = _create_async_tool_function(agent, tool_name)
+        # Build execution namespace (matches python_repl base + tools)
+        exec_namespace = _build_namespace(available_tools, agent)
 
         console.print("[green]Executing...[/]")
 
