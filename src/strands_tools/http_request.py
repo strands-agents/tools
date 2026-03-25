@@ -29,10 +29,13 @@ import collections
 import datetime
 import http.cookiejar
 import json
+import logging
 import os
 import time
 from typing import Any, Dict, Optional, Union
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 import markdownify
 import requests
@@ -438,6 +441,7 @@ def process_auth_headers(headers: Dict[str, Any], tool_input: Dict[str, Any]) ->
             raise ValueError(
                 f"Environment variable '{env_var_name}' is not set or is empty."
             )
+        logger.info(f"Resolved auth token from environment variable '{env_var_name}' for domain '{request_host}'")
 
     auth_type = tool_input.get("auth_type")
 
