@@ -98,7 +98,7 @@ TOOL_SPEC = {
                 },
                 "verify_ssl": {
                     "type": "boolean",
-                    "description": "Whether to verify SSL certificates",
+                    "description": "Whether to verify SSL certificates. Disabling may be restricted.",
                 },
                 "cookie": {
                     "type": "string",
@@ -643,7 +643,17 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         url = tool_input["url"]
         headers = process_auth_headers(tool_input.get("headers", {}), tool_input)
         body = tool_input.get("body")
-        verify = tool_input.get("verify_ssl", True)
+
+        # verify_ssl=False is opt-in via STRANDS_HTTP_ALLOW_INSECURE_SSL env var
+        verify_ssl_input = tool_input.get("verify_ssl", True)
+        if verify_ssl_input is False:
+            if os.environ.get("STRANDS_HTTP_ALLOW_INSECURE_SSL", "").lower() != "true":
+                raise ValueError(
+                    "SSL verification cannot be disabled unless the STRANDS_HTTP_ALLOW_INSECURE_SSL "
+                    "environment variable is set to 'true'."
+                )
+        verify = verify_ssl_input
+
         cookie = tool_input.get("cookie")
         cookie_jar = tool_input.get("cookie_jar")
 

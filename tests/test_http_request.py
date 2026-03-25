@@ -605,21 +605,53 @@ def test_verify_ssl_option():
         },
     }
 
-    # Call http_request with verify_ssl=False
-    with patch("strands_tools.http_request.get_user_input") as mock_input:
-        mock_input.return_value = "y"
-        # Use a real request but don't actually send it over the network
-        with responses.RequestsMock() as rsps:
-            rsps.add(
-                responses.GET,
-                "https://example.com/api/insecure",
-                json={"status": "insecure"},
-                status=200,
-            )
-            result = http_request.http_request(tool=tool_use)
+    # Call http_request with verify_ssl=False (requires STRANDS_HTTP_ALLOW_INSECURE_SSL)
+    original_env = os.environ.copy()
+    os.environ["STRANDS_HTTP_ALLOW_INSECURE_SSL"] = "true"
+    try:
+        with patch("strands_tools.http_request.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            # Use a real request but don't actually send it over the network
+            with responses.RequestsMock() as rsps:
+                rsps.add(
+                    responses.GET,
+                    "https://example.com/api/insecure",
+                    json={"status": "insecure"},
+                    status=200,
+                )
+                result = http_request.http_request(tool=tool_use)
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
 
     # Verify the result
     assert result["status"] == "success"
+
+
+def test_verify_ssl_blocked_without_env_var():
+    """Test that verify_ssl=False is blocked without STRANDS_HTTP_ALLOW_INSECURE_SSL."""
+    tool_use = {
+        "toolUseId": "test-ssl-blocked-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/api/insecure",
+            "verify_ssl": False,
+        },
+    }
+
+    # Ensure the env var is NOT set
+    original_env = os.environ.copy()
+    os.environ.pop("STRANDS_HTTP_ALLOW_INSECURE_SSL", None)
+    try:
+        with patch("strands_tools.http_request.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            result = http_request.http_request(tool=tool_use)
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    assert result["status"] == "error"
+    assert "STRANDS_HTTP_ALLOW_INSECURE_SSL" in result["content"][0]["text"]
 
 
 @responses.activate
