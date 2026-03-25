@@ -179,6 +179,159 @@ items = agent.tool.apify_get_dataset_items(
 
 **Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
+## Search & Crawling
+
+Specialized tools for common search and crawling use cases. Register all search tools at once:
+
+```python
+from strands import Agent
+from strands_tools.apify import APIFY_SEARCH_TOOLS
+
+agent = Agent(tools=APIFY_SEARCH_TOOLS)
+```
+
+Or register all Apify tools (core + search):
+
+```python
+from strands_tools.apify import APIFY_ALL_TOOLS
+
+agent = Agent(tools=APIFY_ALL_TOOLS)
+```
+
+### Search Google
+
+Search Google and return structured results using the [Google Search Scraper](https://apify.com/apify/google-search-scraper) Actor:
+
+```python
+result = agent.tool.apify_google_search_scraper(
+    search_query="best AI frameworks 2025",
+    results_limit=10,
+    country_code="us",
+)
+```
+
+### Search Google Maps
+
+Search Google Maps for businesses and places using the [Google Maps Scraper](https://apify.com/compass/crawler-google-places) Actor:
+
+```python
+result = agent.tool.apify_google_places_scraper(
+    search_query="restaurants in Prague",
+    results_limit=20,
+    include_reviews=True,
+    max_reviews=5,
+)
+```
+
+### Scrape YouTube
+
+Scrape YouTube videos, channels, or search results using the [YouTube Scraper](https://apify.com/streamers/youtube-scraper) Actor:
+
+```python
+# Search YouTube
+result = agent.tool.apify_youtube_scraper(
+    search_query="python tutorial",
+    results_limit=10,
+)
+
+# Scrape specific videos
+result = agent.tool.apify_youtube_scraper(
+    urls=["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+)
+```
+
+### Crawl a website
+
+Crawl a website and extract content from multiple pages using the [Website Content Crawler](https://apify.com/apify/website-content-crawler) Actor. This is the multi-page version — distinct from `apify_scrape_url` which is limited to a single page:
+
+```python
+result = agent.tool.apify_website_content_crawler(
+    start_url="https://docs.example.com",
+    max_pages=20,
+    max_depth=3,
+)
+```
+
+### Scrape e-commerce products
+
+Scrape product data from e-commerce websites using the [E-commerce Scraping Tool](https://apify.com/apify/e-commerce-scraping-tool) Actor. Supports Amazon, eBay, Walmart, and other platforms:
+
+```python
+# Scrape a single product page
+result = agent.tool.apify_ecommerce_scraper(
+    url="https://www.amazon.com/dp/B0TEST",
+)
+
+# Scrape a category or search results page
+result = agent.tool.apify_ecommerce_scraper(
+    url="https://www.amazon.com/s?k=headphones",
+    url_type="listing",
+    results_limit=20,
+)
+```
+
+## Search & Crawling Tool Parameters
+
+### apify_google_search_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | Yes | — | The search query string. Supports advanced Google operators like `"site:example.com"` |
+| `results_limit` | int | No | 10 | Maximum number of results to return. Google returns ~10 per page, so requesting more triggers additional page scraping |
+| `country_code` | string | No | None | Two-letter country code for localized results (e.g., `"us"`, `"de"`) |
+| `language_code` | string | No | None | Two-letter language code (e.g., `"en"`, `"de"`) |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait |
+
+**Returns:** JSON string with run metadata and an `items` array containing structured search results (organic results, ads, People Also Ask).
+
+### apify_google_places_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | Yes | — | Search query for Google Maps (e.g., `"restaurants in Prague"`) |
+| `results_limit` | int | No | 20 | Maximum number of places to return |
+| `language` | string | No | None | Language for results (e.g., `"en"`, `"de"`) |
+| `include_reviews` | bool | No | False | Whether to include user reviews |
+| `max_reviews` | int | No | 5 | Maximum reviews per place when `include_reviews` is True |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait |
+
+**Returns:** JSON string with run metadata and an `items` array containing place data (name, address, rating, phone, website).
+
+### apify_youtube_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `search_query` | string | No | None | YouTube search query |
+| `urls` | list[str] | No | None | Specific YouTube video or channel URLs |
+| `results_limit` | int | No | 20 | Maximum number of results to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait |
+
+At least one of `search_query` or `urls` must be provided.
+
+**Returns:** JSON string with run metadata and an `items` array containing video/channel data.
+
+### apify_website_content_crawler
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `start_url` | string | Yes | — | The starting URL to crawl |
+| `max_pages` | int | No | 10 | Maximum number of pages to crawl |
+| `max_depth` | int | No | 2 | Maximum crawl depth from the start URL |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait |
+
+**Returns:** JSON string with run metadata and an `items` array containing crawled page data with markdown content.
+
+### apify_ecommerce_scraper
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `url` | string | Yes | — | The URL to scrape |
+| `url_type` | string | No | `"product"` | Type of URL: `"product"` for a product detail page, `"listing"` for a category or search results page |
+| `results_limit` | int | No | 20 | Maximum number of products to return |
+| `timeout_secs` | int | No | 300 | Maximum time in seconds to wait |
+
+**Returns:** JSON string with run metadata and an `items` array containing structured product data.
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -187,9 +340,10 @@ items = agent.tool.apify_get_dataset_items(
 | `apify-client package is required` | Optional dependency not installed | Run `pip install strands-agents-tools[apify]` |
 | `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in [Apify Console](https://console.apify.com) |
 | `Task ... finished with status FAILED` | task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
-| `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
+| `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter; `apify_website_content_crawler` with large `max_pages` may need 600+ seconds |
 | `Task ... returned no run data` | task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
+| `At least one of 'search_query' or 'urls' must be provided` | YouTube Scraper called without input | Provide a `search_query`, `urls`, or both |
 
 ## References
 
@@ -198,3 +352,8 @@ items = agent.tool.apify_get_dataset_items(
 - [Apify API Documentation](https://docs.apify.com/api/v2)
 - [Apify Store](https://apify.com/store)
 - [Apify Python Client](https://docs.apify.com/api/client/python/docs)
+- [Google Search Scraper Actor](https://apify.com/apify/google-search-scraper)
+- [Google Maps Scraper Actor](https://apify.com/compass/crawler-google-places)
+- [YouTube Scraper Actor](https://apify.com/streamers/youtube-scraper)
+- [Website Content Crawler Actor](https://apify.com/apify/website-content-crawler)
+- [E-commerce Scraping Tool Actor](https://apify.com/apify/e-commerce-scraping-tool)

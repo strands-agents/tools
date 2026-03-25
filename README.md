@@ -105,6 +105,11 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | apify_run_task | `agent.tool.apify_run_task(task_id="user/my-task")` | Run a saved Apify task by ID with optional input overrides |
 | apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user/my-task", dataset_items_limit=50)` | Run a task and fetch its dataset results in one step |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
+| apify_google_search_scraper | `agent.tool.apify_google_search_scraper(search_query="best AI frameworks")` | Search Google and return structured results |
+| apify_google_places_scraper | `agent.tool.apify_google_places_scraper(search_query="restaurants in Prague")` | Search Google Maps for businesses and places |
+| apify_youtube_scraper | `agent.tool.apify_youtube_scraper(search_query="python tutorial")` | Scrape YouTube videos, channels, or search results |
+| apify_website_content_crawler | `agent.tool.apify_website_content_crawler(start_url="https://docs.example.com")` | Crawl a website and extract content from multiple pages |
+| apify_ecommerce_scraper | `agent.tool.apify_ecommerce_scraper(url="https://www.amazon.com/dp/B0TEST")` | Scrape product data from e-commerce websites |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -970,9 +975,9 @@ result = agent.tool.mongodb_memory(
 
 ```python
 from strands import Agent
-from strands_tools.apify import APIFY_CORE_TOOLS
+from strands_tools.apify import APIFY_ALL_TOOLS
 
-agent = Agent(tools=APIFY_CORE_TOOLS)
+agent = Agent(tools=APIFY_ALL_TOOLS)
 
 # Scrape a single URL and get markdown content
 content = agent.tool.apify_scrape_url(url="https://example.com")
@@ -1004,6 +1009,32 @@ run_info = agent.tool.apify_run_actor(
 items = agent.tool.apify_get_dataset_items(
     dataset_id="abc123",
     limit=100,
+)
+
+# Search Google
+results = agent.tool.apify_google_search_scraper(
+    search_query="best AI frameworks 2025",
+    results_limit=10,
+)
+
+# Search Google Maps for places
+places = agent.tool.apify_google_places_scraper(
+    search_query="restaurants in Prague",
+    include_reviews=True,
+)
+
+# Scrape YouTube
+videos = agent.tool.apify_youtube_scraper(search_query="python tutorial")
+
+# Crawl a website (multi-page)
+pages = agent.tool.apify_website_content_crawler(
+    start_url="https://docs.example.com",
+    max_pages=20,
+)
+
+# Scrape e-commerce product data
+products = agent.tool.apify_ecommerce_scraper(
+    url="https://www.amazon.com/dp/B0TEST",
 )
 ```
 
