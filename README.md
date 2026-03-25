@@ -970,7 +970,7 @@ result = agent.tool.mongodb_memory(
 
 ```python
 from strands import Agent
-from strands_tools.apify_core import APIFY_CORE_TOOLS
+from strands_tools.apify import APIFY_CORE_TOOLS
 
 agent = Agent(tools=APIFY_CORE_TOOLS)
 
