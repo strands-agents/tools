@@ -120,6 +120,7 @@ items = agent.tool.apify_get_dataset_items(
 |-----------|------|----------|---------|-------------|
 | `url` | string | Yes | — | The URL to scrape |
 | `timeout_secs` | int | No | 120 | Maximum time in seconds to wait for scraping to finish |
+| `crawler_type` | string | No | `"cheerio"` | Crawler engine to use. One of `"cheerio"` (fastest, no JS rendering), `"playwright:adaptive"` (fast, renders JS if present), or `"playwright:firefox"` (reliable, renders JS, best at avoiding blocking but slower) |
 
 **Returns:** Markdown content of the scraped page as a plain string.
 
@@ -131,6 +132,7 @@ items = agent.tool.apify_get_dataset_items(
 | `run_input` | dict | No | None | JSON-serializable input for the Actor |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run to finish |
 | `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor run (uses Actor default if not set) |
+| `build` | string | No | None | Actor build tag or number to run a specific version (uses latest build if not set) |
 
 **Returns:** JSON string with run metadata: `run_id`, `status`, `dataset_id`, `started_at`, `finished_at`.
 
@@ -154,6 +156,7 @@ items = agent.tool.apify_get_dataset_items(
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the task run to finish |
 | `memory_mbytes` | int | No | None | Memory allocation in MB for the task run (uses task default if not set) |
 | `dataset_items_limit` | int | No | 100 | Maximum number of dataset items to return |
+| `dataset_items_offset` | int | No | 0 | Number of dataset items to skip for pagination |
 
 **Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
@@ -175,7 +178,9 @@ items = agent.tool.apify_get_dataset_items(
 | `run_input` | dict | No | None | JSON-serializable input for the Actor |
 | `timeout_secs` | int | No | 300 | Maximum time in seconds to wait for the Actor run to finish |
 | `memory_mbytes` | int | No | None | Memory allocation in MB for the Actor run (uses Actor default if not set) |
+| `build` | string | No | None | Actor build tag or number to run a specific version (uses latest build if not set) |
 | `dataset_items_limit` | int | No | 100 | Maximum number of dataset items to return |
+| `dataset_items_offset` | int | No | 0 | Number of dataset items to skip for pagination |
 
 **Returns:** JSON string with run metadata plus an `items` array containing the dataset results.
 
