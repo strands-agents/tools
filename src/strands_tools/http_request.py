@@ -29,6 +29,7 @@ import collections
 import datetime
 import http.cookiejar
 import json
+import logging
 import os
 import time
 from typing import Any, Dict, Optional, Union
@@ -51,6 +52,8 @@ from urllib3 import Retry
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
+
+logger = logging.getLogger(__name__)
 
 TOOL_SPEC = {
     "name": "http_request",
@@ -435,9 +438,8 @@ def process_auth_headers(headers: Dict[str, Any], tool_input: Dict[str, Any]) ->
 
         auth_token = os.environ.get(env_var_name)
         if not auth_token:
-            raise ValueError(
-                f"Environment variable '{env_var_name}' is not set or is empty."
-            )
+            raise ValueError(f"Environment variable '{env_var_name}' is not set or is empty.")
+        logger.info(f"Resolved auth token from environment variable '{env_var_name}' for domain '{request_host}'")
 
     auth_type = tool_input.get("auth_type")
 
