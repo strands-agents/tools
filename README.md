@@ -36,7 +36,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 ## ✨ Features
 
-- 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
+- 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications, search file contents with grep
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
 - 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
@@ -102,6 +102,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
+| grep | `agent.tool.grep(pattern="TODO", path="src/", include="*.py")` | Search file contents using regular expressions, returns file paths with matches sorted by modification time |
 | shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
 | tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
