@@ -990,7 +990,7 @@ def apify_twitter_scraper(
         if search_query:
             run_input["searchTerms"] = [search_query]
         if urls:
-            run_input["startUrls"] = [{"url": u} for u in urls]
+            run_input["startUrls"] = urls
         if twitter_handles:
             run_input["twitterHandles"] = twitter_handles
         if tweet_language is not None:

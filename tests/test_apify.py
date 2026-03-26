@@ -955,7 +955,7 @@ def test_twitter_scraper_with_urls(mock_apify_env, mock_apify_client):
 
     assert result["status"] == "success"
     call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
-    assert call_kwargs["run_input"]["startUrls"] == [{"url": "https://x.com/elonmusk/status/1728108619189874825"}]
+    assert call_kwargs["run_input"]["startUrls"] == ["https://x.com/elonmusk/status/1728108619189874825"]
 
 
 def test_twitter_scraper_with_handles(mock_apify_env, mock_apify_client):
