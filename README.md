@@ -54,6 +54,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
 - 🤖 **Agent as Tool** - Create nested agent instances with model switching support for multi-model workflows and specialized sub-tasks
+- 🔗 **Multi-Agent Graph** - Create and manage deterministic DAG-based multi-agent pipelines with output propagation and per-node model configuration
 - 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
@@ -132,6 +133,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
 | sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
+| graph | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration |
 | cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
@@ -149,6 +151,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
+| elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode", cloud_id="...", api_key="...")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings |
 
 \* *These tools do not work on windows*
 
@@ -863,6 +866,68 @@ result = agent.tool.use_computer(
 )
 ```
 
+### Graph (Multi-Agent DAG)
+
+Create deterministic DAG-based multi-agent pipelines where agents are nodes with dependency relationships. Unlike `agent_graph` (which uses persistent message-passing), `graph` uses task-based execution with output propagation.
+
+```python
+from strands import Agent
+from strands_tools.graph import graph
+
+agent = Agent(tools=[graph])
+
+# Create a multi-agent research pipeline
+result = agent.tool.graph(
+    action="create",
+    graph_id="research_pipeline",
+    topology={
+        "nodes": [
+            {
+                "id": "researcher",
+                "role": "researcher",
+                "system_prompt": "You research topics thoroughly.",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"}
+            },
+            {
+                "id": "analyst",
+                "role": "analyst",
+                "system_prompt": "You analyze research data.",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-3-5-haiku-20241022-v1:0"}
+            },
+            {
+                "id": "reporter",
+                "role": "reporter",
+                "system_prompt": "You create comprehensive reports.",
+                "tools": ["file_write", "editor"]
+            }
+        ],
+        "edges": [
+            {"from": "researcher", "to": "analyst"},
+            {"from": "analyst", "to": "reporter"}
+        ],
+        "entry_points": ["researcher"]
+    }
+)
+
+# Execute a task through the graph
+result = agent.tool.graph(
+    action="execute",
+    graph_id="research_pipeline",
+    task="Research and analyze the impact of AI on healthcare"
+)
+
+# Get graph status
+result = agent.tool.graph(action="status", graph_id="research_pipeline")
+
+# List all graphs
+result = agent.tool.graph(action="list")
+
+# Delete a graph
+result = agent.tool.graph(action="delete", graph_id="research_pipeline")
+```
+
 ### Elasticsearch Memory
 
 **Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
@@ -1247,6 +1312,25 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_MODEL_ID | Default model identifier for environment-based model selection | None |
 | STRANDS_MAX_TOKENS | Maximum tokens for the nested agent model | None |
 | STRANDS_TEMPERATURE | Sampling temperature for the nested agent model | None |
+
+
+#### Elasticsearch Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| ELASTICSEARCH_CLOUD_ID | Elasticsearch Cloud ID for connection | None |
+| ELASTICSEARCH_URL | Elasticsearch URL for serverless connection | None |
+| ELASTICSEARCH_API_KEY | Elasticsearch API key for authentication | None |
+| ELASTICSEARCH_INDEX_NAME | Elasticsearch index name for memory storage | strands_memory |
+| ELASTICSEARCH_NAMESPACE | Namespace for memory isolation | default |
+| ELASTICSEARCH_EMBEDDING_MODEL | Amazon Bedrock model for embeddings | amazon.titan-embed-text-v2:0 |
+| AWS_REGION | AWS region for Bedrock embedding service | us-west-2 |
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+#### Graph Tool
+
+The `graph` tool uses the same model provider environment variables as `use_agent` for per-node model configuration. No additional environment variables are required.
 
 #### Video Tools
 
