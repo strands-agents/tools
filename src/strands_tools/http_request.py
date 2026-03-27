@@ -2,18 +2,26 @@
 Make HTTP requests with comprehensive authentication, session management, and metrics.
 Supports all major authentication types and enterprise patterns.
 
-Environment Variable Support:
-1. Authentication tokens:
-   - Uses auth_env_var parameter to read tokens from environment (e.g., GITHUB_TOKEN, GITLAB_TOKEN)
-   - Example: http_request(method="GET", url="...", auth_type="token", auth_env_var="GITHUB_TOKEN")
-   - Supported variables: GITHUB_TOKEN, GITLAB_TOKEN, SLACK_BOT_TOKEN, AWS_ACCESS_KEY_ID, etc.
-2. AWS credentials:
-   - Reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION automatically
-   - Example: http_request(method="GET", url="...", auth_type="aws_sig_v4", aws_auth={"service": "s3"})
-Use the environment tool (agent.tool.environment) to view available environment variables:
-- List all: environment(action="list")
-- Get specific: environment(action="get", name="GITHUB_TOKEN")
-- Set new: environment(action="set", name="CUSTOM_TOKEN", value="your-token")
+Authentication Support:
+1. Direct tokens: Pass auth_token directly for Bearer, token, custom, or api_key auth types
+2. Basic auth: Provide username/password via basic_auth parameter
+3. Digest auth: Provide credentials via digest_auth parameter
+4. JWT: Provide secret/algorithm/expiry via jwt_config parameter
+5. AWS SigV4: Uses boto3 credential chain automatically via aws_auth parameter
+
+Environment Variable Token Config:
+  Import and populate HTTP_REQUEST_TOKEN_CONFIG to allow specific environment variables
+  to be used as auth tokens for requests to matching domains.
+
+  Format: {"ENV_VAR_NAME": ["allowed.domain.com", "*.other.com"]}
+
+  Example:
+    from strands_tools.http_request import HTTP_REQUEST_TOKEN_CONFIG
+    HTTP_REQUEST_TOKEN_CONFIG["GITHUB_TOKEN"] = ["api.github.com"]
+    HTTP_REQUEST_TOKEN_CONFIG["GITLAB_TOKEN"] = ["gitlab.com"]
+
+  When auth_env_var is passed to the tool, the token is only injected if the request
+  domain matches one of the allowed domains for that variable.
 """
 
 import base64
@@ -21,6 +29,7 @@ import collections
 import datetime
 import http.cookiejar
 import json
+import logging
 import os
 import time
 from typing import Any, Dict, Optional, Union
@@ -44,13 +53,14 @@ from urllib3 import Retry
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+logger = logging.getLogger(__name__)
+
 TOOL_SPEC = {
     "name": "http_request",
     "description": (
         "Make HTTP requests to any API with comprehensive authentication including Bearer tokens, Basic auth, "
-        "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. Automatically reads tokens from "
-        "environment variables (GITHUB_TOKEN, GITLAB_TOKEN, AWS credentials, etc.) when auth_env_var is specified. "
-        "Use environment(action='list') to view available variables. Includes session management, metrics, "
+        "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. "
+        "Includes session management, metrics, "
         "streaming support, cookie handling, redirect control, proxy support, and optional HTML to markdown conversion."
     ),
     "inputSchema": {
@@ -82,11 +92,15 @@ TOOL_SPEC = {
                 },
                 "auth_token": {
                     "type": "string",
-                    "description": "Authentication token (if not provided, will check environment variables)",
+                    "description": "Authentication token (if not provided, will check auth_env_var if configured)",
                 },
                 "auth_env_var": {
                     "type": "string",
-                    "description": "Name of environment variable containing the auth token",
+                    "description": (
+                        "Name of an environment variable containing the auth token. "
+                        "The variable must be listed in HTTP_REQUEST_TOKEN_CONFIG "
+                        "with an allowed domain that matches the request URL."
+                    ),
                 },
                 "headers": {
                     "type": "object",
@@ -98,7 +112,7 @@ TOOL_SPEC = {
                 },
                 "verify_ssl": {
                     "type": "boolean",
-                    "description": "Whether to verify SSL certificates",
+                    "description": "Whether to verify SSL certificates. Disabling may be restricted.",
                 },
                 "cookie": {
                     "type": "string",
@@ -197,6 +211,12 @@ SESSION_CACHE = {}
 
 # Metrics storage
 REQUEST_METRICS = collections.defaultdict(list)
+
+# Token config: maps env var names to lists of allowed domains.
+# Import and populate this dict to enable auth_env_var support:
+#   from strands_tools.http_request import HTTP_REQUEST_TOKEN_CONFIG
+#   HTTP_REQUEST_TOKEN_CONFIG["GITHUB_TOKEN"] = ["api.github.com"]
+HTTP_REQUEST_TOKEN_CONFIG: Dict[str, list] = {}
 
 
 def extract_content_from_html(html: str) -> str:
@@ -372,12 +392,14 @@ def format_headers_table(headers: Dict) -> Table:
 
 
 def process_auth_headers(headers: Dict[str, Any], tool_input: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Process authentication headers based on input parameters.
+    """Process authentication headers based on input parameters.
 
     Supports multiple authentication methods:
-    1. Environment variables: Uses auth_env_var to read tokens
-    2. Direct token: Uses auth_token parameter
+    1. Direct token: Uses auth_token parameter
+    2. Env var token: Uses auth_env_var parameter, validated against HTTP_REQUEST_TOKEN_CONFIG
+    3. Basic auth: Handled separately via handle_basic_auth
+    4. JWT: Handled separately via handle_jwt
+    5. AWS SigV4: Handled separately via handle_aws_sigv4
 
     Special handling for different APIs:
     - GitHub: Uses "token" prefix (auth_type="token")
@@ -385,24 +407,39 @@ def process_auth_headers(headers: Dict[str, Any], tool_input: Dict[str, Any]) ->
     - AWS: Uses SigV4 signing (auth_type="aws_sig_v4")
 
     Examples:
-        # GitHub API with environment variable
-        process_auth_headers({}, {"auth_type": "token", "auth_env_var": "GITHUB_TOKEN"})
+        # GitHub API with env var (requires HTTP_REQUEST_TOKEN_CONFIG["GITHUB_TOKEN"] = ["api.github.com"])
+        process_auth_headers({}, {"auth_type": "token", "auth_env_var": "GITHUB_TOKEN", "url": "https://api.github.com/user"})
 
-        # GitLab API with environment variable
-        process_auth_headers({}, {"auth_type": "Bearer", "auth_env_var": "GITLAB_TOKEN"})
+        # Direct token
+        process_auth_headers({}, {"auth_type": "Bearer", "auth_token": "my-token"})
     """
     headers = headers or {}
 
-    # Get auth token from input or environment
     auth_token = tool_input.get("auth_token")
+
+    # Resolve token from environment variable if auth_env_var is provided
     if not auth_token and "auth_env_var" in tool_input:
         env_var_name = tool_input["auth_env_var"]
-        auth_token = os.getenv(env_var_name)
-        if not auth_token:
+        allowed_domains = HTTP_REQUEST_TOKEN_CONFIG.get(env_var_name)
+
+        if allowed_domains is None:
             raise ValueError(
-                f"Environment variable '{env_var_name}' not found or empty. "
-                f"Use environment(action='list') to see available variables."
+                f"Environment variable '{env_var_name}' is not listed in STRANDS_HTTP_REQUEST_TOKEN_CONFIG. "
+                f"Add it with an explicit list of allowed domains before using it as an auth token."
             )
+
+        # Validate the request URL against the allowed domains using URL parsing
+        request_url = tool_input.get("url", "")
+        request_host = urlparse(request_url).hostname or ""
+        if request_host not in allowed_domains:
+            raise ValueError(
+                f"Request to '{request_host}' is not in the allowed domains for '{env_var_name}': {allowed_domains}"
+            )
+
+        auth_token = os.environ.get(env_var_name)
+        if not auth_token:
+            raise ValueError(f"Environment variable '{env_var_name}' is not set or is empty.")
+        logger.info(f"Resolved auth token from environment variable '{env_var_name}' for domain '{request_host}'")
 
     auth_type = tool_input.get("auth_type")
 
@@ -559,11 +596,31 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             method="GET",
             url="https://api.github.com/user",
             auth_type="token",
+            auth_token="<your-github-token>",
+        )
+        ```
+
+        Or with env var (requires HTTP_REQUEST_TOKEN_CONFIG["GITHUB_TOKEN"] = ["api.github.com"]):
+        ```python
+        http_request(
+            method="GET",
+            url="https://api.github.com/user",
+            auth_type="token",
             auth_env_var="GITHUB_TOKEN",
         )
         ```
 
     2. GitLab API (uses "Bearer" auth_type):
+        ```python
+        http_request(
+            method="GET",
+            url="https://gitlab.com/api/v4/user",
+            auth_type="Bearer",
+            auth_token="<your-gitlab-token>",
+        )
+        ```
+
+        Or with env var (requires HTTP_REQUEST_TOKEN_CONFIG["GITLAB_TOKEN"] = ["gitlab.com"]):
         ```python
         http_request(
             method="GET",
@@ -622,9 +679,10 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         ```
 
     Environment Variables:
-    - Authentication tokens are read from environment when auth_env_var is specified
     - AWS credentials are automatically loaded from environment variables or credentials file
-    - Use environment(action='list') to view all available environment variables
+
+    Token Config:
+    - Use HTTP_REQUEST_TOKEN_CONFIG to allow specific env vars as auth tokens for permitted domains
     """
     console = console_util.create()
 
@@ -643,7 +701,17 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         url = tool_input["url"]
         headers = process_auth_headers(tool_input.get("headers", {}), tool_input)
         body = tool_input.get("body")
-        verify = tool_input.get("verify_ssl", True)
+
+        # verify_ssl=False is opt-in via STRANDS_HTTP_ALLOW_INSECURE_SSL env var
+        verify_ssl_input = tool_input.get("verify_ssl", True)
+        if verify_ssl_input is False:
+            if os.environ.get("STRANDS_HTTP_ALLOW_INSECURE_SSL", "").lower() != "true":
+                raise ValueError(
+                    "SSL verification cannot be disabled unless the STRANDS_HTTP_ALLOW_INSECURE_SSL "
+                    "environment variable is set to 'true'."
+                )
+        verify = verify_ssl_input
+
         cookie = tool_input.get("cookie")
         cookie_jar = tool_input.get("cookie_jar")
 
@@ -905,8 +973,10 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             result_text.append(f"Redirects: {redirect_count} redirects followed ({redirect_chain})")
 
         # Add minimal headers to text response
-        important_headers = ["Content-Type", "Content-Length", "Date", "Server"]
-        headers_text = {k: v for k, v in response.headers.items() if k in important_headers}
+        important_headers_lower = {
+            h.lower() for h in ["Content-Type", "Content-Length", "Date", "Server", "Payment-Required"]
+        }
+        headers_text = {k: v for k, v in response.headers.items() if k.lower() in important_headers_lower}
         result_text.append(f"Headers: {headers_text}")
 
         # Add body to text response
@@ -937,9 +1007,9 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         if "auth" in error_str or "token" in error_str or "credential" in error_str or "unauthorized" in error_str:
             suggestion = (
                 "\n\nSuggestion: Check your authentication setup. Common solutions:\n"
-                "- For GitHub API: Use auth_type='token' with auth_env_var='GITHUB_TOKEN'\n"
-                "- For GitLab API: Use auth_type='Bearer' with auth_env_var='GITLAB_TOKEN'\n"
-                "- Use environment(action='list') to view available environment variables"
+                "- For GitHub API: Use auth_type='token' with auth_token='<your-token>'\n"
+                "- For GitLab API: Use auth_type='Bearer' with auth_token='<your-token>'\n"
+                "- For AWS APIs: Use auth_type='aws_sig_v4' with aws_auth configuration"
             )
 
         # Special handling for ImportError to help with test assertions

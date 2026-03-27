@@ -1139,6 +1139,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
 
+#### HTTP Request Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_HTTP_ALLOW_INSECURE_SSL | Allow disabling SSL certificate verification via verify_ssl parameter | false |
+
 #### Dynamic MCP Client Tool
 
 | Environment Variable | Description | Default | 
