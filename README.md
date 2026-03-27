@@ -53,6 +53,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🤖 **Agent as Tool** - Create nested agent instances with model switching support for multi-model workflows and specialized sub-tasks
 - 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
@@ -137,6 +138,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
+| use_agent | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
@@ -679,6 +681,53 @@ agent.tool.handoff_to_user(
 )
 ```
 
+### Use Agent (Agent as Tool)
+
+```python
+from strands import Agent
+from strands_tools import use_agent
+
+agent = Agent(tools=[use_agent])
+
+# Basic usage - inherits parent agent's model
+result = agent.tool.use_agent(
+    prompt="Tell me about the advantages of tool-building in AI agents",
+    system_prompt="You are a helpful AI assistant specializing in AI development concepts."
+)
+
+# Use a different model provider for specialized tasks
+result = agent.tool.use_agent(
+    prompt="Calculate 2 + 2 and explain the result",
+    system_prompt="You are a helpful math assistant.",
+    model_provider="bedrock",
+    model_settings={
+        "model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    },
+    tools=["calculator"]
+)
+
+# Use environment variables to determine model
+import os
+os.environ["STRANDS_PROVIDER"] = "ollama"
+os.environ["STRANDS_MODEL_ID"] = "qwen3:4b"
+result = agent.tool.use_agent(
+    prompt="Analyze this code",
+    system_prompt="You are a code review assistant.",
+    model_provider="env"
+)
+
+# Custom model configuration with specific parameters
+result = agent.tool.use_agent(
+    prompt="Write a creative story",
+    system_prompt="You are a creative writing assistant.",
+    model_provider="github",
+    model_settings={
+        "model_id": "openai/o4-mini",
+        "params": {"temperature": 1, "max_tokens": 4000}
+    }
+)
+```
+
 ### A2A Client
 
 ```python
@@ -1189,6 +1238,15 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
+#### Use Agent Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_PROVIDER | Default model provider when using model_provider="env" | ollama |
+| STRANDS_MODEL_ID | Default model identifier for environment-based model selection | None |
+| STRANDS_MAX_TOKENS | Maximum tokens for the nested agent model | None |
+| STRANDS_TEMPERATURE | Sampling temperature for the nested agent model | None |
 
 #### Video Tools
 
