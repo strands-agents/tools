@@ -77,6 +77,7 @@ try:
 except ImportError:
     HAS_APIFY_CLIENT = False
 
+# Attribution header - lets Apify track usage originating from strands-agents (analytics only)
 TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
 ERROR_PANEL_TITLE = "[bold red]Apify Error[/bold red]"
 DEFAULT_TIMEOUT_SECS = 300
