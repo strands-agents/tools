@@ -101,13 +101,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
 | apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor with arbitrary input |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
-| apify_instagram_scraper | `agent.tool.apify_instagram_scraper(search_query="apify", results_limit=10)` | Scrape Instagram profiles, posts, or hashtags |
-| apify_linkedin_profile_posts | `agent.tool.apify_linkedin_profile_posts(profile_url="https://linkedin.com/in/user")` | Scrape posts from a LinkedIn profile |
-| apify_linkedin_profile_search | `agent.tool.apify_linkedin_profile_search(search_query="software engineer SF")` | Search for LinkedIn profiles by keywords |
-| apify_linkedin_profile_detail | `agent.tool.apify_linkedin_profile_detail(profile_url="https://linkedin.com/in/user")` | Get detailed LinkedIn profile information |
 | apify_twitter_scraper | `agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=20)` | Scrape tweets from Twitter/X |
-| apify_tiktok_scraper | `agent.tool.apify_tiktok_scraper(search_query="cooking", results_limit=10)` | Scrape TikTok videos, profiles, or hashtags |
-| apify_facebook_posts_scraper | `agent.tool.apify_facebook_posts_scraper(page_url="https://facebook.com/page")` | Scrape posts from Facebook pages |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -991,13 +985,8 @@ result = agent.tool.apify_run_actor_and_get_dataset(
 # Run a saved task (pre-configured Actor with default inputs)
 run_info = agent.tool.apify_run_task(task_id="user/my-task")
 
-# Social media tools: Instagram, LinkedIn, Twitter/X, TikTok, Facebook
+# Social media tools (Twitter/X, Instagram, LinkedIn, TikTok, Facebook)
 social_agent = Agent(tools=APIFY_SOCIAL_TOOLS)
-
-# Scrape Instagram
-posts = social_agent.tool.apify_instagram_scraper(search_query="apify", results_limit=10)
-
-# Scrape Twitter/X
 tweets = social_agent.tool.apify_twitter_scraper(search_query="from:NASA", results_limit=20)
 ```
 
