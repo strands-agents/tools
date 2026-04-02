@@ -1,6 +1,5 @@
 """Tests for programmatic_tool_caller tool."""
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -57,7 +57,7 @@ import sys
 import textwrap
 import traceback
 from io import StringIO
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from rich import box
 from rich.panel import Panel
