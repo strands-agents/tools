@@ -192,6 +192,17 @@ def test_run_actor_api_exception(mock_apify_env, mock_apify_client):
     assert "Connection failed" in result["content"][0]["text"]
 
 
+def test_run_actor_none_response(mock_apify_env, mock_apify_client):
+    """Actor run returns error dict when ActorClient.call() returns None."""
+    mock_apify_client.actor.return_value.call.return_value = None
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor(actor_id="actor/my-scraper")
+
+    assert result["status"] == "error"
+    assert "no run data" in result["content"][0]["text"]
+
+
 def test_run_actor_apify_api_error_401(mock_apify_env, mock_apify_client):
     """Actor run returns friendly message for 401 authentication errors."""
     error = _make_apify_api_error(401, "Unauthorized")
@@ -273,6 +284,18 @@ def test_run_actor_and_get_dataset_success(mock_apify_env, mock_apify_client):
     assert data["dataset_id"] == "dataset-WkC9gct8rq1uR5vDZ"
     assert len(data["items"]) == 3
     assert data["items"][0]["title"] == "Widget A"
+
+
+def test_run_actor_and_get_dataset_no_dataset_id(mock_apify_env, mock_apify_client):
+    """Combined tool returns error when the Actor run has no default dataset."""
+    run_no_dataset = {**MOCK_ACTOR_RUN, "defaultDatasetId": None}
+    mock_apify_client.actor.return_value.call.return_value = run_no_dataset
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor_and_get_dataset(actor_id="actor/my-scraper")
+
+    assert result["status"] == "error"
+    assert "no default dataset" in result["content"][0]["text"]
 
 
 def test_run_actor_and_get_dataset_actor_failure(mock_apify_env, mock_apify_client):
@@ -374,6 +397,18 @@ def test_run_task_and_get_dataset_success(mock_apify_env, mock_apify_client):
     assert data["items"][0]["title"] == "Widget A"
 
 
+def test_run_task_and_get_dataset_no_dataset_id(mock_apify_env, mock_apify_client):
+    """Combined task tool returns error when the task run has no default dataset."""
+    run_no_dataset = {**MOCK_ACTOR_RUN, "defaultDatasetId": None}
+    mock_apify_client.task.return_value.call.return_value = run_no_dataset
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_task_and_get_dataset(task_id="user~my-task")
+
+    assert result["status"] == "error"
+    assert "no default dataset" in result["content"][0]["text"]
+
+
 def test_run_task_and_get_dataset_task_failure(mock_apify_env, mock_apify_client):
     """Combined task tool returns error dict when the task fails."""
     mock_apify_client.task.return_value.call.return_value = MOCK_FAILED_RUN
@@ -400,6 +435,29 @@ def test_scrape_url_success(mock_apify_env, mock_apify_client):
     assert result["status"] == "success"
     assert "Example Domain" in result["content"][0]["text"]
     mock_apify_client.actor.assert_called_once_with("apify/website-content-crawler")
+
+
+def test_scrape_url_none_response(mock_apify_env, mock_apify_client):
+    """Scrape URL returns error dict when ActorClient.call() returns None."""
+    mock_apify_client.actor.return_value.call.return_value = None
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "no run data" in result["content"][0]["text"]
+
+
+def test_scrape_url_no_dataset_id(mock_apify_env, mock_apify_client):
+    """Scrape URL returns error when the crawler run has no default dataset."""
+    run_no_dataset = {**MOCK_ACTOR_RUN, "defaultDatasetId": None}
+    mock_apify_client.actor.return_value.call.return_value = run_no_dataset
+
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_scrape_url(url="https://example.com")
+
+    assert result["status"] == "error"
+    assert "no default dataset" in result["content"][0]["text"]
 
 
 def test_scrape_url_no_content(mock_apify_env, mock_apify_client):
