@@ -99,11 +99,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
-| apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor by ID with arbitrary input |
-| apify_get_dataset_items | `agent.tool.apify_get_dataset_items(dataset_id="abc123", limit=50)` | Fetch items from an Apify dataset |
-| apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its dataset results in one step |
-| apify_run_task | `agent.tool.apify_run_task(task_id="user/my-task")` | Run a saved Apify task by ID with optional input overrides |
-| apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user/my-task", dataset_items_limit=50)` | Run a task and fetch its dataset results in one step |
+| apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor with arbitrary input |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
 | apify_instagram_scraper | `agent.tool.apify_instagram_scraper(search_query="apify", results_limit=10)` | Scrape Instagram profiles, posts, or hashtags |
 | apify_linkedin_profile_posts | `agent.tool.apify_linkedin_profile_posts(profile_url="https://linkedin.com/in/user")` | Scrape posts from a LinkedIn profile |
