@@ -150,6 +150,17 @@ def test_run_actor_default_input(mock_apify_env, mock_apify_client):
     assert call_kwargs["run_input"] == {}
 
 
+def test_run_actor_explicit_empty_input(mock_apify_env, mock_apify_client):
+    """Actor run passes through an explicitly empty dict instead of treating it as falsy."""
+    empty_input: dict = {}
+    with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):
+        result = apify_run_actor(actor_id="actor/my-scraper", run_input=empty_input)
+
+    assert result["status"] == "success"
+    call_kwargs = mock_apify_client.actor.return_value.call.call_args.kwargs
+    assert call_kwargs["run_input"] is empty_input
+
+
 def test_run_actor_with_memory(mock_apify_env, mock_apify_client):
     """Actor run passes memory_mbytes when provided."""
     with patch("strands_tools.apify.ApifyClient", return_value=mock_apify_client):

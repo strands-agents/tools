@@ -200,7 +200,7 @@ class ApifyToolClient:
             self._validate_positive(memory_mbytes, "memory_mbytes")
 
         call_kwargs: Dict[str, Any] = {
-            "run_input": run_input or {},
+            "run_input": run_input if run_input is not None else {},
             "timeout_secs": timeout_secs,
             "logger": None,  # Suppress verbose apify-client logging not useful to end users
         }
