@@ -344,9 +344,13 @@ class ApifyToolClient:
             timeout_secs=timeout_secs,
             logger=None,  # Suppress verbose apify-client logging not useful to end users
         )
+        if actor_run is None:
+            raise RuntimeError("Website Content Crawler returned no run data (possible wait timeout).")
         self._check_run_status(actor_run, "Website Content Crawler")
 
         dataset_id = actor_run.get("defaultDatasetId")
+        if not dataset_id:
+            raise RuntimeError("Website Content Crawler run has no default dataset.")
         result = self.client.dataset(dataset_id).list_items(limit=1)
         items = list(result.items)
 
