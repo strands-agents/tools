@@ -57,7 +57,7 @@ result = agent.tool.apify_run_actor(
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, get_args
 from urllib.parse import urlparse
 
 from rich.panel import Panel
@@ -84,7 +84,8 @@ DEFAULT_SCRAPE_TIMEOUT_SECS = 120
 DEFAULT_DATASET_ITEMS_LIMIT = 100
 
 WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
-WEBSITE_CONTENT_CRAWLER_TYPES = ("playwright:adaptive", "playwright:firefox", "cheerio")
+CrawlerType = Literal["playwright:adaptive", "playwright:firefox", "cheerio"]
+WEBSITE_CONTENT_CRAWLER_TYPES = get_args(CrawlerType)
 
 
 # --- Helper functions ---
@@ -322,7 +323,7 @@ class ApifyToolClient:
         self,
         url: str,
         timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
-        crawler_type: str = "cheerio",
+        crawler_type: CrawlerType = "cheerio",
     ) -> str:
         """Scrape a single URL using Website Content Crawler and return markdown."""
         self._validate_url(url)
@@ -608,7 +609,7 @@ def apify_run_task_and_get_dataset(
 def apify_scrape_url(
     url: str,
     timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
-    crawler_type: str = "cheerio",
+    crawler_type: CrawlerType = "cheerio",
 ) -> Dict[str, Any]:
     """Scrape a single URL and return its content as markdown.
 
