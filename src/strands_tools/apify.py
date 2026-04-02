@@ -119,6 +119,8 @@ def _format_error(e: Exception) -> str:
                     "Rate limit exceeded. The Apify client retries automatically; "
                     "if this persists, reduce request frequency."
                 )
+            case None:
+                return f"Apify API error: {msg}"
             case _:
                 return f"Apify API error ({status_code}): {msg}"
     return str(e)
