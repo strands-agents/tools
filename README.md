@@ -102,10 +102,6 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | apify_run_actor | `agent.tool.apify_run_actor(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run any Apify Actor with arbitrary input |
 | apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
 | apify_google_search_scraper | `agent.tool.apify_google_search_scraper(search_query="best AI frameworks")` | Search Google and return structured results |
-| apify_google_places_scraper | `agent.tool.apify_google_places_scraper(search_query="restaurants in Prague")` | Search Google Maps for businesses and places |
-| apify_youtube_scraper | `agent.tool.apify_youtube_scraper(search_query="python tutorial")` | Scrape YouTube videos, channels, or search results |
-| apify_website_content_crawler | `agent.tool.apify_website_content_crawler(start_url="https://docs.example.com")` | Crawl a website and extract content from multiple pages |
-| apify_ecommerce_scraper | `agent.tool.apify_ecommerce_scraper(url="https://www.amazon.com/dp/B0TEST")` | Scrape product data from e-commerce websites |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -1013,25 +1009,6 @@ results = agent.tool.apify_google_search_scraper(
     results_limit=10,
 )
 
-# Search Google Maps for places
-places = agent.tool.apify_google_places_scraper(
-    search_query="restaurants in Prague",
-    include_reviews=True,
-)
-
-# Scrape YouTube
-videos = agent.tool.apify_youtube_scraper(search_query="python tutorial")
-
-# Crawl a website (multi-page)
-pages = agent.tool.apify_website_content_crawler(
-    start_url="https://docs.example.com",
-    max_pages=20,
-)
-
-# Scrape e-commerce product data
-products = agent.tool.apify_ecommerce_scraper(
-    url="https://www.amazon.com/dp/B0TEST",
-)
 ```
 
 ## 🌍 Environment Variables Configuration
