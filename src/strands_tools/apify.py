@@ -77,13 +77,14 @@ try:
 except ImportError:
     HAS_APIFY_CLIENT = False
 
-WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
 TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
 ERROR_PANEL_TITLE = "[bold red]Apify Error[/bold red]"
 DEFAULT_TIMEOUT_SECS = 300
 DEFAULT_SCRAPE_TIMEOUT_SECS = 120
 DEFAULT_DATASET_ITEMS_LIMIT = 100
-VALID_CRAWLER_TYPES = ("playwright:adaptive", "playwright:firefox", "cheerio")
+
+WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
+WEBSITE_CONTENT_CRAWLER_TYPES = ("playwright:adaptive", "playwright:firefox", "cheerio")
 
 
 # --- Helper functions ---
@@ -326,9 +327,9 @@ class ApifyToolClient:
         """Scrape a single URL using Website Content Crawler and return markdown."""
         self._validate_url(url)
         self._validate_positive(timeout_secs, "timeout_secs")
-        if crawler_type not in VALID_CRAWLER_TYPES:
+        if crawler_type not in WEBSITE_CONTENT_CRAWLER_TYPES:
             raise ValueError(
-                f"Invalid crawler_type '{crawler_type}'. Must be one of: {', '.join(VALID_CRAWLER_TYPES)}."
+                f"Invalid crawler_type '{crawler_type}'. Must be one of: {', '.join(WEBSITE_CONTENT_CRAWLER_TYPES)}."
             )
 
         run_input: Dict[str, Any] = {
