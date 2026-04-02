@@ -94,7 +94,7 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
 
     # Retrieve 'agent' and 'invocations' from kwargs
     agent = kwargs.get("agent")
-    invocations = kwargs.get("invocations", [])
+    invocations = tool.get("input", {}).get("invocations", [])
     results = []
 
     try:
@@ -109,7 +109,7 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
             if callable(tool_fn):
                 try:
                     # Call the tool function with the provided arguments
-                    result = tool_fn(**arguments)
+                    result = tool_fn(record_direct_tool_call=False, **arguments)
 
                     # Create a consistent result structure
                     batch_result = {"name": tool_name, "status": "success", "result": result}
