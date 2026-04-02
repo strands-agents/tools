@@ -1,8 +1,10 @@
 """Apify platform tools for Strands Agents.
 
-This module provides web scraping, data extraction, and automation capabilities
-using the Apify platform. It lets you run any Actor, task, fetch dataset
-results, and scrape individual URLs.
+Apify is a large marketplace of tools for web scraping, data extraction,
+and web automation. These tools are called Actors — serverless cloud applications that
+take JSON input and store results in a dataset (structured, tabular output) or key-value
+store (files and unstructured data). Actors exist for social media, e-commerce, search
+engines, maps, travel sites, and many other sources.
 
 Available Tools:
 ---------------
@@ -16,7 +18,7 @@ Available Tools:
 Setup Requirements:
 ------------------
 1. Create an Apify account at https://apify.com
-2. Obtain your API token: Apify Console > Settings > API & Integrations > Personal API tokens
+2. Get your API token: Apify Console > Settings > API & Integrations > Personal API tokens
 3. Install the optional dependency: pip install strands-agents-tools[apify]
 4. Set the environment variable:
    APIFY_API_TOKEN=your_api_token_here
@@ -366,18 +368,22 @@ def apify_run_actor(
 ) -> Dict[str, Any]:
     """Run any Apify Actor and return the run metadata as JSON.
 
-    Executes the Actor synchronously - blocks until the Actor run finishes or the timeout
-    is reached. Use this when you need to run a specific Actor and then inspect or process
-    the results separately.
+    An Actor is a serverless cloud app on the Apify platform — it takes JSON input,
+    runs the scraping or automation job, and writes results to a dataset. This tool
+    executes the Actor synchronously and returns run metadata only (run_id, status,
+    dataset_id, timestamps). Use apify_run_actor_and_get_dataset to also fetch the
+    output data in one call, or apify_scrape_url for quick single-URL extraction.
 
     Common Actors:
-    - "apify/website-content-crawler" - scrape websites and extract content
-    - "apify/web-scraper" - general-purpose web scraper
-    - "apify/google-search-scraper" - scrape Google search results
+    - "apify/website-content-crawler" — scrape websites and extract content as markdown
+    - "apify/web-scraper" — general-purpose web scraper with JS rendering
+    - "apify/google-search-scraper" — scrape Google search results
 
     Args:
-        actor_id: Actor identifier, e.g. "apify/website-content-crawler" or "username/actor-name".
-        run_input: JSON-serializable input for the Actor. Each Actor defines its own input schema.
+        actor_id: Actor identifier in "username/actor-name" format,
+            e.g. "apify/website-content-crawler". Find Actors at https://apify.com/store.
+        run_input: JSON-serializable input for the Actor. Each Actor defines its own
+            input schema — check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
@@ -419,8 +425,9 @@ def apify_get_dataset_items(
 ) -> Dict[str, Any]:
     """Fetch items from an existing Apify dataset and return them as JSON.
 
-    Use this after running an Actor to retrieve the structured results from its
-    default dataset, or to access any dataset by ID.
+    Every Actor run writes its output to a dataset — a structured, append-only store
+    for tabular data. Use the dataset_id from the run metadata returned by apify_run_actor
+    or apify_run_task. Use offset for pagination through large datasets.
 
     Args:
         dataset_id: The Apify dataset ID to fetch items from.
@@ -457,15 +464,17 @@ def apify_run_actor_and_get_dataset(
 ) -> Dict[str, Any]:
     """Run an Apify Actor and fetch its dataset results in one step.
 
-    Convenience tool that combines running an Actor and fetching its default
-    dataset items into a single call. Use this when you want both the run metadata and the
+    Convenience tool that combines running an Actor and fetching its default dataset
+    items into a single call. Use this when you want both the run metadata and the
     result data without making two separate tool calls.
 
     Args:
-        actor_id: Actor identifier, e.g. "apify/website-content-crawler" or "username/actor-name".
-        run_input: JSON-serializable input for the Actor.
+        actor_id: Actor identifier in "username/actor-name" format,
+            e.g. "apify/website-content-crawler". Find Actors at https://apify.com/store.
+        run_input: JSON-serializable input for the Actor. Each Actor defines its own
+            input schema — check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the Actor run.
+        memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
         dataset_items_limit: Maximum number of dataset items to return. Defaults to 100.
         dataset_items_offset: Number of dataset items to skip for pagination. Defaults to 0.
@@ -509,15 +518,16 @@ def apify_run_task(
     timeout_secs: int = DEFAULT_TIMEOUT_SECS,
     memory_mbytes: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run an Apify task and return the run metadata as JSON.
+    """Run a saved Apify task and return the run metadata as JSON.
 
-    Tasks are saved Actor configurations with preset inputs. Use this when a task
-    has already been configured in Apify Console, so you don't need to specify
-    the full Actor input every time.
+    Tasks are saved Actor configurations with preset inputs, managed in Apify Console.
+    Use this when a task has already been configured, so you don't need to specify
+    the full Actor input every time. Use apify_run_task_and_get_dataset to also fetch
+    the output data in one call.
 
     Args:
-        task_id: Task identifier, e.g. "user/my-task" or a task ID string.
-        task_input: Optional JSON-serializable input to override the task's default input.
+        task_id: Task identifier in "username~task-name" format or a task ID string.
+        task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
 
@@ -558,17 +568,17 @@ def apify_run_task_and_get_dataset(
     dataset_items_limit: int = DEFAULT_DATASET_ITEMS_LIMIT,
     dataset_items_offset: int = 0,
 ) -> Dict[str, Any]:
-    """Run an Apify task and fetch its dataset results in one step.
+    """Run a saved Apify task and fetch its dataset results in one step.
 
-    Convenience tool that combines running a task and fetching its default
-    dataset items into a single call. Use this when you want both the run metadata and the
+    Convenience tool that combines running a task and fetching its default dataset
+    items into a single call. Use this when you want both the run metadata and the
     result data without making two separate tool calls.
 
     Args:
-        task_id: Task identifier, e.g. "user/my-task" or a task ID string.
-        task_input: Optional JSON-serializable input to override the task's default input.
+        task_id: Task identifier in "username~task-name" format or a task ID string.
+        task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the task run.
+        memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
         dataset_items_limit: Maximum number of dataset items to return. Defaults to 100.
         dataset_items_offset: Number of dataset items to skip for pagination. Defaults to 0.
 
@@ -613,14 +623,16 @@ def apify_scrape_url(
 
     Uses the Website Content Crawler Actor under the hood, pre-configured for
     fast single-page scraping. This is the simplest way to extract readable content
-    from any web page.
+    from any web page — no Actor input schema needed. For multi-page crawls, use
+    apify_run_actor_and_get_dataset with "apify/website-content-crawler" directly.
 
     Args:
         url: The URL to scrape, e.g. "https://example.com".
         timeout_secs: Maximum time in seconds to wait for scraping to finish. Defaults to 120.
-        crawler_type: Crawler engine to use. One of "cheerio" (fastest, no JS rendering,
-            default), "playwright:adaptive" (fast, renders JS if present), or
-            "playwright:firefox" (reliable, renders JS, best at avoiding blocking but slower).
+        crawler_type: Crawler engine to use. One of:
+            - "cheerio" (default): Fastest, no JavaScript rendering. Best for static HTML.
+            - "playwright:adaptive": Renders JS only when needed. Good general-purpose choice.
+            - "playwright:firefox": Full JS rendering, best at bypassing anti-bot protection but slowest.
 
     Returns:
         Dict with status and content containing the markdown content of the scraped page.
