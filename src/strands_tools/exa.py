@@ -47,9 +47,10 @@ import os
 from typing import Any, Dict, List, Literal, Optional, Union
 
 import aiohttp
-from rich.console import Console
 from rich.panel import Panel
 from strands import tool
+
+from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ EXA_SEARCH_ENDPOINT = "/search"
 EXA_CONTENTS_ENDPOINT = "/contents"
 
 # Initialize Rich console
-console = Console()
+console = console_util.create()
 
 
 def _get_api_key() -> str:
