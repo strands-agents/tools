@@ -144,12 +144,21 @@ Usage Examples:
                 "score": {
                     "type": "number",
                     "description": (
-                        "Minimum relevance score threshold (0.0-1.0). Results below this score will be filtered out. "
-                        "Default is 0.4."
+                        "Minimum relevance score threshold. For similarity metrics (default), results below this "
+                        "score are filtered out. For distance metrics, results above this score are filtered out. "
+                        "Default is 0.4 for similarity, inf for distance."
                     ),
                     "default": 0.4,
-                    "minimum": 0.0,
-                    "maximum": 1.0,
+                },
+                "score_metric": {
+                    "type": "string",
+                    "enum": ["similarity", "distance"],
+                    "description": (
+                        "How to interpret the score values. Use 'similarity' (default) when higher scores mean "
+                        "more relevant results (e.g., cosine similarity). Use 'distance' when lower scores mean "
+                        "more relevant results (e.g., cosine distance, pgvector <=>)."
+                    ),
+                    "default": "similarity",
                 },
                 "profile_name": {
                     "type": "string",
@@ -187,21 +196,31 @@ Usage Examples:
 }
 
 
-def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> List[Dict[str, Any]]:
+def filter_results_by_score(
+    results: List[Dict[str, Any]], min_score: float, score_metric: str = "similarity"
+) -> List[Dict[str, Any]]:
     """
-    Filter results based on minimum score threshold.
+    Filter results based on score threshold, respecting the score metric type.
 
     This function takes the raw results from a knowledge base query and removes
-    any items that don't meet the minimum relevance score threshold.
+    any items that don't meet the score threshold. The filtering direction depends
+    on the score metric:
+    - "similarity": higher scores = more relevant, keeps scores >= min_score
+    - "distance": lower scores = more relevant, keeps scores <= min_score
 
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
-        min_score: Minimum score threshold (0.0-1.0). Only results with scores
-            greater than or equal to this value will be returned.
+        min_score: Score threshold for filtering. For similarity, only results with
+            scores >= this value are kept. For distance, only results with scores
+            <= this value are kept.
+        score_metric: How to interpret scores. "similarity" (default) means higher
+            is better; "distance" means lower is better.
 
     Returns:
-        List of filtered results that meet or exceed the score threshold
+        List of filtered results that meet the score threshold
     """
+    if score_metric == "distance":
+        return [result for result in results if result.get("score", float("inf")) <= min_score]
     return [result for result in results if result.get("score", 0.0) >= min_score]
 
 
@@ -317,7 +336,9 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         number_of_results = tool_input.get("numberOfResults", 10)
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
-        min_score = tool_input.get("score", default_min_score)
+        score_metric = tool_input.get("score_metric", "similarity")
+        default_score = default_min_score if score_metric == "similarity" else float("inf")
+        min_score = tool_input.get("score", default_score)
         enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
 
@@ -353,7 +374,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Get and filter results
         all_results = response.get("retrievalResults", [])
-        filtered_results = filter_results_by_score(all_results, min_score)
+        filtered_results = filter_results_by_score(all_results, min_score, score_metric)
 
         # Format results for display with optional metadata
         formatted_results = format_results_for_display(filtered_results, enable_metadata)
@@ -363,7 +384,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "toolUseId": tool_use_id,
             "status": "success",
             "content": [
-                {"text": f"Retrieved {len(filtered_results)} results with score >= {min_score}:\n{formatted_results}"}
+                {"text": f"Retrieved {len(filtered_results)} results with score {'<=' if score_metric == 'distance' else '>='} {min_score}:\n{formatted_results}"}
             ],
         }
 
