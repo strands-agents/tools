@@ -152,20 +152,14 @@ class TestSkillListing:
         assert "data-analyst" in text
         assert "Available skills" in text
 
-    def test_list_empty_directory(self, agent, tmp_path):
-        """Test listing skills in an empty directory."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
+    @pytest.mark.parametrize("dir_name,create", [("empty", True), ("nonexistent", False)])
+    def test_list_empty_or_nonexistent_directory(self, agent, tmp_path, dir_name, create):
+        """Test listing skills in an empty or nonexistent directory."""
+        target = tmp_path / dir_name
+        if create:
+            target.mkdir()
 
-        result = agent.tool.skills(action="list", skills_dir=str(empty_dir))
-        text = extract_text(result)
-
-        assert "No skills found" in text
-
-    def test_list_nonexistent_directory(self, agent, tmp_path):
-        """Test listing skills in a nonexistent directory."""
-        nonexistent = str(tmp_path / "nonexistent")
-        result = agent.tool.skills(action="list", skills_dir=nonexistent)
+        result = agent.tool.skills(action="list", skills_dir=str(target))
         text = extract_text(result)
 
         assert "No skills found" in text
@@ -175,27 +169,18 @@ class TestSkillUsage:
     """Tests for loading skill instructions."""
 
     def test_use_skill(self, agent, skills_dir):
-        """Test loading a skill's instructions."""
+        """Test loading a skill returns instructions, metadata, and resource list."""
         result = agent.tool.skills(action="use", skill_name="code-reviewer", skills_dir=str(skills_dir))
         text = extract_text(result)
 
         assert result["status"] == "success"
+        # Instructions
         assert "Code Reviewer Skill" in text
         assert "security vulnerabilities" in text.lower()
-
-    def test_use_skill_includes_metadata(self, agent, skills_dir):
-        """Test that use action includes metadata like location."""
-        result = agent.tool.skills(action="use", skill_name="code-reviewer", skills_dir=str(skills_dir))
-        text = extract_text(result)
-
+        # Metadata (location)
         assert "Location:" in text
         assert "SKILL.md" in text
-
-    def test_use_skill_includes_resources(self, agent, skills_dir):
-        """Test that use action lists available resources."""
-        result = agent.tool.skills(action="use", skill_name="code-reviewer", skills_dir=str(skills_dir))
-        text = extract_text(result)
-
+        # Resources listing
         assert "Available resources:" in text
         assert "scripts/analyze.py" in text
         assert "references/security.md" in text
@@ -495,17 +480,17 @@ class TestGenerateSkillsXml:
 class TestFormatSkillResponse:
     """Tests for _format_skill_response."""
 
-    def test_basic_response(self):
-        """Test basic skill response formatting."""
+    def test_basic_response_and_empty_instructions(self):
+        """Test skill response formatting with and without instructions."""
+        # With instructions
         skill = Skill(name="test", description="Test.", instructions="Do the thing.", path=None)
         result = _format_skill_response(skill)
         assert "Do the thing." in result
 
-    def test_no_instructions(self):
-        """Test response when skill has no instructions."""
-        skill = Skill(name="test", description="Test.", instructions="", path=None)
-        result = _format_skill_response(skill)
-        assert "no instructions available" in result.lower()
+        # Without instructions
+        skill_empty = Skill(name="test", description="Test.", instructions="", path=None)
+        result_empty = _format_skill_response(skill_empty)
+        assert "no instructions available" in result_empty.lower()
 
     def test_includes_allowed_tools(self):
         """Test that allowed_tools are included in response."""
@@ -1176,22 +1161,15 @@ class TestImportSchemeRejection:
     def clear_cache(self):
         clear_cache()
 
-    def test_import_ftp_rejected(self, agent, skills_dir):
-        """Test that ftp:// URLs are rejected."""
+    @pytest.mark.parametrize("url", [
+        "ftp://example.com/SKILL.md",
+        "file:///etc/passwd",
+    ])
+    def test_non_https_schemes_rejected(self, agent, skills_dir, url):
+        """Test that non-HTTPS URL schemes (ftp://, file://) are rejected."""
         result = agent.tool.skills(
             action="import",
-            source="ftp://example.com/SKILL.md",
-            skills_dir=str(skills_dir),
-        )
-
-        assert result["status"] == "error"
-        assert "https" in extract_text(result).lower()
-
-    def test_import_file_scheme_rejected(self, agent, skills_dir):
-        """Test that file:// URLs are rejected."""
-        result = agent.tool.skills(
-            action="import",
-            source="file:///etc/passwd",
+            source=url,
             skills_dir=str(skills_dir),
         )
 
@@ -1207,30 +1185,25 @@ class TestImportFromUrlEdgeCases:
         clear_cache()
 
     @patch("strands_tools.skills.urllib.request.urlopen")
-    def test_import_from_url_urlerror(self, mock_urlopen, agent, skills_dir):
-        """Test handling of URLError (e.g., DNS failure)."""
+    def test_import_from_url_network_errors(self, mock_urlopen, agent, skills_dir):
+        """Test handling of URLError and OSError during URL fetch."""
+        # URLError (DNS failure)
         mock_urlopen.side_effect = urllib.error.URLError("Name resolution failed")
-
         result = agent.tool.skills(
             action="import",
             source="https://nonexistent.example.com/SKILL.md",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "error fetching url" in extract_text(result).lower()
 
-    @patch("strands_tools.skills.urllib.request.urlopen")
-    def test_import_from_url_oserror(self, mock_urlopen, agent, skills_dir):
-        """Test handling of generic OSError during URL fetch."""
+        # OSError (network unreachable)
         mock_urlopen.side_effect = OSError("Network is unreachable")
-
         result = agent.tool.skills(
             action="import",
             source="https://example.com/SKILL.md",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "network error" in extract_text(result).lower()
 
@@ -1238,24 +1211,22 @@ class TestImportFromUrlEdgeCases:
 class TestListResourcesEdgeCases:
     """Tests for _action_list_resources edge cases."""
 
-    def test_list_resources_missing_skill_name(self, agent, skills_dir):
-        """Test list_resources with no skill_name."""
+    def test_list_resources_error_cases(self, agent, skills_dir):
+        """Test list_resources with missing skill_name and nonexistent skill."""
+        # Missing skill_name
         result = agent.tool.skills(
             action="list_resources",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "skill_name is required" in extract_text(result)
 
-    def test_list_resources_nonexistent_skill(self, agent, skills_dir):
-        """Test list_resources for a skill that doesn't exist."""
+        # Nonexistent skill
         result = agent.tool.skills(
             action="list_resources",
             skill_name="nonexistent",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "not found" in extract_text(result).lower()
 
@@ -1296,26 +1267,24 @@ class TestListResourcesEdgeCases:
 class TestGetResourceEdgeCases:
     """Tests for _action_get_resource edge cases."""
 
-    def test_get_resource_missing_skill_name(self, agent, skills_dir):
-        """Test get_resource with no skill_name."""
+    def test_get_resource_error_cases(self, agent, skills_dir):
+        """Test get_resource with missing skill_name and nonexistent skill."""
+        # Missing skill_name
         result = agent.tool.skills(
             action="get_resource",
             resource_path="scripts/analyze.py",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "skill_name is required" in extract_text(result)
 
-    def test_get_resource_nonexistent_skill(self, agent, skills_dir):
-        """Test get_resource for a skill that doesn't exist."""
+        # Nonexistent skill
         result = agent.tool.skills(
             action="get_resource",
             skill_name="nonexistent",
             resource_path="foo.py",
             skills_dir=str(skills_dir),
         )
-
         assert result["status"] == "error"
         assert "not found" in extract_text(result).lower()
 
@@ -1410,24 +1379,19 @@ allowed-tools:
 class TestModuleCache:
     """Tests for module-level caching."""
 
-    def test_cache_persists_across_calls(self, agent, skills_dir):
-        """Test that cache persists across tool calls."""
+    def test_cache_lifecycle(self, agent, skills_dir):
+        """Test that cache persists across calls and clearing allows rediscovery."""
         clear_cache()
         agent.tool.skills(action="list", skills_dir=str(skills_dir))
-
         assert "code-reviewer" in _cache
 
+        # Persists across calls
         result = agent.tool.skills(action="list", skills_dir=str(skills_dir))
         assert "code-reviewer" in extract_text(result)
 
-    def test_cache_cleared_allows_rediscovery(self, agent, skills_dir):
-        """Test that clearing cache allows fresh discovery."""
-        agent.tool.skills(action="list", skills_dir=str(skills_dir))
-        assert "code-reviewer" in _cache
-
+        # Clearing allows rediscovery
         clear_cache()
         assert len(_cache) == 0
-
         result = agent.tool.skills(action="list", skills_dir=str(skills_dir))
         assert "code-reviewer" in extract_text(result)
 
@@ -1468,21 +1432,17 @@ class TestTopLevelExceptionHandler:
 class TestSyncSkills:
     """Tests for the sync_skills public helper."""
 
-    def test_populates_cache(self, agent, skills_dir):
-        """Test that sync_skills populates the module-level cache."""
+    def test_populates_cache_and_updates_tool_spec(self, agent, skills_dir):
+        """Test that sync_skills populates cache and updates tool description."""
         clear_cache()
         assert len(_cache) == 0
 
         sync_skills(skills_dir=str(skills_dir))
 
+        # Cache populated
         assert "code-reviewer" in _cache
         assert "data-analyst" in _cache
-
-    def test_updates_tool_spec(self, agent, skills_dir):
-        """Test that sync_skills updates the skills tool description."""
-        clear_cache()
-        sync_skills(skills_dir=str(skills_dir))
-
+        # Tool spec updated
         desc = skills_tool.tool_spec["description"]
         assert "<available_skills>" in desc
         assert "code-reviewer" in desc
