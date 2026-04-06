@@ -7,7 +7,7 @@ Tests cover:
 - Error handling
 - Import action (directory, file, URL)
 - Virtual skill behavior
-- Experimental warning
+- SDK plugin info in docstring
 - Agent state caching
 - Comma-separated skills directories
 - Tool spec update with skills catalog

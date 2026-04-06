@@ -4,6 +4,12 @@ This tool provides a high-level interface for working with Agent Skills -
 modular packages of instructions, scripts, and resources that give AI agents
 specialized capabilities for specific tasks.
 
+Note: The Strands SDK also provides a native AgentSkills plugin
+(strands.vended_plugins.skills.AgentSkills) which offers automatic system
+prompt injection and lifecycle management. This tool is a standalone
+alternative that works through the tool-calling interface and can be used
+independently or alongside the SDK plugin.
+
 Skills follow the AgentSkills.io specification and use progressive disclosure:
 - Phase 1: Load only metadata (~100 tokens per skill) via 'list' action
 - Phase 2: Load full instructions when skill is used via 'use' action
@@ -14,6 +20,8 @@ Environment Variables:
 
 Usage Examples:
 --------------
+Using this tool directly:
+
 ```python
 from strands import Agent
 from strands_tools import skills
@@ -33,9 +41,19 @@ sync_skills(skills_dir="./my-skills,~/.agents/skills")
 agent = Agent(tools=[skills])
 ```
 
+Using the SDK's native AgentSkills plugin instead:
+
+```python
+from strands import Agent
+from strands.vended_plugins.skills import AgentSkills
+
+agent = Agent(plugins=[AgentSkills(skills="./skills")])
+```
+
 For more information about Agent Skills:
 - Specification: https://agentskills.io
 - Anthropic Skills: https://github.com/anthropics/skills
+- SDK Plugin: https://strandsagents.com/latest/user-guide/concepts/agent-skills/
 """
 
 import logging
@@ -160,9 +178,6 @@ def _update_tool_spec(cache: Dict[str, Skill]) -> None:
     skills_xml = _generate_skills_xml(cache)
 
     base_description = (
-        "⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. "
-        "The recommended path for production use will be the SDK's native skills feature (coming soon). "
-        "APIs and behavior may change without notice.\n\n"
         "Load and use Agent Skills - modular packages of specialized instructions.\n\n"
         "Skills are folders containing SKILL.md files with instructions that help you "
         "perform specific tasks effectively. Skills are auto-discovered from STRANDS_SKILLS_DIR.\n\n"
@@ -792,11 +807,7 @@ def skills(
     source: Optional[str] = None,
     skills_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """⚠️ EXPERIMENTAL: This tool is an early experiment for working with Agent Skills. \
-The recommended path for production use will be the SDK's native skills feature (coming soon). \
-APIs and behavior may change without notice.
-
-    Load and use Agent Skills - modular packages of specialized instructions.
+    """Load and use Agent Skills - modular packages of specialized instructions.
 
     Skills are folders containing SKILL.md files with instructions that help you
     perform specific tasks effectively. Skills are auto-discovered from STRANDS_SKILLS_DIR.
