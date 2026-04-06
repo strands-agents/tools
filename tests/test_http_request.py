@@ -25,6 +25,7 @@ def mock_request_state():
     """Create a mock request state dictionary."""
     return {}
 
+
 @pytest.fixture
 def mock_env_vars():
     """Set up mock environment variables for testing."""
@@ -43,6 +44,7 @@ def extract_result_text(result):
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
         return "\n".join([item["text"] for item in result["content"]])
     return str(result)
+
 
 @responses.activate
 def test_basic_get_request():
