@@ -7,6 +7,27 @@ Please read through this document before submitting any issues or pull requests 
 information to effectively respond to your bug report or contribution.
 
 
+## New Tools Policy
+
+Due to maintenance and scalability concerns, **we are not accepting new tools into this repository**. To avoid the Strands team being the bottleneck for new tool reviews and releases, we encourage contributors to publish new tools as standalone community packages.
+
+**What we accept:**
+- Bug fixes for existing tools
+- Documentation improvements
+- Performance enhancements to existing tools
+- Test coverage improvements
+
+**What we don't accept:**
+- New tool submissions (PRs adding new tools will be closed)
+- New tool feature requests (issues requesting new tools will be closed)
+
+**Want to build a tool?** You can use our [extension template](https://github.com/strands-agents/extension-template-python) to scaffold your own tool package and publish it to PyPI. Once published, you can get it featured in our docs and community catalog:
+
+- Extension template: https://github.com/strands-agents/extension-template-python
+- Get featured in docs: https://strandsagents.com/docs/community/get-featured/
+- Contribution guide: https://strandsagents.com/docs/contribute/
+
+
 ## Reporting Bugs/Feature Requests
 
 We welcome you to use the [Bug Reports](../../issues/new?template=bug_report.yml) file to report bugs or [Feature Requests](../../issues/new?template=feature_request.yml) to suggest features.
