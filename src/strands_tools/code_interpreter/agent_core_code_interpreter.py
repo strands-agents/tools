@@ -53,6 +53,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         session_name: Optional[str] = None,
         auto_create: bool = True,
         persist_sessions: bool = True,
+        session_timeout_seconds: int = 900,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter with session persistence support.
@@ -99,6 +100,10 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 invocation but the Python process persists. Setting this to True allows
                 sessions to survive across invocations and be reconnected by subsequent
                 instances via module-level cache.
+
+            session_timeout_seconds (int): Timeout in seconds for sessions created
+                by this instance. Sessions automatically terminate after the timeout period.
+                Default: 900 (15 minutes).
 
         Session Lifecycle:
             Invocation 1 (Instance #1):
@@ -180,6 +185,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.identifier = identifier or "aws.codeinterpreter.v1"
         self.auto_create = auto_create
         self.persist_sessions = persist_sessions
+        self.session_timeout_seconds = session_timeout_seconds
 
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
@@ -262,8 +268,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             # Create new sandbox client
             client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
 
-            # Start session with identifier and name
-            client.start(identifier=self.identifier, name=session_name)
+            client.start(
+                identifier=self.identifier,
+                name=session_name,
+                session_timeout_seconds=self.session_timeout_seconds,
+            )
 
             aws_session_id = client.session_id
 

@@ -25,7 +25,6 @@ def mock_request_state():
     """Create a mock request state dictionary."""
     return {}
 
-
 @pytest.fixture
 def mock_env_vars():
     """Set up mock environment variables for testing."""
@@ -44,7 +43,6 @@ def extract_result_text(result):
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
         return "\n".join([item["text"] for item in result["content"]])
     return str(result)
-
 
 @responses.activate
 def test_basic_get_request():
@@ -232,7 +230,7 @@ def test_disable_redirects():
 
 
 @responses.activate
-def test_auth_token_direct(mock_env_vars):
+def test_auth_token_direct():
     """Test using auth_token parameter directly."""
     responses.add(
         responses.GET,
@@ -262,8 +260,8 @@ def test_auth_token_direct(mock_env_vars):
 
 
 @responses.activate
-def test_auth_token_from_env(mock_env_vars):
-    """Test getting auth token from environment variable."""
+def test_auth_token_bearer():
+    """Test Bearer auth with direct auth_token."""
     responses.add(
         responses.GET,
         "https://api.example.com/protected",
@@ -278,7 +276,7 @@ def test_auth_token_from_env(mock_env_vars):
             "method": "GET",
             "url": "https://api.example.com/protected",
             "auth_type": "Bearer",
-            "auth_env_var": "TEST_TOKEN",
+            "auth_token": "test-token-value",
         },
     }
 
@@ -292,7 +290,7 @@ def test_auth_token_from_env(mock_env_vars):
 
 
 @responses.activate
-def test_github_api_auth(mock_env_vars):
+def test_github_api_auth():
     """Test GitHub API authentication with token prefix."""
     responses.add(
         responses.GET,
@@ -315,7 +313,7 @@ def test_github_api_auth(mock_env_vars):
             "method": "GET",
             "url": "https://api.github.com/user",
             "auth_type": "token",
-            "auth_env_var": "GITHUB_TOKEN",
+            "auth_token": "github-token-1234",
         },
     }
 
@@ -328,6 +326,85 @@ def test_github_api_auth(mock_env_vars):
     # Check that GitHub-specific headers were set
     assert responses.calls[0].request.headers["Authorization"] == "token github-token-1234"
     assert responses.calls[0].request.headers["Accept"] == "application/vnd.github.v3+json"
+
+
+@responses.activate
+def test_auth_env_var_allowed_domain(mock_env_vars):
+    """Test auth_env_var resolves token when domain is in the allowlist."""
+    responses.add(
+        responses.GET,
+        "https://api.github.com/user",
+        json={"login": "testuser"},
+        status=200,
+    )
+
+    tool_use = {
+        "toolUseId": "test-env-var-allowed-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.github.com/user",
+            "auth_type": "token",
+            "auth_env_var": "GITHUB_TOKEN",
+        },
+    }
+
+    token_config = {"GITHUB_TOKEN": ["api.github.com"]}
+    with (
+        patch("strands_tools.http_request.HTTP_REQUEST_TOKEN_CONFIG", token_config),
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+    ):
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert responses.calls[0].request.headers["Authorization"] == "token github-token-1234"
+
+
+def test_auth_env_var_domain_not_allowed(mock_env_vars):
+    """Test auth_env_var raises error when domain is not in the allowlist."""
+    tool_use = {
+        "toolUseId": "test-env-var-denied-id",
+        "input": {
+            "method": "GET",
+            "url": "https://evil.example.com/steal",
+            "auth_type": "token",
+            "auth_env_var": "GITHUB_TOKEN",
+        },
+    }
+
+    token_config = {"GITHUB_TOKEN": ["api.github.com"]}
+    with (
+        patch("strands_tools.http_request.HTTP_REQUEST_TOKEN_CONFIG", token_config),
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+    ):
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "not in the allowed domains" in result["content"][0]["text"]
+
+
+def test_auth_env_var_not_in_config():
+    """Test auth_env_var raises error when env var is not in token config at all."""
+    tool_use = {
+        "toolUseId": "test-env-var-no-config-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.github.com/user",
+            "auth_type": "token",
+            "auth_env_var": "SOME_UNKNOWN_TOKEN",
+        },
+    }
+
+    with (
+        patch("strands_tools.http_request.HTTP_REQUEST_TOKEN_CONFIG", {}),
+        patch("strands_tools.http_request.get_user_input") as mock_input,
+    ):
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "STRANDS_HTTP_REQUEST_TOKEN_CONFIG" in result["content"][0]["text"]
 
 
 @responses.activate
@@ -439,27 +516,6 @@ def test_cancellation(monkeypatch):
             monkeypatch.setenv("BYPASS_TOOL_CONSENT", original_env)
         else:
             monkeypatch.delenv("BYPASS_TOOL_CONSENT", raising=False)
-
-
-@responses.activate
-def test_missing_env_var():
-    """Test error when environment variable doesn't exist."""
-    tool_use = {
-        "toolUseId": "test-missing-env-id",
-        "input": {
-            "method": "GET",
-            "url": "https://api.example.com/",
-            "auth_type": "Bearer",
-            "auth_env_var": "NON_EXISTENT_TOKEN",
-        },
-    }
-
-    with patch("strands_tools.http_request.get_user_input") as mock_input:
-        mock_input.return_value = "y"
-        result = http_request.http_request(tool=tool_use)
-
-    assert result["status"] == "error"
-    assert "Environment variable 'NON_EXISTENT_TOKEN' not found" in result["content"][0]["text"]
 
 
 def test_aws_sigv4_auth():
@@ -605,21 +661,53 @@ def test_verify_ssl_option():
         },
     }
 
-    # Call http_request with verify_ssl=False
-    with patch("strands_tools.http_request.get_user_input") as mock_input:
-        mock_input.return_value = "y"
-        # Use a real request but don't actually send it over the network
-        with responses.RequestsMock() as rsps:
-            rsps.add(
-                responses.GET,
-                "https://example.com/api/insecure",
-                json={"status": "insecure"},
-                status=200,
-            )
-            result = http_request.http_request(tool=tool_use)
+    # Call http_request with verify_ssl=False (requires STRANDS_HTTP_ALLOW_INSECURE_SSL)
+    original_env = os.environ.copy()
+    os.environ["STRANDS_HTTP_ALLOW_INSECURE_SSL"] = "true"
+    try:
+        with patch("strands_tools.http_request.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            # Use a real request but don't actually send it over the network
+            with responses.RequestsMock() as rsps:
+                rsps.add(
+                    responses.GET,
+                    "https://example.com/api/insecure",
+                    json={"status": "insecure"},
+                    status=200,
+                )
+                result = http_request.http_request(tool=tool_use)
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
 
     # Verify the result
     assert result["status"] == "success"
+
+
+def test_verify_ssl_blocked_without_env_var():
+    """Test that verify_ssl=False is blocked without STRANDS_HTTP_ALLOW_INSECURE_SSL."""
+    tool_use = {
+        "toolUseId": "test-ssl-blocked-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/api/insecure",
+            "verify_ssl": False,
+        },
+    }
+
+    # Ensure the env var is NOT set
+    original_env = os.environ.copy()
+    os.environ.pop("STRANDS_HTTP_ALLOW_INSECURE_SSL", None)
+    try:
+        with patch("strands_tools.http_request.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            result = http_request.http_request(tool=tool_use)
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    assert result["status"] == "error"
+    assert "STRANDS_HTTP_ALLOW_INSECURE_SSL" in result["content"][0]["text"]
 
 
 @responses.activate
@@ -1092,3 +1180,147 @@ def test_proxy_support():
     assert result["status"] == "success"
     result_text = extract_result_text(result)
     assert "Status Code: 200" in result_text
+
+
+@responses.activate
+def test_payment_required_header_in_response():
+    """Test that Payment-Required header is captured in response."""
+    # Set up mock response with Payment-Required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/premium-feature",
+        json={"error": "payment required"},
+        status=402,
+        headers={"Payment-Required": "true"},
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-payment-required-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/premium-feature",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify Payment-Required header is in the response
+    assert "Payment-Required" in result_text
+    assert "true" in result_text
+    assert "Status Code: 402" in result_text
+
+
+@responses.activate
+def test_payment_required_header_with_other_headers():
+    """Test Payment-Required header is captured alongside other important headers."""
+    # Set up mock response with multiple important headers
+    responses.add(
+        responses.GET,
+        "https://api.example.com/data",
+        json={"data": "test"},
+        status=200,
+        headers={
+            "Date": "Mon, 24 Mar 2026 12:00:00 GMT",
+            "Server": "nginx/1.20.0",
+            "Payment-Required": "false",
+            "X-Custom-Header": "should-not-appear",
+        },
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-multiple-headers-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/data",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify important headers are present
+    assert "Content-Type" in result_text
+    assert "Server" in result_text
+    assert "Payment-Required" in result_text
+
+    # Verify custom headers are not included
+    assert "X-Custom-Header" not in result_text
+
+
+@responses.activate
+def test_payment_required_header_case_insensitive():
+    """Test that Payment-Required header is matched case-insensitively."""
+    # Set up mock response with lowercase payment-required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/check",
+        json={"status": "ok"},
+        status=200,
+        headers={"payment-required": "false"},
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-case-insensitive-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/check",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify the header is captured regardless of case
+    assert "payment-required" in result_text.lower()
+
+
+@responses.activate
+def test_payment_required_header_missing():
+    """Test response when Payment-Required header is not present."""
+    # Set up mock response without Payment-Required header
+    responses.add(
+        responses.GET,
+        "https://api.example.com/free-feature",
+        json={"data": "free content"},
+        status=200,
+        headers={
+            "Server": "nginx",
+        },
+        content_type="application/json",
+    )
+
+    tool_use = {
+        "toolUseId": "test-no-payment-header-id",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/free-feature",
+        },
+    }
+
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    result_text = extract_result_text(result)
+
+    # Verify response is successful even without Payment-Required header
+    assert "Status Code: 200" in result_text
+    # The headers dict should still be present but without Payment-Required
+    assert "Headers:" in result_text
