@@ -59,7 +59,7 @@ result = agent.tool.apify_run_actor(
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, get_args
 from urllib.parse import urlparse
 
 from rich.panel import Panel
@@ -79,13 +79,16 @@ try:
 except ImportError:
     HAS_APIFY_CLIENT = False
 
-WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
+# Attribution header - lets Apify track usage originating from strands-agents (analytics only)
 TRACKING_HEADER = {"x-apify-integration-platform": "strands-agents"}
 ERROR_PANEL_TITLE = "[bold red]Apify Error[/bold red]"
 DEFAULT_TIMEOUT_SECS = 300
 DEFAULT_SCRAPE_TIMEOUT_SECS = 120
 DEFAULT_DATASET_ITEMS_LIMIT = 100
-VALID_CRAWLER_TYPES = ("playwright:adaptive", "playwright:firefox", "cheerio")
+
+WEBSITE_CONTENT_CRAWLER = "apify/website-content-crawler"
+CrawlerType = Literal["playwright:adaptive", "playwright:firefox", "cheerio"]
+WEBSITE_CONTENT_CRAWLER_TYPES = get_args(CrawlerType)
 
 
 # --- Helper functions ---
@@ -118,6 +121,8 @@ def _format_error(e: Exception) -> str:
                     "Rate limit exceeded. The Apify client retries automatically; "
                     "if this persists, reduce request frequency."
                 )
+            case None:
+                return f"Apify API error: {msg}"
             case _:
                 return f"Apify API error ({status_code}): {msg}"
     return str(e)
@@ -199,7 +204,7 @@ class ApifyToolClient:
             self._validate_positive(memory_mbytes, "memory_mbytes")
 
         call_kwargs: Dict[str, Any] = {
-            "run_input": run_input or {},
+            "run_input": run_input if run_input is not None else {},
             "timeout_secs": timeout_secs,
             "logger": None,  # Suppress verbose apify-client logging not useful to end users
         }
@@ -323,14 +328,14 @@ class ApifyToolClient:
         self,
         url: str,
         timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
-        crawler_type: str = "cheerio",
+        crawler_type: CrawlerType = "cheerio",
     ) -> str:
         """Scrape a single URL using Website Content Crawler and return Markdown."""
         self._validate_url(url)
         self._validate_positive(timeout_secs, "timeout_secs")
-        if crawler_type not in VALID_CRAWLER_TYPES:
+        if crawler_type not in WEBSITE_CONTENT_CRAWLER_TYPES:
             raise ValueError(
-                f"Invalid crawler_type '{crawler_type}'. Must be one of: {', '.join(VALID_CRAWLER_TYPES)}."
+                f"Invalid crawler_type '{crawler_type}'. Must be one of: {', '.join(WEBSITE_CONTENT_CRAWLER_TYPES)}."
             )
 
         run_input: Dict[str, Any] = {
@@ -343,9 +348,13 @@ class ApifyToolClient:
             timeout_secs=timeout_secs,
             logger=None,  # Suppress verbose apify-client logging not useful to end users
         )
+        if actor_run is None:
+            raise RuntimeError("Website Content Crawler returned no run data (possible wait timeout).")
         self._check_run_status(actor_run, "Website Content Crawler")
 
         dataset_id = actor_run.get("defaultDatasetId")
+        if not dataset_id:
+            raise RuntimeError("Website Content Crawler run has no default dataset.")
         result = self.client.dataset(dataset_id).list_items(limit=1)
         items = list(result.items)
 
@@ -617,7 +626,7 @@ def apify_run_task_and_get_dataset(
 def apify_scrape_url(
     url: str,
     timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
-    crawler_type: str = "cheerio",
+    crawler_type: CrawlerType = "cheerio",
 ) -> Dict[str, Any]:
     """Scrape a single URL and return its content as Markdown.
 
