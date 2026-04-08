@@ -33,9 +33,9 @@
 </div>
 
 > [!IMPORTANT]
-> **Looking to add a new tool?** Due to maintenance and scalability concerns, we are not accepting new tools into this repository. Instead, we encourage you to publish your tool as a standalone community package. You can use our [extension template](https://github.com/strands-agents/extension-template-python) to get started and get featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
+> **Looking to add a new tool?** We are not accepting new tools into this repository. Instead, we recommend publishing your tool as a standalone community package using our [extension template](https://github.com/strands-agents/extension-template-python). Once published, you can get it featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
 >
-> We still welcome bug fixes, documentation improvements, and enhancements to existing tools. See our [contribution guide](https://strandsagents.com/docs/contribute/) for details.
+> We welcome bug fixes, documentation improvements, and enhancements to existing tools. See our [contribution guide](https://strandsagents.com/docs/contribute/) for details.
 
 Strands Agents Tools is a community-driven project that provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
@@ -1369,7 +1369,7 @@ We welcome contributions from everyone! Here's how you can help:
 - **Tests** that improve coverage
 
 > [!NOTE]
-> We are not accepting new tools into this repository. To publish your own tool, use our [extension template](https://github.com/strands-agents/extension-template-python) and get it listed in the [community catalog](https://strandsagents.com/docs/community/get-featured/).
+> We are not accepting new tools into this repository. Instead, we recommend using our [extension template](https://github.com/strands-agents/extension-template-python) to publish your own tool package and get it listed in the [community catalog](https://strandsagents.com/docs/community/get-featured/).
 
 See our [Contributing Guide](CONTRIBUTING.md) for development setup and pull request process, or visit the [contribution guide](https://strandsagents.com/docs/contribute/) for all the ways to contribute to the Strands ecosystem.
 

@@ -9,7 +9,7 @@ body:
       value: |
         Thanks for suggesting a new feature for Strands Agents Tools!
 
-        > **Note:** Due to maintenance and scalability concerns, we are not accepting new tools into this repository. If you'd like to build a new tool, please use our [extension template](https://github.com/strands-agents/extension-template-python) and publish it as a standalone package. You can then get it featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
+        > **Note:** We are not accepting new tools into this repository. If you'd like to build a new tool, we recommend using our [extension template](https://github.com/strands-agents/extension-template-python) to publish it as a standalone package. You can then get it featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
         >
         > We still welcome feature requests for **improvements to existing tools**.
   - type: textarea
