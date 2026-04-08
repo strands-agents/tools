@@ -38,7 +38,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -104,7 +104,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | apify_run_actor_and_get_dataset | `agent.tool.apify_run_actor_and_get_dataset(actor_id="apify/website-content-crawler", run_input={"startUrls": [{"url": "https://example.com"}]})` | Run an Actor and fetch its dataset results in one step |
 | apify_run_task | `agent.tool.apify_run_task(task_id="user/my-task")` | Run a saved Apify task by ID with optional input overrides |
 | apify_run_task_and_get_dataset | `agent.tool.apify_run_task_and_get_dataset(task_id="user/my-task", dataset_items_limit=50)` | Run a task and fetch its dataset results in one step |
-| apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as markdown |
+| apify_scrape_url | `agent.tool.apify_scrape_url(url="https://example.com")` | Scrape a URL and return its content as Markdown |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
@@ -206,7 +206,7 @@ result = agent.tool.mcp_client(
     tool_args={"x": 10, "y": 20}
 )
 
-# Connect to a SSE-based server
+# Connect to an SSE-based server
 agent.tool.mcp_client(
     action="connect",
     connection_id="web_server",
@@ -277,7 +277,7 @@ response = agent.tool.http_request(
     auth_token="your_token_here"
 )
 
-# Convert HTML webpages to markdown for better readability
+# Convert HTML webpages to Markdown for better readability
 response = agent.tool.http_request(
     method="GET",
     url="https://example.com/article",
@@ -974,7 +974,7 @@ from strands_tools.apify import APIFY_CORE_TOOLS
 
 agent = Agent(tools=APIFY_CORE_TOOLS)
 
-# Scrape a single URL and get markdown content
+# Scrape a single URL and get Markdown content
 content = agent.tool.apify_scrape_url(url="https://example.com")
 
 # Run an Actor and get results in one step

@@ -1,10 +1,10 @@
 """Apify platform tools for Strands Agents.
 
-Apify is a large marketplace of tools for web scraping, data extraction,
-and web automation. These tools are called Actors — serverless cloud applications that
-take JSON input and store results in a dataset (structured, tabular output) or key-value
-store (files and unstructured data). Actors exist for social media, e-commerce, search
-engines, maps, travel sites, and many other sources.
+
+Apify is the world's largest marketplace of tools for web scraping, crawling, data extraction, and web automation.
+These tools are called Actors, serverless cloud programs that take JSON input and store results
+in a dataset (structured, tabular output) or key-value store (files and unstructured data).
+Get structured data from social media, e-commerce, search engines, maps, travel sites, or any other website.
 
 Available Tools:
 ---------------
@@ -325,7 +325,7 @@ class ApifyToolClient:
         timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
         crawler_type: str = "cheerio",
     ) -> str:
-        """Scrape a single URL using Website Content Crawler and return markdown."""
+        """Scrape a single URL using Website Content Crawler and return Markdown."""
         self._validate_url(url)
         self._validate_positive(timeout_secs, "timeout_secs")
         if crawler_type not in VALID_CRAWLER_TYPES:
@@ -375,15 +375,15 @@ def apify_run_actor(
     output data in one call, or apify_scrape_url for quick single-URL extraction.
 
     Common Actors:
-    - "apify/website-content-crawler" — scrape websites and extract content as markdown
-    - "apify/web-scraper" — general-purpose web scraper with JS rendering
+    - "apify/website-content-crawler" - scrape websites and extract content as Markdown
+    - "apify/web-scraper" - general-purpose web scraper with JS rendering
     - "apify/google-search-scraper" — scrape Google search results
 
     Args:
         actor_id: Actor identifier in "username/actor-name" format,
             e.g. "apify/website-content-crawler". Find Actors at https://apify.com/store.
         run_input: JSON-serializable input for the Actor. Each Actor defines its own
-            input schema — check the Actor README on Apify Store for required fields.
+            input schema - check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
@@ -472,7 +472,7 @@ def apify_run_actor_and_get_dataset(
         actor_id: Actor identifier in "username/actor-name" format,
             e.g. "apify/website-content-crawler". Find Actors at https://apify.com/store.
         run_input: JSON-serializable input for the Actor. Each Actor defines its own
-            input schema — check the Actor README on Apify Store for required fields.
+            input schema - check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
@@ -526,7 +526,7 @@ def apify_run_task(
     the output data in one call.
 
     Args:
-        task_id: Task identifier in "username~task-name" format or a task ID string.
+        task_id: Task identifier in "username/task-name" format or a task ID string.
         task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
@@ -575,7 +575,7 @@ def apify_run_task_and_get_dataset(
     result data without making two separate tool calls.
 
     Args:
-        task_id: Task identifier in "username~task-name" format or a task ID string.
+        task_id: Task identifier in "username/task-name" format or a task ID string.
         task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
         memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
@@ -619,7 +619,7 @@ def apify_scrape_url(
     timeout_secs: int = DEFAULT_SCRAPE_TIMEOUT_SECS,
     crawler_type: str = "cheerio",
 ) -> Dict[str, Any]:
-    """Scrape a single URL and return its content as markdown.
+    """Scrape a single URL and return its content as Markdown.
 
     Uses the Website Content Crawler Actor under the hood, pre-configured for
     fast single-page scraping. This is the simplest way to extract readable content
@@ -635,7 +635,7 @@ def apify_scrape_url(
             - "playwright:firefox": Full JS rendering, best at bypassing anti-bot protection but slowest.
 
     Returns:
-        Dict with status and content containing the markdown content of the scraped page.
+        Dict with status and content containing the Markdown content of the scraped page.
     """
     try:
         _check_dependency()
