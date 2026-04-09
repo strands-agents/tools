@@ -121,7 +121,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import boto3
-from elasticsearch import Elasticsearch, NotFoundError
+from elasticsearch import Elasticsearch
 from strands import tool
 
 # Set up logging
@@ -773,7 +773,14 @@ def elasticsearch_memory(
 
             elif action_enum == MemoryAction.RETRIEVE:
                 response = _retrieve_memories(
-                    es_client, bedrock_runtime, index_name, safe_namespace, embedding_model, query, max_results, next_token
+                    es_client,
+                    bedrock_runtime,
+                    index_name,
+                    safe_namespace,
+                    embedding_model,
+                    query,
+                    max_results,
+                    next_token,
                 )
                 return {
                     "status": "success",
