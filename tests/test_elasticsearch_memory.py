@@ -260,14 +260,21 @@ def test_get_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     """Test getting a specific memory by ID."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Configure mock get response
-    mock_elasticsearch_client["client"].get.return_value = {
-        "_source": {
-            "memory_id": "mem_123",
-            "content": "Test content",
-            "timestamp": "2023-01-01T00:00:00Z",
-            "metadata": {"category": "test"},
-            "namespace": "test_namespace",
+    # Configure mock search response (now uses search instead of get for namespace enforcement)
+    mock_elasticsearch_client["client"].search.return_value = {
+        "hits": {
+            "hits": [
+                {
+                    "_source": {
+                        "memory_id": "mem_123",
+                        "content": "Test content",
+                        "timestamp": "2023-01-01T00:00:00Z",
+                        "metadata": {"category": "test"},
+                        "namespace": "test_namespace",
+                    }
+                }
+            ],
+            "total": {"value": 1},
         }
     }
 
@@ -278,25 +285,20 @@ def test_get_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "Memory retrieved successfully" in result["content"][0]["text"]
 
-    # Verify get was called
-    mock_elasticsearch_client["client"].get.assert_called_once_with(index="test_index", id="mem_123")
+    # Verify search was called with both memory_id and namespace for security
+    mock_elasticsearch_client["client"].search.assert_called_once()
+    search_call = mock_elasticsearch_client["client"].search.call_args[1]
+    query = search_call["body"]["query"]["bool"]["must"]
+    assert {"term": {"memory_id": "mem_123"}} in query
+    assert {"term": {"namespace": "test_namespace"}} in query
 
 
 def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     """Test deleting a memory."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Configure mock responses
-    mock_elasticsearch_client["client"].get.return_value = {
-        "_source": {
-            "memory_id": "mem_123",
-            "content": "Test content",
-            "timestamp": "2023-01-01T00:00:00Z",
-            "metadata": {},
-            "namespace": "test_namespace",
-        }
-    }
-    mock_elasticsearch_client["client"].delete.return_value = {"result": "deleted"}
+    # Configure mock delete_by_query response (atomic delete with namespace constraint)
+    mock_elasticsearch_client["client"].delete_by_query.return_value = {"deleted": 1}
 
     # Call the tool
     result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123", **config)
@@ -305,8 +307,12 @@ def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     assert result["status"] == "success"
     assert "Memory deleted successfully: mem_123" in result["content"][0]["text"]
 
-    # Verify delete was called
-    mock_elasticsearch_client["client"].delete.assert_called_once_with(index="test_index", id="mem_123")
+    # Verify delete_by_query was called with both memory_id and namespace
+    mock_elasticsearch_client["client"].delete_by_query.assert_called_once()
+    call_args = mock_elasticsearch_client["client"].delete_by_query.call_args[1]
+    query = call_args["body"]["query"]["bool"]["must"]
+    assert {"term": {"memory_id": "mem_123"}} in query
+    assert {"term": {"namespace": "test_namespace"}} in query
 
 
 def test_unsupported_action(mock_elasticsearch_client, mock_bedrock_client, config):
@@ -387,26 +393,32 @@ def test_memory_not_found(mock_elasticsearch_client, mock_bedrock_client, config
     """Test handling when memory is not found."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    from elasticsearch import NotFoundError
-
-    # Configure mock to raise NotFoundError
-    mock_elasticsearch_client["client"].get.side_effect = NotFoundError("404", "not_found_exception", {})
+    # Configure mock search to return empty results (memory not found in namespace)
+    mock_elasticsearch_client["client"].search.return_value = {
+        "hits": {
+            "hits": [],
+            "total": {"value": 0},
+        }
+    }
 
     # Call the tool
     result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent", **config)
 
     # Verify error response
     assert result["status"] == "error"
-    assert "Memory nonexistent not found" in result["content"][0]["text"]
+    assert "Memory nonexistent not found in namespace test_namespace" in result["content"][0]["text"]
 
 
 def test_namespace_validation(mock_elasticsearch_client, mock_bedrock_client, config):
     """Test that memories are properly filtered by namespace."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Configure mock get response with wrong namespace
-    mock_elasticsearch_client["client"].get.return_value = {
-        "_source": {"memory_id": "mem_123", "content": "Test content", "namespace": "wrong_namespace"}
+    # Configure mock search to return empty results (memory not in this namespace)
+    mock_elasticsearch_client["client"].search.return_value = {
+        "hits": {
+            "hits": [],
+            "total": {"value": 0},
+        }
     }
 
     # Call the tool
@@ -415,6 +427,13 @@ def test_namespace_validation(mock_elasticsearch_client, mock_bedrock_client, co
     # Verify error response
     assert result["status"] == "error"
     assert "not found in namespace test_namespace" in result["content"][0]["text"]
+
+    # Verify search was called with both memory_id and namespace
+    mock_elasticsearch_client["client"].search.assert_called_once()
+    search_call = mock_elasticsearch_client["client"].search.call_args[1]
+    query = search_call["body"]["query"]["bool"]["must"]
+    assert {"term": {"memory_id": "mem_123"}} in query
+    assert {"term": {"namespace": "test_namespace"}} in query
 
 
 def test_pagination_support(mock_elasticsearch_client, mock_bedrock_client, config):
@@ -754,12 +773,15 @@ def test_security_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     """Test security-related scenarios like namespace isolation."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Configure mock get response with wrong namespace
-    mock_elasticsearch_client["client"].get.return_value = {
-        "_source": {"memory_id": "mem_123", "content": "Test content", "namespace": "wrong_namespace"}
+    # Configure mock search to return empty results (memory not in this namespace)
+    mock_elasticsearch_client["client"].search.return_value = {
+        "hits": {
+            "hits": [],
+            "total": {"value": 0},
+        }
     }
 
-    # Test namespace validation
+    # Test namespace validation - memory exists but not in requested namespace
     result = agent.tool.elasticsearch_memory(
         action="get",
         memory_id="mem_123",
@@ -791,3 +813,109 @@ def test_troubleshooting_scenarios(mock_elasticsearch_client, mock_bedrock_clien
     result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
     assert result["status"] == "error"
     assert "Unable to connect to Elasticsearch cluster" in result["content"][0]["text"]
+
+
+def test_injection_prevention(mock_elasticsearch_client, mock_bedrock_client, config):
+    """Test that injection attempts via namespace are blocked."""
+    agent = Agent(tools=[elasticsearch_memory])
+
+    # Remove namespace from config to avoid conflict
+    test_config = {k: v for k, v in config.items() if k != "namespace"}
+
+    # Test dict-based injection (analogous to MongoDB {"$ne": ""} attack)
+    malicious_namespace = {"$ne": ""}
+    result = agent.tool.elasticsearch_memory(action="list", namespace=malicious_namespace, **test_config)
+    assert result["status"] == "error"
+    error_text = result["content"][0]["text"]
+    assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text
+
+    # Test other injection payloads
+    injection_attempts = [
+        {"$gt": ""},
+        {"$regex": ".*"},
+        {"$exists": True},
+        {"$in": ["tenant1", "tenant2"]},
+    ]
+
+    for injection_payload in injection_attempts:
+        result = agent.tool.elasticsearch_memory(action="list", namespace=injection_payload, **test_config)
+        assert result["status"] == "error", f"Injection {injection_payload} should be blocked"
+        error_text = result["content"][0]["text"]
+        assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text
+
+
+def test_namespace_validation_strict_rules(mock_elasticsearch_client, mock_bedrock_client, config):
+    """Test strict namespace validation rules."""
+    agent = Agent(tools=[elasticsearch_memory])
+
+    # Remove namespace from config to avoid conflict
+    test_config = {k: v for k, v in config.items() if k != "namespace"}
+
+    # Test invalid characters (should be rejected)
+    invalid_namespaces = [
+        "user.name",  # Dots not allowed
+        "user@domain",  # @ symbol
+        "user$name",  # $ symbol
+        "user name",  # Space
+        "user/path",  # Forward slash
+        "user:name",  # Colon
+        "a" * 65,  # Too long (over 64 chars)
+        "",  # Empty
+        "   ",  # Whitespace only
+    ]
+
+    for invalid_namespace in invalid_namespaces:
+        result = agent.tool.elasticsearch_memory(action="list", namespace=invalid_namespace, **test_config)
+        assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
+        error_text = result["content"][0]["text"]
+        assert "Invalid namespace" in error_text
+
+
+def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_client, config):
+    """Test that valid namespaces are accepted."""
+    agent = Agent(tools=[elasticsearch_memory])
+
+    # Configure mock responses
+    mock_elasticsearch_client["client"].search.return_value = {
+        "hits": {
+            "hits": [],
+            "total": {"value": 0},
+        }
+    }
+
+    # Remove namespace from config
+    test_config = {k: v for k, v in config.items() if k != "namespace"}
+
+    valid_namespaces = [
+        "default",
+        "user_123",
+        "tenant-abc",
+        "MyNamespace",
+        "a",
+        "A" * 64,  # Max length
+    ]
+
+    for valid_namespace in valid_namespaces:
+        result = agent.tool.elasticsearch_memory(action="list", namespace=valid_namespace, **test_config)
+        assert result["status"] == "success", f"Valid namespace '{valid_namespace}' should be accepted"
+
+
+def test_delete_memory_namespace_enforcement(mock_elasticsearch_client, mock_bedrock_client, config):
+    """Test that delete enforces namespace atomically (no TOCTOU)."""
+    agent = Agent(tools=[elasticsearch_memory])
+
+    # Configure delete_by_query to return 0 deleted (memory not in namespace)
+    mock_elasticsearch_client["client"].delete_by_query.return_value = {"deleted": 0}
+
+    result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123", **config)
+
+    # Should fail because memory not found in the requested namespace
+    assert result["status"] == "error"
+    assert "not found in namespace test_namespace" in result["content"][0]["text"]
+
+    # Verify delete_by_query was called with namespace constraint
+    mock_elasticsearch_client["client"].delete_by_query.assert_called_once()
+    call_args = mock_elasticsearch_client["client"].delete_by_query.call_args[1]
+    query = call_args["body"]["query"]["bool"]["must"]
+    assert {"term": {"memory_id": "mem_123"}} in query
+    assert {"term": {"namespace": "test_namespace"}} in query
