@@ -213,7 +213,6 @@ TOOL_SPEC = {
                 "region",
                 "service_name",
                 "operation_name",
-                "parameters",
                 "label",
             ],
         }
@@ -280,7 +279,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     service_name = tool_input["service_name"]
     operation_name = tool_input["operation_name"]
-    parameters = tool_input["parameters"]
+    parameters = tool_input.get("parameters", {})
     region = tool_input.get("region", aws_region)
     label = tool_input.get("label", "AWS Operation Details")
 
