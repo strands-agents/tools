@@ -14,8 +14,9 @@
 
 <!-- Choose one of the following types of changes, delete the rest -->
 
+> Please note that we are not accepting new tools into this repository. Instead, we recommend using our [extension template](https://github.com/strands-agents/extension-template-python) to publish your own tool package and get it featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
+
 Bug fix
-New Tool
 Breaking change
 Documentation update
 Other (please describe):
