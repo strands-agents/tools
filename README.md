@@ -32,11 +32,6 @@
   </p>
 </div>
 
-> [!IMPORTANT]
-> **Looking to add a new tool?** We are not accepting new tools into this repository. Instead, we recommend publishing your tool as a standalone community package using our [extension template](https://github.com/strands-agents/extension-template-python). Once published, you can get it featured in our [community catalog](https://strandsagents.com/docs/community/get-featured/).
->
-> We welcome bug fixes, documentation improvements, and enhancements to existing tools. See our [contribution guide](https://strandsagents.com/docs/contribute/) for details.
-
 Strands Agents Tools is a community-driven project that provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
@@ -1361,17 +1356,20 @@ The `graph` tool uses the same model provider environment variables as `use_agen
 
 ## Contributing ❤️
 
-We welcome contributions from everyone! Here's how you can help:
+This is a community-driven project, powered by passionate developers like you.
+We enthusiastically welcome contributions from everyone,
+regardless of experience level—your unique perspective is valuable to us!
 
-- **Bug fixes** for existing tools
-- **Documentation improvements**
-- **Performance enhancements** to existing tools
-- **Tests** that improve coverage
+### How to Get Started?
 
-> [!NOTE]
-> We are not accepting new tools into this repository. Instead, we recommend using our [extension template](https://github.com/strands-agents/extension-template-python) to publish your own tool package and get it listed in the [community catalog](https://strandsagents.com/docs/community/get-featured/).
+1. **Find your first opportunity**: If you're new to the project, explore our labeled "good first issues" for beginner-friendly tasks.
+2. **Understand our workflow**: Review our [Contributing Guide](CONTRIBUTING.md)  to learn about our development setup, coding standards, and pull request process.
+3. **Make your impact**: Contributions come in many forms—fixing bugs, enhancing documentation, improving performance, adding features, writing tests, or refining the user experience.
+4. **Submit your work**: When you're ready, submit a well-documented pull request, and our maintainers will provide feedback to help get your changes merged.
 
-See our [Contributing Guide](CONTRIBUTING.md) for development setup and pull request process, or visit the [contribution guide](https://strandsagents.com/docs/contribute/) for all the ways to contribute to the Strands ecosystem.
+Your questions, insights, and ideas are always welcome!
+
+Together, we're building something meaningful that impacts real users. We look forward to collaborating with you!
 
 ## License
 
