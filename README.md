@@ -38,7 +38,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -202,7 +202,7 @@ result = agent.tool.mcp_client(
     tool_args={"x": 10, "y": 20}
 )
 
-# Connect to an SSE-based server
+# Connect to a SSE-based server
 agent.tool.mcp_client(
     action="connect",
     connection_id="web_server",
@@ -273,7 +273,7 @@ response = agent.tool.http_request(
     auth_token="your_token_here"
 )
 
-# Convert HTML webpages to Markdown for better readability
+# Convert HTML webpages to markdown for better readability
 response = agent.tool.http_request(
     method="GET",
     url="https://example.com/article",

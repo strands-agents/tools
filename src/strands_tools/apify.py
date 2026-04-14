@@ -394,7 +394,7 @@ def apify_run_actor(
         run_input: JSON-serializable input for the Actor. Each Actor defines its own
             input schema - check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
+        memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default `memory` value if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
 
     Returns:
@@ -483,7 +483,7 @@ def apify_run_actor_and_get_dataset(
         run_input: JSON-serializable input for the Actor. Each Actor defines its own
             input schema - check the Actor README on Apify Store for required fields.
         timeout_secs: Maximum time in seconds to wait for the Actor run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default if not set.
+        memory_mbytes: Memory allocation in MB for the Actor run. Uses Actor default `memory` value if not set.
         build: Actor build tag or number to run a specific version. Uses latest build if not set.
         dataset_items_limit: Maximum number of dataset items to return. Defaults to 100.
         dataset_items_offset: Number of dataset items to skip for pagination. Defaults to 0.
@@ -538,7 +538,7 @@ def apify_run_task(
         task_id: Task identifier in "username/task-name" format or a task ID string.
         task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
+        memory_mbytes: Memory allocation in MB for the task run. Uses task default `memory` value if not set.
 
     Returns:
         Dict with status and content containing run metadata: run_id, status, dataset_id,
@@ -587,7 +587,7 @@ def apify_run_task_and_get_dataset(
         task_id: Task identifier in "username/task-name" format or a task ID string.
         task_input: Optional JSON-serializable input to override the task's default input fields.
         timeout_secs: Maximum time in seconds to wait for the task run to finish. Defaults to 300.
-        memory_mbytes: Memory allocation in MB for the task run. Uses task default if not set.
+        memory_mbytes: Memory allocation in MB for the task run. Uses task default `memory` value if not set.
         dataset_items_limit: Maximum number of dataset items to return. Defaults to 100.
         dataset_items_offset: Number of dataset items to skip for pagination. Defaults to 0.
 
