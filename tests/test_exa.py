@@ -30,6 +30,11 @@ def mock_aiohttp_response():
                 "favicon": "https://arxiv.org/favicon.ico",
                 "text": "Abstract Large Language Models (LLMs) have recently demonstrated remarkable capabilities...",
                 "summary": "This overview paper on Large Language Models (LLMs) highlights key developments...",
+                "highlights": [
+                    "Large Language Models (LLMs) have recently demonstrated remarkable capabilities",
+                    "This survey provides a comprehensive overview of recent advances in LLMs",
+                ],
+                "highlightScores": [0.95, 0.88],
             }
         ],
         "context": "Formatted context string...",
@@ -66,6 +71,11 @@ def mock_contents_response():
                 "id": "https://arxiv.org/abs/2307.06435",
                 "text": "Abstract Large Language Models (LLMs) have recently demonstrated remarkable capabilities...",
                 "summary": "This overview paper on Large Language Models (LLMs) highlights key developments...",
+                "highlights": [
+                    "Large Language Models (LLMs) have recently demonstrated remarkable capabilities",
+                    "This survey provides a comprehensive overview of recent advances in LLMs",
+                ],
+                "highlightScores": [0.95, 0.88],
             }
         ],
         "context": "Formatted context string...",
@@ -290,6 +300,57 @@ def test_format_contents_response():
     assert panel.title == "[bold blue]Exa Contents Results"
     assert "test-request-456" in panel.renderable
     assert "Successfully retrieved: 1 URLs" in panel.renderable
+
+
+def test_format_search_response_with_highlights():
+    """Test format_search_response renders highlights."""
+    data = {
+        "requestId": "test-hl-search",
+        "searchType": "auto",
+        "resolvedSearchType": "auto",
+        "results": [
+            {
+                "title": "Highlights Test",
+                "url": "https://example.com",
+                "author": "Author",
+                "publishedDate": "2024-01-01",
+                "highlights": [
+                    "First key excerpt from the page",
+                    "Second key excerpt from the page",
+                ],
+            }
+        ],
+        "costDollars": {"total": 0.005},
+    }
+
+    panel = exa.format_search_response(data)
+    rendered = panel.renderable
+    assert "Highlights:" in rendered
+    assert "First key excerpt from the page" in rendered
+    assert "Second key excerpt from the page" in rendered
+
+
+def test_format_contents_response_with_highlights():
+    """Test format_contents_response renders highlights."""
+    data = {
+        "requestId": "test-hl-contents",
+        "results": [
+            {
+                "title": "Highlights Test",
+                "url": "https://example.com",
+                "highlights": [
+                    "Key excerpt from contents",
+                ],
+            }
+        ],
+        "statuses": [{"id": "https://example.com", "status": "success", "error": None}],
+        "costDollars": {"total": 0.001},
+    }
+
+    panel = exa.format_contents_response(data)
+    rendered = panel.renderable
+    assert "Highlights:" in rendered
+    assert "Key excerpt from contents" in rendered
 
 
 def test_format_contents_response_with_errors():

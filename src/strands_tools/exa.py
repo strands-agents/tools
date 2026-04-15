@@ -9,6 +9,8 @@ Key Features:
 - Deep search for thorough, comprehensive results
 - Advanced content filtering and domain management
 - Full page content extraction with summaries
+- Highlights for token-efficient page excerpts
+- Content freshness control with max age hours
 - Support for general web search, company info, news, PDFs, GitHub repos, and more
 - Date range filtering and domain management
 - Live crawling with fallback options
@@ -109,6 +111,12 @@ def format_search_response(data: Dict[str, Any]) -> Panel:
             if summary:
                 content.append(f"Summary: {summary}")
 
+            highlights_list = result.get("highlights", [])
+            if highlights_list:
+                content.append("Highlights:")
+                for highlight in highlights_list:
+                    content.append(f"  \u2022 {highlight.strip()}")
+
             # Add full text content (length controlled by API maxCharacters parameter)
             if text:
                 content.append(f"Content: {text.strip()}")
@@ -160,6 +168,12 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
             if summary:
                 content.append(f"Summary: {summary}")
 
+            highlights_list = result.get("highlights", [])
+            if highlights_list:
+                content.append("Highlights:")
+                for highlight in highlights_list:
+                    content.append(f"  \u2022 {highlight.strip()}")
+
             if subpages:
                 content.append(f"Subpages: {len(subpages)} found")
 
@@ -192,9 +206,19 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 @tool
 async def exa_search(
     query: str,
-    type: Optional[Literal["auto", "fast", "deep"]] = "auto",
+    type: Optional[Literal["auto", "instant", "fast", "deep"]] = "auto",
     category: Optional[
-        Literal["company", "news", "pdf", "github", "personal site", "linkedin profile", "financial report"]
+        Literal[
+            "company",
+            "research paper",
+            "news",
+            "pdf",
+            "github",
+            "personal site",
+            "linkedin profile",
+            "people",
+            "financial report",
+        ]
     ] = None,
     user_location: Optional[str] = None,
     num_results: Optional[int] = None,
@@ -210,9 +234,11 @@ async def exa_search(
     moderation: Optional[bool] = None,
     # Contents options
     text: Optional[Union[bool, Dict[str, Any]]] = None,
+    highlights: Optional[Union[bool, Dict[str, Any]]] = None,
     summary: Optional[Dict[str, Any]] = None,
     livecrawl: Optional[Literal["never", "fallback", "always", "preferred"]] = None,
     livecrawl_timeout: Optional[int] = None,
+    max_age_hours: Optional[int] = None,
     subpages: Optional[int] = None,
     subpage_target: Optional[Union[str, List[str]]] = None,
     extras: Optional[Dict[str, Any]] = None,
@@ -232,22 +258,25 @@ async def exa_search(
 
     Search Types:
     - auto: Intelligently selects the best search approach (recommended default)
+    - instant: Lowest latency search for real-time applications
     - fast: Optimized for speed
     - deep: Thorough search for comprehensive results
 
     Categories (optional - general web search works best):
     - company: Focus on company websites and information when specifically needed
+    - research paper: Academic and research papers
     - news: News articles and journalism
     - pdf: PDF documents
     - github: GitHub repositories and code
     - personal site: Personal websites and blogs
     - linkedin profile: LinkedIn profiles
+    - people: People search (LinkedIn profiles)
     - financial report: Financial and earnings reports
 
     Args:
         query: The search query string. Examples: "Latest developments in artificial intelligence",
             "Best project management tools"
-        type: Search type - "auto" (default, recommended), "fast", or "deep"
+        type: Search type - "auto" (default, recommended), "instant", "fast", or "deep"
         category: Optional data category - use sparingly as general search works best.
             Use "company" when specifically looking for company information
         user_location: Two-letter ISO country code (e.g., "US", "UK") for geo-localized results
@@ -264,9 +293,13 @@ async def exa_search(
         moderation: Enable content moderation to filter unsafe content
         text: Include full page text - True/False or object with maxCharacters and includeHtmlTags.
             Use maxCharacters to control text length instead of relying on default limits
+        highlights: Token-efficient page excerpts - True/False or object with maxCharacters
+            and optional query for guiding highlight extraction
         summary: Generate summaries - object with query and optional schema for structured output
         livecrawl: Live crawling options - "never", "fallback", "always", "preferred"
         livecrawl_timeout: Timeout for live crawling in milliseconds (default 10000)
+        max_age_hours: Maximum age of cached content in hours before livecrawling.
+            0 = always livecrawl, -1 = never livecrawl (cache only)
         subpages: Number of subpages to crawl from each result
         subpage_target: Keywords to find specific subpages (string or array)
         extras: Additional options - object with links (int) and imageLinks (int)
@@ -304,6 +337,13 @@ async def exa_search(
         category="news",
         start_published_date="2024-01-01T00:00:00.000Z",
         text=True
+    )
+
+    # Search with highlights and content freshness
+    result = await exa_search(
+        query="AI safety research advances",
+        highlights={"maxCharacters": 4000},
+        max_age_hours=24,
     )
     """
     try:
@@ -374,12 +414,16 @@ async def exa_search(
         contents = {}
         if text is not None:
             contents["text"] = text
+        if highlights is not None:
+            contents["highlights"] = highlights
         if summary is not None:
             contents["summary"] = summary
         if livecrawl is not None:
             contents["livecrawl"] = livecrawl
         if livecrawl_timeout is not None:
             contents["livecrawlTimeout"] = livecrawl_timeout
+        if max_age_hours is not None:
+            contents["maxAgeHours"] = max_age_hours
         if subpages is not None:
             contents["subpages"] = subpages
         if subpage_target is not None:
@@ -427,9 +471,11 @@ async def exa_search(
 async def exa_get_contents(
     urls: List[str],
     text: Optional[Union[bool, Dict[str, Any]]] = None,
+    highlights: Optional[Union[bool, Dict[str, Any]]] = None,
     summary: Optional[Dict[str, Any]] = None,
     livecrawl: Optional[Literal["never", "fallback", "always", "preferred"]] = None,
     livecrawl_timeout: Optional[int] = None,
+    max_age_hours: Optional[int] = None,
     subpages: Optional[int] = None,
     subpage_target: Optional[Union[str, List[str]]] = None,
     extras: Optional[Dict[str, Any]] = None,
@@ -451,6 +497,7 @@ async def exa_get_contents(
 
     Content Options:
     - Text: Full page content with optional HTML tags and character limits
+    - Highlights: Token-efficient page excerpts
     - Summary: AI-generated summaries with optional structured schemas
     - Subpages: Crawl and extract content from related pages
     - Extras: Additional links and images from pages
@@ -461,6 +508,8 @@ async def exa_get_contents(
             - True: Extract full text with default settings
             - False: Disable text extraction
             - Object: Advanced options with maxCharacters (controls text length) and includeHtmlTags
+        highlights: Token-efficient page excerpts - True/False or object with maxCharacters
+            and optional query for guiding highlight extraction
         summary: Summary generation options:
             - query: Custom query for summary generation
             - schema: JSON schema for structured summary output
@@ -470,6 +519,8 @@ async def exa_get_contents(
             - "always": Always perform live crawl
             - "preferred": Try live crawl, fall back to cache if it fails
         livecrawl_timeout: Timeout for live crawling in milliseconds (default 10000)
+        max_age_hours: Maximum age of cached content in hours before livecrawling.
+            0 = always livecrawl, -1 = never livecrawl (cache only)
         subpages: Number of subpages to crawl from each URL
         subpage_target: Keywords to find specific subpages (string or list)
         extras: Extra content options:
@@ -525,9 +576,11 @@ async def exa_get_contents(
         payload = {
             "urls": urls,
             "text": text,
+            "highlights": highlights,
             "summary": summary,
             "livecrawl": livecrawl,
             "livecrawlTimeout": livecrawl_timeout,
+            "maxAgeHours": max_age_hours,
             "subpages": subpages,
             "subpageTarget": subpage_target,
             "extras": extras,
