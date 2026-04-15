@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strands_tools.programmatic_tool_caller import (
+    _RESERVED_NAMESPACE_NAMES,
     _build_namespace,
     _create_async_tool_function,
     _execute_tool,
@@ -174,6 +175,35 @@ class TestBuildNamespace:
         assert asyncio.iscoroutinefunction(ns["calculator"])
         assert asyncio.iscoroutinefunction(ns["shell"])
 
+    def test_tool_named_asyncio_raises_error(self):
+        """A tool named 'asyncio' must raise ValueError (namespace clash)."""
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="asyncio"):
+                _build_namespace({"asyncio", "calculator"}, mock_agent)
+
+    def test_tool_clashing_with_extra_module_raises_error(self):
+        """A tool whose name matches an extra module must raise ValueError."""
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {"PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json"}):
+            with pytest.raises(ValueError, match="json"):
+                _build_namespace({"json", "calculator"}, mock_agent)
+
+    def test_no_error_when_no_clashes(self):
+        """No error should be raised when tool names don't clash with reserved names."""
+        mock_agent = MagicMock()
+        with patch.dict("os.environ", {"PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json"}):
+            ns = _build_namespace({"calculator", "shell"}, mock_agent)
+
+        assert "calculator" in ns
+        assert "shell" in ns
+        assert "json" in ns
+
+    def test_reserved_namespace_names_constant(self):
+        """_RESERVED_NAMESPACE_NAMES should contain asyncio and __name__."""
+        assert "asyncio" in _RESERVED_NAMESPACE_NAMES
+        assert "__name__" in _RESERVED_NAMESPACE_NAMES
+
 
 class TestProgrammaticToolCaller:
     """Tests for programmatic_tool_caller function."""
@@ -336,3 +366,75 @@ print(f"Results: {results}")
         )
         assert result["status"] == "success"
         assert "key" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_system_exit_caught(self, mock_console, mock_input):
+        """sys.exit() in user code must NOT crash the host — it should return an error result."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(
+            code="import sys; sys.exit(1)",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "error"
+        assert "SystemExit" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_keyboard_interrupt_caught(self, mock_console, mock_input):
+        """KeyboardInterrupt in user code must NOT crash the host."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {}
+
+        result = programmatic_tool_caller(
+            code="raise KeyboardInterrupt('test')",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "error"
+        assert "KeyboardInterrupt" in result["content"][0]["text"]
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+    def test_tool_named_asyncio_raises_namespace_error(self, mock_console, mock_input):
+        """If a tool is named 'asyncio', it must fail with an error (not silently shadow)."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {
+            "asyncio": MagicMock(),
+            "calculator": MagicMock(),
+        }
+
+        result = programmatic_tool_caller(
+            code="print('should not run')",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "error"
+        assert "asyncio" in result["content"][0]["text"]
+        assert "conflict" in result["content"][0]["text"].lower()
+
+    @patch("strands_tools.programmatic_tool_caller.get_user_input")
+    @patch("strands_tools.programmatic_tool_caller.console_util")
+    @patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true", "PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES": "json"})
+    def test_tool_named_like_extra_module_raises_namespace_error(self, mock_console, mock_input):
+        """If a tool name matches an extra module, it must fail with an error."""
+        mock_console.create.return_value = MagicMock()
+        mock_context = MagicMock()
+        mock_context.agent.tool_registry.registry = {
+            "json": MagicMock(),
+            "calculator": MagicMock(),
+        }
+
+        result = programmatic_tool_caller(
+            code="print('should not run')",
+            tool_context=mock_context,
+        )
+        assert result["status"] == "error"
+        assert "json" in result["content"][0]["text"]
+        assert "conflict" in result["content"][0]["text"].lower()

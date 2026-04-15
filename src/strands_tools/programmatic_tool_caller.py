@@ -71,6 +71,10 @@ from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
 
+# Reserved namespace names that tools cannot shadow.
+# asyncio is always required; __name__ is the base namespace key.
+_RESERVED_NAMESPACE_NAMES = frozenset({"asyncio", "__name__"})
+
 
 # =============================================================================
 # Tool Execution Helpers
@@ -147,6 +151,11 @@ def _build_namespace(available_tools: set[str], agent: Any) -> Dict[str, Any]:
     (comma-separated module names, e.g. ``json,re,math,collections``).
     Tool functions are injected as async callables.
 
+    Raises:
+        ValueError: If a tool name conflicts with a reserved namespace name
+            (``asyncio``, ``__name__``) or with an extra module injected via
+            ``PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES``.
+
     Returns:
         Namespace dict ready for ``exec()``.
     """
@@ -158,6 +167,9 @@ def _build_namespace(available_tools: set[str], agent: Any) -> Dict[str, Any]:
     # asyncio is always required (async wrapper)
     namespace["asyncio"] = asyncio
 
+    # Collect all reserved names (built-in + extra modules)
+    reserved_names = set(_RESERVED_NAMESPACE_NAMES)
+
     # Extra modules from env var
     extra_modules = os.environ.get("PROGRAMMATIC_TOOL_CALLER_EXTRA_MODULES", "").strip()
     if extra_modules:
@@ -167,8 +179,18 @@ def _build_namespace(available_tools: set[str], agent: Any) -> Dict[str, Any]:
                 continue
             try:
                 namespace[mod_name] = importlib.import_module(mod_name)
+                reserved_names.add(mod_name)
             except ImportError:
                 logger.warning(f"Could not import extra module '{mod_name}', skipping")
+
+    # Check for namespace clashes BEFORE injecting tools
+    clashing_tools = available_tools & reserved_names
+    if clashing_tools:
+        raise ValueError(
+            f"Tool name(s) {sorted(clashing_tools)} conflict with reserved namespace entries. "
+            f"Reserved names: {sorted(reserved_names)}. "
+            f"Rename the tool(s) or exclude them via PROGRAMMATIC_TOOL_CALLER_ALLOWED_TOOLS."
+        )
 
     # Inject tools as async functions
     for tool_name in available_tools:
@@ -307,6 +329,11 @@ def programmatic_tool_caller(
 
     except SyntaxError:
         error_msg = f"Syntax error:\n{traceback.format_exc()}"
+        console.print(Panel(error_msg, title="[bold red]Error[/]", border_style="red"))
+        return {"status": "error", "content": [{"text": error_msg}]}
+
+    except (SystemExit, KeyboardInterrupt) as e:
+        error_msg = f"Execution error: {type(e).__name__}: {e}"
         console.print(Panel(error_msg, title="[bold red]Error[/]", border_style="red"))
         return {"status": "error", "content": [{"text": error_msg}]}
 
