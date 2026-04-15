@@ -435,7 +435,11 @@ async def exa_search(
             payload["contents"] = contents
 
         # Make API request
-        headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "x-exa-integration": "aws-strands-agent",
+        }
         url = f"{EXA_API_BASE_URL}{EXA_SEARCH_ENDPOINT}"
 
         # Remove None values
@@ -588,7 +592,11 @@ async def exa_get_contents(
         }
 
         # Make API request
-        headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "x-exa-integration": "aws-strands-agent",
+        }
         url = f"{EXA_API_BASE_URL}{EXA_CONTENTS_ENDPOINT}"
 
         # Remove None values
