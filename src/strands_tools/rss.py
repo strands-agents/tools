@@ -34,7 +34,11 @@ class RSSManager:
         os.makedirs(self.storage_path, exist_ok=True)
 
     def get_feed_file_path(self, feed_id: str) -> str:
-        return os.path.join(self.storage_path, f"{feed_id}.json")
+        file_path = os.path.realpath(os.path.join(self.storage_path, f"{feed_id}.json"))
+        storage_real = os.path.realpath(self.storage_path)
+        if not file_path.startswith(storage_real + os.sep):
+            raise ValueError(f"Invalid feed_id: path traversal detected in '{feed_id}'")
+        return file_path
 
     def get_subscription_file_path(self) -> str:
         return os.path.join(self.storage_path, "subscriptions.json")
