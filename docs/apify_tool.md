@@ -344,9 +344,9 @@ At least one of `search_query` or `urls` must be provided.
 | `APIFY_API_TOKEN environment variable is not set` | Token not configured | Set the `APIFY_API_TOKEN` environment variable |
 | `apify-client package is required` | Optional dependency not installed | Run `pip install strands-agents-tools[apify]` |
 | `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in [Apify Console](https://console.apify.com) |
-| `Task ... finished with status FAILED` | task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
-| `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter; `apify_website_content_crawler` with large `max_pages` may need 600+ seconds |
-| `Task ... returned no run data` | task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
+| `Task ... finished with status FAILED` | Task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
+| `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
+| `Task ... returned no run data` | Task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
 | `At least one of 'search_query' or 'urls' must be provided` | YouTube Scraper called without input | Provide a `search_query`, `urls`, or both |
 
