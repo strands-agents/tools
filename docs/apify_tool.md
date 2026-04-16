@@ -415,9 +415,9 @@ result = agent.tool.apify_facebook_posts_scraper(
 | `APIFY_API_TOKEN environment variable is not set` | Token not configured | Set the `APIFY_API_TOKEN` environment variable |
 | `apify-client package is required` | Optional dependency not installed | Run `pip install strands-agents-tools[apify]` |
 | `Actor ... finished with status FAILED` | Actor execution error | Check Actor input parameters and run logs in [Apify Console](https://console.apify.com) |
-| `Task ... finished with status FAILED` | task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
+| `Task ... finished with status FAILED` | Task execution error | Check task configuration and run logs in [Apify Console](https://console.apify.com) |
 | `Actor/task ... finished with status TIMED-OUT` | Timeout too short for the workload | Increase the `timeout_secs` parameter |
-| `Task ... returned no run data` | task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
+| `Task ... returned no run data` | Task `call()` returned `None` (wait timeout) | Increase the `timeout_secs` parameter |
 | `No content returned for URL` | Website Content Crawler returned empty results | Verify the URL is accessible and returns content |
 | `Provide at least one of 'search_query' or 'urls'` | Neither parameter was provided to a social media tool that requires one | Pass `search_query`, `urls`, or both |
 

@@ -972,7 +972,7 @@ from strands_tools.apify import APIFY_CORE_TOOLS, APIFY_SOCIAL_TOOLS
 # Core tools: Actor/task execution, datasets, URL scraping
 agent = Agent(tools=APIFY_CORE_TOOLS)
 
-# Scrape a single URL and get markdown content
+# Scrape a single URL and get Markdown content
 content = agent.tool.apify_scrape_url(url="https://example.com")
 
 # Run an Actor and get results in one step
