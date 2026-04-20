@@ -113,14 +113,15 @@ export AWS_REGION="us-east-1"                          # Default: "us-west-2"
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import boto3
-from elasticsearch import Elasticsearch, NotFoundError
+from elasticsearch import Elasticsearch
 from strands import tool
 
 # Set up logging
@@ -183,6 +184,47 @@ DEFAULT_INDEX_NAME = "strands_memory"
 DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 DEFAULT_EMBEDDING_DIMS = 1024  # Titan v2 returns 1024 dimensions
 DEFAULT_MAX_RESULTS = 10
+DEFAULT_NAMESPACE = "default"
+
+
+def _validate_namespace(namespace: Any) -> str:
+    """Validate and sanitize namespace parameter to prevent injection attacks.
+
+    This function treats namespace as a trusted identifier by requiring it to be
+    a simple string matching the pattern ^[A-Za-z0-9_-]{1,64}$ before including
+    it in Elasticsearch queries. This prevents potential injection attacks and
+    ensures consistent namespace handling across all memory operations.
+
+    Args:
+        namespace: The namespace value to validate (can be any type)
+
+    Returns:
+        str: A validated string namespace (1-64 chars, alphanumeric + underscore + hyphen only)
+
+    Raises:
+        ElasticsearchValidationError: If namespace cannot be converted to a safe string
+    """
+    if namespace is None:
+        return DEFAULT_NAMESPACE
+
+    if not isinstance(namespace, str):
+        raise ElasticsearchValidationError(f"Namespace must be a string, got {type(namespace).__name__}. ")
+
+    clean_namespace = str(namespace).strip()
+
+    if not clean_namespace:
+        raise ElasticsearchValidationError("Invalid namespace: Namespace cannot be empty.")
+
+    if len(clean_namespace) > 64:
+        raise ElasticsearchValidationError("Invalid namespace: Namespace too long. Maximum 64 characters allowed.")
+
+    if not re.match(r"^[A-Za-z0-9_-]{1,64}$", clean_namespace):
+        raise ElasticsearchValidationError(
+            f"Invalid namespace: Namespace '{clean_namespace}' contains invalid characters. "
+            "Must match pattern ^[A-Za-z0-9_-]{1,64}$"
+        )
+
+    return clean_namespace
 
 
 def _ensure_index_exists(es_client: Elasticsearch, index_name: str, es_url: Optional[str] = None):
@@ -465,12 +507,26 @@ def _get_memory(es_client: Elasticsearch, index_name: str, namespace: str, memor
         Exception: If memory not found or not in correct namespace
     """
     try:
-        response = es_client.get(index=index_name, id=memory_id)
-        source = response["_source"]
+        # Query with both memory_id and namespace to enforce tenant isolation server-side
+        search_body = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"memory_id": memory_id}},
+                        {"term": {"namespace": namespace}},
+                    ]
+                }
+            },
+            "size": 1,
+            "_source": ["memory_id", "content", "timestamp", "metadata", "namespace"],
+        }
 
-        # Verify namespace
-        if source.get("namespace") != namespace:
+        response = es_client.search(index=index_name, body=search_body)
+
+        if not response["hits"]["hits"]:
             raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found in namespace {namespace}")
+
+        source = response["hits"]["hits"][0]["_source"]
 
         return {
             "memory_id": source["memory_id"],
@@ -480,8 +536,6 @@ def _get_memory(es_client: Elasticsearch, index_name: str, namespace: str, memor
             "namespace": source["namespace"],
         }
 
-    except NotFoundError:
-        raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found") from None
     except ElasticsearchMemoryNotFoundError:
         raise
     except Exception as e:
@@ -491,6 +545,10 @@ def _get_memory(es_client: Elasticsearch, index_name: str, namespace: str, memor
 def _delete_memory(es_client: Elasticsearch, index_name: str, namespace: str, memory_id: str) -> Dict:
     """
     Delete a specific memory by ID.
+
+    Uses delete_by_query with both memory_id and namespace constraints to
+    atomically verify ownership and delete in a single operation, preventing
+    TOCTOU (Time-of-Check to Time-of-Use) race conditions.
 
     Args:
         es_client: Elasticsearch client
@@ -505,18 +563,29 @@ def _delete_memory(es_client: Elasticsearch, index_name: str, namespace: str, me
         Exception: If memory not found or deletion fails
     """
     try:
-        # First verify the memory exists and is in correct namespace
-        _get_memory(es_client, index_name, namespace, memory_id)
+        # Atomically delete only if both memory_id and namespace match,
+        # preventing TOCTOU race conditions between check and delete
+        response = es_client.delete_by_query(
+            index=index_name,
+            body={
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"term": {"memory_id": memory_id}},
+                            {"term": {"namespace": namespace}},
+                        ]
+                    }
+                }
+            },
+        )
 
-        # Delete the memory
-        response = es_client.delete(index=index_name, id=memory_id)
+        if response.get("deleted", 0) == 0:
+            raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found in namespace {namespace}")
 
-        return {"memory_id": memory_id, "result": response["result"]}
+        return {"memory_id": memory_id, "result": "deleted"}
 
     except ElasticsearchMemoryNotFoundError:
         raise
-    except NotFoundError:
-        raise ElasticsearchMemoryNotFoundError(f"Memory {memory_id} not found") from None
     except Exception as e:
         raise ElasticsearchMemoryError(f"Failed to delete memory {memory_id}: {str(e)}") from e
 
@@ -603,10 +672,20 @@ def elasticsearch_memory(
 
         # Set defaults
         index_name = index_name or os.getenv("ELASTICSEARCH_INDEX_NAME", DEFAULT_INDEX_NAME)
-        namespace = namespace or os.getenv("ELASTICSEARCH_NAMESPACE", "default")
+        if namespace is None:
+            namespace = os.getenv("ELASTICSEARCH_NAMESPACE", DEFAULT_NAMESPACE)
         embedding_model = embedding_model or os.getenv("ELASTICSEARCH_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
         region = region or os.getenv("AWS_REGION", "us-west-2")
         max_results = max_results or DEFAULT_MAX_RESULTS
+
+        # Validate namespace to prevent injection attacks
+        try:
+            safe_namespace = _validate_namespace(namespace)
+        except ElasticsearchValidationError as e:
+            return {
+                "status": "error",
+                "content": [{"text": f"Invalid namespace: {str(e)}"}],
+            }
 
         # Initialize Elasticsearch client
         try:
@@ -685,7 +764,7 @@ def elasticsearch_memory(
         try:
             if action_enum == MemoryAction.RECORD:
                 response = _record_memory(
-                    es_client, bedrock_runtime, index_name, namespace, embedding_model, content, metadata
+                    es_client, bedrock_runtime, index_name, safe_namespace, embedding_model, content, metadata
                 )
                 return {
                     "status": "success",
@@ -694,7 +773,14 @@ def elasticsearch_memory(
 
             elif action_enum == MemoryAction.RETRIEVE:
                 response = _retrieve_memories(
-                    es_client, bedrock_runtime, index_name, namespace, embedding_model, query, max_results, next_token
+                    es_client,
+                    bedrock_runtime,
+                    index_name,
+                    safe_namespace,
+                    embedding_model,
+                    query,
+                    max_results,
+                    next_token,
                 )
                 return {
                     "status": "success",
@@ -702,21 +788,21 @@ def elasticsearch_memory(
                 }
 
             elif action_enum == MemoryAction.LIST:
-                response = _list_memories(es_client, index_name, namespace, max_results, next_token)
+                response = _list_memories(es_client, index_name, safe_namespace, max_results, next_token)
                 return {
                     "status": "success",
                     "content": [{"text": f"Memories listed successfully: {json.dumps(response, default=str)}"}],
                 }
 
             elif action_enum == MemoryAction.GET:
-                response = _get_memory(es_client, index_name, namespace, memory_id)
+                response = _get_memory(es_client, index_name, safe_namespace, memory_id)
                 return {
                     "status": "success",
                     "content": [{"text": f"Memory retrieved successfully: {json.dumps(response, default=str)}"}],
                 }
 
             elif action_enum == MemoryAction.DELETE:
-                response = _delete_memory(es_client, index_name, namespace, memory_id)
+                response = _delete_memory(es_client, index_name, safe_namespace, memory_id)
                 return {
                     "status": "success",
                     "content": [{"text": f"Memory deleted successfully: {memory_id}"}],

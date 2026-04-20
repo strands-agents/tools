@@ -1,12 +1,12 @@
 """
 Exa Search and Contents tools for intelligent web search and content processing.
 
-This module provides access to Exa's API, which offers neural search capabilities optimized for LLMs and AI agents.
-The "auto" mode intelligently combines neural embeddings-based search with traditional keyword search for best results.
+This module provides access to Exa's API, which offers advanced search capabilities optimized for LLMs and AI agents.
+The "auto" mode intelligently selects the best search approach for optimal results.
 
 Key Features:
 - Auto mode that intelligently selects the best search approach (default)
-- Neural and keyword search capabilities
+- Deep search for thorough, comprehensive results
 - Advanced content filtering and domain management
 - Full page content extraction with summaries
 - Support for general web search, company info, news, PDFs, GitHub repos, and more
@@ -47,9 +47,10 @@ import os
 from typing import Any, Dict, List, Literal, Optional, Union
 
 import aiohttp
-from rich.console import Console
 from rich.panel import Panel
 from strands import tool
+
+from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ EXA_SEARCH_ENDPOINT = "/search"
 EXA_CONTENTS_ENDPOINT = "/contents"
 
 # Initialize Rich console
-console = Console()
+console = console_util.create()
 
 
 def _get_api_key() -> str:
@@ -191,7 +192,7 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 @tool
 async def exa_search(
     query: str,
-    type: Optional[Literal["keyword", "neural", "fast", "auto"]] = "auto",
+    type: Optional[Literal["auto", "fast", "deep"]] = "auto",
     category: Optional[
         Literal["company", "news", "pdf", "github", "personal site", "linkedin profile", "financial report"]
     ] = None,
@@ -217,25 +218,22 @@ async def exa_search(
     extras: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Search the web intelligently using Exa's neural and keyword search capabilities.
+    Search the web intelligently using Exa's advanced search capabilities.
 
     Exa provides advanced web search optimized for LLMs and AI agents. The "auto" mode (default)
-    intelligently combines neural embeddings-based search with traditional keyword search to find
-    the most relevant results for your query.
+    intelligently selects the best search approach to find the most relevant results for your query.
 
     Key Features:
     - Auto mode that intelligently selects the best search approach (default)
-    - Neural search using embeddings for semantic understanding
-    - Traditional keyword search for exact matches
+    - Deep search for thorough, comprehensive results
     - Advanced filtering by domain, date, and content
     - Live crawling with fallback options
     - Rich content extraction with summaries
 
     Search Types:
-    - auto: Intelligently combines neural and keyword approaches (recommended default)
-    - neural: Uses embeddings-based model for semantic search
-    - keyword: Google-like SERP search for exact matches
-    - fast: Streamlined versions of neural and keyword models
+    - auto: Intelligently selects the best search approach (recommended default)
+    - fast: Optimized for speed
+    - deep: Thorough search for comprehensive results
 
     Categories (optional - general web search works best):
     - company: Focus on company websites and information when specifically needed
@@ -249,7 +247,7 @@ async def exa_search(
     Args:
         query: The search query string. Examples: "Latest developments in artificial intelligence",
             "Best project management tools"
-        type: Search type - "auto" (default, recommended), "neural", "keyword", or "fast"
+        type: Search type - "auto" (default, recommended), "fast", or "deep"
         category: Optional data category - use sparingly as general search works best.
             Use "company" when specifically looking for company information
         user_location: Two-letter ISO country code (e.g., "US", "UK") for geo-localized results
