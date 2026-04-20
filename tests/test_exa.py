@@ -17,7 +17,7 @@ def mock_aiohttp_response():
     mock_response = AsyncMock()
     mock_response.json.return_value = {
         "requestId": "b5947044c4b78efa9552a7c89b306d95",
-        "resolvedSearchType": "neural",
+        "resolvedSearchType": "auto",
         "searchType": "auto",
         "results": [
             {
@@ -40,8 +40,7 @@ def mock_aiohttp_response():
                     "search": 0.005,
                     "contents": 0,
                     "breakdown": {
-                        "keywordSearch": 0,
-                        "neuralSearch": 0.005,
+                        "search": 0.005,
                         "contentText": 0,
                         "contentHighlight": 0,
                         "contentSummary": 0,
@@ -249,7 +248,7 @@ def test_format_search_response():
     data = {
         "requestId": "test-request-123",
         "searchType": "auto",
-        "resolvedSearchType": "neural",
+        "resolvedSearchType": "auto",
         "results": [
             {
                 "title": "Test Result",
