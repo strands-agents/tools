@@ -11,6 +11,19 @@ import pytest
 from strands_tools import exa
 
 
+class AsyncContextManager:
+    """Helper to wrap a value as an async context manager for mocking aiohttp."""
+
+    def __init__(self, value):
+        self.value = value
+
+    async def __aenter__(self):
+        return self.value
+
+    async def __aexit__(self, *args):
+        pass
+
+
 @pytest.fixture
 def mock_aiohttp_response():
     """Create a mock aiohttp response for search."""
@@ -351,6 +364,108 @@ def test_format_contents_response_with_highlights():
     rendered = panel.renderable
     assert "Highlights:" in rendered
     assert "Key excerpt from contents" in rendered
+
+
+def _make_mock_session(captured, response_data):
+    """Build a mock aiohttp session that captures the payload and headers from post() calls."""
+    mock_resp = AsyncMock()
+    mock_resp.json.return_value = response_data
+
+    mock_post_ctx = AsyncMock()
+    mock_post_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_post_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    def fake_post(url, json=None, headers=None):
+        captured["url"] = url
+        captured["payload"] = json
+        captured["headers"] = headers
+        return mock_post_ctx
+
+    mock_session = AsyncMock()
+    mock_session.post = fake_post
+
+    mock_session_ctx = AsyncMock()
+    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_ctx.__aexit__ = AsyncMock(return_value=False)
+    return mock_session_ctx
+
+
+SEARCH_RESPONSE = {
+    "requestId": "test",
+    "searchType": "auto",
+    "resolvedSearchType": "auto",
+    "results": [],
+    "costDollars": {"total": 0},
+}
+
+CONTENTS_RESPONSE = {
+    "requestId": "test",
+    "results": [],
+    "statuses": [],
+    "costDollars": {"total": 0},
+}
+
+
+def test_exa_search_payload_wires_highlights_and_max_age_hours():
+    """Test that exa_search correctly wires highlights and maxAgeHours into the contents dict."""
+    captured = {}
+    mock_session_ctx = _make_mock_session(captured, SEARCH_RESPONSE)
+
+    with (
+        patch.dict(os.environ, {"EXA_API_KEY": "test-key"}),
+        patch("aiohttp.ClientSession", return_value=mock_session_ctx),
+    ):
+        asyncio.run(exa.exa_search(query="test", highlights=True, max_age_hours=24))
+
+    contents = captured["payload"]["contents"]
+    assert contents["highlights"] is True
+    assert contents["maxAgeHours"] == 24
+
+
+def test_exa_search_payload_wires_highlights_dict():
+    """Test that exa_search passes a highlights dict through to the contents dict."""
+    captured = {}
+    mock_session_ctx = _make_mock_session(captured, SEARCH_RESPONSE)
+
+    with (
+        patch.dict(os.environ, {"EXA_API_KEY": "test-key"}),
+        patch("aiohttp.ClientSession", return_value=mock_session_ctx),
+    ):
+        asyncio.run(exa.exa_search(query="test", highlights={"maxCharacters": 4000}))
+
+    contents = captured["payload"]["contents"]
+    assert contents["highlights"] == {"maxCharacters": 4000}
+
+
+def test_exa_get_contents_payload_wires_highlights_and_max_age_hours():
+    """Test that exa_get_contents correctly wires highlights and maxAgeHours into the flat payload."""
+    captured = {}
+    mock_session_ctx = _make_mock_session(captured, CONTENTS_RESPONSE)
+
+    with (
+        patch.dict(os.environ, {"EXA_API_KEY": "test-key"}),
+        patch("aiohttp.ClientSession", return_value=mock_session_ctx),
+    ):
+        asyncio.run(exa.exa_get_contents(urls=["https://example.com"], highlights=True, max_age_hours=48))
+
+    payload = captured["payload"]
+    assert payload["highlights"] is True
+    assert payload["maxAgeHours"] == 48
+    assert "contents" not in payload
+
+
+def test_exa_search_payload_includes_integration_header():
+    """Test that exa_search sends the x-exa-integration header."""
+    captured = {}
+    mock_session_ctx = _make_mock_session(captured, SEARCH_RESPONSE)
+
+    with (
+        patch.dict(os.environ, {"EXA_API_KEY": "test-key"}),
+        patch("aiohttp.ClientSession", return_value=mock_session_ctx),
+    ):
+        asyncio.run(exa.exa_search(query="test"))
+
+    assert captured["headers"]["x-exa-integration"] == "aws-strands-agent"
 
 
 def test_format_contents_response_with_errors():
