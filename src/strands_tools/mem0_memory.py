@@ -74,17 +74,18 @@ import boto3
 from mem0 import Memory as Mem0Memory
 from mem0 import MemoryClient
 from opensearchpy import AWSV4SignerAuth, RequestsHttpConnection
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolResultContent, ToolUse
 
+from strands_tools.utils import console_util
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
 # Initialize Rich console
-console = Console()
+console = console_util.create()
 
 TOOL_SPEC = {
     "name": "mem0_memory",

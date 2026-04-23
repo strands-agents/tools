@@ -53,6 +53,8 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - ⏱️ **Task Scheduling** - Schedule and manage cron jobs
 - 🧠 **Advanced Reasoning** - Tools for complex thinking and reasoning capabilities
 - 🐝 **Swarm Intelligence** - Coordinate multiple AI agents for parallel problem solving with shared memory
+- 🤖 **Agent as Tool** - Create nested agent instances with model switching support for multi-model workflows and specialized sub-tasks
+- 🔗 **Multi-Agent Graph** - Create and manage deterministic DAG-based multi-agent pipelines with output propagation and per-node model configuration
 - 🔌 **Dynamic MCP Client** - ⚠️ Dynamically connect to external MCP servers and load remote tools (use with caution - see security warnings)
 - 🔄 **Multiple tools in Parallel**  - Call multiple other tools at the same time in parallel with Batch Tool
 - 🔍 **Browser Tool** - Tool giving an agent access to perform automated actions on a browser (chromium)
@@ -108,7 +110,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
 | tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
 | tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
-| exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) that combines neural and keyword search for optimal results |
+| exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) for optimal results, plus fast and deep search modes |
 | exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
@@ -131,12 +133,14 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
 | sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
+| graph | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration |
 | cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
 | slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
+| use_agent | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
 | batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
@@ -147,6 +151,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
+| elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode", cloud_id="...", api_key="...")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings |
 
 \* *These tools do not work on windows*
 
@@ -679,6 +684,53 @@ agent.tool.handoff_to_user(
 )
 ```
 
+### Use Agent (Agent as Tool)
+
+```python
+from strands import Agent
+from strands_tools import use_agent
+
+agent = Agent(tools=[use_agent])
+
+# Basic usage - inherits parent agent's model
+result = agent.tool.use_agent(
+    prompt="Tell me about the advantages of tool-building in AI agents",
+    system_prompt="You are a helpful AI assistant specializing in AI development concepts."
+)
+
+# Use a different model provider for specialized tasks
+result = agent.tool.use_agent(
+    prompt="Calculate 2 + 2 and explain the result",
+    system_prompt="You are a helpful math assistant.",
+    model_provider="bedrock",
+    model_settings={
+        "model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    },
+    tools=["calculator"]
+)
+
+# Use environment variables to determine model
+import os
+os.environ["STRANDS_PROVIDER"] = "ollama"
+os.environ["STRANDS_MODEL_ID"] = "qwen3:4b"
+result = agent.tool.use_agent(
+    prompt="Analyze this code",
+    system_prompt="You are a code review assistant.",
+    model_provider="env"
+)
+
+# Custom model configuration with specific parameters
+result = agent.tool.use_agent(
+    prompt="Write a creative story",
+    system_prompt="You are a creative writing assistant.",
+    model_provider="github",
+    model_settings={
+        "model_id": "openai/o4-mini",
+        "params": {"temperature": 1, "max_tokens": 4000}
+    }
+)
+```
+
 ### A2A Client
 
 ```python
@@ -812,6 +864,68 @@ result = agent.tool.use_computer(
     hotkey_str="command+ctrl+f",  # For macOS
     app_name="Chrome"
 )
+```
+
+### Graph (Multi-Agent DAG)
+
+Create deterministic DAG-based multi-agent pipelines where agents are nodes with dependency relationships. Unlike `agent_graph` (which uses persistent message-passing), `graph` uses task-based execution with output propagation.
+
+```python
+from strands import Agent
+from strands_tools.graph import graph
+
+agent = Agent(tools=[graph])
+
+# Create a multi-agent research pipeline
+result = agent.tool.graph(
+    action="create",
+    graph_id="research_pipeline",
+    topology={
+        "nodes": [
+            {
+                "id": "researcher",
+                "role": "researcher",
+                "system_prompt": "You research topics thoroughly.",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"}
+            },
+            {
+                "id": "analyst",
+                "role": "analyst",
+                "system_prompt": "You analyze research data.",
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-3-5-haiku-20241022-v1:0"}
+            },
+            {
+                "id": "reporter",
+                "role": "reporter",
+                "system_prompt": "You create comprehensive reports.",
+                "tools": ["file_write", "editor"]
+            }
+        ],
+        "edges": [
+            {"from": "researcher", "to": "analyst"},
+            {"from": "analyst", "to": "reporter"}
+        ],
+        "entry_points": ["researcher"]
+    }
+)
+
+# Execute a task through the graph
+result = agent.tool.graph(
+    action="execute",
+    graph_id="research_pipeline",
+    task="Research and analyze the impact of AI on healthcare"
+)
+
+# Get graph status
+result = agent.tool.graph(action="status", graph_id="research_pipeline")
+
+# List all graphs
+result = agent.tool.graph(action="list")
+
+# Delete a graph
+result = agent.tool.graph(action="delete", graph_id="research_pipeline")
 ```
 
 ### Elasticsearch Memory
@@ -1139,6 +1253,12 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | ENV_VARS_MASKED_DEFAULT | Default setting for masking sensitive values | true |
 
+#### HTTP Request Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_HTTP_ALLOW_INSECURE_SSL | Allow disabling SSL certificate verification via verify_ssl parameter | false |
+
 #### Dynamic MCP Client Tool
 
 | Environment Variable | Description | Default | 
@@ -1183,6 +1303,34 @@ The Mem0 Memory Tool supports three different backend configurations:
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
+
+#### Use Agent Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| STRANDS_PROVIDER | Default model provider when using model_provider="env" | ollama |
+| STRANDS_MODEL_ID | Default model identifier for environment-based model selection | None |
+| STRANDS_MAX_TOKENS | Maximum tokens for the nested agent model | None |
+| STRANDS_TEMPERATURE | Sampling temperature for the nested agent model | None |
+
+
+#### Elasticsearch Memory Tool
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| ELASTICSEARCH_CLOUD_ID | Elasticsearch Cloud ID for connection | None |
+| ELASTICSEARCH_URL | Elasticsearch URL for serverless connection | None |
+| ELASTICSEARCH_API_KEY | Elasticsearch API key for authentication | None |
+| ELASTICSEARCH_INDEX_NAME | Elasticsearch index name for memory storage | strands_memory |
+| ELASTICSEARCH_NAMESPACE | Namespace for memory isolation | default |
+| ELASTICSEARCH_EMBEDDING_MODEL | Amazon Bedrock model for embeddings | amazon.titan-embed-text-v2:0 |
+| AWS_REGION | AWS region for Bedrock embedding service | us-west-2 |
+
+**Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
+
+#### Graph Tool
+
+The `graph` tool uses the same model provider environment variables as `use_agent` for per-node model configuration. No additional environment variables are required.
 
 #### Video Tools
 

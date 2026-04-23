@@ -1,6 +1,7 @@
 """Comprehensive tests for RSS feed tool with improved organization."""
 
 import json
+import os
 from unittest.mock import MagicMock, call, mock_open, patch
 
 import pytest
@@ -130,6 +131,28 @@ class TestRSSManager:
             entry_no_content = {"title": "Test Entry"}
             result = manager.format_entry(entry_no_content, include_content=True)
             assert result["content"] == "No content available"
+
+    @pytest.mark.parametrize(
+        "feed_id",
+        [
+            "../outside",
+            "../../etc/config",
+            "subdir/../../../escape",
+            "/absolute/path",
+        ],
+    )
+    def test_get_feed_file_path_rejects_traversal(self, feed_id):
+        """Test that path traversal sequences in feed_id are rejected."""
+        manager = RSSManager()
+        with pytest.raises(ValueError, match="path traversal detected"):
+            manager.get_feed_file_path(feed_id)
+
+    def test_get_feed_file_path_allows_valid_ids(self):
+        """Test that valid feed_ids are accepted."""
+        manager = RSSManager()
+        path = manager.get_feed_file_path("my_valid_feed")
+        assert path.endswith("my_valid_feed.json")
+        assert os.path.realpath(manager.storage_path) in path
 
     @pytest.mark.parametrize(
         "url,expected_id",
