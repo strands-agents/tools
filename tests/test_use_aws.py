@@ -100,6 +100,24 @@ def test_use_aws_direct_success(mock_boto3_client, mock_available_services, mock
     assert "test-request-id" in result["content"][0]["text"]
 
 
+def test_use_aws_without_parameters(mock_boto3_client, mock_available_services, mock_available_operations):
+    """Test use_aws when parameters is not provided in the input."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "service_name": "s3",
+            "operation_name": "list_buckets",
+            "region": "us-west-2",
+            "label": "List S3 Buckets",
+        },
+    }
+
+    result = use_aws.use_aws(tool=tool_use)
+
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "success"
+
+
 def test_use_aws_invalid_service(mock_available_services, mock_available_operations):
     """Test use_aws with an invalid service name."""
     tool_use = {
