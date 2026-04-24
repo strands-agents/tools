@@ -677,3 +677,123 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     assert "results with score >=" in result_text
     assert "Metadata:" not in result_text
     assert "test-source" not in result_text
+
+
+def test_filter_results_by_score_distance_metric():
+    """Test filter_results_by_score with distance metric (lower = more relevant)."""
+    test_results = [
+        {"score": 0.1},  # Very close match (distance)
+        {"score": 0.3},  # Close match
+        {"score": 0.7},  # Far match
+        {"score": 1.2},  # Very far match
+    ]
+
+    # Filter with distance threshold 0.5 — should keep scores <= 0.5
+    filtered = retrieve.filter_results_by_score(test_results, 0.5, score_metric="distance")
+    assert len(filtered) == 2
+    assert filtered[0]["score"] == 0.1
+    assert filtered[1]["score"] == 0.3
+
+    # Filter with distance threshold 0.8 — should keep scores <= 0.8
+    filtered = retrieve.filter_results_by_score(test_results, 0.8, score_metric="distance")
+    assert len(filtered) == 3
+    assert filtered[0]["score"] == 0.1
+    assert filtered[1]["score"] == 0.3
+    assert filtered[2]["score"] == 0.7
+
+
+def test_filter_results_by_score_similarity_metric_explicit():
+    """Test filter_results_by_score with explicit similarity metric (regression test)."""
+    test_results = [{"score": 0.9}, {"score": 0.5}, {"score": 0.3}, {"score": 0.8}]
+
+    # Explicit similarity should behave same as default
+    filtered = retrieve.filter_results_by_score(test_results, 0.5, score_metric="similarity")
+    assert len(filtered) == 3
+    assert filtered[0]["score"] == 0.9
+    assert filtered[1]["score"] == 0.5
+    assert filtered[2]["score"] == 0.8
+
+
+def test_filter_results_by_score_default_unchanged():
+    """Test that default behavior (no score_metric) is unchanged for backward compatibility."""
+    test_results = [{"score": 0.9}, {"score": 0.5}, {"score": 0.3}]
+
+    # Calling without score_metric should default to similarity (>= filter)
+    filtered = retrieve.filter_results_by_score(test_results, 0.5)
+    assert len(filtered) == 2
+    assert filtered[0]["score"] == 0.9
+    assert filtered[1]["score"] == 0.5
+
+
+def test_filter_results_distance_default_score_for_missing():
+    """Test that missing scores default to inf for distance metric (filtered out)."""
+    test_results = [{"score": 0.1}, {}, {"score": 0.3}]
+
+    # With distance metric, missing scores default to inf, so they should be filtered out
+    filtered = retrieve.filter_results_by_score(test_results, 0.5, score_metric="distance")
+    assert len(filtered) == 2
+    assert filtered[0]["score"] == 0.1
+    assert filtered[1]["score"] == 0.3
+
+
+def test_retrieve_tool_distance_metric(mock_boto3_client):
+    """Test direct invocation of retrieve tool with distance metric."""
+    # Override mock to return distance-style scores (low = good)
+    mock_boto3_client.return_value.retrieve.return_value = {
+        "retrievalResults": [
+            {
+                "content": {"text": "Close match", "type": "TEXT"},
+                "location": {"customDocumentLocation": {"id": "doc-001"}, "type": "CUSTOM"},
+                "score": 0.05,
+            },
+            {
+                "content": {"text": "Medium match", "type": "TEXT"},
+                "location": {"customDocumentLocation": {"id": "doc-002"}, "type": "CUSTOM"},
+                "score": 0.3,
+            },
+            {
+                "content": {"text": "Far match", "type": "TEXT"},
+                "location": {"customDocumentLocation": {"id": "doc-003"}, "type": "CUSTOM"},
+                "score": 0.9,
+            },
+        ]
+    }
+
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "score": 0.4,
+            "score_metric": "distance",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    # Should keep scores <= 0.4 (the close and medium matches)
+    assert "Retrieved 2 results with score <= 0.4" in result["content"][0]["text"]
+    assert "doc-001" in result["content"][0]["text"]
+    assert "doc-002" in result["content"][0]["text"]
+    # Far match (0.9) should be filtered out
+    assert "doc-003" not in result["content"][0]["text"]
+
+
+def test_retrieve_tool_distance_metric_default_score(mock_boto3_client):
+    """Test that distance metric without explicit score defaults to inf (keeps all results)."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "score_metric": "distance",
+            # No score parameter — should default to inf, keeping all results
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    # All 3 mock results should be kept since default threshold is inf
+    assert "Retrieved 3 results with score <= inf" in result["content"][0]["text"]
