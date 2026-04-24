@@ -538,7 +538,10 @@ class Browser(ABC):
             return {"status": "error", "content": [{"text": "Error: No active page for session"}]}
 
         try:
-            text = await page.text_content(action.selector)
+            if action.method == "inner_text":
+                text = await page.inner_text(action.selector)
+            else:
+                text = await page.text_content(action.selector)
             return {"status": "success", "content": [{"text": f"Text content: {text}"}]}
         except Exception as e:
             logger.debug("exception=<%s> | get text action failed on selector '%s'", str(e), action.selector)
@@ -584,9 +587,9 @@ class Browser(ABC):
                         ],
                     }
 
-            # Truncate long HTML content
-            truncated_result = result[:1000] + "..." if len(result) > 1000 else result
-            return {"status": "success", "content": [{"text": truncated_result}]}
+            if action.max_length and len(result) > action.max_length:
+                result = result[:action.max_length] + "..."
+            return {"status": "success", "content": [{"text": result}]}
         except Exception as e:
             logger.debug("exception=<%s> | get HTML action failed", str(e))
             return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
