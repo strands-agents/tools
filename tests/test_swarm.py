@@ -64,11 +64,20 @@ def mock_swarm_result():
 
     # Mock results from individual agents
     mock_agent_result1 = MagicMock()
-    mock_agent_result1.result.content = [MagicMock(text="Research findings: The market shows strong growth potential.")]
+    mock_agent_result1.result.message = {
+        "role": "assistant",
+        "content": [{"text": "Research findings: The market shows strong growth potential."}],
+    }
     mock_agent_result2 = MagicMock()
-    mock_agent_result2.result.content = [MagicMock(text="Analysis complete: Data indicates 25% market opportunity.")]
+    mock_agent_result2.result.message = {
+        "role": "assistant",
+        "content": [{"text": "Analysis complete: Data indicates 25% market opportunity."}],
+    }
     mock_agent_result3 = MagicMock()
-    mock_agent_result3.result.content = [MagicMock(text="Final report: Comprehensive strategy document created.")]
+    mock_agent_result3.result.message = {
+        "role": "assistant",
+        "content": [{"text": "Final report: Comprehensive strategy document created."}],
+    }
 
     mock_result.results = {
         "researcher": mock_agent_result1,
