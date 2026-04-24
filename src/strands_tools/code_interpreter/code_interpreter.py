@@ -13,6 +13,7 @@ from strands import tool
 
 from .models import (
     CodeInterpreterInput,
+    DownloadFilesAction,
     ExecuteCodeAction,
     ExecuteCommandAction,
     InitSessionAction,
@@ -84,6 +85,7 @@ class CodeInterpreter(ABC):
         - writeFiles: Create or update files in the sandbox
         - listFiles: Browse directory contents and file structures
         - removeFiles: Delete files from the sandbox environment
+        - downloadFiles: Download files from sandbox to local filesystem
 
         Common Usage Scenarios:
         ---------------------
@@ -167,6 +169,8 @@ class CodeInterpreter(ABC):
                 - WriteFilesAction: type="writeFiles", session_name, content (list of FileContent objects)
                 - ListFilesAction: type="listFiles", session_name, path
                 - RemoveFilesAction: type="removeFiles", session_name, paths (list)
+                - DownloadFilesAction: type="downloadFiles", session_name, source_paths (list), 
+                  destination_dir (optional, defaults to /tmp)
                 - ListLocalSessionsAction: type="listLocalSessions"
 
         Returns:
@@ -250,6 +254,8 @@ class CodeInterpreter(ABC):
             return self.remove_files(action)
         elif isinstance(action, WriteFilesAction):
             return self.write_files(action)
+        elif isinstance(action, DownloadFilesAction):
+            return self.download_files(action)
         else:
             return {"status": "error", "content": [{"text": f"Unknown action: {type(action)}"}]}
 
@@ -320,6 +326,11 @@ class CodeInterpreter(ABC):
     @abstractmethod
     def write_files(self, action: WriteFilesAction) -> Dict[str, Any]:
         """Write files to a sandbox session."""
+        ...
+
+    @abstractmethod
+    def download_files(self, action: DownloadFilesAction) -> Dict[str, Any]:
+        """Download files from a sandbox session to the local filesystem."""
         ...
 
     @abstractmethod
