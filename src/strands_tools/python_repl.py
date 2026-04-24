@@ -207,6 +207,7 @@ class ReplState:
 
     def save_state(self, code: Optional[str] = None) -> None:
         """Save current state."""
+        import warnings
         try:
             # Execute new code if provided
             if code:
@@ -214,18 +215,30 @@ class ReplState:
 
             # Filter namespace for persistence
             save_dict = {}
+            # Use a tight recursion limit during pickle-ability tests so that
+            # self-referencing objects (e.g. enums whose qualified name points
+            # back into __main__) fail fast instead of causing an exponential
+            # blowup of dill PicklingWarnings before RecursionError propagates.
+            orig_limit = sys.getrecursionlimit()
             for name, value in self._namespace.items():
                 if not name.startswith("_"):
                     try:
                         # Try to pickle the value
-                        dill.dumps(value)
+                        sys.setrecursionlimit(200)
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", category=Warning, module="dill")
+                            dill.dumps(value)
                         save_dict[name] = value
                     except BaseException:
                         continue
+                    finally:
+                        sys.setrecursionlimit(orig_limit)
 
             # Save state
             with open(self.state_file, "wb") as f:
-                dill.dump(save_dict, f)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=Warning, module="dill")
+                    dill.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
 
         except Exception as e:
