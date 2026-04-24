@@ -938,6 +938,8 @@ class Browser(ABC):
     def _execute_async(self, action_coro) -> Any:
         # Apply nest_asyncio if not already applied
         if not self._nest_asyncio_applied:
+            # Ensure the event loop is correctly referenced on the active thread.
+            asyncio.set_event_loop(self._loop)
             nest_asyncio.apply()
             self._nest_asyncio_applied = True
 
