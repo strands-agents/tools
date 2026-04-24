@@ -37,13 +37,13 @@ def mock_agent():
 
 def test_batch_success(mock_agent):
     """Test successful execution of multiple tools."""
-    mock_tool = {"toolUseId": "mock_tool_id"}
     invocations = [
         {"name": "http_request", "arguments": {"method": "GET", "url": "https://api.ipify.org?format=json"}},
         {"name": "use_aws", "arguments": {"service_name": "s3", "operation_name": "list_buckets"}},
     ]
+    mock_tool = {"toolUseId": "mock_tool_id", "input": {"invocations": invocations}}
 
-    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -64,20 +64,26 @@ def test_batch_success(mock_agent):
     assert len(results) == 2
     assert results[0]["name"] == "http_request"
     assert results[0]["status"] == "success"
-    assert results[0]["result"]["result"]["ip"] == "127.0.0.1"
     assert results[1]["name"] == "use_aws"
     assert results[1]["status"] == "success"
-    assert results[1]["result"]["result"]["buckets"] == ["bucket1", "bucket2"]
+
+    # Verify sub-tools called with record_direct_tool_call=False
+    mock_agent.tool.http_request.assert_called_once_with(
+        record_direct_tool_call=False, method="GET", url="https://api.ipify.org?format=json"
+    )
+    mock_agent.tool.use_aws.assert_called_once_with(
+        record_direct_tool_call=False, service_name="s3", operation_name="list_buckets"
+    )
 
 
 def test_batch_missing_tool(mock_agent):
     """Test behavior when a tool is not found."""
-    mock_tool = {"toolUseId": "mock_tool_id"}
     invocations = [
         {"name": "non_existent_tool", "arguments": {}},
     ]
+    mock_tool = {"toolUseId": "mock_tool_id", "input": {"invocations": invocations}}
 
-    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -102,12 +108,12 @@ def test_batch_missing_tool(mock_agent):
 
 def test_batch_tool_error(mock_agent):
     """Test behavior when a tool raises an exception."""
-    mock_tool = {"toolUseId": "mock_tool_id"}
     invocations = [
         {"name": "error_tool", "arguments": {}},
     ]
+    mock_tool = {"toolUseId": "mock_tool_id", "input": {"invocations": invocations}}
 
-    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -133,10 +139,9 @@ def test_batch_tool_error(mock_agent):
 
 def test_batch_no_invocations(mock_agent):
     """Test behavior when no invocations are provided."""
-    mock_tool = {"toolUseId": "mock_tool_id"}
-    invocations = []
+    mock_tool = {"toolUseId": "mock_tool_id", "input": {"invocations": []}}
 
-    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=invocations)
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "success"
@@ -153,14 +158,26 @@ def test_batch_no_invocations(mock_agent):
     assert len(json_content["results"]) == 0
 
 
+def test_batch_no_input_key(mock_agent):
+    """Test behavior when tool dict has no input key (graceful fallback)."""
+    mock_tool = {"toolUseId": "mock_tool_id"}
+
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
+
+    assert result["toolUseId"] == "mock_tool_id"
+    assert result["status"] == "success"
+    json_content = result["content"][1]["json"]
+    assert json_content["batch_summary"]["total_tools"] == 0
+
+
 def test_batch_top_level_error(mock_agent):
     """Test behavior when a top-level exception occurs."""
-    mock_tool = {"toolUseId": "mock_tool_id"}
+    mock_tool = {"toolUseId": "mock_tool_id", "input": {"invocations": []}}
 
     # Simulate an error in the agent
     mock_agent.tool = None  # This will cause an AttributeError when accessing tools
 
-    result = batch.batch(tool=mock_tool, agent=mock_agent, invocations=[])
+    result = batch.batch(tool=mock_tool, agent=mock_agent)
 
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "error"  # Expect 'error' status
