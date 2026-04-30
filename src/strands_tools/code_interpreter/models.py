@@ -28,7 +28,7 @@ class FileContent(BaseModel):
         default=None,
         description="Text content for the file",
     )
-    blob: Optional[str] = Field(
+    blob: Optional[bytes] = Field(
         default=None,
         description="Base64-encoded binary content for the file",
     )

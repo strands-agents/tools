@@ -765,7 +765,7 @@ def test_write_files_action_with_blob(interpreter, mock_client):
         type="writeFiles",
         session_name="test-session",
         content=[
-            FileContent(path="image.png", blob="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"),
+            FileContent(path="image.png", blob=b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"),
             FileContent(path="data.txt", text="Some data"),
         ],
     )
@@ -779,7 +779,7 @@ def test_write_files_action_with_blob(interpreter, mock_client):
             "content": [
                 {
                     "path": "image.png",
-                    "blob": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+                    "blob": b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
                 },
                 {"path": "data.txt", "text": "Some data"},
             ]
