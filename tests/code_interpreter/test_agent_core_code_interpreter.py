@@ -38,7 +38,10 @@ def mock_client():
     client.start.return_value = None
     client.stop.return_value = None
     client.get_session.return_value = {"status": "READY"}
-    client.invoke.return_value = {"stream": [{"result": {"content": "Mock response"}}], "isError": False}
+    client.invoke.return_value = {
+        "stream": [{"result": {"content": "Mock response"}}],
+        "isError": False,
+    }
     return client
 
 
@@ -174,7 +177,10 @@ def test_ensure_session_module_cache_session_not_ready():
             interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
 
             with patch.object(interpreter, "init_session") as mock_init:
-                mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
+                mock_init.return_value = {
+                    "status": "success",
+                    "content": [{"text": "Created"}],
+                }
 
                 session_name, error = interpreter._ensure_session("stale-session")
 
@@ -205,7 +211,10 @@ def test_ensure_session_module_cache_get_session_fails():
             interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
 
             with patch.object(interpreter, "init_session") as mock_init:
-                mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
+                mock_init.return_value = {
+                    "status": "success",
+                    "content": [{"text": "Created"}],
+                }
 
                 session_name, error = interpreter._ensure_session("missing-session")
 
@@ -373,7 +382,11 @@ def test_cleanup_platform_with_persist_sessions_false(mock_client):
 
         interpreter._started = True
 
-        session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
+        session_info = SessionInfo(
+            session_id="test-session-id-123",
+            description="Test session",
+            client=mock_client,
+        )
         interpreter._sessions["test-session"] = session_info
 
         interpreter.cleanup_platform()
@@ -391,7 +404,11 @@ def test_cleanup_platform_with_exception_in_stop(mock_client):
         interpreter._started = True
         mock_client.stop.side_effect = Exception("Stop failed")
 
-        session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
+        session_info = SessionInfo(
+            session_id="test-session-id-123",
+            description="Test session",
+            client=mock_client,
+        )
         interpreter._sessions["test-session"] = session_info
 
         interpreter.cleanup_platform()
@@ -414,7 +431,9 @@ def test_init_session_success(mock_client_class, interpreter, mock_client):
 
     mock_client_class.assert_called_once_with(region="us-west-2")
     mock_client.start.assert_called_once_with(
-        identifier="aws.codeinterpreter.v1", name="my-session", session_timeout_seconds=900
+        identifier="aws.codeinterpreter.v1",
+        name="my-session",
+        session_timeout_seconds=900,
     )
 
     assert "my-session" in interpreter._sessions
@@ -438,7 +457,11 @@ def test_init_session_with_custom_identifier(mock_client_class, mock_client):
         custom_id = "my-custom-interpreter-abc123"
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", identifier=custom_id)
 
-        action = InitSessionAction(type="initSession", description="Test session", session_name="custom-session")
+        action = InitSessionAction(
+            type="initSession",
+            description="Test session",
+            session_name="custom-session",
+        )
 
         result = interpreter.init_session(action)
 
@@ -469,7 +492,11 @@ def test_init_session_with_default_identifier(mock_client_class, mock_client):
 
         interpreter = AgentCoreCodeInterpreter(region="us-west-2")
 
-        action = InitSessionAction(type="initSession", description="Test session", session_name="default-session")
+        action = InitSessionAction(
+            type="initSession",
+            description="Test session",
+            session_name="default-session",
+        )
 
         result = interpreter.init_session(action)
 
@@ -480,7 +507,9 @@ def test_init_session_with_default_identifier(mock_client_class, mock_client):
 
         mock_client_class.assert_called_once_with(region="us-west-2")
         mock_client.start.assert_called_once_with(
-            identifier="aws.codeinterpreter.v1", name="default-session", session_timeout_seconds=900
+            identifier="aws.codeinterpreter.v1",
+            name="default-session",
+            session_timeout_seconds=900,
         )
 
         assert "default-session" in interpreter._sessions
@@ -500,13 +529,19 @@ def test_init_session_with_session_timeout(mock_client_class, mock_client):
 
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", session_timeout_seconds=1800)
 
-        action = InitSessionAction(type="initSession", description="Test session", session_name="timeout-session")
+        action = InitSessionAction(
+            type="initSession",
+            description="Test session",
+            session_name="timeout-session",
+        )
 
         result = interpreter.init_session(action)
 
         assert result["status"] == "success"
         mock_client.start.assert_called_once_with(
-            identifier="aws.codeinterpreter.v1", name="timeout-session", session_timeout_seconds=1800
+            identifier="aws.codeinterpreter.v1",
+            name="timeout-session",
+            session_timeout_seconds=1800,
         )
 
 
@@ -519,13 +554,19 @@ def test_init_session_without_session_timeout(mock_client_class, mock_client):
 
         interpreter = AgentCoreCodeInterpreter(region="us-west-2")
 
-        action = InitSessionAction(type="initSession", description="Test session", session_name="no-timeout-session")
+        action = InitSessionAction(
+            type="initSession",
+            description="Test session",
+            session_name="no-timeout-session",
+        )
 
         result = interpreter.init_session(action)
 
         assert result["status"] == "success"
         mock_client.start.assert_called_once_with(
-            identifier="aws.codeinterpreter.v1", name="no-timeout-session", session_timeout_seconds=900
+            identifier="aws.codeinterpreter.v1",
+            name="no-timeout-session",
+            session_timeout_seconds=900,
         )
 
 
@@ -559,11 +600,29 @@ def test_init_session_multiple_identifiers_verification(mock_client_class, mock_
         assert mock_client.start.call_count == 3
         call_args_list = mock_client.start.call_args_list
 
-        assert call_args_list[0] == ((), {"identifier": custom_id1, "name": "session1", "session_timeout_seconds": 900})
-        assert call_args_list[1] == ((), {"identifier": custom_id2, "name": "session2", "session_timeout_seconds": 900})
+        assert call_args_list[0] == (
+            (),
+            {
+                "identifier": custom_id1,
+                "name": "session1",
+                "session_timeout_seconds": 900,
+            },
+        )
+        assert call_args_list[1] == (
+            (),
+            {
+                "identifier": custom_id2,
+                "name": "session2",
+                "session_timeout_seconds": 900,
+            },
+        )
         assert call_args_list[2] == (
             (),
-            {"identifier": "aws.codeinterpreter.v1", "name": "session3", "session_timeout_seconds": 900},
+            {
+                "identifier": "aws.codeinterpreter.v1",
+                "name": "session3",
+                "session_timeout_seconds": 900,
+            },
         )
 
 
@@ -639,14 +698,18 @@ def test_execute_code_success(interpreter, mock_client):
     interpreter._sessions["test-session"] = session_info
 
     action = ExecuteCodeAction(
-        type="executeCode", session_name="test-session", code="print('Hello, World!')", language=LanguageType.PYTHON
+        type="executeCode",
+        session_name="test-session",
+        code="print('Hello, World!')",
+        language=LanguageType.PYTHON,
     )
 
     result = interpreter.execute_code(action)
 
     assert result["status"] == "success"
     mock_client.invoke.assert_called_once_with(
-        "executeCode", {"code": "print('Hello, World!')", "language": "python", "clearContext": False}
+        "executeCode",
+        {"code": "print('Hello, World!')", "language": "python", "clearContext": False},
     )
 
 
@@ -657,7 +720,10 @@ def test_execute_code_session_not_found():
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", auto_create=False)
 
         action = ExecuteCodeAction(
-            type="executeCode", session_name="non-existent", code="print('Hello')", language=LanguageType.PYTHON
+            type="executeCode",
+            session_name="non-existent",
+            code="print('Hello')",
+            language=LanguageType.PYTHON,
         )
 
         with pytest.raises(ValueError, match="Session 'non-existent' not found"):
@@ -756,6 +822,37 @@ def test_write_files_success(interpreter, mock_client):
     )
 
 
+def test_write_files_action_with_blob(interpreter, mock_client):
+    """Test successful file writing with base64 blob content."""
+    session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
+    interpreter._sessions["test-session"] = session_info
+
+    action = WriteFilesAction(
+        type="writeFiles",
+        session_name="test-session",
+        content=[
+            FileContent(path="image.png", blob="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"),
+            FileContent(path="data.txt", text="Some data"),
+        ],
+    )
+
+    result = interpreter.write_files(action)
+
+    assert result["status"] == "success"
+    mock_client.invoke.assert_called_once_with(
+        "writeFiles",
+        {
+            "content": [
+                {
+                    "path": "image.png",
+                    "blob": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+                },
+                {"path": "data.txt", "text": "Some data"},
+            ]
+        },
+    )
+
+
 def test_create_tool_result_with_stream(interpreter):
     """Test _create_tool_result with stream response."""
     response = {"stream": [{"result": {"content": "Test output"}}], "isError": False}
@@ -830,7 +927,10 @@ def test_execute_code_with_auto_session_creation(mock_client_class, interpreter)
     """Test code execution with automatic session creation."""
     mock_client = mock_client_class.return_value
     mock_client.session_id = "auto-session-id"
-    mock_client.invoke.return_value = {"stream": [{"result": {"content": "Success"}}], "isError": False}
+    mock_client.invoke.return_value = {
+        "stream": [{"result": {"content": "Success"}}],
+        "isError": False,
+    }
 
     action = ExecuteCodeAction(
         type="executeCode",
@@ -848,7 +948,8 @@ def test_execute_code_with_auto_session_creation(mock_client_class, interpreter)
     assert auto_created_session.startswith("session-")
 
     mock_client.invoke.assert_called_with(
-        "executeCode", {"code": "print('Auto session')", "language": "python", "clearContext": False}
+        "executeCode",
+        {"code": "print('Auto session')", "language": "python", "clearContext": False},
     )
 
 

@@ -8,7 +8,7 @@ with discriminated unions, ensuring required fields are present for each action 
 from enum import Enum
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LanguageType(str, Enum):
@@ -24,7 +24,22 @@ class FileContent(BaseModel):
     updating files during code execution sessions."""
 
     path: str = Field(description="The file path where content should be written")
-    text: str = Field(description="Text content for the file")
+    text: Optional[str] = Field(
+        default=None,
+        description="Text content for the file",
+    )
+    blob: Optional[str] = Field(
+        default=None,
+        description="Base64-encoded binary content for the file",
+    )
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "FileContent":
+        if self.text is None and self.blob is None:
+            raise ValueError("Either text or blob must be provided")
+        if self.text is not None and self.blob is not None:
+            raise ValueError("Only one of text or blob may be provided")
+        return self
 
 
 # Action-specific Pydantic models using discriminated unions
@@ -36,13 +51,15 @@ class InitSessionAction(BaseModel):
     type: Literal["initSession"] = Field(description="Initialize a new code interpreter session")
     description: str = Field(description="Required description of what this session will be used for")
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, a default session will be used."
+        default=None,
+        description="Session name. If not provided, a default session will be used.",
     )
 
 
 class ListLocalSessionsAction(BaseModel):
     """View all active code interpreter sessions managed by this tool instance. Use this to see what sessions are
-    available, check their status, or find the session name you need for other operations."""
+    available, check their status, or find the session name you need for other operations.
+    """
 
     type: Literal["listLocalSessions"] = Field(description="List all local sessions managed by this tool instance")
 
@@ -60,18 +77,26 @@ class ExecuteCodeAction(BaseModel):
     )
 
     code: str = Field(description="Required code to execute")
-    language: LanguageType = Field(default=LanguageType.PYTHON, description="Programming language for code execution")
-    clear_context: bool = Field(default=False, description="Whether to clear the execution context before running code")
+    language: LanguageType = Field(
+        default=LanguageType.PYTHON,
+        description="Programming language for code execution",
+    )
+    clear_context: bool = Field(
+        default=False,
+        description="Whether to clear the execution context before running code",
+    )
 
 
 class ExecuteCommandAction(BaseModel):
     """Execute shell/terminal commands within the sandbox environment. Use this for system operations like installing
-    packages, running scripts, file management, or any command-line tasks that need to be performed in the session."""
+    packages, running scripts, file management, or any command-line tasks that need to be performed in the session.
+    """
 
     type: Literal["executeCommand"] = Field(description="Execute a shell command in the code interpreter")
 
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, uses the default session."
+        default=None,
+        description="Session name. If not provided, uses the default session.",
     )
 
     command: str = Field(description="Required shell command to execute")
@@ -79,12 +104,14 @@ class ExecuteCommandAction(BaseModel):
 
 class ReadFilesAction(BaseModel):
     """Read the contents of one or more files from the sandbox file system. Use this to examine data files,
-    configuration files, code files, or any other files that have been created or uploaded to the session."""
+    configuration files, code files, or any other files that have been created or uploaded to the session.
+    """
 
     type: Literal["readFiles"] = Field(description="Read files from the code interpreter")
 
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, uses the default session."
+        default=None,
+        description="Session name. If not provided, uses the default session.",
     )
 
     paths: List[str] = Field(description="List of file paths to read")
@@ -92,25 +119,32 @@ class ReadFilesAction(BaseModel):
 
 class ListFilesAction(BaseModel):
     """Browse and list files and directories within the sandbox file system. Use this to explore the directory
-    structure, find files, or understand what's available in the session before reading or manipulating files."""
+    structure, find files, or understand what's available in the session before reading or manipulating files.
+    """
 
     type: Literal["listFiles"] = Field(description="List files in a directory")
 
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, uses the default session."
+        default=None,
+        description="Session name. If not provided, uses the default session.",
     )
 
-    path: str = Field(default=".", description="Directory path to list (defaults to current directory)")
+    path: str = Field(
+        default=".",
+        description="Directory path to list (defaults to current directory)",
+    )
 
 
 class RemoveFilesAction(BaseModel):
     """Delete one or more files from the sandbox file system. Use this to clean up temporary files, remove outdated
-    data, or manage storage space within the session. Be careful as this permanently removes files."""
+    data, or manage storage space within the session. Be careful as this permanently removes files.
+    """
 
     type: Literal["removeFiles"] = Field(description="Remove files from the code interpreter")
 
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, uses the default session."
+        default=None,
+        description="Session name. If not provided, uses the default session.",
     )
 
     paths: List[str] = Field(description="Required list of file paths to remove")
@@ -118,12 +152,14 @@ class RemoveFilesAction(BaseModel):
 
 class WriteFilesAction(BaseModel):
     """Create or update multiple files in the sandbox file system with specified content. Use this to save data,
-    create configuration files, write code files, or store any text-based content that your code execution will need."""
+    create configuration files, write code files, or store any text-based content that your code execution will need.
+    """
 
     type: Literal["writeFiles"] = Field(description="Write files to the code interpreter")
 
     session_name: Optional[str] = Field(
-        default=None, description="Session name. If not provided, uses the default session."
+        default=None,
+        description="Session name. If not provided, uses the default session.",
     )
 
     content: List[FileContent] = Field(description="Required list of file content to write")

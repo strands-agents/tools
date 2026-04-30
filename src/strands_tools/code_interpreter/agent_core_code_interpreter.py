@@ -3,7 +3,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter as BedrockAgentCoreCodeInterpreterClient
+from bedrock_agentcore.tools.code_interpreter_client import (
+    CodeInterpreter as BedrockAgentCoreCodeInterpreterClient,
+)
 
 from ..utils.aws_util import resolve_region
 from .code_interpreter import CodeInterpreter
@@ -252,7 +254,10 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         # Check if session already exists in instance cache
         if session_name in self._sessions:
-            return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
+            return {
+                "status": "error",
+                "content": [{"text": f"Session '{session_name}' already exists"}],
+            }
 
         # Check if session name already in use (module-level cache)
         if session_name in _session_mapping:
@@ -322,7 +327,14 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         return {
             "status": "success",
-            "content": [{"json": {"sessions": sessions_info, "totalSessions": len(sessions_info)}}],
+            "content": [
+                {
+                    "json": {
+                        "sessions": sessions_info,
+                        "totalSessions": len(sessions_info),
+                    }
+                }
+            ],
         }
 
     def _ensure_session(self, session_name: Optional[str]) -> tuple[str, Optional[Dict[str, Any]]]:
@@ -371,7 +383,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                     client.session_id = aws_session_id
 
                     self._sessions[target_session] = SessionInfo(
-                        session_id=aws_session_id, description="Reconnected via module cache", client=client
+                        session_id=aws_session_id,
+                        description="Reconnected via module cache",
+                        client=client,
                     )
 
                     logger.info(f"Reconnected to existing session: {target_session}")
@@ -392,7 +406,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.info(f"Auto-creating session: {target_session}")
 
             init_action = InitSessionAction(
-                type="initSession", session_name=target_session, description="Auto-initialized session"
+                type="initSession",
+                session_name=target_session,
+                description="Auto-initialized session",
             )
             result = self.init_session(init_action)
 
@@ -414,7 +430,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         logger.debug(f"Executing {action.language} code in session '{session_name}'")
 
-        params = {"code": action.code, "language": action.language.value, "clearContext": action.clear_context}
+        params = {
+            "code": action.code,
+            "language": action.language.value,
+            "clearContext": action.clear_context,
+        }
         response = self._sessions[session_name].client.invoke("executeCode", params)
 
         return self._create_tool_result(response)
@@ -479,7 +499,12 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         logger.debug(f"Writing {len(action.content)} files to session '{session_name}'")
 
-        content_dicts = [{"path": fc.path, "text": fc.text} for fc in action.content]
+        content_dicts = []
+        for fc in action.content:
+            if fc.blob is not None:
+                content_dicts.append({"path": fc.path, "blob": fc.blob})
+            else:
+                content_dicts.append({"path": fc.path, "text": fc.text})
         params = {"content": content_dicts}
         response = self._sessions[session_name].client.invoke("writeFiles", params)
 
@@ -498,7 +523,10 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                         "content": [{"text": str(result.get("content"))}],
                     }
 
-            return {"status": "error", "content": [{"text": f"Failed to create tool result: {str(response)}"}]}
+            return {
+                "status": "error",
+                "content": [{"text": f"Failed to create tool result: {str(response)}"}],
+            }
 
         return response
 
