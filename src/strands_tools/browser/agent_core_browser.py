@@ -49,6 +49,7 @@ class AgentCoreBrowser(Browser):
         # Create new browser client for this session
         session_client = AgentCoreBrowserClient(region=self.region)
         session_id = session_client.start(identifier=self.identifier, session_timeout_seconds=self.session_timeout)
+        self._client_dict[session_id] = session_client
 
         logger.info(f"started Bedrock AgentCore browser session: {session_id}")
 
