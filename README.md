@@ -20,6 +20,7 @@
     <a href="https://github.com/strands-agents/tools/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/tools"/></a>
     <a href="https://pypi.org/project/strands-agents-tools/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents-tools"/></a>
     <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents-tools"/></a>
+    <a href="https://discord.gg/strands"><img alt="Strands Discord" src="https://img.shields.io/badge/Discord-Strands-5865F2?logo=discord&logoColor=white"/></a>
   </div>
 
   <p>
@@ -1370,6 +1371,9 @@ regardless of experience level—your unique perspective is valuable to us!
 Your questions, insights, and ideas are always welcome!
 
 Together, we're building something meaningful that impacts real users. We look forward to collaborating with you!
+
+## Stay in touch with the team
+Come meet the Strands team and other users on [**Discord**](https://discord.com/invite/strands)
 
 ## License
 
