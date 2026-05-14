@@ -146,16 +146,17 @@ def test_parse_expression_edge_cases():
     with pytest.raises(ValueError, match="Expression must be a string"):
         parse_expression(123)
 
-    # Test with invalid operators
-    with pytest.raises(ValueError, match="Invalid operator"):
-        parse_expression("2 // 3")
-
-    with pytest.raises(ValueError, match="Invalid operator sequence"):
+    # Test with invalid syntax
+    with pytest.raises(ValueError, match="Invalid"):
         parse_expression("2 **/ 3")
 
-    # Test with logical operators
-    with pytest.raises(ValueError, match="Logical operators are not supported"):
+    # Test with logical operators (invalid Python syntax)
+    with pytest.raises(ValueError, match="Invalid"):
         parse_expression("x && y")
+
+    # Test that floor division is handled (parse_expr supports it)
+    result = parse_expression("2 // 3")
+    assert result == 0
 
     # Test logarithm notation
     result = parse_expression("log(10)")
@@ -189,8 +190,10 @@ def test_parse_expression_edge_cases():
         result = parse_expression(case)
         assert isinstance(result, sp.Basic)
 
-    # Test sympify error handling
-    with mock.patch("sympy.sympify", side_effect=sp.SympifyError("Test error")):
+    # Test parse_expr error handling
+    with mock.patch(
+        "src.strands_tools.calculator.parse_expr", side_effect=SyntaxError("Test error")
+    ):
         with pytest.raises(ValueError, match="Invalid mathematical expression"):
             parse_expression("x + y")
 
@@ -642,3 +645,18 @@ def test_error_handling(agent):
     result_text = extract_result_text(result)
     # Should either give an error or solve in terms of y
     assert "Error" in result_text or "y" in result_text
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "__import__('os').getpid()",
+        "eval('1+1')",
+        "open('/dev/null')",
+    ],
+)
+def test_code_execution_blocked(payload):
+    """Verify that malicious payloads cannot achieve code execution via parse_expression."""
+    result = calculator_func(expression=payload, mode="evaluate")
+    assert result["status"] == "error"
+    assert "Invalid mathematical expression:" in result["content"][0]["text"]

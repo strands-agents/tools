@@ -72,6 +72,13 @@ from rich.panel import Panel
 from rich.table import Table
 from strands import tool
 
+from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication_application,
+    parse_expr,
+    standard_transformations,
+)
+
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
@@ -111,63 +118,127 @@ def create_error_panel(console: Console, error_message: str) -> None:
     )
 
 
+# Restricted namespace for parse_expr. Only math functions and constants are available.
+_SAFE_SYMPY_LOCALS: Dict[str, Any] = {
+    # Constants
+    "pi": sp.pi,
+    "e": sp.E,
+    "E": sp.E,
+    "I": sp.I,
+    "oo": sp.oo,
+    "inf": sp.oo,
+    "nan": sp.nan,
+    "zoo": sp.zoo,
+    "true": True,
+    "false": False,
+    "True": True,
+    "False": False,
+    # Trig
+    "sin": sp.sin,
+    "cos": sp.cos,
+    "tan": sp.tan,
+    "cot": sp.cot,
+    "sec": sp.sec,
+    "csc": sp.csc,
+    "asin": sp.asin,
+    "acos": sp.acos,
+    "atan": sp.atan,
+    "atan2": sp.atan2,
+    # Hyperbolic
+    "sinh": sp.sinh,
+    "cosh": sp.cosh,
+    "tanh": sp.tanh,
+    "asinh": sp.asinh,
+    "acosh": sp.acosh,
+    "atanh": sp.atanh,
+    # Exponential/logarithmic
+    "exp": sp.exp,
+    "log": sp.log,
+    "ln": sp.ln,
+    # Powers and roots
+    "sqrt": sp.sqrt,
+    "cbrt": sp.cbrt,
+    "Abs": sp.Abs,
+    "abs": sp.Abs,
+    "sign": sp.sign,
+    # Combinatorics
+    "factorial": sp.factorial,
+    "binomial": sp.binomial,
+    # Floor/ceiling
+    "floor": sp.floor,
+    "ceiling": sp.ceiling,
+    # Special functions
+    "gamma": sp.gamma,
+    "zeta": sp.zeta,
+    "erf": sp.erf,
+    # Min/Max
+    "Max": sp.Max,
+    "Min": sp.Min,
+    "max": sp.Max,
+    "min": sp.Min,
+    # Constructors
+    "Eq": sp.Eq,
+    "Matrix": sp.Matrix,
+    "Rational": sp.Rational,
+    "Integer": sp.Integer,
+    "Float": sp.Float,
+    "Symbol": sp.Symbol,
+    "symbols": sp.symbols,
+    "N": sp.N,
+    # Solving/simplification
+    "solve": sp.solve,
+    "simplify": sp.simplify,
+    "expand": sp.expand,
+    "factor": sp.factor,
+    "collect": sp.collect,
+    "cancel": sp.cancel,
+    "apart": sp.apart,
+    "together": sp.together,
+    "limit": sp.limit,
+    "diff": sp.diff,
+    "integrate": sp.integrate,
+    "series": sp.series,
+    "Sum": sp.Sum,
+    "Product": sp.Product,
+}
+
+# Restricted globals with builtins neutralized.
+# Only include Python builtins that SymPy's parser internals require.
+_SAFE_GLOBALS: Dict[str, Any] = {
+    "__builtins__": {},
+}
+
+
 def parse_expression(expr_str: str) -> Any:
-    """Parse a string expression into a SymPy expression."""
+    """Parse a string expression into a SymPy expression safely.
+
+    Uses sympy.parsing.sympy_parser.parse_expr with a restricted local_dict
+    and empty __builtins__ to prevent code execution via eval.
+    """
+    if not isinstance(expr_str, str):
+        raise ValueError("Expression must be a string")
+
+    transformations = standard_transformations + (
+        implicit_multiplication_application,
+        convert_xor,
+    )
+
     try:
-        # Validate expression string
-        if not isinstance(expr_str, str):
-            raise ValueError("Expression must be a string")
-
-        # Replace common mathematical notations
-        expr_str = expr_str.replace("^", "**")
-
-        # Handle logarithm notations
-        if "log(" in expr_str:
-            expr_str = expr_str.replace("log(", "ln(")  # Convert to natural log
-
-        # Pre-process pi and e for better evaluation - using word boundaries to avoid replacing 'e' in function names
-        expr_str = expr_str.replace(" pi ", " " + str(sp.N(sp.pi, 50)) + " ")
-        expr_str = expr_str.replace("(pi)", "(" + str(sp.N(sp.pi, 50)) + ")")
-        expr_str = expr_str.replace("pi+", str(sp.N(sp.pi, 50)) + "+")
-        expr_str = expr_str.replace("pi-", str(sp.N(sp.pi, 50)) + "-")
-        expr_str = expr_str.replace("pi*", str(sp.N(sp.pi, 50)) + "*")
-        expr_str = expr_str.replace("pi/", str(sp.N(sp.pi, 50)) + "/")
-        expr_str = expr_str.replace("pi)", str(sp.N(sp.pi, 50)) + ")")
-
-        # Handle standalone 'e' constant but preserve function names like 'exp'
-        expr_str = expr_str.replace(" e ", " " + str(sp.N(sp.E, 50)) + " ")
-        expr_str = expr_str.replace("(e)", "(" + str(sp.N(sp.E, 50)) + ")")
-        expr_str = expr_str.replace("e+", str(sp.N(sp.E, 50)) + "+")
-        expr_str = expr_str.replace("e-", str(sp.N(sp.E, 50)) + "-")
-        expr_str = expr_str.replace("e*", str(sp.N(sp.E, 50)) + "*")
-        expr_str = expr_str.replace("e/", str(sp.N(sp.E, 50)) + "/")
-        expr_str = expr_str.replace("e)", str(sp.N(sp.E, 50)) + ")")
-
-        # Basic validation for common invalid patterns
-        if "//" in expr_str:  # Catch integer division which is not supported
-            raise ValueError("Invalid operator: //. Use / for division.")
-
-        if "**/" in expr_str:  # Catch power/division confusion
-            raise ValueError("Invalid operator sequence: **/")
-
-        if any(op in expr_str for op in ["&&", "||", "&", "|"]):  # Catch logical operators
-            raise ValueError("Logical operators are not supported in mathematical expressions")
-
-        try:
-            # First try parsing with pre-evaluated constants
-            expr = sp.sympify(expr_str, evaluate=True)  # type: ignore
-
-            # If we got any symbolic constants, substitute their values
-            if expr.has(sp.pi) or expr.has(sp.E):
-                expr = expr.subs({sp.pi: sp.N(sp.pi, 50), sp.E: sp.N(sp.E, 50)})
-
-            return expr
-
-        except sp.SympifyError as e:
-            raise ValueError(f"Invalid mathematical expression: {str(e)}") from e
-
+        expr = parse_expr(
+            expr_str,
+            local_dict=_SAFE_SYMPY_LOCALS,
+            global_dict=_SAFE_GLOBALS,
+            transformations=transformations,
+            evaluate=True,
+        )
     except Exception as e:
-        raise ValueError(f"Invalid expression: {str(e)}") from e
+        raise ValueError(f"Invalid mathematical expression: {str(e)}") from e
+
+    # Substitute numeric values for symbolic constants for consistent evaluation
+    if isinstance(expr, sp.Basic) and (expr.has(sp.pi) or expr.has(sp.E)):
+        expr = expr.subs({sp.pi: sp.N(sp.pi, 50), sp.E: sp.N(sp.E, 50)})
+
+    return expr
 
 
 def get_precision_level(num: Union[float, int, sp.Expr]) -> int:
@@ -448,11 +519,11 @@ def evaluate_expression(
 def solve_equation(expr: Any, precision: int) -> Any:
     """Solve an equation or system of equations."""
     try:
-        # Handle system of equations
-        if isinstance(expr, list):
+        # Handle system of equations (list or tuple from comma-separated input)
+        if isinstance(expr, (list, tuple)):
             # Get all variables in the system
             variables = set().union(*[eq.free_symbols for eq in expr])
-            solution = sp.solve(expr, list(variables))
+            solution = sp.solve(list(expr), list(variables))
             return solution
 
         # Single equation
@@ -528,7 +599,7 @@ def calculate_limit(expr: Any, var: str, point: str) -> Any:
             raise ValueError(f"Cannot calculate limit of an undefined expression: {expr}") from None
 
         var_sym = sp.Symbol(var)
-        point_val = sp.sympify(point)
+        point_val = parse_expression(point)
         return sp.limit(expr, var_sym, point_val)
     except Exception as e:
         raise ValueError(f"Limit calculation error: {str(e)}") from e
@@ -548,7 +619,7 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
             raise ValueError(f"Cannot expand series of an undefined expression: {expr}") from None
 
         var_sym = sp.Symbol(var)
-        point_val = sp.sympify(point)
+        point_val = parse_expression(point)
         return sp.series(expr, var_sym, point_val, order)
     except Exception as e:
         raise ValueError(f"Series expansion error: {str(e)}") from e
