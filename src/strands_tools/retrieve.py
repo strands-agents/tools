@@ -205,6 +205,20 @@ def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> 
     return [result for result in results if result.get("score", 0.0) >= min_score]
 
 
+# Mapping of RetrievalResultLocation types to their document identifier fields.
+# See: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalResultLocation.html
+_LOCATION_FIELD_MAP = {
+    "customDocumentLocation": "id",
+    "s3Location": "uri",
+    "webLocation": "url",
+    "confluenceLocation": "url",
+    "salesforceLocation": "url",
+    "sharePointLocation": "url",
+    "kendraDocumentLocation": "uri",
+    "sqlLocation": "query",
+}
+
+
 def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: bool = False) -> str:
     """
     Format retrieval results for readable display.
@@ -229,22 +243,10 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
         # Extract document location - handle all RetrievalResultLocation types
         location = result.get("location", {})
         doc_id = "Unknown"
-        if "customDocumentLocation" in location:
-            doc_id = location["customDocumentLocation"].get("id", "Unknown")
-        elif "s3Location" in location:
-            doc_id = location["s3Location"].get("uri", "")
-        elif "webLocation" in location:
-            doc_id = location["webLocation"].get("url", "")
-        elif "confluenceLocation" in location:
-            doc_id = location["confluenceLocation"].get("url", "")
-        elif "salesforceLocation" in location:
-            doc_id = location["salesforceLocation"].get("url", "")
-        elif "sharePointLocation" in location:
-            doc_id = location["sharePointLocation"].get("url", "")
-        elif "kendraDocumentLocation" in location:
-            doc_id = location["kendraDocumentLocation"].get("uri", "")
-        elif "sqlLocation" in location:
-            doc_id = location["sqlLocation"].get("query", "")
+        for loc_key, field in _LOCATION_FIELD_MAP.items():
+            if loc_key in location:
+                doc_id = location[loc_key].get(field, "Unknown")
+                break
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
