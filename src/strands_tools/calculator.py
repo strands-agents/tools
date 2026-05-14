@@ -71,7 +71,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from strands import tool
-
 from sympy.parsing.sympy_parser import (
     convert_xor,
     implicit_multiplication_application,
@@ -202,8 +201,9 @@ _SAFE_SYMPY_LOCALS: Dict[str, Any] = {
     "Product": sp.Product,
 }
 
-# Restricted globals with builtins neutralized.
-# Only include Python builtins that SymPy's parser internals require.
+# Restricted globals with builtins neutralized to prevent code execution.
+# Setting __builtins__ to an empty dict ensures __import__, eval, exec, open,
+# and all other Python builtins are inaccessible during eval.
 _SAFE_GLOBALS: Dict[str, Any] = {
     "__builtins__": {},
 }

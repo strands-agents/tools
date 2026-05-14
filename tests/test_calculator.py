@@ -191,9 +191,7 @@ def test_parse_expression_edge_cases():
         assert isinstance(result, sp.Basic)
 
     # Test parse_expr error handling
-    with mock.patch(
-        "src.strands_tools.calculator.parse_expr", side_effect=SyntaxError("Test error")
-    ):
+    with mock.patch("src.strands_tools.calculator.parse_expr", side_effect=SyntaxError("Test error")):
         with pytest.raises(ValueError, match="Invalid mathematical expression"):
             parse_expression("x + y")
 
@@ -648,15 +646,17 @@ def test_error_handling(agent):
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "payload,mock_target",
     [
-        "__import__('os').getpid()",
-        "eval('1+1')",
-        "open('/dev/null')",
+        ("__import__('os').getpid()", "os.getpid"),
+        ("open('/dev/null')", "builtins.open"),
+        ("eval('__import__(\"os\").getpid()')", "os.getpid"),
     ],
 )
-def test_code_execution_blocked(payload):
+def test_code_execution_blocked(payload, mock_target):
     """Verify that malicious payloads cannot achieve code execution via parse_expression."""
-    result = calculator_func(expression=payload, mode="evaluate")
-    assert result["status"] == "error"
-    assert "Invalid mathematical expression:" in result["content"][0]["text"]
+    with mock.patch(mock_target) as mock_fn:
+        result = calculator_func(expression=payload, mode="evaluate")
+        assert result["status"] == "error"
+        assert "Invalid mathematical expression:" in result["content"][0]["text"]
+        mock_fn.assert_not_called()
