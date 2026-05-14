@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /opt/hostedtoolcache/Python/3.13.13/x64/bin/python
+cachedir: .pytest_cache
+rootdir: /home/runner/work/tools/tools
+configfile: pyproject.toml
+plugins: anyio-4.13.0
+collecting ... collected 30 items
+
+tests/test_retrieve.py::test_filter_results_by_score PASSED              [  3%]
+tests/test_retrieve.py::test_format_results_for_display PASSED           [  6%]
+tests/test_retrieve.py::test_format_results_for_display_web_location PASSED [ 10%]
+tests/test_retrieve.py::test_format_results_for_display_confluence_location PASSED [ 13%]
+tests/test_retrieve.py::test_format_results_for_display_salesforce_location PASSED [ 16%]
+tests/test_retrieve.py::test_format_results_for_display_sharepoint_location PASSED [ 20%]
+tests/test_retrieve.py::test_format_results_for_display_kendra_location PASSED [ 23%]
+tests/test_retrieve.py::test_format_results_for_display_sql_location PASSED [ 26%]
+tests/test_retrieve.py::test_format_results_for_display_unknown_location PASSED [ 30%]
+tests/test_retrieve.py::test_format_results_with_metadata PASSED         [ 33%]
+tests/test_retrieve.py::test_format_results_without_metadata PASSED      [ 36%]
+tests/test_retrieve.py::test_format_results_with_empty_metadata PASSED   [ 40%]
+tests/test_retrieve.py::test_format_results_with_metadata_enabled PASSED [ 43%]
+tests/test_retrieve.py::test_format_results_with_metadata_disabled PASSED [ 46%]
+tests/test_retrieve.py::test_retrieve_tool_direct PASSED                 [ 50%]
+tests/test_retrieve.py::test_retrieve_with_default_kb_id PASSED          [ 53%]
+tests/test_retrieve.py::test_retrieve_error_handling PASSED              [ 56%]
+tests/test_retrieve.py::test_retrieve_custom_score_threshold PASSED      [ 60%]
+tests/test_retrieve.py::test_retrieve_via_agent PASSED                   [ 63%]
+tests/test_retrieve.py::test_retrieve_with_custom_profile PASSED         [ 66%]
+tests/test_retrieve.py::test_retrieve_with_custom_region PASSED          [ 70%]
+tests/test_retrieve.py::test_retrieve_no_results_above_threshold PASSED  [ 73%]
+tests/test_retrieve.py::test_format_results_non_string_content PASSED    [ 76%]
+tests/test_retrieve.py::test_retrieve_with_valid_filter PASSED           [ 80%]
+tests/test_retrieve.py::test_retrieve_with_invalid_filter PASSED         [ 83%]
+tests/test_retrieve.py::test_retrieve_with_enable_metadata_true PASSED   [ 86%]
+tests/test_retrieve.py::test_retrieve_with_enable_metadata_false PASSED  [ 90%]
+tests/test_retrieve.py::test_retrieve_with_enable_metadata_default PASSED [ 93%]
+tests/test_retrieve.py::test_retrieve_with_environment_variable_default PASSED [ 96%]
+tests/test_retrieve.py::test_retrieve_via_agent_with_enable_metadata PASSED [100%]
+
+============================== 30 passed in 0.67s ==============================
