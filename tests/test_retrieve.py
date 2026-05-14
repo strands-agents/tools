@@ -134,6 +134,139 @@ def test_format_results_for_display():
     assert "Content: S3 content" in s3_formatted
 
 
+def test_format_results_for_display_web_location():
+    """Test format_results_for_display with webLocation."""
+    test_results = [
+        {
+            "content": {"text": "Web content", "type": "TEXT"},
+            "location": {
+                "webLocation": {"url": "https://example.com/docs/page.html"},
+                "type": "WEB",
+            },
+            "score": 0.85,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.8500" in formatted
+    assert "Document ID: https://example.com/docs/page.html" in formatted
+    assert "Content: Web content" in formatted
+
+
+def test_format_results_for_display_confluence_location():
+    """Test format_results_for_display with confluenceLocation."""
+    test_results = [
+        {
+            "content": {"text": "Confluence content", "type": "TEXT"},
+            "location": {
+                "confluenceLocation": {"url": "https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123"},
+                "type": "CONFLUENCE",
+            },
+            "score": 0.78,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7800" in formatted
+    assert "Document ID: https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123" in formatted
+    assert "Content: Confluence content" in formatted
+
+
+def test_format_results_for_display_salesforce_location():
+    """Test format_results_for_display with salesforceLocation."""
+    test_results = [
+        {
+            "content": {"text": "Salesforce content", "type": "TEXT"},
+            "location": {
+                "salesforceLocation": {"url": "https://mycompany.salesforce.com/articles/KB001"},
+                "type": "SALESFORCE",
+            },
+            "score": 0.72,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7200" in formatted
+    assert "Document ID: https://mycompany.salesforce.com/articles/KB001" in formatted
+    assert "Content: Salesforce content" in formatted
+
+
+def test_format_results_for_display_sharepoint_location():
+    """Test format_results_for_display with sharePointLocation."""
+    test_results = [
+        {
+            "content": {"text": "SharePoint content", "type": "TEXT"},
+            "location": {
+                "sharePointLocation": {"url": "https://mycompany.sharepoint.com/sites/docs/page.aspx"},
+                "type": "SHAREPOINT",
+            },
+            "score": 0.80,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.8000" in formatted
+    assert "Document ID: https://mycompany.sharepoint.com/sites/docs/page.aspx" in formatted
+    assert "Content: SharePoint content" in formatted
+
+
+def test_format_results_for_display_kendra_location():
+    """Test format_results_for_display with kendraDocumentLocation."""
+    test_results = [
+        {
+            "content": {"text": "Kendra content", "type": "TEXT"},
+            "location": {
+                "kendraDocumentLocation": {"uri": "https://kendra.aws/documents/doc-12345"},
+                "type": "KENDRA",
+            },
+            "score": 0.91,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.9100" in formatted
+    assert "Document ID: https://kendra.aws/documents/doc-12345" in formatted
+    assert "Content: Kendra content" in formatted
+
+
+def test_format_results_for_display_sql_location():
+    """Test format_results_for_display with sqlLocation."""
+    test_results = [
+        {
+            "content": {"text": "SQL content", "type": "TEXT"},
+            "location": {
+                "sqlLocation": {"query": "SELECT * FROM documents WHERE id = 1"},
+                "type": "SQL",
+            },
+            "score": 0.65,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.6500" in formatted
+    assert "Document ID: SELECT * FROM documents WHERE id = 1" in formatted
+    assert "Content: SQL content" in formatted
+
+
+def test_format_results_for_display_unknown_location():
+    """Test format_results_for_display with an unrecognized location type."""
+    test_results = [
+        {
+            "content": {"text": "Unknown source content", "type": "TEXT"},
+            "location": {
+                "futureLocation": {"url": "https://future.example.com"},
+                "type": "FUTURE",
+            },
+            "score": 0.70,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7000" in formatted
+    assert "Document ID: Unknown" in formatted
+    assert "Content: Unknown source content" in formatted
+
+
 def test_format_results_with_metadata():
     """Test the format_results_for_display function with metadata enabled."""
     test_results = [
