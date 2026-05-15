@@ -48,9 +48,7 @@ def _write_crontab(new_content: str, description: str) -> Optional[Dict[str, Any
 
     if not bypass_consent:
         console = console_util.create()
-        console.print(
-            f"\n[bold yellow]Cron tool wants to modify your crontab:[/bold yellow]\n{description}\n"
-        )
+        console.print(f"\n[bold yellow]Cron tool wants to modify your crontab:[/bold yellow]\n{description}\n")
         confirm = get_user_input("<yellow><bold>Allow this crontab modification?</bold> [y/*]</yellow>")
 
         if confirm.lower() != "y":
