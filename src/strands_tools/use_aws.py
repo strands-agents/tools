@@ -47,18 +47,19 @@ Key Features:
 Security Recommendations:
 
    The IAM role attached to the agent's execution environment should follow
-   least-privilege principles. Restrict the role to only the services and
-   operations the agent actually needs. In particular:
+   least-privilege principles. Grant only the services and operations the
+   agent needs to fulfill its purpose.
 
-   • Avoid granting sts:GetSessionToken, sts:AssumeRole, or
-     secretsmanager:GetSecretValue unless the agent requires them.
-   • Add explicit Deny statements for credential-returning operations that
-     the agent should never call.
-   • Use IAM condition keys (e.g., aws:SourceIp, aws:VpcSourceIp) to limit
-     where credentials can be used if they are disclosed.
+   • Scope the role policy to specific resources and actions rather than
+     using wildcards.
+   • Add explicit Deny statements for operations the agent should never
+     call (e.g., credential-returning or destructive APIs).
+   • Use IAM condition keys (e.g., aws:SourceIp, aws:RequestedRegion) to
+     further constrain what the role can do and from where.
 
-   The tool redacts known credential fields from responses, but IAM scoping
-   remains the primary defense against unauthorized access.
+   The tool provides response redaction and consent prompts as defense-in-depth,
+   but IAM policy scoping remains the primary mechanism for controlling what
+   an agent can access.
 
 See the use_aws function docstring for more details on parameters and usage.
 """
