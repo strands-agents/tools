@@ -287,7 +287,7 @@ def _validate_expression_ast(expr_str: str) -> None:
     try:
         tree = ast.parse(expr_str, mode="eval")
     except SyntaxError as e:
-        raise ValueError(f"Invalid mathematical expression: {e.msg}")
+        raise ValueError(f"Invalid mathematical expression: {e.msg}") from e
 
     for node in ast.walk(tree):
         if type(node) not in _ALLOWED_AST_NODES:
@@ -712,7 +712,6 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
         return sp.series(expr, var_sym, point_val, order)
     except Exception as e:
         raise ValueError(f"Series expansion error: {str(e)}") from e
-
 
 
 @tool
