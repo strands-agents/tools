@@ -15,6 +15,8 @@ Key Features:
 
 2. Safety Features:
    • Confirmation prompts for mutative operations (create, update, delete)
+   • Confirmation prompts for credential-returning operations (STS, Secrets Manager, ECR)
+   • Response redaction of known sensitive keys (SecretAccessKey, SessionToken, etc.)
    • Parameter validation with helpful error messages
    • Automatic schema generation for invalid requests
    • Error handling with detailed feedback
@@ -41,6 +43,22 @@ Key Features:
        label="List all S3 buckets"
    )
    ```
+
+Security Recommendations:
+
+   The IAM role attached to the agent's execution environment should follow
+   least-privilege principles. Restrict the role to only the services and
+   operations the agent actually needs. In particular:
+
+   • Avoid granting sts:GetSessionToken, sts:AssumeRole, or
+     secretsmanager:GetSecretValue unless the agent requires them.
+   • Add explicit Deny statements for credential-returning operations that
+     the agent should never call.
+   • Use IAM condition keys (e.g., aws:SourceIp, aws:VpcSourceIp) to limit
+     where credentials can be used if they are disclosed.
+
+   The tool redacts known credential fields from responses, but IAM scoping
+   remains the primary defense against unauthorized access.
 
 See the use_aws function docstring for more details on parameters and usage.
 """
