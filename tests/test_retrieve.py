@@ -162,7 +162,12 @@ def test_format_results_for_display():
             "KENDRA",
             "https://kendra.aws/documents/doc-12345",
         ),
-        ("sqlLocation", {"query": "SELECT * FROM documents WHERE id = 1"}, "SQL", "SELECT * FROM documents WHERE id = 1"),
+        (
+            "sqlLocation",
+            {"query": "SELECT * FROM documents WHERE id = 1"},
+            "SQL",
+            "SELECT * FROM documents WHERE id = 1",
+        ),
     ],
 )
 def test_format_results_for_display_location_types(location_key, location_data, location_type, expected_doc_id):
