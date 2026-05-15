@@ -513,3 +513,183 @@ def test_get_user_input_new_loop(mock_set_event_loop, mock_new_event_loop, mock_
     mock_new_event_loop.assert_called_once()
     mock_set_event_loop.assert_called_once_with(mock_loop)
     assert result == "y"
+
+
+# --- Credential redaction and sensitive operation consent gate tests ---
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("SecretAccessKey", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+        ("SessionToken", "FwoGZXIvYXdzEBYaDHmKHt..."),
+        ("SecretString", '{"password": "hunter2"}'),
+        ("SecretBinary", b"\x00\x01\x02"),
+        ("authorizationToken", "QVdTOnN1cGVyc2VjcmV0"),
+        ("Password", "super-secret"),
+        ("AccessToken", "eyJraWQiOi..."),
+        ("RefreshToken", "eyJjdHkiOi..."),
+        ("IdToken", "eyJraWQiOi..."),
+        ("ApiKey", "abc123apikey"),
+        ("ClientSecret", "client-secret-value"),
+        ("KeyMaterial", "-----BEGIN RSA PRIVATE KEY-----"),
+        ("PrivateKey", "-----BEGIN PRIVATE KEY-----"),
+        ("SharedSecret", "shared-secret-123"),
+        ("DbPassword", "db-pass-456"),
+        ("MasterUserPassword", "master-pass-789"),
+    ],
+)
+def test_redact_sensitive_values_key_redacted(key, value):
+    """Each sensitive key should be redacted regardless of nesting depth."""
+    response = {key: value, "SafeField": "visible"}
+    result = use_aws.redact_sensitive_values(response)
+
+    assert result == {key: "**REDACTED**", "SafeField": "visible"}
+
+
+def test_redact_sensitive_values_nested_dict():
+    """Sensitive keys nested inside dicts are redacted."""
+    response = {
+        "Credentials": {
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
+            "SecretAccessKey": "secret-key-value",
+            "SessionToken": "session-token-value",
+            "Expiration": "2026-05-13T18:00:00Z",
+        }
+    }
+    result = use_aws.redact_sensitive_values(response)
+
+    assert result == {
+        "Credentials": {
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
+            "SecretAccessKey": "**REDACTED**",
+            "SessionToken": "**REDACTED**",
+            "Expiration": "2026-05-13T18:00:00Z",
+        }
+    }
+
+
+def test_redact_sensitive_values_nested_list():
+    """Sensitive keys inside list elements are redacted."""
+    response = {
+        "authorizationData": [
+            {"authorizationToken": "token-1", "proxyEndpoint": "https://endpoint-1"},
+            {"authorizationToken": "token-2", "proxyEndpoint": "https://endpoint-2"},
+        ]
+    }
+    result = use_aws.redact_sensitive_values(response)
+
+    assert result == {
+        "authorizationData": [
+            {"authorizationToken": "**REDACTED**", "proxyEndpoint": "https://endpoint-1"},
+            {"authorizationToken": "**REDACTED**", "proxyEndpoint": "https://endpoint-2"},
+        ]
+    }
+
+
+@pytest.mark.parametrize("obj", [{}, [], None, "string", 42, 3.14, True])
+def test_redact_sensitive_values_edge_cases(obj):
+    """Empty containers and scalars pass through without error."""
+    result = use_aws.redact_sensitive_values(obj)
+    assert result == obj
+
+
+@pytest.mark.parametrize(
+    "service,operation",
+    [
+        ("sts", "get_session_token"),
+        ("secretsmanager", "get_secret_value"),
+        ("ecr", "get_authorization_token"),
+    ],
+)
+@patch("strands_tools.use_aws.get_user_input", return_value="n")
+def test_use_aws_sensitive_operations_blocked_on_denial(mock_input, service, operation):
+    """Sensitive operations are blocked when user declines consent."""
+    with (
+        patch("strands_tools.use_aws.get_available_services", return_value=[service]),
+        patch("strands_tools.use_aws.get_available_operations", return_value=[operation]),
+        patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}),
+    ):
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {
+                "service_name": service,
+                "operation_name": operation,
+                "parameters": {},
+                "region": "us-east-1",
+                "label": "Test",
+            },
+        }
+        result = use_aws.use_aws(tool=tool_use)
+
+        mock_input.assert_called_once()
+        assert result["status"] == "error"
+        assert "Operation canceled by user" in result["content"][0]["text"]
+
+
+@patch("strands_tools.use_aws.get_user_input", return_value="y")
+def test_use_aws_sensitive_operations_proceeds_with_redaction(mock_input):
+    """Sensitive operation proceeds on consent but response is still redacted."""
+    mock_client = MagicMock()
+    mock_client.get_secret_value.return_value = {
+        "Name": "my-secret",
+        "SecretString": "top-secret-value",
+    }
+
+    with (
+        patch("strands_tools.use_aws.get_available_services", return_value=["secretsmanager"]),
+        patch("strands_tools.use_aws.get_available_operations", return_value=["get_secret_value"]),
+        patch("strands_tools.use_aws.get_boto3_client", return_value=mock_client),
+        patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}),
+    ):
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {
+                "service_name": "secretsmanager",
+                "operation_name": "get_secret_value",
+                "parameters": {"SecretId": "my-secret"},
+                "region": "us-east-1",
+                "label": "Test",
+            },
+        }
+        result = use_aws.use_aws(tool=tool_use)
+
+        assert result["status"] == "success"
+        assert "**REDACTED**" in result["content"][0]["text"]
+        assert "top-secret-value" not in result["content"][0]["text"]
+
+
+@patch("strands_tools.use_aws.get_user_input")
+def test_use_aws_sensitive_operations_bypass_consent(mock_input):
+    """BYPASS_TOOL_CONSENT=true skips consent for sensitive operations."""
+    mock_client = MagicMock()
+    mock_client.get_session_token.return_value = {
+        "Credentials": {
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
+            "SecretAccessKey": "secret-key-value",
+            "SessionToken": "session-token-value",
+            "Expiration": "2026-05-13T18:00:00Z",
+        },
+    }
+
+    with (
+        patch("strands_tools.use_aws.get_available_services", return_value=["sts"]),
+        patch("strands_tools.use_aws.get_available_operations", return_value=["get_session_token"]),
+        patch("strands_tools.use_aws.get_boto3_client", return_value=mock_client),
+        patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"}),
+    ):
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {
+                "service_name": "sts",
+                "operation_name": "get_session_token",
+                "parameters": {},
+                "region": "us-east-1",
+                "label": "Test",
+            },
+        }
+        result = use_aws.use_aws(tool=tool_use)
+
+        mock_input.assert_not_called()
+        assert result["status"] == "success"
+        assert "**REDACTED**" in result["content"][0]["text"]
