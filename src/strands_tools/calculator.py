@@ -1,10 +1,16 @@
 """
 Calculator tool powered by SymPy for comprehensive mathematical operations.
 
-This module provides a powerful mathematical calculation engine built on SymPy
+This module provides a mathematical calculation engine built on SymPy
 that can handle everything from basic arithmetic to advanced calculus, equation solving,
-and matrix operations. It's designed to provide formatted, precise results with
+and matrix operations. It provides formatted, precise results with
 proper error handling and robust type conversion.
+
+Security:
+    All expressions are validated against an AST allowlist before evaluation.
+    Only mathematical syntax (operators, function calls, literals, names, containers)
+    is permitted. Attribute access, subscripts, lambdas, comprehensions, and imports
+    are rejected, preventing code execution via eval.
 
 Key Features:
 1. Expression Evaluation:
@@ -19,7 +25,7 @@ Key Features:
    • Integration (indefinite integrals)
    • Limit calculation (at specified points or infinity)
    • Series expansions (Taylor and Laurent series)
-   • Matrix operations (determinants, multiplication, etc.)
+   • Matrix operations (det, transpose, trace, arithmetic)
 
 3. Display and Formatting:
    • Configurable precision for numeric results
@@ -34,7 +40,7 @@ from strands_tools import calculator
 
 agent = Agent(tools=[calculator])
 
-# Basic arithmetic evaluation
+# Basic arithmetic (expressions must be valid Python with explicit operators)
 agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")
 
 # Equation solving
@@ -54,6 +60,9 @@ agent.tool.calculator(
     mode="integrate",
     wrt="x"
 )
+
+# Matrix determinant
+agent.tool.calculator(expression="det(Matrix([[1, 2], [3, 4]]))")
 ```
 
 See the calculator function docstring for more details on available modes and parameters.
@@ -184,6 +193,10 @@ _SAFE_SYMPY_LOCALS: Dict[str, Any] = {
     "Symbol": sp.Symbol,
     "symbols": sp.symbols,
     "N": sp.N,
+    # Matrix operations
+    "det": sp.det,
+    "transpose": sp.transpose,
+    "trace": sp.trace,
     # Solving/simplification
     "solve": sp.solve,
     "simplify": sp.simplify,
@@ -209,14 +222,90 @@ _SAFE_GLOBALS: Dict[str, Any] = {
 }
 
 
+_ALLOWED_AST_NODES = {
+    # Structural
+    ast.Expression,
+    # Literals
+    ast.Constant,
+    # Names and loading
+    ast.Name,
+    ast.Load,
+    # Expressions
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.BoolOp,
+    ast.Compare,
+    ast.IfExp,
+    ast.Call,
+    # Operators
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
+    ast.USub,
+    ast.UAdd,
+    ast.BitXor,  # used for exponentiation via convert_xor
+    # Comparisons (needed for Eq() style expressions)
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    # Containers (for Matrix([[...]]), function args, etc.)
+    ast.Tuple,
+    ast.List,
+    # Boolean
+    ast.And,
+    ast.Or,
+    ast.Not,
+    # Star args (for function calls like Max(*values))
+    ast.Starred,
+    # keyword arguments (for Symbol('x', positive=True) style calls)
+    ast.keyword,
+}
+
+
+def _validate_expression_ast(expr_str: str) -> None:
+    """Reject expressions containing attribute access, subscripts, or other unsafe syntax.
+
+    This blocks attacks like:
+        solve.__globals__['__builtins__']['__import__']('os').system('...')
+
+    Only pure mathematical expressions (calls, operators, literals, names, containers)
+    are permitted. Inputs that are not valid Python are rejected outright.
+
+    Args:
+        expr_str: The raw expression string to validate.
+
+    Raises:
+        ValueError: If the expression contains disallowed syntax or is not valid Python.
+    """
+    try:
+        tree = ast.parse(expr_str, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Invalid mathematical expression: {e.msg}")
+
+    for node in ast.walk(tree):
+        if type(node) not in _ALLOWED_AST_NODES:
+            raise ValueError(f"Invalid mathematical expression: unsupported syntax '{type(node).__name__}'")
+
+
 def parse_expression(expr_str: str) -> Any:
     """Parse a string expression into a SymPy expression safely.
 
-    Uses sympy.parsing.sympy_parser.parse_expr with a restricted local_dict
+    Validates the expression AST against an allowlist of safe node types,
+    then uses sympy.parsing.sympy_parser.parse_expr with a restricted local_dict
     and empty __builtins__ to prevent code execution via eval.
     """
     if not isinstance(expr_str, str):
         raise ValueError("Expression must be a string")
+
+    # Validate AST before eval to block attribute traversal attacks
+    _validate_expression_ast(expr_str)
 
     transformations = standard_transformations + (
         implicit_multiplication_application,
@@ -625,37 +714,6 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
         raise ValueError(f"Series expansion error: {str(e)}") from e
 
 
-def parse_matrix_expression(expr_str: str) -> Any:
-    """Parse matrix expression and perform operations."""
-    try:
-        # Function to safely convert string to matrix
-        def safe_matrix_from_str(matrix_str: str) -> Any:
-            # Use ast.literal_eval for safe evaluation of matrix literals
-            try:
-                matrix_data = ast.literal_eval(matrix_str.strip())
-                return sp.Matrix(matrix_data)
-            except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid matrix format: {str(e)}") from e
-
-        # Split into parts for operations
-        parts = expr_str.split("*")
-        if len(parts) == 2:
-            # Handle multiplication
-            matrix1 = safe_matrix_from_str(parts[0])
-            matrix2 = safe_matrix_from_str(parts[1])
-            return matrix1 * matrix2
-        elif "+" in expr_str:
-            # Handle addition
-            parts = expr_str.split("+")
-            matrix1 = safe_matrix_from_str(parts[0])
-            matrix2 = safe_matrix_from_str(parts[1])
-            return matrix1 + matrix2
-        else:
-            # Single matrix operations
-            return safe_matrix_from_str(expr_str)
-    except Exception as e:
-        raise ValueError(f"Matrix parsing error: {str(e)}") from e
-
 
 @tool
 def calculator(
@@ -706,9 +764,11 @@ def calculator(
     - Data science: Matrix operations and statistical calculations
 
     Args:
-        expression: The mathematical expression to evaluate, such as "2 + 2 * 3",
-            "x**2 + 2*x + 1", or "sin(pi/2)". For matrix operations, use array
-            notation like "[[1, 2], [3, 4]]".
+        expression: A SymPy-compatible mathematical expression written in valid Python
+            syntax. Use explicit operators and SymPy function names (e.g., "2*x + 1",
+            "sin(pi/2)", "factorial(5)", "Abs(x)", "Eq(x**2, 4)").
+            For matrix operations, use Matrix() with functions like det(),
+            transpose(), or trace().
         mode: The calculation mode to use. Options are:
             - "evaluate": Compute the value of the expression (default)
             - "solve": Solve an equation or system of equations
@@ -768,10 +828,7 @@ def calculator(
         variables = variables or {}
 
         # Parse the expression
-        if mode == "matrix":
-            expr = parse_matrix_expression(expression)
-        else:
-            expr = parse_expression(expression)
+        expr = parse_expression(expression)
 
         # Process based on mode
         additional_info = {}
