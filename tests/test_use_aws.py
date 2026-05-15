@@ -551,7 +551,7 @@ def test_redact_sensitive_values_nested_dict():
     """Sensitive keys nested inside dicts are redacted."""
     response = {
         "Credentials": {
-            "AccessKeyId": "ASIAXXXXXXXXXEXAMPLE",
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
             "SecretAccessKey": "secret-key-value",
             "SessionToken": "session-token-value",
             "Expiration": "2026-05-13T18:00:00Z",
@@ -561,7 +561,7 @@ def test_redact_sensitive_values_nested_dict():
 
     assert result == {
         "Credentials": {
-            "AccessKeyId": "ASIAXXXXXXXXXEXAMPLE",
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
             "SecretAccessKey": "**REDACTED**",
             "SessionToken": "**REDACTED**",
             "Expiration": "2026-05-13T18:00:00Z",
@@ -665,7 +665,7 @@ def test_use_aws_sensitive_operations_bypass_consent(mock_input):
     mock_client = MagicMock()
     mock_client.get_session_token.return_value = {
         "Credentials": {
-            "AccessKeyId": "ASIAXXXXXXXXXEXAMPLE",
+            "AccessKeyId": "EXAMPLE_KEY_ID_12345678",
             "SecretAccessKey": "secret-key-value",
             "SessionToken": "session-token-value",
             "Expiration": "2026-05-13T18:00:00Z",
