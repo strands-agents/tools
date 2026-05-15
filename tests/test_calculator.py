@@ -24,7 +24,6 @@ from src.strands_tools.calculator import (
     get_precision_level,
     numeric_evaluation,
     parse_expression,
-    parse_matrix_expression,
     preprocess_expression,
     solve_equation,
 )
@@ -109,20 +108,20 @@ def test_equation_solving(agent):
 def test_matrix_operations(agent):
     """Test matrix operations."""
     # Test matrix addition
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]] + [[5, 6], [7, 8]]", mode="matrix")
+    result = agent.tool.calculator(expression="Matrix([[1, 2], [3, 4]]) + Matrix([[5, 6], [7, 8]])", mode="matrix")
     result_text = extract_result_text(result)
     assert "6" in result_text and "8" in result_text and "10" in result_text and "12" in result_text
 
     # Test matrix multiplication
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]] * [[5, 6], [7, 8]]", mode="matrix")
+    result = agent.tool.calculator(expression="Matrix([[1, 2], [3, 4]]) * Matrix([[5, 6], [7, 8]])", mode="matrix")
     result_text = extract_result_text(result)
     # Result should be [[19, 22], [43, 50]]
     assert "19" in result_text and "22" in result_text and "43" in result_text and "50" in result_text
 
-    # Test determinant (implicitly)
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]]", mode="matrix")
+    # Test determinant
+    result = agent.tool.calculator(expression="det(Matrix([[1, 2], [3, 4]]))")
     result_text = extract_result_text(result)
-    assert "Matrix" in result_text or "1" in result_text  # Either the matrix itself or its determinant
+    assert "-2" in result_text
 
 
 def test_scientific_notation_and_precision(agent):
@@ -147,11 +146,11 @@ def test_parse_expression_edge_cases():
         parse_expression(123)
 
     # Test with invalid syntax
-    with pytest.raises(ValueError, match="Invalid"):
+    with pytest.raises(ValueError):
         parse_expression("2 **/ 3")
 
     # Test with logical operators (invalid Python syntax)
-    with pytest.raises(ValueError, match="Invalid"):
+    with pytest.raises(ValueError):
         parse_expression("x && y")
 
     # Test that floor division is handled (parse_expr supports it)
@@ -397,17 +396,6 @@ def test_create_error_panel():
     mock_console.print.assert_called_once()
 
 
-def test_parse_matrix_expression_errors():
-    """Test error handling in parse_matrix_expression function."""
-    # Test with invalid matrix format
-    with pytest.raises(ValueError, match="Invalid matrix format"):
-        parse_matrix_expression("[[1, 2], [3]]")
-
-    # Test with general error
-    with pytest.raises(ValueError, match="Matrix parsing error"):
-        parse_matrix_expression("not_a_matrix")
-
-
 def test_evaluate_expression_comprehensive():
     """Test comprehensive evaluation of expressions."""
     # Test basic numeric evaluation
@@ -437,11 +425,6 @@ def test_edge_case_error_handling(agent):
     """Test more edge cases for error handling."""
     # Test with unsupported operators
     result = agent.tool.calculator(expression="x && y")
-    result_text = extract_result_text(result)
-    assert "Error" in result_text
-
-    # Test with invalid matrix input
-    result = agent.tool.calculator(expression="[[1, 2], [3]]", mode="matrix")
     result_text = extract_result_text(result)
     assert "Error" in result_text
 
@@ -654,9 +637,64 @@ def test_error_handling(agent):
     ],
 )
 def test_code_execution_blocked(payload, mock_target):
-    """Verify that malicious payloads cannot achieve code execution via parse_expression."""
+    """Verify that malicious payloads cannot achieve code execution via the calculator tool."""
     with mock.patch(mock_target) as mock_fn:
         result = calculator_func(expression=payload, mode="evaluate")
         assert result["status"] == "error"
-        assert "Invalid mathematical expression:" in result["content"][0]["text"]
+        assert "Invalid mathematical expression" in result["content"][0]["text"]
         mock_fn.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Attribute traversal via __globals__
+        "solve.__globals__['__builtins__']['__import__']('os').system('id')",
+        "simplify.__globals__['__builtins__']['__import__']('os').getpid()",
+        "N.__globals__['__builtins__']['__import__']('subprocess').run(['id'])",
+        # Attribute traversal via __class__
+        "solve.__class__.__bases__[0].__subclasses__()",
+        "(1).__class__.__bases__[0].__subclasses__()",
+        # Direct attribute access
+        "solve.__module__",
+        "solve.__name__",
+        # Subscript access
+        "solve.__globals__['os']",
+        # Lambda and comprehensions
+        "(lambda: __import__('os'))()",
+        "[x for x in ().__class__.__bases__[0].__subclasses__()]",
+        # Invalid Python (implicit multiplication, assignment, import)
+        "2x",
+        "2sin(x)",
+        "x = 5",
+        "import os",
+    ],
+)
+def test_ast_validation_rejects_unsafe_input(payload):
+    """Verify that AST validation rejects unsafe or non-Python syntax."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "2 + 3",
+        "sin(pi/4)",
+        "sqrt(2)",
+        "factorial(10)",
+        "Matrix([[1,2],[3,4]])",
+        "Eq(x**2, 4)",
+        "Max(1, 2, 3)",
+        "2^10",
+        "2*x + 3*y",
+        "log(e**2) + sin(pi)",
+        "det(Matrix([[1, 2], [3, 4]]))",
+        "transpose(Matrix([[1, 2], [3, 4]]))",
+        "trace(Matrix([[1, 0], [0, 5]]))",
+    ],
+)
+def test_ast_validation_allows_legitimate_math(expression):
+    """Verify that AST validation permits valid mathematical expressions."""
+    result = parse_expression(expression)
+    assert result is not None
