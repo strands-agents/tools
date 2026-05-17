@@ -148,6 +148,10 @@ TOOL_SPEC = {
                     "type": "integer",
                     "description": "Maximum number of redirects to follow (default: 30)",
                 },
+                "timeout": {
+                    "type": "number",
+                    "description": "Request timeout in seconds (default: 30). Set to None for no timeout.",
+                },
                 "convert_to_markdown": {
                     "type": "boolean",
                     "description": "Convert HTML responses to markdown format (default: False).",
@@ -879,6 +883,9 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         if body:
             request_kwargs["data"] = body
 
+        # Set default timeout (30s) to prevent indefinite blocking
+        request_kwargs.setdefault("timeout", tool_input.get("timeout", 30))
+
         # Execute request with metrics
         start_time = time.time()
         response = session.request(**request_kwargs)
@@ -1022,3 +1029,4 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": error_text}],
         }
+
