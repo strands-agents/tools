@@ -384,7 +384,9 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
             elif os.path.isdir(pattern):
                 matching_files = []
 
-                for root, _dirs, files in os.walk(pattern):
+                for root, dirs, files in os.walk(pattern):
+                    dirs[:] = [d for d in dirs if not d.startswith(".")]
+
                     if not recursive and root != pattern:
                         continue
 
