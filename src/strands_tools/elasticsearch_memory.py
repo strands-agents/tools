@@ -36,7 +36,7 @@ Usage Examples:
 from strands import Agent
 from strands_tools.elasticsearch_memory import elasticsearch_memory
 
-# Create agent with direct tool usage
+# Create agent with elasticsearch_memory tool (credentials via env vars)
 agent = Agent(tools=[elasticsearch_memory])
 
 # Store a memory with semantic embeddings
@@ -44,8 +44,6 @@ elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     metadata={"category": "food_preferences", "type": "dietary"},
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
@@ -55,8 +53,6 @@ elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
@@ -65,8 +61,6 @@ elasticsearch_memory(
 elasticsearch_memory(
     action="list",
     max_results=10,
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
@@ -75,8 +69,6 @@ elasticsearch_memory(
 elasticsearch_memory(
     action="get",
     memory_id="mem_1234567890_abcd1234",
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
@@ -85,8 +77,6 @@ elasticsearch_memory(
 elasticsearch_memory(
     action="delete",
     memory_id="mem_1234567890_abcd1234",
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
     index_name="memories",
     namespace="user_123"
 )
@@ -599,9 +589,6 @@ def elasticsearch_memory(
     max_results: Optional[int] = None,
     next_token: Optional[str] = None,
     metadata: Optional[Dict] = None,
-    cloud_id: Optional[str] = None,
-    api_key: Optional[str] = None,
-    es_url: Optional[str] = None,
     index_name: Optional[str] = None,
     namespace: Optional[str] = None,
     embedding_model: Optional[str] = None,
@@ -639,6 +626,10 @@ def elasticsearch_memory(
     - delete: Remove a specific memory
       Use this to delete memories that are no longer needed.
 
+    Connection credentials are read from environment variables:
+    - ELASTICSEARCH_CLOUD_ID or ELASTICSEARCH_URL for connection
+    - ELASTICSEARCH_API_KEY for authentication
+
     Args:
         action: The memory operation to perform (one of: "record", "retrieve", "list", "get", "delete")
         content: For record action: Text content to store as a memory
@@ -647,9 +638,6 @@ def elasticsearch_memory(
         max_results: Maximum number of results to return (optional, default: 10)
         next_token: Pagination token for list action (optional)
         metadata: Additional metadata to store with the memory (optional)
-        cloud_id: Elasticsearch Cloud ID for connection (optional if es_url provided)
-        api_key: Elasticsearch API key for authentication
-        es_url: Elasticsearch URL for serverless connection (optional if cloud_id provided)
         index_name: Name of the Elasticsearch index (defaults to 'strands_memory')
         namespace: Namespace for memory operations (defaults to 'default')
         embedding_model: Amazon Bedrock model for embeddings (defaults to Titan)
@@ -658,12 +646,11 @@ def elasticsearch_memory(
     Returns:
         Dict: Response containing the requested memory information or operation status
     """
-    try:
-        # Get values from environment variables if not provided
-        cloud_id = cloud_id or os.getenv("ELASTICSEARCH_CLOUD_ID")
-        es_url = es_url or os.getenv("ELASTICSEARCH_URL")
-        api_key = api_key or os.getenv("ELASTICSEARCH_API_KEY")
+    cloud_id = os.getenv("ELASTICSEARCH_CLOUD_ID")
+    es_url = os.getenv("ELASTICSEARCH_URL")
+    api_key = os.getenv("ELASTICSEARCH_API_KEY")
 
+    try:
         # Validate required parameters
         if not api_key:
             return {"status": "error", "content": [{"text": "api_key is required"}]}
