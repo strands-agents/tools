@@ -2,6 +2,7 @@
 Tests for the elasticsearch_memory tool.
 """
 
+import inspect
 import json
 import os
 from unittest import mock
@@ -11,6 +12,29 @@ import pytest
 from strands import Agent
 
 from src.strands_tools.elasticsearch_memory import elasticsearch_memory
+
+ES_ENV_VARS = {
+    "ELASTICSEARCH_CLOUD_ID": "test-cloud-id",
+    "ELASTICSEARCH_API_KEY": "test-api-key",
+    "ELASTICSEARCH_INDEX_NAME": "test_index",
+    "ELASTICSEARCH_NAMESPACE": "test_namespace",
+    "AWS_REGION": "us-east-1",
+}
+
+ES_URL_ENV_VARS = {
+    "ELASTICSEARCH_URL": "https://test-cluster.es.region.aws.elastic.cloud:443",
+    "ELASTICSEARCH_API_KEY": "test-api-key",
+    "ELASTICSEARCH_INDEX_NAME": "test_index",
+    "ELASTICSEARCH_NAMESPACE": "test_namespace",
+    "AWS_REGION": "us-east-1",
+}
+
+
+@pytest.fixture(autouse=True)
+def set_es_env_vars():
+    """Auto-set ES environment variables for all tests."""
+    with mock.patch.dict(os.environ, ES_ENV_VARS):
+        yield
 
 
 @pytest.fixture
@@ -74,29 +98,40 @@ def agent(mock_elasticsearch_client, mock_bedrock_client):
 
 @pytest.fixture
 def config():
-    """Configuration parameters for testing."""
+    """Configuration parameters for testing (non-credential params only)."""
     return {
-        "cloud_id": "test-cloud-id",
-        "api_key": "test-api-key",
         "index_name": "test_index",
         "namespace": "test_namespace",
-        "region": "us-east-1",
     }
 
 
+# --- Security Tests ---
+
+
+def test_credential_params_not_in_tool_signature():
+    """Verify that credential/connection parameters cannot be passed to the tool."""
+    sig = inspect.signature(elasticsearch_memory)
+    param_names = set(sig.parameters.keys())
+    assert "es_url" not in param_names
+    assert "cloud_id" not in param_names
+    assert "api_key" not in param_names
+
+
 def test_missing_required_params(mock_elasticsearch_client, mock_bedrock_client):
-    """Test tool with missing required parameters."""
+    """Test tool with missing required environment variables."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Test missing both cloud_id and es_url
-    result = agent.tool.elasticsearch_memory(action="record", content="test", api_key="test-api-key")
-    assert result["status"] == "error"
-    assert "Either cloud_id or es_url is required" in result["content"][0]["text"]
+    # Test missing both cloud_id and es_url (no env vars set)
+    with mock.patch.dict(os.environ, {"ELASTICSEARCH_API_KEY": "test-api-key"}, clear=True):
+        result = agent.tool.elasticsearch_memory(action="record", content="test")
+        assert result["status"] == "error"
+        assert "Either cloud_id or es_url is required" in result["content"][0]["text"]
 
     # Test missing api_key
-    result = agent.tool.elasticsearch_memory(action="record", content="test", cloud_id="test-cloud-id")
-    assert result["status"] == "error"
-    assert "api_key is required" in result["content"][0]["text"]
+    with mock.patch.dict(os.environ, {"ELASTICSEARCH_CLOUD_ID": "test-cloud-id"}, clear=True):
+        result = agent.tool.elasticsearch_memory(action="record", content="test")
+        assert result["status"] == "error"
+        assert "api_key is required" in result["content"][0]["text"]
 
 
 def test_connection_failure(mock_elasticsearch_client, mock_bedrock_client):
@@ -106,9 +141,8 @@ def test_connection_failure(mock_elasticsearch_client, mock_bedrock_client):
     # Configure ping to return False (connection failure)
     mock_elasticsearch_client["client"].ping.return_value = False
 
-    result = agent.tool.elasticsearch_memory(
-        action="record", content="test", cloud_id="test-cloud-id", api_key="test-api-key"
-    )
+    with mock.patch.dict(os.environ, ES_ENV_VARS):
+        result = agent.tool.elasticsearch_memory(action="record", content="test")
 
     assert result["status"] == "error"
     assert "Unable to connect to Elasticsearch cluster" in result["content"][0]["text"]
@@ -121,7 +155,8 @@ def test_index_creation(mock_elasticsearch_client, mock_bedrock_client, config):
     # Configure mock responses
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
-    agent.tool.elasticsearch_memory(action="record", content="Test content", **config)
+    with mock.patch.dict(os.environ, ES_ENV_VARS):
+        agent.tool.elasticsearch_memory(action="record", content="Test content", **config)
 
     # Verify index creation was called
     mock_elasticsearch_client["client"].indices.create.assert_called_once()
@@ -158,9 +193,10 @@ def test_record_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(
-        action="record", content="Test memory content", metadata={"category": "test"}, **config
-    )
+    with mock.patch.dict(os.environ, ES_ENV_VARS):
+        result = agent.tool.elasticsearch_memory(
+            action="record", content="Test memory content", metadata={"category": "test"}, **config
+        )
 
     # Verify success response
     assert result["status"] == "success"
@@ -504,8 +540,6 @@ def test_agent_tool_usage(mock_elasticsearch_client, mock_bedrock_client):
     result = agent.tool.elasticsearch_memory(
         action="record",
         content="Test memory content",
-        cloud_id="test-cloud-id",
-        api_key="test-api-key",
         index_name="test_index",
         namespace="test_namespace",
     )
@@ -522,21 +556,20 @@ def test_agent_tool_usage(mock_elasticsearch_client, mock_bedrock_client):
 
 
 def test_es_url_connection(mock_elasticsearch_client, mock_bedrock_client):
-    """Test using es_url instead of cloud_id for connection."""
+    """Test using ELASTICSEARCH_URL instead of ELASTICSEARCH_CLOUD_ID for connection."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Configure mock responses
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
-    # Call tool with es_url instead of cloud_id
-    result = agent.tool.elasticsearch_memory(
-        action="record",
-        content="Test memory content",
-        es_url="https://test-cluster.es.region.aws.elastic.cloud:443",
-        api_key="test-api-key",
-        index_name="test_index",
-        namespace="test_namespace",
-    )
+    # Override env vars to use URL instead of cloud_id
+    with mock.patch.dict(os.environ, ES_URL_ENV_VARS, clear=False):
+        result = agent.tool.elasticsearch_memory(
+            action="record",
+            content="Test memory content",
+            index_name="test_index",
+            namespace="test_namespace",
+        )
 
     # Verify success response
     assert result["status"] == "success"
@@ -558,7 +591,8 @@ def test_custom_embedding_model(mock_elasticsearch_client, mock_bedrock_client, 
 
     # Call tool with custom embedding model
     result = agent.tool.elasticsearch_memory(
-        action="record", content="Test memory content", embedding_model="amazon.titan-embed-text-v1:0", **config
+        action="record", content="Test memory content", embedding_model="amazon.titan-embed-text-v1:0",
+        index_name="test_index", namespace="test_namespace",
     )
 
     # Verify success response
@@ -583,7 +617,7 @@ def test_multiple_namespaces(mock_elasticsearch_client, mock_bedrock_client, con
         action="record",
         content="Alice likes Italian food",
         namespace="user_alice",
-        **{k: v for k, v in config.items() if k != "namespace"},
+        index_name="test_index",
     )
 
     # Store memory in system namespace
@@ -591,7 +625,7 @@ def test_multiple_namespaces(mock_elasticsearch_client, mock_bedrock_client, con
         action="record",
         content="System maintenance scheduled",
         namespace="system_global",
-        **{k: v for k, v in config.items() if k != "namespace"},
+        index_name="test_index",
     )
 
     # Verify both operations succeeded
@@ -626,13 +660,10 @@ def test_configuration_dictionary_pattern(mock_elasticsearch_client, mock_bedroc
         }
     }
 
-    # Create configuration dictionary
+    # Create configuration dictionary (non-credential params only)
     config = {
-        "cloud_id": "test-cloud-id",
-        "api_key": "test-api-key",
         "index_name": "memories",
         "namespace": "user_123",
-        "region": "us-east-1",
     }
 
     # Store memory using config dictionary
@@ -782,14 +813,13 @@ def test_security_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     }
 
     # Test namespace validation - memory exists but not in requested namespace
-    result = agent.tool.elasticsearch_memory(
-        action="get",
-        memory_id="mem_123",
-        cloud_id="test-cloud-id",
-        api_key="test-api-key",
-        index_name="test_index",
-        namespace="correct_namespace",
-    )
+    with mock.patch.dict(os.environ, ES_ENV_VARS):
+        result = agent.tool.elasticsearch_memory(
+            action="get",
+            memory_id="mem_123",
+            index_name="test_index",
+            namespace="correct_namespace",
+        )
 
     assert result["status"] == "error"
     assert "not found in namespace correct_namespace" in result["content"][0]["text"]
@@ -819,8 +849,8 @@ def test_injection_prevention(mock_elasticsearch_client, mock_bedrock_client, co
     """Test that injection attempts via namespace are blocked."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Remove namespace from config to avoid conflict
-    test_config = {k: v for k, v in config.items() if k != "namespace"}
+    # Config without namespace
+    test_config = {"index_name": "test_index"}
 
     # Test dict-based injection (analogous to MongoDB {"$ne": ""} attack)
     malicious_namespace = {"$ne": ""}
@@ -848,8 +878,8 @@ def test_namespace_validation_strict_rules(mock_elasticsearch_client, mock_bedro
     """Test strict namespace validation rules."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Remove namespace from config to avoid conflict
-    test_config = {k: v for k, v in config.items() if k != "namespace"}
+    # Config without namespace
+    test_config = {"index_name": "test_index"}
 
     # Test invalid characters (should be rejected)
     invalid_namespaces = [
@@ -883,8 +913,8 @@ def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_clien
         }
     }
 
-    # Remove namespace from config
-    test_config = {k: v for k, v in config.items() if k != "namespace"}
+    # Config without namespace
+    test_config = {"index_name": "test_index"}
 
     valid_namespaces = [
         "default",
