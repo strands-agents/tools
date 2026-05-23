@@ -4,6 +4,8 @@ Tests for the workflow tool using the Agent interface.
 
 import json
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -259,6 +261,69 @@ class TestWorkflowExecution:
 
         extracted_id = namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
         assert extracted_id == "task1"
+
+    def test_start_workflow_enforces_task_timeout(self, mock_parent_agent):
+        """A task that exceeds its configured timeout is marked as error so the workflow can finish."""
+        # WorkflowManager is a singleton (__new__-based), so reset it before AND after
+        # this test to avoid leaking our patched execute_task / shut-down TaskExecutor
+        # into other tests.
+        workflow_module.WorkflowManager._instance = None
+        try:
+            with (
+                tempfile.TemporaryDirectory() as temp_dir,
+                patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)),
+            ):
+                manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+                # execute_task replacement that sleeps far longer than the configured task timeout
+                def hanging_execute_task(task, workflow):
+                    time.sleep(2.0)
+                    return {"status": "success", "content": [{"text": "should not be reached"}]}
+
+                manager.execute_task = hanging_execute_task
+
+                workflow_id = "timeout_test"
+                workflow_data = {
+                    "workflow_id": workflow_id,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "created",
+                    "tasks": [
+                        {
+                            "task_id": "slow_task",
+                            "description": "Hangs longer than its timeout",
+                            "timeout": 0.2,
+                            "priority": 3,
+                            "dependencies": [],
+                        }
+                    ],
+                    "task_results": {
+                        "slow_task": {
+                            "status": "pending",
+                            "result": None,
+                            "priority": 3,
+                            "model_provider": None,
+                            "tools": [],
+                        }
+                    },
+                    "parallel_execution": True,
+                }
+                manager.store_workflow(workflow_id, workflow_data)
+
+                started = time.time()
+                result = manager.start_workflow(workflow_id)
+                elapsed = time.time() - started
+
+                # Workflow should give up on the hung task well before its 2.0s sleep completes
+                assert elapsed < 1.5, f"start_workflow blocked on a hung task ({elapsed:.2f}s)"
+                assert result["status"] == "success"
+
+                task_result = manager.get_workflow(workflow_id)["task_results"]["slow_task"]
+                assert task_result["status"] == "error"
+                timeout_text = task_result["result"][0]["text"]
+                assert "timeout" in timeout_text.lower()
+                assert "0.2" in timeout_text
+        finally:
+            workflow_module.WorkflowManager._instance = None
 
 
 class TestWorkflowStatus:
