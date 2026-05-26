@@ -52,6 +52,9 @@ class AgentCoreBrowser(Browser):
 
         logger.info(f"started Bedrock AgentCore browser session: {session_id}")
 
+        # Store the client so close_platform() can properly terminate the session
+        self._client_dict[session_id] = session_client
+
         # Get CDP connection details
         cdp_url, cdp_headers = session_client.generate_ws_headers()
 
