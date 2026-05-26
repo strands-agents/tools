@@ -389,7 +389,8 @@ class SocketModeHandler:
 
             # Refresh the system prompt with latest context handled from Slack events
             agent.system_prompt = (
-                f"{SLACK_SYSTEM_PROMPT}\n\nEvent Context:\nCurrent: {json.dumps(event)}{event_context}"
+                f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}\n\n"
+                f"Event Context:\nCurrent: {json.dumps(event)}{event_context}"
             )
 
             # Process with agent
@@ -443,7 +444,7 @@ class SocketModeHandler:
             agent = Agent(
                 model=self.agent.model,
                 messages=[],
-                system_prompt=SLACK_SYSTEM_PROMPT,
+                system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
                 tools=tools,
                 callback_handler=self.agent.callback_handler,
             )
@@ -456,7 +457,10 @@ class SocketModeHandler:
             interaction_text = f"Interactive event from user {event.get('user')}. Actions: {actions}"
 
             try:
-                agent.system_prompt = f"{SLACK_SYSTEM_PROMPT}\n\nInteractive Context:\n{json.dumps(event, indent=2)}"
+                agent.system_prompt = (
+                    f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}\n\n"
+                    f"Interactive Context:\n{json.dumps(event, indent=2)}"
+                )
                 response = agent(interaction_text)
 
                 # Only send a response if auto-reply is enabled
