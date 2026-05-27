@@ -595,7 +595,8 @@ class Browser(ABC):
                     }
 
             # Truncate long HTML content
-            truncated_result = result[:1000] + "..." if len(result) > 1000 else result
+            max_len = action.max_length if action.max_length > 0 else len(result)
+            truncated_result = result[:max_len] + "..." if len(result) > max_len else result
             return {"status": "success", "content": [{"text": truncated_result}]}
         except Exception as e:
             logger.debug("exception=<%s> | get HTML action failed", str(e))
