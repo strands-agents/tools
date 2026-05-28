@@ -326,7 +326,7 @@ class WorkflowManager:
 
             # Configure tools
             filtered_tools = []
-            if task_tools and self.parent_agent and hasattr(self.parent_agent, "tool_registry"):
+            if isinstance(task_tools, list) and self.parent_agent and hasattr(self.parent_agent, "tool_registry"):
                 # Filter parent agent tools to only include specified tool names
                 available_tools = self.parent_agent.tool_registry.registry
                 for tool_name in task_tools:
