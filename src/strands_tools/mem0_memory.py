@@ -209,32 +209,16 @@ class Mem0ServiceClient:
             logger.debug("Using FAISS backend (Mem0Memory with FAISS)")
             merged_config = self._append_faiss_config(config)
 
-        # Graph backend providers
-
-        # Graph backend providers
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER") and os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
-            raise RuntimeError("""Conflicting backend configurations:
-                Both NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER and NEPTUNE_DATABASE_ENDPOINT environment variables are set.
-                Please specify only one graph backend.""")
-
-        if os.environ.get("NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER"):
-            logger.debug("Using Neptune Analytics graph backend (Mem0Memory with Neptune Analytics)")
-            merged_config = self._append_neptune_analytics_graph_config(merged_config)
-
-        elif os.environ.get("NEPTUNE_DATABASE_ENDPOINT"):
-            logger.debug("Using Neptune Database graph backend (Mem0Memory with Neptune Database)")
-            merged_config = self._append_neptune_database_backend(merged_config)
-
         return Mem0Memory.from_config(config_dict=merged_config)
 
     def _append_neptune_analytics_vector_config(self, config: Optional[Dict] = None) -> Dict:
-        """Update incoming configuration dictionary to include the configuration of Neptune Analytics vector backend.
+        """Update incoming configuration dictionary to include the Neptune Analytics vector backend.
 
         Args:
             config: Optional configuration dictionary to override defaults.
 
         Returns:
-            An configuration dict with graph backend.
+            A configuration dict with Neptune Analytics as the vector store.
         """
         config = config or {}
         config["vector_store"] = {
@@ -245,26 +229,6 @@ class Mem0ServiceClient:
             },
         }
         return self._merge_config(config)
-
-    def _append_neptune_database_backend(self, config: Optional[Dict] = None) -> Dict:
-        """Update incoming configuration dictionary to include the configuration of Neptune Database graph backend.
-
-        Args:
-            config: Optional configuration dictionary to override defaults.
-
-        Returns:
-            An configuration dict with graph backend.
-        """
-        config = config or {}
-        config["graph_store"] = {
-            "provider": "neptunedb",
-            "config": {"endpoint": f"neptune-db://{os.environ.get('NEPTUNE_DATABASE_ENDPOINT')}"},
-        }
-        # To retrieve cosine similarity score instead for Faiss.
-        if "faiss" == config.get("vector_store", {}).get("provider"):
-            config["vector_store"]["config"]["distance_strategy"] = "cosine"
-
-        return config
 
     def _append_opensearch_config(self, config: Optional[Dict] = None) -> Dict:
         """Update incoming configuration dictionary to include the configuration of OpenSearch vector backend.
@@ -338,21 +302,6 @@ class Mem0ServiceClient:
         }
         return merged_config
 
-    def _append_neptune_analytics_graph_config(self, config: Dict) -> Dict:
-        """Update incoming configuration dictionary to include the configuration of Neptune Analytics graph backend.
-
-        Args:
-            config: Configuration dictionary to add Neptune Analytics graph backend
-
-        Returns:
-            An configuration dict with graph backend.
-        """
-        config["graph_store"] = {
-            "provider": "neptune",
-            "config": {"endpoint": f"neptune-graph://{os.environ.get('NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER')}"},
-        }
-        return config
-
     def _merge_config(self, config: Optional[Dict] = None) -> Dict:
         """Merge user-provided configuration with default configuration.
 
@@ -398,14 +347,30 @@ class Mem0ServiceClient:
         if not user_id and not agent_id:
             raise ValueError("Either user_id or agent_id must be provided")
 
-        return self.mem0.get_all(user_id=user_id, agent_id=agent_id)
+        # mem0 >=2.0 requires entity ids to be passed via `filters` rather than as
+        # top-level keyword arguments.
+        filters = self._build_entity_filters(user_id, agent_id)
+        return self.mem0.get_all(filters=filters)
 
     def search_memories(self, query: str, user_id: Optional[str] = None, agent_id: Optional[str] = None):
         """Search memories using semantic search."""
         if not user_id and not agent_id:
             raise ValueError("Either user_id or agent_id must be provided")
 
-        return self.mem0.search(query=query, user_id=user_id, agent_id=agent_id)
+        # mem0 >=2.0 requires entity ids to be passed via `filters` rather than as
+        # top-level keyword arguments.
+        filters = self._build_entity_filters(user_id, agent_id)
+        return self.mem0.search(query=query, filters=filters)
+
+    @staticmethod
+    def _build_entity_filters(user_id: Optional[str], agent_id: Optional[str]) -> Dict[str, str]:
+        """Build a mem0 `filters` dict from the provided entity ids."""
+        filters: Dict[str, str] = {}
+        if user_id:
+            filters["user_id"] = user_id
+        if agent_id:
+            filters["agent_id"] = agent_id
+        return filters
 
     def delete_memory(self, memory_id: str):
         """Delete a memory by ID."""
@@ -520,48 +485,6 @@ def format_retrieve_response(memories: List[Dict]) -> Panel:
     return Panel(table, title="[bold green]Search Results", border_style="green")
 
 
-def format_retrieve_graph_response(memories: List[Dict]) -> Panel:
-    """Format retrieve response for graph data"""
-    if not memories:
-        return Panel(
-            "No graph memories found matching the query.", title="[bold yellow]No Matches", border_style="yellow"
-        )
-
-    table = Table(title="Search Results", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan", width=25)
-    table.add_column("Relationship", style="yellow", width=45)
-    table.add_column("Destination", style="green", width=30)
-
-    for memory in memories:
-        source = memory.get("source", "N/A")
-        relationship = memory.get("relationship", "N/A")
-        destination = memory.get("destination", "N/A")
-
-        table.add_row(source, relationship, destination)
-
-    return Panel(table, title="[bold green]Search Results (Graph)", border_style="green")
-
-
-def format_list_graph_response(memories: List[Dict]) -> Panel:
-    """Format list response for graph data"""
-    if not memories:
-        return Panel("No graph memories found.", title="[bold yellow]No Memories", border_style="yellow")
-
-    table = Table(title="Graph Memories", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan", width=25)
-    table.add_column("Relationship", style="yellow", width=45)
-    table.add_column("Target", style="green", width=30)
-
-    for memory in memories:
-        source = memory.get("source", "N/A")
-        relationship = memory.get("relationship", "N/A")
-        destination = memory.get("target", "N/A")
-
-        table.add_row(source, relationship, destination)
-
-    return Panel(table, title="[bold green]Memories List (Graph)", border_style="green")
-
-
 def format_history_response(history: List[Dict]) -> Panel:
     """Format memory history response."""
     if not history:
@@ -609,26 +532,6 @@ def format_store_response(results: List[Dict]) -> Panel:
         table.add_row(event, content_preview)
 
     return Panel(table, title="[bold green]Memory Stored", border_style="green")
-
-
-def format_store_graph_response(memories: List[Dict]) -> Panel:
-    """Format store response for graph data"""
-    if not memories:
-        return Panel("No graph memories stored.", title="[bold yellow]No Memories Stored", border_style="yellow")
-
-    table = Table(title="Graph Memories Stored", show_header=True, header_style="bold magenta")
-    table.add_column("Source", style="cyan", width=25)
-    table.add_column("Relationship", style="yellow", width=45)
-    table.add_column("Target", style="green", width=30)
-
-    for memory in memories:
-        source = memory[0].get("source", "N/A")
-        relationship = memory[0].get("relationship", "N/A")
-        destination = memory[0].get("target", "N/A")
-
-        table.add_row(source, relationship, destination)
-
-    return Panel(table, title="[bold green]Memories Stored (Graph)", border_style="green")
 
 
 def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
@@ -743,13 +646,6 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 panel = format_store_response(results_list)
                 console.print(panel)
 
-            # Process graph relations (If any)
-            if "relations" in results:
-                relationships_list = results.get("relations").get("added_entities", [])
-                results_list.extend(relationships_list)
-                panel_graph = format_store_graph_response(relationships_list)
-                console.print(panel_graph)
-
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
@@ -774,13 +670,6 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             panel = format_list_response(results_list)
             console.print(panel)
 
-            # Process graph relations (If any)
-            if "relations" in memories:
-                relationships_list = memories.get("relations", [])
-                results_list.extend(relationships_list)
-                panel_graph = format_list_graph_response(relationships_list)
-                console.print(panel_graph)
-
             return ToolResult(
                 toolUseId=tool_use_id,
                 status="success",
@@ -800,13 +689,6 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             results_list = memories if isinstance(memories, list) else memories.get("results", [])
             panel = format_retrieve_response(results_list)
             console.print(panel)
-
-            # Process graph relations (If any)
-            if "relations" in memories:
-                relationships_list = memories.get("relations", [])
-                results_list.extend(relationships_list)
-                panel_graph = format_retrieve_graph_response(relationships_list)
-                console.print(panel_graph)
 
             return ToolResult(
                 toolUseId=tool_use_id,
