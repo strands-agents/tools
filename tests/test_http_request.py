@@ -1301,7 +1301,7 @@ def test_timeout_default_value_passed_to_request():
             mock_session.cookies = {}
             mock_get_session.return_value = mock_session
 
-            result = http_request.http_request(tool=tool_use)
+            http_request.http_request(tool=tool_use)
 
             # Verify timeout=30 was passed to session.request
             call_kwargs = mock_session.request.call_args[1]
@@ -1335,7 +1335,7 @@ def test_custom_timeout_value_passed_to_request():
             mock_session.cookies = {}
             mock_get_session.return_value = mock_session
 
-            result = http_request.http_request(tool=tool_use)
+            http_request.http_request(tool=tool_use)
 
             call_kwargs = mock_session.request.call_args[1]
             assert call_kwargs["timeout"] == 120
