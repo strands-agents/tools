@@ -756,6 +756,37 @@ def test_write_files_success(interpreter, mock_client):
     )
 
 
+def test_write_files_action_with_blob(interpreter, mock_client):
+    """Test successful file writing with base64 blob content."""
+    session_info = SessionInfo(session_id="test-session-id-123", description="Test session", client=mock_client)
+    interpreter._sessions["test-session"] = session_info
+
+    action = WriteFilesAction(
+        type="writeFiles",
+        session_name="test-session",
+        content=[
+            FileContent(path="image.png", blob=b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"),
+            FileContent(path="data.txt", text="Some data"),
+        ],
+    )
+
+    result = interpreter.write_files(action)
+
+    assert result["status"] == "success"
+    mock_client.invoke.assert_called_once_with(
+        "writeFiles",
+        {
+            "content": [
+                {
+                    "path": "image.png",
+                    "blob": b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+                },
+                {"path": "data.txt", "text": "Some data"},
+            ]
+        },
+    )
+
+
 def test_create_tool_result_with_stream(interpreter):
     """Test _create_tool_result with stream response."""
     response = {"stream": [{"result": {"content": "Test output"}}], "isError": False}
