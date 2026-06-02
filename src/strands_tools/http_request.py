@@ -150,7 +150,7 @@ TOOL_SPEC = {
                 },
                 "timeout": {
                     "type": "number",
-                    "description": "Request timeout in seconds (default: 30). Set to None for no timeout.",
+                    "description": "Request timeout in seconds (default: 30). Use a very large value (e.g. 9999) for effectively no timeout.",
                 },
                 "convert_to_markdown": {
                     "type": "boolean",
