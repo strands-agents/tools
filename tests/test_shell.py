@@ -823,8 +823,9 @@ def test_shell_with_json_array_string(mock_execute_commands):
             "status": "success",
         },
     ]
-    # Call the shell function with new @tool decorator signature and non_interactive=True to skip confirmation
-    shell.shell('["cmd1", "cmd2"]', non_interactive=True)
+    # Call the shell function with STRANDS_NON_INTERACTIVE env var to skip confirmation
+    with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+        shell.shell('["cmd1", "cmd2"]')
 
     # Verify execute_commands was called with parsed array
     mock_execute_commands.assert_called_once()
@@ -846,8 +847,9 @@ def test_shell_with_invalid_json_array_string(mock_execute_commands):
         }
     ]
 
-    # Call the shell function with new @tool decorator signature and non_interactive=True
-    shell.shell("[invalid json array]", non_interactive=True)
+    # Call the shell function with STRANDS_NON_INTERACTIVE env var to skip confirmation
+    with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+        shell.shell("[invalid json array]")
 
     # Verify execute_commands was called with the original string (fallback)
     mock_execute_commands.assert_called_once()
@@ -870,9 +872,10 @@ def test_shell_with_complex_command_objects(mock_execute_commands):
         }
     ]
 
-    # Call the shell function with new @tool decorator signature - complex command object
+    # Call the shell function with STRANDS_NON_INTERACTIVE env var - complex command object
     command_obj = {"command": "git clone", "timeout": 120}
-    shell.shell(command_obj, non_interactive=True)
+    with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+        shell.shell(command_obj)
 
     # Verify execute_commands was called with the complex object
     mock_execute_commands.assert_called_once()
@@ -936,8 +939,9 @@ def test_shell_console_output(mock_console_util):
         # Reset mock for non-interactive test
         mock_console.reset_mock()
 
-        # Call with non_interactive_mode=True
-        shell.shell("echo test", non_interactive=True)
+        # Call with STRANDS_NON_INTERACTIVE env var
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            shell.shell("echo test")
 
         # Verify console.print was not called for UI elements in non-interactive mode
         assert mock_console.print.call_count == 0
@@ -967,32 +971,11 @@ def test_shell_exception_ui_output(mock_execute_commands, mock_get_user_input, m
         # Reset mock for non-interactive test
         mock_console.reset_mock()
 
-        # Call with non_interactive_mode=True
-        shell.shell("echo test", non_interactive=True)
+        # Call with STRANDS_NON_INTERACTIVE env var
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            shell.shell("echo test")
 
         # Verify console.print was not called in non-interactive mode
         assert mock_console.print.call_count == 0
 
 
-@patch("strands_tools.shell.execute_commands")
-@patch("strands_tools.shell.get_user_input")
-def test_shell_non_interactive_parameter(mock_get_user_input, mock_execute_commands):
-    """Test shell tool with non_interactive parameter."""
-    # Mock execute_commands to return a successful result
-    mock_execute_commands.return_value = [
-        {
-            "command": "echo test",
-            "exit_code": 0,
-            "output": "test\n",
-            "error": "",
-            "status": "success",
-        }
-    ]
-
-    # Call the shell function with non_interactive=True
-    result = shell.shell("echo test", non_interactive=True)
-
-    assert result["status"] == "success"
-
-    # Verify that get_user_input was not called because non_interactive=True
-    mock_get_user_input.assert_not_called()

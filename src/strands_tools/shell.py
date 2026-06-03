@@ -416,7 +416,6 @@ def shell(
     ignore_errors: bool = False,
     timeout: int = None,
     work_dir: str = None,
-    non_interactive: bool = False,
 ) -> Dict[str, Any]:
     """Interactive shell with PTY support for real-time command execution and interaction. Features:
 
@@ -482,16 +481,13 @@ def shell(
         ignore_errors: Continue execution even if some commands fail (default: False)
         timeout: Timeout in seconds for each command (default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)
         work_dir: Working directory for command execution (default: current)
-        non_interactive: Run in non-interactive mode without user prompts (default: False)
 
     Returns:
         Dict containing status and response content
     """
     console = console_util.create()
 
-    is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
-    # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
-    non_interactive_mode = is_strands_non_interactive or non_interactive
+    non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
 
     # Validate command parameter
     if command is None:
