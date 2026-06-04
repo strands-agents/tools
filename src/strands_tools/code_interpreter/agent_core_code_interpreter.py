@@ -3,6 +3,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import boto3
 from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter as BedrockAgentCoreCodeInterpreterClient
 
 from ..utils.aws_util import resolve_region
@@ -54,6 +55,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         auto_create: bool = True,
         persist_sessions: bool = True,
         session_timeout_seconds: int = 900,
+        boto_session: Optional[boto3.Session] = None,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter with session persistence support.
@@ -104,6 +106,11 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             session_timeout_seconds (int): Timeout in seconds for sessions created
                 by this instance. Sessions automatically terminate after the timeout period.
                 Default: 900 (15 minutes).
+
+            boto_session (Optional[boto3.Session]): Custom boto3 session for AWS authentication.
+                If provided, this session is passed to the underlying Bedrock AgentCore client,
+                enabling cross-account access or custom credential configurations.
+                If None (default), the client uses the default credential chain.
 
         Session Lifecycle:
             Invocation 1 (Instance #1):
@@ -186,6 +193,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.auto_create = auto_create
         self.persist_sessions = persist_sessions
         self.session_timeout_seconds = session_timeout_seconds
+        self.boto_session = boto_session
 
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
@@ -266,7 +274,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         try:
             # Create new sandbox client
-            client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
+            client = BedrockAgentCoreCodeInterpreterClient(region=self.region, session=self.boto_session)
 
             client.start(
                 identifier=self.identifier,
@@ -360,7 +368,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.debug(f"Found session in module cache: {target_session} -> {aws_session_id}")
 
             try:
-                client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
+                client = BedrockAgentCoreCodeInterpreterClient(region=self.region, session=self.boto_session)
 
                 # Verify session still exists and is ready
                 session_info = client.get_session(interpreter_id=self.identifier, session_id=aws_session_id)
