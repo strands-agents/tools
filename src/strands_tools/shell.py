@@ -126,6 +126,16 @@ class CommandExecutor:
 
             if pid == 0:  # Child process
                 try:
+                    # Ensure TERM is set for proper terminal emulation
+                    os.environ.setdefault("TERM", "xterm-256color")
+
+                    # Disable pagers in non-interactive mode to prevent hangs
+                    # (e.g. git diff spawning 'less' which waits for input)
+                    if non_interactive_mode:
+                        os.environ.setdefault("GIT_PAGER", "cat")
+                        os.environ.setdefault("PAGER", "cat")
+                        os.environ.setdefault("MANPAGER", "cat")
+
                     os.chdir(cwd)
                     os.execvp("/bin/sh", ["/bin/sh", "-c", command])
                 except Exception as e:
