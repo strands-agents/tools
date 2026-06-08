@@ -86,8 +86,16 @@ docs = [
 mem0-memory = [
     # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
     "mem0ai>=0.1.99,<1.0.0",
-    "opensearch-py>=2.8.0,<3.0.0",
+    "opensearch-py>=2.8.0,<3.0.0", 
 ]
+
+mem0-memory-pgvector = [
+    # Need to be optional if using other vector_storage providers
+    "mem0ai>=0.1.99,<1.0.0",
+    "psycopg>=3.2.8",
+    "psycopg-pool>=3.2.6,<4.0.0",    
+]
+
 local-chromium-browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
 agent-core-browser = [
     "nest-asyncio>=1.5.0,<2.0.0",
