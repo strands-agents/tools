@@ -781,3 +781,415 @@ class TestWorkflowFileOperations:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestWorkflowRemoteAgents:
+    """Test workflow remote agent execution functionality."""
+
+    @pytest.mark.asyncio
+    async def test_execute_remote_task_success(self, mock_parent_agent):
+        """Test successful remote task execution."""
+        from unittest.mock import AsyncMock
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "remote_test",
+            "description": "Test remote execution",
+            "agent_url": "https://<test-agent-domain>",
+            "auth_token": "test_token_123",
+            "priority": 5,
+            "timeout": 300,
+        }
+
+        # Mock httpx response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "status": "success",
+            "content": [{"text": "Remote task completed successfully"}],
+            "metrics": {"duration_ms": 1234},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.__aenter__.return_value = mock_client_instance
+            mock_client_instance.__aexit__.return_value = None
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_client.return_value = mock_client_instance
+
+            result = await manager._execute_remote_task(task, "Test prompt", timeout=300)
+
+            assert result["status"] == "success"
+            assert result["content"] == [{"text": "Remote task completed successfully"}]
+            assert result["metrics"] == {"duration_ms": 1234}
+            assert result["remote_agent"] == "https://<test-agent-domain>"
+
+            # Verify the request was made correctly
+            mock_client_instance.post.assert_called_once()
+            call_args = mock_client_instance.post.call_args
+            # URL doesn't end with /execute, so it's treated as AgentCore gateway format
+            assert call_args[0][0] == "https://<test-agent-domain>"
+            # AgentCore format uses "prompt" not "message"
+            assert call_args[1]["json"]["prompt"] == "Test prompt"
+            assert call_args[1]["headers"]["Authorization"] == "Bearer test_token_123"
+
+    @pytest.mark.asyncio
+    async def test_execute_remote_task_timeout(self, mock_parent_agent):
+        """Test remote task timeout handling."""
+        import httpx
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "timeout_test",
+            "description": "Test timeout",
+            "agent_url": "https://<slow-agent-domain>",
+            "timeout": 10,
+        }
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_client_instance = MagicMock()
+            mock_client_instance.__aenter__.return_value = mock_client_instance
+            mock_client_instance.__aexit__.return_value = None
+            mock_client_instance.post.side_effect = httpx.TimeoutException("Request timed out")
+            mock_client.return_value = mock_client_instance
+
+            result = await manager._execute_remote_task(task, "Test prompt", timeout=10)
+
+            assert result["status"] == "error"
+            assert "timed out" in result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_execute_remote_task_http_error(self, mock_parent_agent):
+        """Test remote task HTTP error handling."""
+        from unittest.mock import AsyncMock
+
+        import httpx
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {"task_id": "error_test", "description": "Test HTTP error", "agent_url": "https://<error-agent-domain>"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.__aenter__.return_value = mock_client_instance
+            mock_client_instance.__aexit__.return_value = None
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "Server error", request=MagicMock(), response=mock_response
+            )
+            mock_client.return_value = mock_client_instance
+
+            result = await manager._execute_remote_task(task, "Test prompt", timeout=300)
+
+            assert result["status"] == "error"
+            assert "500" in result["content"][0]["text"]
+
+    def test_create_workflow_with_remote_agents(self, mock_parent_agent):
+        """Test creating a workflow with remote agent tasks."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        tasks = [
+            {"task_id": "local_task", "description": "Local task", "model_provider": "bedrock", "priority": 5},
+            {
+                "task_id": "remote_task",
+                "description": "Remote task",
+                "agent_url": "https://<remote-agent-domain>",
+                "auth_token": "token123",
+                "dependencies": ["local_task"],
+                "priority": 4,
+            },
+        ]
+
+        result = manager.create_workflow("hybrid_workflow", tasks)
+
+        assert result["status"] == "success"
+        assert "hybrid_workflow" in result["content"][0]["text"]
+
+        # Verify workflow was stored
+        workflow = manager.get_workflow("hybrid_workflow")
+        assert workflow is not None
+        assert len(workflow["tasks"]) == 2
+        assert workflow["tasks"][1]["agent_url"] == "https://<remote-agent-domain>"
+
+    def test_execute_task_routes_to_remote(self, mock_parent_agent):
+        """Test that execute_task correctly routes remote agent tasks."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "remote_routing_test",
+            "description": "Test routing",
+            "agent_url": "https://<test-agent-domain>",
+            "auth_token": "token123",
+        }
+
+        workflow = {"workflow_id": "test_workflow", "task_results": {}}
+
+        # Mock the _execute_remote_task method
+        with patch.object(manager, "_execute_remote_task") as mock_remote_exec:
+            mock_remote_exec.return_value = {
+                "status": "success",
+                "content": [{"text": "Remote result"}],
+                "metrics": None,
+            }
+
+            # Mock asyncio to avoid actual async execution in test
+            with patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop_instance = MagicMock()
+                mock_loop_instance.run_until_complete.return_value = {
+                    "status": "success",
+                    "content": [{"text": "Remote result"}],
+                    "metrics": None,
+                }
+                mock_loop.return_value = mock_loop_instance
+
+                result = manager.execute_task(task, workflow)
+
+                assert result["status"] == "success"
+                assert result["content"] == [{"text": "Remote result"}]
+
+    def test_workflow_with_mixed_agents(self, agent):
+        """Test workflow creation with both local and remote agents."""
+        tasks = [
+            {"task_id": "data_collection", "description": "Collect data locally", "priority": 5},
+            {
+                "task_id": "remote_analysis",
+                "description": "Analyze with remote agent",
+                "agent_url": "https://<analysis-agent-domain>",
+                "auth_token": "analysis_token",
+                "dependencies": ["data_collection"],
+                "priority": 4,
+            },
+            {
+                "task_id": "local_synthesis",
+                "description": "Synthesize results locally",
+                "dependencies": ["data_collection", "remote_analysis"],
+                "priority": 3,
+            },
+        ]
+
+        result = workflow_module.workflow(action="create", workflow_id="mixed_workflow", tasks=tasks, agent=agent)
+
+        assert result["status"] == "success"
+        assert "mixed_workflow" in result["content"][0]["text"]
+
+        # Verify workflow structure
+        manager = workflow_module._manager
+        workflow = manager.get_workflow("mixed_workflow")
+        assert len(workflow["tasks"]) == 3
+        assert workflow["tasks"][1].get("agent_url") is not None
+        assert workflow["tasks"][0].get("agent_url") is None
+        assert workflow["tasks"][2].get("agent_url") is None
+
+    @pytest.mark.asyncio
+    async def test_execute_websocket_task_success(self, mock_parent_agent):
+        """Test successful WebSocket task execution."""
+        import json
+        from unittest.mock import AsyncMock
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "ws_test",
+            "description": "Test WebSocket execution",
+            "ws_url": "wss://<test-ws-domain>/ws",
+            "auth_token": "ws_token_123",
+            "session_id": "test-session-12345678901234567890123",
+            "priority": 5,
+            "timeout": 300,
+        }
+
+        # Mock websocket connection
+        mock_websocket = AsyncMock()
+        mock_websocket.send = AsyncMock()
+        mock_websocket.recv = AsyncMock(
+            return_value=json.dumps(
+                {"result": {"agent": "agent_1", "message": "WebSocket task completed"}, "metrics": {"duration_ms": 500}}
+            )
+        )
+
+        with patch("websockets.connect") as mock_connect:
+            mock_connect.return_value.__aenter__.return_value = mock_websocket
+            mock_connect.return_value.__aexit__.return_value = None
+
+            result = await manager._execute_websocket_task(task, "Test WS prompt", timeout=300)
+
+            assert result["status"] == "success"
+            assert "WebSocket task completed" in result["content"][0]["text"]
+            assert result["metrics"] == {"duration_ms": 500}
+            assert result["remote_agent"] == "wss://<test-ws-domain>/ws"
+
+            # Verify WebSocket connection was made with correct headers
+            mock_connect.assert_called_once()
+            call_kwargs = mock_connect.call_args[1]
+            assert call_kwargs["additional_headers"]["Authorization"] == "Bearer ws_token_123"
+            assert (
+                call_kwargs["additional_headers"]["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"]
+                == "test-session-12345678901234567890123"
+            )
+
+            # Verify message was sent
+            mock_websocket.send.assert_called_once()
+            sent_message = json.loads(mock_websocket.send.call_args[0][0])
+            assert sent_message["prompt"] == "Test WS prompt"
+            assert sent_message["task_id"] == "ws_test"
+
+    @pytest.mark.asyncio
+    async def test_execute_websocket_task_timeout(self, mock_parent_agent):
+        """Test WebSocket task timeout handling."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "ws_timeout_test",
+            "description": "Test WS timeout",
+            "ws_url": "wss://<slow-ws-domain>/ws",
+            "timeout": 5,
+        }
+
+        mock_websocket = AsyncMock()
+        mock_websocket.send = AsyncMock()
+        mock_websocket.recv = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        with patch("websockets.connect") as mock_connect:
+            mock_connect.return_value.__aenter__.return_value = mock_websocket
+            mock_connect.return_value.__aexit__.return_value = None
+
+            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                result = await manager._execute_websocket_task(task, "Test prompt", timeout=5)
+
+                assert result["status"] == "error"
+                assert "timed out" in result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_execute_websocket_task_connection_error(self, mock_parent_agent):
+        """Test WebSocket connection error handling."""
+        import websockets
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "ws_error_test",
+            "description": "Test WS connection error",
+            "ws_url": "wss://<error-ws-domain>/ws",
+        }
+
+        with patch("websockets.connect") as mock_connect:
+            mock_connect.side_effect = websockets.exceptions.WebSocketException("Connection failed")
+
+            result = await manager._execute_websocket_task(task, "Test prompt", timeout=300)
+
+            assert result["status"] == "error"
+            assert "WebSocket error" in result["content"][0]["text"]
+            assert "Connection failed" in result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_execute_remote_task_routes_to_websocket(self, mock_parent_agent):
+        """Test that _execute_remote_task routes to WebSocket when ws_url is provided."""
+
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        task = {
+            "task_id": "ws_routing_test",
+            "description": "Test WS routing",
+            "ws_url": "wss://<test-ws-domain>/ws",
+            "auth_token": "ws_token",
+        }
+
+        # Mock the _execute_websocket_task method
+        with patch.object(manager, "_execute_websocket_task") as mock_ws_exec:
+            mock_ws_exec.return_value = {
+                "status": "success",
+                "content": [{"text": "WebSocket result"}],
+                "metrics": None,
+                "remote_agent": "wss://<test-ws-domain>/ws",
+            }
+
+            result = await manager._execute_remote_task(task, "Test prompt", timeout=300)
+
+            assert result["status"] == "success"
+            assert result["content"] == [{"text": "WebSocket result"}]
+            mock_ws_exec.assert_called_once_with(task, "Test prompt", 300)
+
+    def test_create_workflow_with_websocket_agents(self, mock_parent_agent):
+        """Test creating a workflow with WebSocket agent tasks."""
+        manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+        tasks = [
+            {
+                "task_id": "ws_task_1",
+                "description": "WebSocket task 1",
+                "ws_url": "wss://<ws-agent-1-domain>/ws",
+                "session_id": "session-12345678901234567890123",
+                "priority": 5,
+            },
+            {
+                "task_id": "ws_task_2",
+                "description": "WebSocket task 2",
+                "ws_url": "wss://<ws-agent-2-domain>/ws",
+                "auth_token": "ws_token_456",
+                "dependencies": ["ws_task_1"],
+                "priority": 4,
+            },
+        ]
+
+        result = manager.create_workflow("ws_workflow", tasks)
+
+        assert result["status"] == "success"
+        assert "ws_workflow" in result["content"][0]["text"]
+
+        # Verify workflow was stored
+        workflow = manager.get_workflow("ws_workflow")
+        assert workflow is not None
+        assert len(workflow["tasks"]) == 2
+        assert workflow["tasks"][0]["ws_url"] == "wss://<ws-agent-1-domain>/ws"
+        assert workflow["tasks"][1]["ws_url"] == "wss://<ws-agent-2-domain>/ws"
+
+    def test_workflow_with_http_and_websocket_agents(self, agent):
+        """Test workflow creation with both HTTP and WebSocket remote agents."""
+        tasks = [
+            {
+                "task_id": "http_task",
+                "description": "HTTP remote task",
+                "agent_url": "https://<http-agent-domain>",
+                "auth_token": "http_token",
+                "priority": 5,
+            },
+            {
+                "task_id": "ws_task",
+                "description": "WebSocket remote task",
+                "ws_url": "wss://<ws-agent-domain>/ws",
+                "auth_token": "ws_token",
+                "dependencies": ["http_task"],
+                "priority": 4,
+            },
+            {
+                "task_id": "local_task",
+                "description": "Local task",
+                "dependencies": ["http_task", "ws_task"],
+                "priority": 3,
+            },
+        ]
+
+        result = workflow_module.workflow(
+            action="create", workflow_id="multi_protocol_workflow", tasks=tasks, agent=agent
+        )
+
+        assert result["status"] == "success"
+        assert "multi_protocol_workflow" in result["content"][0]["text"]
+
+        # Verify workflow structure
+        manager = workflow_module._manager
+        workflow = manager.get_workflow("multi_protocol_workflow")
+        assert len(workflow["tasks"]) == 3
+        assert workflow["tasks"][0].get("agent_url") is not None
+        assert workflow["tasks"][1].get("ws_url") is not None
+        assert workflow["tasks"][2].get("agent_url") is None
+        assert workflow["tasks"][2].get("ws_url") is None
