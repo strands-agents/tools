@@ -1006,9 +1006,12 @@ def mongodb_memory(
         max_results: Maximum number of results to return (optional, default: 10)
         next_token: Pagination token for list action (optional)
         metadata: Additional metadata to store with the memory (optional)
-        cluster_uri: MongoDB Atlas cluster URI (optional if set via environment)
-        database_name: Name of the MongoDB database (optional, defaults to 'strands_memory')
-        collection_name: Name of the MongoDB collection (optional, defaults to 'memories')
+        cluster_uri: MongoDB Atlas cluster URI. If the MONGODB_ATLAS_CLUSTER_URI environment variable
+            is set, it takes precedence and this parameter is ignored.
+        database_name: Name of the MongoDB database. If the MONGODB_DATABASE_NAME environment variable
+            is set, it takes precedence. Defaults to 'strands_memory'.
+        collection_name: Name of the MongoDB collection. If the MONGODB_COLLECTION_NAME environment
+            variable is set, it takes precedence. Defaults to 'memories'.
         namespace: Namespace for memory operations (defaults to 'default')
         embedding_model: Amazon Bedrock model for embeddings (defaults to Titan)
         region: AWS region for Bedrock service (defaults to 'us-west-2')
@@ -1018,12 +1021,13 @@ def mongodb_memory(
         Dict: Response containing the requested memory information or operation status
     """
     try:
-        # Get values from environment variables if not provided
-        cluster_uri = cluster_uri or os.getenv("MONGODB_ATLAS_CLUSTER_URI")
-        database_name = database_name or os.getenv("MONGODB_DATABASE_NAME", DEFAULT_DATABASE_NAME)
-        collection_name = collection_name or os.getenv("MONGODB_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
-        embedding_model = embedding_model or os.getenv("MONGODB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
-        region = region or os.getenv("AWS_REGION", DEFAULT_AWS_REGION)
+        # Environment variables take precedence over agent-provided parameters to prevent
+        # the agent from redirecting connections to untrusted servers.
+        cluster_uri = os.getenv("MONGODB_ATLAS_CLUSTER_URI") or cluster_uri
+        database_name = os.getenv("MONGODB_DATABASE_NAME", database_name or DEFAULT_DATABASE_NAME)
+        collection_name = os.getenv("MONGODB_COLLECTION_NAME", collection_name or DEFAULT_COLLECTION_NAME)
+        embedding_model = os.getenv("MONGODB_EMBEDDING_MODEL", embedding_model or DEFAULT_EMBEDDING_MODEL)
+        region = os.getenv("AWS_REGION", region or DEFAULT_AWS_REGION)
         vector_index_name = vector_index_name or DEFAULT_VECTOR_INDEX_NAME
         if namespace is None:
             namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)

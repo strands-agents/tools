@@ -314,7 +314,7 @@ def editor(
     console = console_util.create()
 
     try:
-        path = os.path.abspath(os.path.expanduser(path))
+        path = os.path.expanduser(path)
 
         if not command:
             raise ValueError("Command is required")
@@ -805,4 +805,3 @@ def editor(
             "status": "error",
             "content": [{"text": f"Error: {str(e)}"}],
         }
-

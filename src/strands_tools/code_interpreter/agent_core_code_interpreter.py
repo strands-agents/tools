@@ -479,7 +479,12 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         logger.debug(f"Writing {len(action.content)} files to session '{session_name}'")
 
-        content_dicts = [{"path": fc.path, "text": fc.text} for fc in action.content]
+        content_dicts = []
+        for fc in action.content:
+            if fc.blob is not None:
+                content_dicts.append({"path": fc.path, "blob": fc.blob})
+            else:
+                content_dicts.append({"path": fc.path, "text": fc.text})
         params = {"content": content_dicts}
         response = self._sessions[session_name].client.invoke("writeFiles", params)
 

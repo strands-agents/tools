@@ -134,6 +134,75 @@ def test_format_results_for_display():
     assert "Content: S3 content" in s3_formatted
 
 
+@pytest.mark.parametrize(
+    "location_key,location_data,location_type,expected_doc_id",
+    [
+        ("webLocation", {"url": "https://example.com/docs/page.html"}, "WEB", "https://example.com/docs/page.html"),
+        (
+            "confluenceLocation",
+            {"url": "https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123"},
+            "CONFLUENCE",
+            "https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123",
+        ),
+        (
+            "salesforceLocation",
+            {"url": "https://mycompany.salesforce.com/articles/KB001"},
+            "SALESFORCE",
+            "https://mycompany.salesforce.com/articles/KB001",
+        ),
+        (
+            "sharePointLocation",
+            {"url": "https://mycompany.sharepoint.com/sites/docs/page.aspx"},
+            "SHAREPOINT",
+            "https://mycompany.sharepoint.com/sites/docs/page.aspx",
+        ),
+        (
+            "kendraDocumentLocation",
+            {"uri": "https://kendra.aws/documents/doc-12345"},
+            "KENDRA",
+            "https://kendra.aws/documents/doc-12345",
+        ),
+        (
+            "sqlLocation",
+            {"query": "SELECT * FROM documents WHERE id = 1"},
+            "SQL",
+            "SELECT * FROM documents WHERE id = 1",
+        ),
+    ],
+)
+def test_format_results_for_display_location_types(location_key, location_data, location_type, expected_doc_id):
+    """Test format_results_for_display with all supported RetrievalResultLocation types."""
+    test_results = [
+        {
+            "content": {"text": "Test content", "type": "TEXT"},
+            "location": {location_key: location_data, "type": location_type},
+            "score": 0.80,
+        }
+    ]
+    formatted = retrieve.format_results_for_display(test_results)
+    assert f"Document ID: {expected_doc_id}" in formatted
+    assert "Content: Test content" in formatted
+
+
+def test_format_results_for_display_unknown_location():
+    """Test format_results_for_display with an unrecognized location type."""
+    test_results = [
+        {
+            "content": {"text": "Unknown source content", "type": "TEXT"},
+            "location": {
+                "futureLocation": {"url": "https://future.example.com"},
+                "type": "FUTURE",
+            },
+            "score": 0.70,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7000" in formatted
+    assert "Document ID: Unknown" in formatted
+    assert "Content: Unknown source content" in formatted
+
+
 def test_format_results_with_metadata():
     """Test the format_results_for_display function with metadata enabled."""
     test_results = [

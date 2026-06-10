@@ -112,7 +112,7 @@ result = mongodb_memory(
 
 ### Environment Variables
 
-You can also use environment variables for configuration:
+You can use environment variables for configuration:
 
 ```bash
 export MONGODB_ATLAS_CLUSTER_URI="mongodb+srv://user:password@cluster.mongodb.net/"
@@ -122,6 +122,10 @@ export MONGODB_NAMESPACE="user_123"
 export MONGODB_EMBEDDING_MODEL="amazon.titan-embed-text-v2:0"
 export AWS_REGION="us-west-2"
 ```
+
+**Note:** Environment variables take precedence over tool parameters in the standalone function.
+To let the agent control the connection target, use the class-based approach or leave the
+environment variable unset.
 
 Then use the tool with minimal parameters (environment variables will be used):
 
