@@ -68,6 +68,7 @@ def test_initialization(interpreter):
     assert interpreter.auto_create is True
     assert interpreter.persist_sessions is True
     assert interpreter.session_timeout_seconds == 900
+    assert interpreter.boto_session is None
 
 
 def test_initialization_with_new_parameters():
@@ -412,7 +413,7 @@ def test_init_session_success(mock_client_class, interpreter, mock_client):
     assert result["content"][0]["json"]["description"] == "Test session"
     assert result["content"][0]["json"]["sessionId"] == "test-session-id-123"
 
-    mock_client_class.assert_called_once_with(region="us-west-2")
+    mock_client_class.assert_called_once_with(region="us-west-2", session=None)
     mock_client.start.assert_called_once_with(
         identifier="aws.codeinterpreter.v1", name="my-session", session_timeout_seconds=900
     )
@@ -447,7 +448,7 @@ def test_init_session_with_custom_identifier(mock_client_class, mock_client):
         assert result["content"][0]["json"]["description"] == "Test session"
         assert result["content"][0]["json"]["sessionId"] == "test-session-id-123"
 
-        mock_client_class.assert_called_once_with(region="us-west-2")
+        mock_client_class.assert_called_once_with(region="us-west-2", session=None)
         mock_client.start.assert_called_once_with(
             identifier=custom_id, name="custom-session", session_timeout_seconds=900
         )
@@ -478,7 +479,7 @@ def test_init_session_with_default_identifier(mock_client_class, mock_client):
         assert result["content"][0]["json"]["description"] == "Test session"
         assert result["content"][0]["json"]["sessionId"] == "test-session-id-123"
 
-        mock_client_class.assert_called_once_with(region="us-west-2")
+        mock_client_class.assert_called_once_with(region="us-west-2", session=None)
         mock_client.start.assert_called_once_with(
             identifier="aws.codeinterpreter.v1", name="default-session", session_timeout_seconds=900
         )
@@ -918,3 +919,54 @@ def test_module_level_session_mapping():
             mock_client2.get_session.assert_called_once_with(
                 interpreter_id="aws.codeinterpreter.v1", session_id="aws-session-123"
             )
+
+
+def test_initialization_with_boto_session():
+    """Test initialization with custom boto3 session."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_session = MagicMock()
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", boto_session=mock_session)
+        assert interpreter.boto_session is mock_session
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_init_session_passes_boto_session_to_client(mock_client_class):
+    """Test that init_session passes boto_session to the underlying client."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_session = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.session_id = "test-session-id"
+        mock_client_class.return_value = mock_client
+
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", boto_session=mock_session)
+
+        action = InitSessionAction(type="initSession", description="Test", session_name="boto-session-test")
+        result = interpreter.init_session(action)
+
+        assert result["status"] == "success"
+        mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
+    """Test that _ensure_session passes boto_session when reconnecting via module cache."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+        mock_session = MagicMock()
+
+        _session_mapping["cached-session"] = "cached-session-id"
+
+        reconnect_client = MagicMock()
+        reconnect_client.get_session.return_value = {"status": "READY"}
+        mock_client_class.return_value = reconnect_client
+
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", boto_session=mock_session)
+
+        session_name, error = interpreter._ensure_session("cached-session")
+
+        assert session_name == "cached-session"
+        assert error is None
+        mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
