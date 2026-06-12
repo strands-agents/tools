@@ -159,6 +159,7 @@ class GetHtmlAction(BaseModel):
     type: Literal["get_html"] = Field(description="Get HTML content")
     session_name: str = Field(description="Required session name from a previous init_session call")
     selector: Optional[str] = Field(default=None, description="CSS selector for specific element (optional)")
+    max_length: Optional[int] = Field(default=None, description="Maximum characters to return. If None, returns full HTML content. Set to limit response size.")
 
 
 class ScreenshotAction(BaseModel):
