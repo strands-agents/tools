@@ -71,7 +71,7 @@ dev = [
     "pytest>=8.0.0,<10.0.0",
     "ruff>=0.13.0,<0.14.0",
     "responses>=0.6.1,<1.0.0",
-    "mem0ai>=0.1.104,<1.0.0",
+    "mem0ai>=2.0.0,<3.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
     "nest-asyncio>=1.5.0,<2.0.0",
     "playwright>=1.42.0,<2.0.0",
@@ -85,7 +85,7 @@ docs = [
 ]
 mem0-memory = [
     # Need to be optional as a fix for https://github.com/strands-agents/docs/issues/19
-    "mem0ai>=0.1.99,<1.0.0",
+    "mem0ai>=2.0.0,<3.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
 ]
 local-chromium-browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
@@ -149,6 +149,8 @@ extra-dependencies = [
     "pytest-xdist>=3.0.0,<4.0.0",
     "responses>=0.6.1,<1.0.0",
     "pytest_asyncio>=0.25.0,<2.0.0",
+    # Local FAISS vector store used by the mem0_memory e2e test (tests_integ).
+    "faiss-cpu>=1.8.0,<2.0.0",
 ]
 extra-args = ["-n", "auto", '-vv']
 
