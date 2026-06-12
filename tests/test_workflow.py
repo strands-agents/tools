@@ -390,6 +390,25 @@ class TestWorkflowManager:
             assert len(call_kwargs["tools"]) == 2
             assert call_kwargs["system_prompt"] == "You are a test assistant."
 
+    def test_create_task_agent_with_explicit_empty_tools(self, mock_parent_agent):
+        """Test task agent creation with an explicit empty tools list."""
+        with patch("strands_tools.workflow.Agent") as mock_agent_class:
+            mock_task_agent = MagicMock()
+            mock_agent_class.return_value = mock_task_agent
+
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+
+            task = {
+                "task_id": "test_task",
+                "description": "Test task",
+                "tools": [],
+            }
+
+            manager._create_task_agent(task)
+
+            call_kwargs = mock_agent_class.call_args.kwargs
+            assert call_kwargs["tools"] == []
+
     def test_create_task_agent_with_model_provider(self, mock_parent_agent):
         """Test task agent creation with custom model provider."""
         with (
