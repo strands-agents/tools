@@ -1346,11 +1346,10 @@ The `graph` tool uses the same model provider environment variables as `use_agen
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
 | MONGODB_ATLAS_CLUSTER_URI | MongoDB Atlas connection string | None |
-| MONGODB_DEFAULT_DATABASE | Default database name for MongoDB operations | memories |
-| MONGODB_DEFAULT_COLLECTION | Default collection name for MongoDB operations | user_memories |
-| MONGODB_DEFAULT_NAMESPACE | Default namespace for memory isolation | default |
-| MONGODB_DEFAULT_MAX_RESULTS | Default maximum results for list operations | 50 |
-| MONGODB_DEFAULT_MIN_SCORE | Default minimum relevance score for filtering results | 0.4 |
+| MONGODB_DATABASE_NAME | Database name for MongoDB operations | strands_memory |
+| MONGODB_COLLECTION_NAME | Collection name for MongoDB operations | memories |
+| MONGODB_NAMESPACE | Namespace for memory isolation | default |
+| MONGODB_EMBEDDING_MODEL | Amazon Bedrock model for embeddings | amazon.titan-embed-text-v2:0 |
 
 **Note**: This tool requires AWS account credentials to generate embeddings using Amazon Bedrock Titan models.
 

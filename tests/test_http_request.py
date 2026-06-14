@@ -1326,3 +1326,76 @@ def test_payment_required_header_missing():
     assert "Status Code: 200" in result_text
     # The headers dict should still be present but without Payment-Required
     assert "Headers:" in result_text
+
+
+@responses.activate
+def test_timeout_default_value_passed_to_request():
+    """Test that default timeout=30 is actually passed to session.request."""
+    responses.add(
+        responses.GET,
+        "https://example.com/api/verify-timeout",
+        json={"status": "ok"},
+        status=200,
+    )
+
+    tool_use = {
+        "toolUseId": "test-verify-timeout-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/api/verify-timeout",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        # Patch the session's request method to capture the timeout kwarg
+        with patch("strands_tools.http_request.get_cached_session") as mock_get_session:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.content = b'{"status": "ok"}'
+            mock_response.cookies = {}
+            mock_session.request.return_value = mock_response
+            mock_session.cookies = {}
+            mock_get_session.return_value = mock_session
+
+            http_request.http_request(tool=tool_use)
+
+            # Verify timeout=30 was passed to session.request
+            call_kwargs = mock_session.request.call_args[1]
+            assert "timeout" in call_kwargs
+            assert call_kwargs["timeout"] == 30
+
+
+@responses.activate
+def test_custom_timeout_value_passed_to_request():
+    """Test that custom timeout value is passed to session.request."""
+    tool_use = {
+        "toolUseId": "test-custom-timeout-verify-id",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/api/custom-timeout-verify",
+            "timeout": 120,
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        with patch("strands_tools.http_request.get_cached_session") as mock_get_session:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.content = b'{"status": "ok"}'
+            mock_response.cookies = {}
+            mock_session.request.return_value = mock_response
+            mock_session.cookies = {}
+            mock_get_session.return_value = mock_session
+
+            http_request.http_request(tool=tool_use)
+
+            call_kwargs = mock_session.request.call_args[1]
+            assert call_kwargs["timeout"] == 120
