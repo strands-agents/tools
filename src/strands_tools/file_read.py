@@ -1193,7 +1193,10 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
                         tool_input.get("search_pattern", ""),
                         tool_input.get("context_lines", file_read_context_lines_default),
                     )
-                    response_content.extend([{"text": r["context"]} for r in results])
+                    if not results:
+                        response_content.append({"text": "No search results found for the given pattern."})
+                    else:
+                        response_content.extend([{"text": r["context"]} for r in results])
 
                 elif mode == "diff":
                     comparison_path = tool_input.get("comparison_path")
