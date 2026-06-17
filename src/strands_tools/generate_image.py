@@ -241,10 +241,11 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 os.makedirs(output_dir)
 
             i = 1
-            base_image_path = os.path.join(output_dir, f"{filename}.png")
+            ext = "jpg" if output_format == "jpeg" else output_format
+            base_image_path = os.path.join(output_dir, f"{filename}.{ext}")
             image_path = base_image_path
             while os.path.exists(image_path):
-                image_path = os.path.join(output_dir, f"{filename}_{i}.png")
+                image_path = os.path.join(output_dir, f"{filename}_{i}.{ext}")
                 i += 1
 
             with open(image_path, "wb") as file:
