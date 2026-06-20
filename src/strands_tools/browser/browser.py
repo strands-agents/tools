@@ -946,6 +946,10 @@ class Browser(ABC):
             return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
 
     def _execute_async(self, action_coro) -> Any:
+        # Ensure the browser's event loop is set on the current thread
+        # (strands dispatches sync methods to a worker thread)
+        asyncio.set_event_loop(self._loop)
+
         # Apply nest_asyncio if not already applied
         if not self._nest_asyncio_applied:
             nest_asyncio.apply()
