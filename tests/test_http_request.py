@@ -1138,8 +1138,8 @@ def test_markdown_conversion_non_html():
     assert '"message": "hello"' in result_text  # Should still be JSON (no conversion for non-HTML)
 
 
-def test_proxy_support():
-    """Test HTTP proxy support functionality."""
+def test_proxies_input_is_ignored():
+    """An LLM-supplied `proxies` field must NOT be forwarded to requests."""
     tool_use = {
         "toolUseId": "test-proxy-id",
         "input": {
@@ -1172,11 +1172,10 @@ def test_proxy_support():
         # Call the function
         result = http_request.http_request(tool=tool_use)
 
-    # Verify the proxy was actually passed to requests
+    # Verify the LLM-supplied proxy was NOT passed to requests
     assert mock_request.called
     call_kwargs = mock_request.call_args[1]
-    assert "proxies" in call_kwargs
-    assert call_kwargs["proxies"] == {"https": "https://proxy.example.com:8080"}
+    assert "proxies" not in call_kwargs
 
     # Verify the result
     assert result["status"] == "success"

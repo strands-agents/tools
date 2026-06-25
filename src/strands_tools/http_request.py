@@ -61,7 +61,7 @@ TOOL_SPEC = {
         "Make HTTP requests to any API with comprehensive authentication including Bearer tokens, Basic auth, "
         "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. "
         "Includes session management, metrics, "
-        "streaming support, cookie handling, redirect control, proxy support, and optional HTML to markdown conversion."
+        "streaming support, cookie handling, redirect control, and optional HTML to markdown conversion."
     ),
     "inputSchema": {
         "json": {
@@ -193,15 +193,6 @@ TOOL_SPEC = {
                         "secret": {"type": "string"},
                         "algorithm": {"type": "string"},
                         "expiry": {"type": "integer"},
-                    },
-                },
-                "proxies": {
-                    "type": "object",
-                    "description": "Dictionary mapping protocol or protocol and hostname to the URL of the proxy.",
-                    "properties": {
-                        "http": {"type": "string"},
-                        "https": {"type": "string"},
-                        "ftp": {"type": "string"},
                     },
                 },
             },
@@ -673,17 +664,12 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         )
         ```
 
-    7. Using proxy:
-        ```python
-        http_request(
-            method="GET",
-            url="https://example.com/api",
-            proxies={"https": "https://proxy.example.com:8080"},
-        )
-        ```
-
     Environment Variables:
     - AWS credentials are automatically loaded from environment variables or credentials file
+    - Proxies are configured by the operator at process level via the standard
+      HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (honored by `requests`), or by
+      setting `session.proxies` in code. Proxies are intentionally not part of the
+      LLM-controllable tool input.
 
     Token Config:
     - Use HTTP_REQUEST_TOKEN_CONFIG to allow specific env vars as auth tokens for permitted domains
@@ -832,7 +818,11 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "verify": verify,
             "auth": auth,
             "allow_redirects": tool_input.get("allow_redirects", True),
-            "proxies": tool_input.get("proxies", None),
+            # Proxies, if any, are configured by the operator at process level
+            # (HTTP_PROXY / HTTPS_PROXY env vars, or session.proxies set in code).
+            # Proxies are intentionally NOT LLM-controllable: an attacker-influenced
+            # LLM could otherwise route credentialed requests through an actor proxy,
+            # bypassing the HTTP_REQUEST_TOKEN_CONFIG hostname allowlist.
         }
 
         # Set max_redirects if specified
@@ -1029,4 +1019,3 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": error_text}],
         }
-
