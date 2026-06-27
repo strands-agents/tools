@@ -699,3 +699,29 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+
+
+class TestLazyState:
+    """Test that the global ReplState is created lazily, not at import time."""
+
+    def test_import_does_not_create_state(self):
+        """Importing the module should not instantiate ReplState."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        try:
+            # Right after import the global instance must not exist yet.
+            assert module._repl_state is None
+        finally:
+            # Restore a usable state for subsequent tests in this session.
+            module.get_repl_state()
+
+    def test_get_repl_state_is_lazy_singleton(self):
+        """get_repl_state creates the instance on first use and reuses it."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        assert module._repl_state is None
+        first = module.get_repl_state()
+        assert module._repl_state is first
+        assert module.get_repl_state() is first

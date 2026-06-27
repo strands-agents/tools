@@ -274,8 +274,26 @@ class ReplState:
         return objects
 
 
-# Create global state instance
-repl_state = ReplState()
+# Lazily-created global state instance. The instance is created on first use
+# rather than at import time to avoid side effects (directory creation and
+# state file loading) when the module is merely imported.
+_repl_state: Optional[ReplState] = None
+
+
+def get_repl_state() -> ReplState:
+    """Return the global ReplState, creating it on first use."""
+    global _repl_state
+    if _repl_state is None:
+        _repl_state = ReplState()
+    return _repl_state
+
+
+def __getattr__(name: str) -> Any:
+    # Preserve access to ``python_repl.repl_state`` as a module attribute while
+    # keeping initialization lazy.
+    if name == "repl_state":
+        return get_repl_state()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def clean_ansi(text: str) -> str:
@@ -317,7 +335,7 @@ class PtyManager:
                 os.dup2(self.worker_fd, 2)
 
                 # Execute in REPL namespace
-                namespace = repl_state.get_namespace()
+                namespace = get_repl_state().get_namespace()
                 exec(code, namespace)
 
                 os._exit(0)
@@ -569,6 +587,8 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
+
+    repl_state = get_repl_state()
 
     code = tool_input["code"]
     interactive = os.environ.get("PYTHON_REPL_INTERACTIVE", str(tool_input.get("interactive", True))).lower() == "true"
