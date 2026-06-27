@@ -21,8 +21,18 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level session cache - persists across object instances
-_session_mapping: Dict[str, str] = {}  # user_session_name -> aws_session_id
+# Module-level session cache - persists across object instances within a single process.
+#
+# Keys are scoped per caller identity (see _resolve_isolation_key) so that instances
+# configured with different AWS credentials do not reconnect to each other's sessions
+# when they happen to use the same session_name. Instances that share the same identity
+# (the common case: one process, one set of credentials) still reconnect as before.
+#
+# NOTE: this in-process cache is a performance optimization, not an isolation boundary.
+# It only persists within a single Python process and is keyed on a best-effort identity.
+# Deployments that serve multiple distinct callers must run them in separate processes and
+# use distinct, unguessable session names. Do not rely on this cache to keep callers apart.
+_session_mapping: Dict[str, str] = {}  # "isolation_key\x00user_session_name" -> aws_session_id
 
 
 @dataclass
@@ -173,9 +183,18 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Notes:
             - Module-level cache persists in long-running Python processes (AgentCore)
             - Cache does NOT persist across container restarts (cold starts)
+            - Cache keys are scoped per caller identity (derived from the configured
+              credentials), so instances using different credentials do not reconnect to
+              each other's sessions through a shared session_name
             - Session names must be unique per user/conversation for isolation
             - AWS session IDs are globally unique (ULID format)
             - Sessions can be manually stopped via AWS console/API if needed
+
+            The in-process cache is a performance optimization, NOT a security boundary.
+            It lives only within a single Python process and is keyed on a best-effort
+            identity. Deployments that serve multiple distinct callers must run them in
+            separate processes and use distinct, unguessable session names rather than
+            relying on this cache to keep callers separated.
 
         Raises:
             ValueError: If auto_create=False and session doesn't exist, or if
@@ -194,6 +213,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.persist_sessions = persist_sessions
         self.session_timeout_seconds = session_timeout_seconds
         self.boto_session = boto_session
+        self._isolation_key = self._resolve_isolation_key(boto_session)
 
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
@@ -207,6 +227,39 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             f"identifier='{self.identifier}', auto_create={auto_create}, "
             f"persist_sessions={persist_sessions}"
         )
+
+    @staticmethod
+    def _resolve_isolation_key(boto_session: Optional[boto3.Session]) -> str:
+        """Derive a stable cache-scoping key from the configured credentials.
+
+        Instances that resolve to the same key share cached sessions in the module-level
+        cache; instances with different keys do not. The goal is that two instances backed
+        by different AWS credentials never reconnect to each other's cached sessions via a
+        shared session_name.
+
+        The key is best-effort and derived from the access key id of the resolved
+        credentials. When no distinguishing identity is available (no explicit boto session
+        and no resolvable credentials), a shared default is used so the common single-process,
+        single-identity reconnection behavior is preserved.
+        """
+        if boto_session is None:
+            return "default"
+
+        try:
+            credentials = boto_session.get_credentials()
+            access_key = getattr(credentials, "access_key", None) if credentials else None
+            if access_key:
+                return f"akid:{access_key}"
+        except Exception as e:
+            logger.debug(f"Could not resolve credentials for cache scoping: {e}")
+
+        # Distinct boto session but no resolvable credentials: scope to this session object
+        # so it cannot reconnect to another caller's cached sessions.
+        return f"session:{id(boto_session)}"
+
+    def _scoped_key(self, session_name: str) -> str:
+        """Build the module-level cache key for a session name under this instance's identity."""
+        return f"{self._isolation_key}\x00{session_name}"
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""
@@ -262,8 +315,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name in self._sessions:
             return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
 
-        # Check if session name already in use (module-level cache)
-        if session_name in _session_mapping:
+        # Check if session name already in use (module-level cache, scoped to this identity)
+        if self._scoped_key(session_name) in _session_mapping:
             error_msg = (
                 f"Session '{session_name}' is already in use by another instance. "
                 f"Use a unique session name or reconnect to the existing session "
@@ -284,8 +337,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
             aws_session_id = client.session_id
 
-            # Store mapping in module-level cache
-            _session_mapping[session_name] = aws_session_id
+            # Store mapping in module-level cache (scoped to this identity)
+            _session_mapping[self._scoped_key(session_name)] = aws_session_id
 
             # Store session info locally
             self._sessions[session_name] = SessionInfo(
@@ -360,8 +413,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.debug(f"Using cached session: {target_session}")
             return target_session, None
 
-        # Check module-level cache for AWS session ID
-        aws_session_id = _session_mapping.get(target_session)
+        # Check module-level cache for AWS session ID (scoped to this identity)
+        scoped_key = self._scoped_key(target_session)
+        aws_session_id = _session_mapping.get(scoped_key)
 
         if aws_session_id:
             # Found in module cache - try to reconnect
@@ -387,13 +441,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 else:
                     # Session exists but not ready - remove from cache
                     logger.warning(f"Session {target_session} not READY, removing from cache")
-                    del _session_mapping[target_session]
+                    del _session_mapping[scoped_key]
 
             except Exception as e:
                 # Session doesn't exist or error - remove from cache
                 logger.debug(f"Session reconnection failed: {e}")
-                if target_session in _session_mapping:
-                    del _session_mapping[target_session]
+                if scoped_key in _session_mapping:
+                    del _session_mapping[scoped_key]
 
         # Session not found - create new if auto_create enabled
         if self.auto_create:

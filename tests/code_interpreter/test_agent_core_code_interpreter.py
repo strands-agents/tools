@@ -133,15 +133,15 @@ def test_ensure_session_reconnection_via_module_cache(mock_client):
         ) as mock_client_class:
             mock_resolve.return_value = "us-west-2"
 
-            # Setup module cache with existing session
-            _session_mapping["target-session"] = "found-session-id"
-
             reconnect_client = MagicMock()
             reconnect_client.session_id = "found-session-id"
             reconnect_client.get_session.return_value = {"status": "READY"}
             mock_client_class.return_value = reconnect_client
 
             interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True)
+
+            # Setup module cache with existing session (keyed per caller identity)
+            _session_mapping[interpreter._scoped_key("target-session")] = "found-session-id"
 
             session_name, error = interpreter._ensure_session("target-session")
 
@@ -164,15 +164,15 @@ def test_ensure_session_module_cache_session_not_ready():
         ) as mock_client_class:
             mock_resolve.return_value = "us-west-2"
 
-            # Setup module cache
-            _session_mapping["stale-session"] = "stale-session-id"
-
             reconnect_client = MagicMock()
             reconnect_client.session_id = "new-session-id"
             reconnect_client.get_session.return_value = {"status": "STOPPED"}
             mock_client_class.return_value = reconnect_client
 
             interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
+
+            # Setup module cache (keyed per caller identity)
+            _session_mapping[interpreter._scoped_key("stale-session")] = "stale-session-id"
 
             with patch.object(interpreter, "init_session") as mock_init:
                 mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
@@ -182,7 +182,7 @@ def test_ensure_session_module_cache_session_not_ready():
                 assert session_name == "stale-session"
                 assert error is None
                 # Session should be removed from cache
-                assert "stale-session" not in _session_mapping
+                assert interpreter._scoped_key("stale-session") not in _session_mapping
                 # New session should be created
                 mock_init.assert_called_once()
 
@@ -195,15 +195,15 @@ def test_ensure_session_module_cache_get_session_fails():
         ) as mock_client_class:
             mock_resolve.return_value = "us-west-2"
 
-            # Setup module cache
-            _session_mapping["missing-session"] = "missing-session-id"
-
             reconnect_client = MagicMock()
             reconnect_client.get_session.side_effect = Exception("Session not found")
             reconnect_client.session_id = "new-session-id"
             mock_client_class.return_value = reconnect_client
 
             interpreter = AgentCoreCodeInterpreter(region="us-west-2", persist_sessions=True, auto_create=True)
+
+            # Setup module cache (keyed per caller identity)
+            _session_mapping[interpreter._scoped_key("missing-session")] = "missing-session-id"
 
             with patch.object(interpreter, "init_session") as mock_init:
                 mock_init.return_value = {"status": "success", "content": [{"text": "Created"}]}
@@ -213,7 +213,7 @@ def test_ensure_session_module_cache_get_session_fails():
                 assert session_name == "missing-session"
                 assert error is None
                 # Session should be removed from cache after error
-                assert "missing-session" not in _session_mapping
+                assert interpreter._scoped_key("missing-session") not in _session_mapping
                 mock_init.assert_called_once()
 
 
@@ -425,8 +425,8 @@ def test_init_session_success(mock_client_class, interpreter, mock_client):
     assert session_info.description == "Test session"
     assert session_info.client == mock_client
 
-    # Check module-level cache
-    assert _session_mapping.get("my-session") == "test-session-id-123"
+    # Check module-level cache (keyed per caller identity)
+    assert _session_mapping.get(interpreter._scoped_key("my-session")) == "test-session-id-123"
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
@@ -903,7 +903,7 @@ def test_module_level_session_mapping():
             result = interpreter1.init_session(action)
 
             assert result["status"] == "success"
-            assert _session_mapping["shared-session"] == "aws-session-123"
+            assert _session_mapping[interpreter1._scoped_key("shared-session")] == "aws-session-123"
 
             # Second instance should find session in module cache
             mock_client2 = MagicMock()
@@ -957,16 +957,82 @@ def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
         mock_resolve.return_value = "us-west-2"
         mock_session = MagicMock()
 
-        _session_mapping["cached-session"] = "cached-session-id"
-
         reconnect_client = MagicMock()
         reconnect_client.get_session.return_value = {"status": "READY"}
         mock_client_class.return_value = reconnect_client
 
         interpreter = AgentCoreCodeInterpreter(region="us-west-2", boto_session=mock_session)
 
+        _session_mapping[interpreter._scoped_key("cached-session")] = "cached-session-id"
+
         session_name, error = interpreter._ensure_session("cached-session")
 
         assert session_name == "cached-session"
         assert error is None
         mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
+
+
+def test_session_cache_scoped_per_identity_keys():
+    """Instances with different credentials produce different module-cache keys for the same name."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+
+        session_a = MagicMock()
+        session_a.get_credentials.return_value.access_key = "AKIAAAAAAAAAAAAAAAA"
+        session_b = MagicMock()
+        session_b.get_credentials.return_value.access_key = "AKIBBBBBBBBBBBBBBBB"
+
+        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_a)
+        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_b)
+
+        # Same user-facing session name resolves to different module-cache keys.
+        assert interpreter_a._scoped_key("shared-name") != interpreter_b._scoped_key("shared-name")
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_session_not_shared_across_instances_with_different_identity(mock_client_class):
+    """A session cached by one instance is not reachable from an instance with a different identity.
+
+    Regression test: instance A initializes a session under a given session_name; instance B,
+    configured with different credentials, must not reconnect to A's session by reusing that name.
+    """
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+
+        session_a = MagicMock()
+        session_a.get_credentials.return_value.access_key = "AKIAAAAAAAAAAAAAAAA"
+        session_b = MagicMock()
+        session_b.get_credentials.return_value.access_key = "AKIBBBBBBBBBBBBBBBB"
+
+        # Instance A creates a session named "shared-name".
+        client_a = MagicMock()
+        client_a.session_id = "aws-session-a"
+        mock_client_class.return_value = client_a
+
+        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_a)
+        result = interpreter_a.init_session(
+            InitSessionAction(type="initSession", description="A", session_name="shared-name")
+        )
+        assert result["status"] == "success"
+        assert _session_mapping[interpreter_a._scoped_key("shared-name")] == "aws-session-a"
+
+        # Instance B (different credentials) tries to reach "shared-name".
+        # It must NOT reconnect to A's session; with auto_create it creates its own instead.
+        client_b = MagicMock()
+        client_b.session_id = "aws-session-b"
+        client_b.get_session.return_value = {"status": "READY"}
+        mock_client_class.return_value = client_b
+
+        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_b, auto_create=True)
+
+        # B does not see A's cached entry under its own identity scope.
+        assert interpreter_b._scoped_key("shared-name") not in _session_mapping
+
+        session_name, error = interpreter_b._ensure_session("shared-name")
+        assert session_name == "shared-name"
+        assert error is None
+
+        # B never reconnected to A's AWS session id.
+        client_b.get_session.assert_not_called()
+        # A's cached mapping is unchanged by B's activity.
+        assert _session_mapping[interpreter_a._scoped_key("shared-name")] == "aws-session-a"
