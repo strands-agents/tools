@@ -56,6 +56,8 @@ from typing import Any, Dict
 
 from strands import tool
 
+from strands_tools.utils.user_input import get_user_input
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -73,9 +75,10 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
     ------------
     1. The function validates the provided tool file path exists
     2. It checks if dynamic tool loading is allowed via environment configuration
-    3. It uses the agent's tool registry to load and register the tool
-    4. Once loaded, the tool becomes available to use like any built-in tool
-    5. The tool can then be called directly on the agent object as agent.tool.tool_name(...)
+    3. It prompts for user consent before executing the file (unless BYPASS_TOOL_CONSENT is set)
+    4. It uses the agent's tool registry to load and register the tool
+    5. Once loaded, the tool becomes available to use like any built-in tool
+    6. The tool can then be called directly on the agent object as agent.tool.tool_name(...)
 
     Tool Loading Process:
     -------------------
@@ -173,6 +176,8 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
         Various exceptions: Depending on the tool file's content and validity
 
     Notes:
+        - Because loading a file executes its top-level code, the user is prompted to confirm
+          before the file is loaded; set BYPASS_TOOL_CONSENT=true to skip the prompt
         - The tool loading can be disabled via STRANDS_DISABLE_LOAD_TOOL=true environment variable
         - Python files in the cwd()/tools/ directory are automatically hot reloaded without
           requiring explicit calls to load_tool
@@ -196,6 +201,20 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
         # Validate that the file exists
         if not os.path.exists(path):
             raise FileNotFoundError(f"Tool file not found: {path}")
+
+        # Loading a tool runs the target file, so ask the user to confirm before doing so,
+        # matching the confirmation prompt used by other tools such as shell.
+        strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
+        if not strands_dev:
+            confirm = get_user_input(
+                f"<yellow><bold>Load and execute Python file '{path}' as tool '{name}'?</bold> "
+                f"This runs arbitrary code from the file. [y/*]</yellow>"
+            )
+            if confirm.lower() != "y":
+                return {
+                    "status": "error",
+                    "content": [{"text": f"Tool loading cancelled by user. Input: {confirm}"}],
+                }
 
         # Load the tool using the agent's tool registry
         current_agent.tool_registry.load_tool_from_filepath(tool_name=name, tool_path=path)

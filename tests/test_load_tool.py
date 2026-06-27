@@ -57,6 +57,7 @@ def extract_result_text(result):
     return str(result)
 
 
+@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_load_tool_direct(temp_tool_file):
     """Test direct invocation of the load_tool tool."""
     # Create a mock agent with a mock tool registry
@@ -109,6 +110,7 @@ def test_load_tool_file_not_found():
     mock_agent.tool_registry.load_tool_from_filepath.assert_not_called()
 
 
+@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_load_tool_exception():
     """Test load_tool when an exception occurs during loading."""
     mock_agent = MagicMock()
@@ -124,6 +126,7 @@ def test_load_tool_exception():
         assert "Test exception" in result["content"][0]["text"]
 
 
+@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
 def test_load_tool_via_agent(agent, temp_tool_file):
     """Test loading a tool via the agent interface."""
     # Just verify that the agent can be instantiated with the load_tool tool
@@ -134,3 +137,50 @@ def test_load_tool_via_agent(agent, temp_tool_file):
         assert True
     except Exception as e:
         pytest.fail(f"Agent load_tool call raised an exception: {e}")
+
+
+@patch.dict(os.environ, {}, clear=False)
+@patch("strands_tools.load_tool.get_user_input")
+def test_load_tool_consent_declined(mock_get_user_input, temp_tool_file):
+    """Test that load_tool aborts and does not execute the file when consent is declined."""
+    os.environ.pop("BYPASS_TOOL_CONSENT", None)
+    mock_get_user_input.return_value = "n"
+
+    mock_agent = MagicMock()
+    result = load_tool.load_tool(path=temp_tool_file, name="sample_tool", agent=mock_agent)
+
+    # Loading is refused and the file is never handed to the registry (so its code never runs).
+    assert result["status"] == "error"
+    assert "cancelled" in result["content"][0]["text"].lower()
+    mock_agent.tool_registry.load_tool_from_filepath.assert_not_called()
+    mock_get_user_input.assert_called_once()
+
+
+@patch.dict(os.environ, {}, clear=False)
+@patch("strands_tools.load_tool.get_user_input")
+def test_load_tool_consent_granted(mock_get_user_input, temp_tool_file):
+    """Test that load_tool proceeds when the user confirms the prompt."""
+    os.environ.pop("BYPASS_TOOL_CONSENT", None)
+    mock_get_user_input.return_value = "y"
+
+    mock_agent = MagicMock()
+    result = load_tool.load_tool(path=temp_tool_file, name="sample_tool", agent=mock_agent)
+
+    assert result["status"] == "success"
+    mock_agent.tool_registry.load_tool_from_filepath.assert_called_once_with(
+        tool_name="sample_tool", tool_path=temp_tool_file
+    )
+    mock_get_user_input.assert_called_once()
+
+
+@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
+@patch("strands_tools.load_tool.get_user_input")
+def test_load_tool_consent_bypassed(mock_get_user_input, temp_tool_file):
+    """Test that BYPASS_TOOL_CONSENT skips the prompt and loads directly."""
+    mock_agent = MagicMock()
+    result = load_tool.load_tool(path=temp_tool_file, name="sample_tool", agent=mock_agent)
+
+    assert result["status"] == "success"
+    mock_agent.tool_registry.load_tool_from_filepath.assert_called_once()
+    # No prompt should be shown when consent is bypassed.
+    mock_get_user_input.assert_not_called()
