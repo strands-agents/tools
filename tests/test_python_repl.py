@@ -348,17 +348,37 @@ class TestPythonRepl:
             assert python_repl.repl_state.get_namespace()["dev_mode_test"] == 42
 
     def test_non_interactive_mode_bypass_confirmation(self, mock_console):
-        """Test that non_interactive_mode bypasses the confirmation dialog."""
+        """Test that STRANDS_NON_INTERACTIVE bypasses the confirmation dialog."""
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "non_interactive_test = 'passed'", "interactive": False},
         }
 
-        # Pass non_interactive_mode as True
-        result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+        # STRANDS_NON_INTERACTIVE drives non-interactive mode
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            result = python_repl.python_repl(tool=tool_use)
 
         assert result["status"] == "success"
         assert python_repl.repl_state.get_namespace()["non_interactive_test"] == "passed"
+
+    def test_non_interactive_kwarg_does_not_bypass_confirmation(self, mock_console):
+        """A non_interactive_mode kwarg must not suppress the confirmation prompt."""
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "kwarg_bypass = True", "interactive": False},
+        }
+
+        # Without the env var set, the confirmation prompt must run even if a
+        # caller passes non_interactive_mode=True. Simulate the user declining.
+        with (
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "declining"]),
+            patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false", "STRANDS_NON_INTERACTIVE": ""}, clear=False),
+        ):
+            result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+
+        assert result["status"] == "error"
+        assert "cancelled by the user" in result["content"][0]["text"]
+        assert "kwarg_bypass" not in python_repl.repl_state.get_namespace()
 
     def test_user_rejection_cancels_execution(self, mock_console):
         """Test that user rejection properly cancels execution."""
@@ -411,9 +431,9 @@ class TestPythonRepl:
             },
         }
 
-        # First define the recursive function
-        # Pass non_interactive_mode=True to bypass confirmation
-        python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+        # First define the recursive function (non-interactive via env var)
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            python_repl.python_repl(tool=tool_use)
 
         # Now trigger the recursion error
         error_tool = {
@@ -425,13 +445,15 @@ class TestPythonRepl:
         }
 
         # Mock the clear_state method to verify it gets called
-        with patch.object(
-            python_repl.repl_state,
-            "clear_state",
-            wraps=python_repl.repl_state.clear_state,
-        ) as mock_clear:
-            # Pass non_interactive_mode=True to bypass confirmation
-            result = python_repl.python_repl(tool=error_tool, non_interactive_mode=True)
+        with (
+            patch.object(
+                python_repl.repl_state,
+                "clear_state",
+                wraps=python_repl.repl_state.clear_state,
+            ) as mock_clear,
+            patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+        ):
+            result = python_repl.python_repl(tool=error_tool)
 
             # Verify clear_state was called
             mock_clear.assert_called_once()
@@ -459,11 +481,13 @@ class TestPythonRepl:
             mock_pty_instance.get_output.return_value = "Interactive test\n"
 
             # Mock os.waitpid to simulate process completion
-            with patch("os.waitpid") as mock_waitpid:
+            with (
+                patch("os.waitpid") as mock_waitpid,
+                patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+            ):
                 mock_waitpid.side_effect = [(12345, 0)]  # Return pid and exit status 0
 
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was used
                 mock_pty.assert_called_once()
@@ -493,11 +517,13 @@ class TestPythonRepl:
             mock_pty_instance.get_output.return_value = "Traceback... ValueError: Test error"
 
             # Mock os.waitpid to simulate process error
-            with patch("os.waitpid") as mock_waitpid:
+            with (
+                patch("os.waitpid") as mock_waitpid,
+                patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+            ):
                 mock_waitpid.side_effect = [(12345, 1)]  # Return pid and non-zero exit status
 
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was used and stopped
                 mock_pty_instance.stop.assert_called_once()
@@ -523,9 +549,11 @@ class TestPythonRepl:
             mock_pty_instance.get_output.return_value = "test output"
 
             # Mock os.waitpid to raise OSError
-            with patch("os.waitpid", side_effect=OSError("No such process")):
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+            with (
+                patch("os.waitpid", side_effect=OSError("No such process")),
+                patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+            ):
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was stopped and cleaned up
                 mock_pty_instance.stop.assert_called_once()
@@ -545,8 +573,9 @@ class TestPythonRepl:
 )
 def test_agent_interface(agent, code, expected):
     """Test calling python_repl through the Agent interface."""
-    # Use non_interactive_mode to bypass confirmation
-    result = agent.tool.python_repl(code=code, interactive=False, non_interactive_mode=True)
+    # Use STRANDS_NON_INTERACTIVE to bypass confirmation
+    with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+        result = agent.tool.python_repl(code=code, interactive=False)
 
     # Extract the response text
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
