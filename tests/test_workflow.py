@@ -349,6 +349,87 @@ class TestWorkflowDeletion:
         assert "workflow_id is required for delete action" in result["content"][0]["text"]
 
 
+class TestWorkflowIdValidation:
+    """Test that workflow_id stays confined to the workflow directory."""
+
+    BAD_IDS = [
+        "../../etc/passwd",
+        "../../../../tmp/pwned",
+        "..",
+        ".",
+        "foo/bar",
+        "/etc/passwd",
+        "with space",
+        "tab\tname",
+        "a" * 129,
+        "",
+    ]
+
+    @pytest.mark.parametrize("bad_id", BAD_IDS)
+    def test_is_valid_workflow_id_rejects(self, bad_id):
+        """The allowlist rejects traversal sequences, separators, and overlong ids."""
+        assert workflow_module.is_valid_workflow_id(bad_id) is False
+
+    @pytest.mark.parametrize("good_id", ["abc", "my_workflow", "data-pipeline", "v1.2.3", "A" * 128])
+    def test_is_valid_workflow_id_accepts(self, good_id):
+        """The allowlist accepts ordinary ids."""
+        assert workflow_module.is_valid_workflow_id(good_id) is True
+
+    @pytest.mark.parametrize("action", ["create", "start", "status", "delete"])
+    def test_tool_boundary_rejects_traversal(self, mock_parent_agent, action):
+        """Each action rejects a traversal workflow_id before reaching a sink."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+
+            kwargs = {"action": action, "workflow_id": "../../etc/passwd", "agent": mock_parent_agent}
+            if action == "create":
+                kwargs["tasks"] = [{"task_id": "t1", "description": "d"}]
+
+            result = workflow_module.workflow(**kwargs)
+
+            assert result["status"] == "error"
+            assert "Invalid workflow_id" in result["content"][0]["text"]
+            mock_manager.create_workflow.assert_not_called()
+            mock_manager.start_workflow.assert_not_called()
+            mock_manager.get_workflow_status.assert_not_called()
+            mock_manager.delete_workflow.assert_not_called()
+
+    def test_resolve_workflow_path_rejects_traversal(self):
+        """The defense-in-depth resolver refuses paths that escape WORKFLOW_DIR."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                with pytest.raises(ValueError):
+                    workflow_module.resolve_workflow_path("../../etc/passwd")
+
+    def test_resolve_workflow_path_allows_valid_id(self):
+        """A valid id resolves to a file directly inside WORKFLOW_DIR."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                resolved = workflow_module.resolve_workflow_path("safe_id")
+                assert resolved == (Path(temp_dir).resolve() / "safe_id.json")
+
+    def test_sinks_confine_traversal_id(self):
+        """store/load/delete sinks all refuse a traversal id at runtime."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                outside = Path(temp_dir).parent / "pwned.json"
+                manager = object.__new__(workflow_module.WorkflowManager)
+                manager._workflows = {}
+
+                # store_workflow returns an error status and writes nothing outside the dir.
+                store_result = workflow_module.WorkflowManager.store_workflow(manager, "../pwned", {"data": "x"})
+                assert store_result["status"] == "error"
+                assert not outside.exists()
+
+                # load_workflow returns None rather than reading outside the dir.
+                assert workflow_module.WorkflowManager.load_workflow(manager, "../pwned") is None
+
+                # delete_workflow surfaces an error rather than unlinking outside the dir.
+                delete_result = workflow_module.WorkflowManager.delete_workflow(manager, "../pwned")
+                assert delete_result["status"] == "error"
+
+
 class TestWorkflowManager:
     """Test WorkflowManager class functionality."""
 
