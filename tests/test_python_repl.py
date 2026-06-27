@@ -1,6 +1,7 @@
 """Tests for the python_repl tool using the Agent interface."""
 
 import os
+import stat
 import sys
 import tempfile
 import threading
@@ -699,3 +700,27 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+
+
+class TestStatePermissions:
+    """Test that persisted state is written with restrictive permissions."""
+
+    def test_persistence_dir_is_owner_only(self):
+        """The persistence directory should be created mode 0o700."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                mode = stat.S_IMODE(os.stat(repl.persistence_dir).st_mode)
+                # No group or other access bits should be set.
+                assert mode & 0o077 == 0, oct(mode)
+
+    def test_state_file_is_owner_only(self):
+        """The persisted state file should be written mode 0o600."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                repl.clear_state()
+                repl.save_state("perm_test = 1")
+                assert os.path.exists(repl.state_file)
+                mode = stat.S_IMODE(os.stat(repl.state_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
