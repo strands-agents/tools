@@ -60,11 +60,11 @@ agent.tool.bright_data(
     language="en"
 )
 
-# Extract product data from Amazon
+# Extract structured data for a supported source type
 agent.tool.bright_data(
     action="web_data_feed",
-    source_type="amazon_product",
-    url="https://www.amazon.com/product-url"
+    source_type="linkedin_person_profile",
+    url="https://www.example.com/profile-url"
 )
 ```
 """
