@@ -73,6 +73,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Dict, Optional
 from urllib.parse import quote
 
@@ -86,6 +87,43 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 console = console_util.create()
+
+
+def _resolve_output_path(output_path: str) -> Path:
+    """Resolve an output path and confine it to an allowed root directory.
+
+    The allowed root is the directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR
+    environment variable, or the current working directory when that variable is
+    not set. The resolved path must be the root itself or located inside it, and
+    the final path component must not be a symlink that points elsewhere.
+
+    Args:
+        output_path (str): User-supplied path to save the screenshot.
+
+    Returns:
+        Path: The resolved, confined path.
+
+    Raises:
+        ValueError: If the resolved path falls outside the allowed root.
+    """
+    root = Path(os.environ.get("STRANDS_BRIGHT_DATA_OUTPUT_DIR", Path.cwd())).expanduser().resolve()
+
+    candidate = Path(output_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+
+    # Reject a final component that is a symlink so we do not follow it elsewhere.
+    if candidate.is_symlink():
+        raise ValueError(f"output_path must not be a symlink: {output_path}")
+
+    resolved = candidate.resolve()
+
+    if resolved != root and root not in resolved.parents:
+        raise ValueError(
+            f"output_path must be within {root}. Set STRANDS_BRIGHT_DATA_OUTPUT_DIR to choose a different directory."
+        )
+
+    return resolved
 
 
 class BrightDataClient:
@@ -173,10 +211,12 @@ class BrightDataClient:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
 
-        with open(output_path, "wb") as f:
+        resolved_path = _resolve_output_path(output_path)
+
+        with open(resolved_path, "wb") as f:
             f.write(response.content)
 
-        return output_path
+        return str(resolved_path)
 
     @staticmethod
     def encode_query(query: str) -> str:
