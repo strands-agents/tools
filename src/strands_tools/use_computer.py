@@ -24,6 +24,7 @@ import inspect
 import logging
 import os
 import platform
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -642,6 +643,17 @@ def extract_text_from_image(image_path: str, min_confidence: float = 0.5) -> Lis
     return results
 
 
+# Application names are expected to be plain, printable names (letters, digits,
+# spaces, and a few common punctuation characters). Reject anything else so that
+# names are always treated as data by the underlying launch/focus mechanisms.
+_VALID_APP_NAME = re.compile(r"^[\w\s.\-()&']+$")
+
+
+def _is_valid_app_name(app_name: str) -> bool:
+    """Return True if app_name is a plain, printable application name."""
+    return bool(app_name) and _VALID_APP_NAME.fullmatch(app_name) is not None
+
+
 def open_application(app_name: str) -> str:
     """
     Launch an application cross-platform.
@@ -682,9 +694,18 @@ def open_application(app_name: str) -> str:
     # Use mapped name if available, otherwise use original
     actual_app_name = app_mappings.get(app_name.lower(), app_name)
 
+    # Names not covered by the known mapping must be plain, printable names.
+    if app_name.lower() not in app_mappings and not _is_valid_app_name(app_name):
+        return f"Invalid application name: '{app_name}'"
+
     try:
         if system == "windows":
-            result = subprocess.run(f"start {actual_app_name}", shell=True, capture_output=True, text=True)
+            # Pass the application name as a separate argument (shell=False) so it
+            # is treated as data by 'start' rather than parsed by the shell. The
+            # empty string is the optional window title argument for 'start'.
+            result = subprocess.run(
+                ["cmd", "/c", "start", "", actual_app_name], capture_output=True, text=True, shell=False
+            )
         elif system == "darwin":  # macOS
             result = subprocess.run(["open", "-a", actual_app_name], capture_output=True, text=True)
         elif system == "linux":
@@ -741,14 +762,22 @@ def focus_application(app_name: str, timeout: float = 2.0) -> bool:
     system = platform.system().lower()
     start_time = time.time()
 
+    if not _is_valid_app_name(app_name):
+        logger.warning(f"Invalid application name for focus: {app_name}")
+        return False
+
     try:
         if system == "darwin":  # macOS
-            # Use AppleScript to bring app to front with timeout
-            script = f'tell application "{app_name}" to activate'
+            # Pass the application name as a script argument (available via 'argv')
+            # instead of interpolating it into the AppleScript source, so the name
+            # is treated as data rather than code.
+            script = "on run argv\n  tell application (item 1 of argv) to activate\nend run"
 
             # Set up a process with timeout
             try:
-                result = subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=timeout)
+                result = subprocess.run(
+                    ["osascript", "-e", script, app_name], check=True, capture_output=True, timeout=timeout
+                )
                 if result.returncode != 0:
                     logger.warning(f"Focus application returned non-zero exit code: {result.returncode}")
                     return False
@@ -763,14 +792,16 @@ def focus_application(app_name: str, timeout: float = 2.0) -> bool:
                 return False
 
         elif system == "windows":
-            # Use PowerShell to focus window
+            # Pass the application name as a script argument (available via 'args')
+            # instead of interpolating it into the PowerShell source, so the name
+            # is treated as data rather than code.
             script = (
-                f"Add-Type -AssemblyName Microsoft.VisualBasic; "
-                f"[Microsoft.VisualBasic.Interaction]::AppActivate('{app_name}')"
+                "Add-Type -AssemblyName Microsoft.VisualBasic; "
+                "[Microsoft.VisualBasic.Interaction]::AppActivate($args[0])"
             )
             try:
                 result = subprocess.run(
-                    ["powershell", "-Command", script], check=True, capture_output=True, timeout=timeout
+                    ["powershell", "-Command", script, app_name], check=True, capture_output=True, timeout=timeout
                 )
                 if result.returncode != 0:
                     return False

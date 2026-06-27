@@ -337,6 +337,23 @@ class TestApplicationManagement:
             result = open_application("test_app")
             assert "Launched" in result
 
+    def test_open_application_windows_no_shell(self):
+        """On Windows the app name is passed as a list argument with shell disabled."""
+        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            open_application("notepad")
+            args, kwargs = mock_run.call_args
+            assert args[0] == ["cmd", "/c", "start", "", "notepad"]
+            assert kwargs.get("shell") is False
+
+    def test_open_application_rejects_injection_payload(self):
+        """A command-chaining payload is rejected before any subprocess call."""
+        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = open_application("notepad & whoami > C:\\temp\\pwned.txt")
+            assert "Invalid application name" in result
+            mock_run.assert_not_called()
+
     def test_close_application(self):
         mock_process = MagicMock()
         mock_process.info = {"name": "test_app"}
@@ -627,7 +644,15 @@ class TestFocusApplication:
     @pytest.mark.parametrize(
         "system,expected_command",
         [
-            ("darwin", ["osascript", "-e", 'tell application "TestApp" to activate']),
+            (
+                "darwin",
+                [
+                    "osascript",
+                    "-e",
+                    "on run argv\n  tell application (item 1 of argv) to activate\nend run",
+                    "TestApp",
+                ],
+            ),
             (
                 "windows",
                 [
@@ -635,8 +660,9 @@ class TestFocusApplication:
                     "-Command",
                     (
                         "Add-Type -AssemblyName Microsoft.VisualBasic; "
-                        "[Microsoft.VisualBasic.Interaction]::AppActivate('TestApp')"
+                        "[Microsoft.VisualBasic.Interaction]::AppActivate($args[0])"
                     ),
+                    "TestApp",
                 ],
             ),
             ("linux", ["wmctrl", "-a", "TestApp"]),
@@ -674,6 +700,30 @@ class TestFocusApplication:
         with patch("platform.system", return_value="unknown"):
             result = focus_application("TestApp")
             assert result is False
+
+    def test_focus_application_passes_name_as_argument_macos(self):
+        """The app name is passed as a separate argv item, never inside the script source."""
+        from src.strands_tools.use_computer import focus_application
+
+        payload = 'TestApp" & do shell script "echo PWNED > /tmp/pwned'
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            # A payload with a double-quote is rejected by validation before any subprocess call.
+            assert focus_application(payload) is False
+            mock_run.assert_not_called()
+
+    def test_focus_application_script_is_static_macos(self):
+        """A benign name reaches osascript as data, with a constant script body."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            focus_application("Safari")
+            args = mock_run.call_args[0][0]
+            # The app name is the trailing argv item, not interpolated into the script body.
+            assert args[-1] == "Safari"
+            assert "Safari" not in args[2]
+            assert "do shell script" not in args[2]
 
 
 class TestHandleAnalyzeScreenshotPytesseract:
