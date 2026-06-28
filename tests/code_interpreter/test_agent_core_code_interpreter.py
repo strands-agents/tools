@@ -972,21 +972,64 @@ def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
         mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
 
 
+def _make_boto_session(account, arn, access_key="AKIAAAAAAAAAAAAAAAA"):
+    """Build a mock boto3 session whose STS GetCallerIdentity returns a fixed account/ARN."""
+    session = MagicMock()
+    sts_client = MagicMock()
+    sts_client.get_caller_identity.return_value = {"Account": account, "Arn": arn}
+    session.client.return_value = sts_client
+    session.get_credentials.return_value.access_key = access_key
+    return session
+
+
 def test_session_cache_scoped_per_identity_keys():
-    """Instances with different credentials produce different module-cache keys for the same name."""
+    """Instances with different caller identities produce different module-cache keys for the same name."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        session_a = MagicMock()
-        session_a.get_credentials.return_value.access_key = "AKIAAAAAAAAAAAAAAAA"
-        session_b = MagicMock()
-        session_b.get_credentials.return_value.access_key = "AKIBBBBBBBBBBBBBBBB"
+        session_a = _make_boto_session("111111111111", "arn:aws:sts::111111111111:assumed-role/RoleA/sessA")
+        session_b = _make_boto_session("222222222222", "arn:aws:sts::222222222222:assumed-role/RoleB/sessB")
 
         interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_a)
         interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_b)
 
         # Same user-facing session name resolves to different module-cache keys.
         assert interpreter_a._scoped_key("shared-name") != interpreter_b._scoped_key("shared-name")
+
+
+def test_isolation_key_stable_across_credential_rotation():
+    """The isolation key stays stable when STS credentials rotate but the caller identity is unchanged.
+
+    Regression test for STS/SSO/assumed-role users: the live access key id rotates on every
+    credential refresh, but GetCallerIdentity reports the same Account + Arn. Keying the cache
+    on the caller identity (not the access key) keeps the scoped key stable across rotation, so
+    a later instance reconnects to the earlier instance's cached session instead of missing it.
+    """
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+
+        account = "111111111111"
+        arn = "arn:aws:sts::111111111111:assumed-role/MyRole/agentcore"
+
+        # First instance: initial (pre-rotation) access key.
+        session_before = MagicMock()
+        sts_before = MagicMock()
+        sts_before.get_caller_identity.return_value = {"Account": account, "Arn": arn}
+        session_before.client.return_value = sts_before
+        session_before.get_credentials.return_value.access_key = "AKIAOLDOLDOLDOLDOLDO"
+
+        # Second instance: credentials have rotated (new access key) but same caller identity.
+        session_after = MagicMock()
+        sts_after = MagicMock()
+        sts_after.get_caller_identity.return_value = {"Account": account, "Arn": arn}
+        session_after.client.return_value = sts_after
+        session_after.get_credentials.return_value.access_key = "AKIANEWNEWNEWNEWNEWN"
+
+        interpreter_before = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_before)
+        interpreter_after = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_after)
+
+        # Despite the rotated access key, the scoped cache key is identical, so reconnection works.
+        assert interpreter_before._scoped_key("shared-name") == interpreter_after._scoped_key("shared-name")
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
@@ -999,10 +1042,8 @@ def test_session_not_shared_across_instances_with_different_identity(mock_client
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        session_a = MagicMock()
-        session_a.get_credentials.return_value.access_key = "AKIAAAAAAAAAAAAAAAA"
-        session_b = MagicMock()
-        session_b.get_credentials.return_value.access_key = "AKIBBBBBBBBBBBBBBBB"
+        session_a = _make_boto_session("111111111111", "arn:aws:sts::111111111111:assumed-role/RoleA/sessA")
+        session_b = _make_boto_session("222222222222", "arn:aws:sts::222222222222:assumed-role/RoleB/sessB")
 
         # Instance A creates a session named "shared-name".
         client_a = MagicMock()

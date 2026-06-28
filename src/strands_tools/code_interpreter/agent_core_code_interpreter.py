@@ -183,9 +183,10 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Notes:
             - Module-level cache persists in long-running Python processes (AgentCore)
             - Cache does NOT persist across container restarts (cold starts)
-            - Cache keys are scoped per caller identity (derived from the configured
-              credentials), so instances using different credentials do not reconnect to
-              each other's sessions through a shared session_name
+            - Cache keys are scoped per caller identity (derived from STS GetCallerIdentity
+              for the configured credentials), so instances using different identities do not
+              reconnect to each other's sessions through a shared session_name. The key stays
+              stable across credential refreshes for STS/SSO/assumed-role callers
             - Session names must be unique per user/conversation for isolation
             - AWS session IDs are globally unique (ULID format)
             - Sessions can be manually stopped via AWS console/API if needed
@@ -213,6 +214,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.persist_sessions = persist_sessions
         self.session_timeout_seconds = session_timeout_seconds
         self.boto_session = boto_session
+        # Computed lazily and memoized on first use (see _resolve_isolation_key).
         self._isolation_key = self._resolve_isolation_key(boto_session)
 
         if session_name is None:
@@ -228,23 +230,39 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             f"persist_sessions={persist_sessions}"
         )
 
-    @staticmethod
-    def _resolve_isolation_key(boto_session: Optional[boto3.Session]) -> str:
-        """Derive a stable cache-scoping key from the configured credentials.
+    def _resolve_isolation_key(self, boto_session: Optional[boto3.Session]) -> str:
+        """Derive a rotation-stable cache-scoping key for the configured credentials.
 
         Instances that resolve to the same key share cached sessions in the module-level
         cache; instances with different keys do not. The goal is that two instances backed
-        by different AWS credentials never reconnect to each other's cached sessions via a
-        shared session_name.
+        by the same caller identity always reconnect to each other's cached sessions via a
+        shared session_name, while instances backed by a different identity never do.
 
-        The key is best-effort and derived from the access key id of the resolved
-        credentials. When no distinguishing identity is available (no explicit boto session
-        and no resolvable credentials), a shared default is used so the common single-process,
-        single-identity reconnection behavior is preserved.
+        The key is derived from the caller identity reported by STS GetCallerIdentity
+        (Account + Arn). For STS/SSO/assumed-role credentials the access key id rotates on
+        refresh, but the account and ARN stay constant, so keying on them keeps the cache
+        key stable across credential refreshes and lets reconnection succeed.
+
+        The result is memoized on the instance (this method is invoked once at init), so STS
+        is contacted at most once per interpreter. If STS is unavailable (offline, no creds,
+        permission denied), this falls back to the access key id and finally to the boto
+        session object identity, so cache scoping never crashes the interpreter.
         """
         if boto_session is None:
             return "default"
 
+        try:
+            sts = boto_session.client("sts", region_name=self.region)
+            identity = sts.get_caller_identity()
+            account = identity.get("Account")
+            arn = identity.get("Arn")
+            if account or arn:
+                return f"caller:{account}/{arn}"
+        except Exception as e:
+            logger.debug(f"Could not resolve caller identity via STS for cache scoping: {e}")
+
+        # STS unavailable: fall back to the access key id of the resolved credentials.
+        # This is not rotation-stable, but it preserves the previous best-effort behavior.
         try:
             credentials = boto_session.get_credentials()
             access_key = getattr(credentials, "access_key", None) if credentials else None
@@ -253,8 +271,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         except Exception as e:
             logger.debug(f"Could not resolve credentials for cache scoping: {e}")
 
-        # Distinct boto session but no resolvable credentials: scope to this session object
-        # so it cannot reconnect to another caller's cached sessions.
+        # Distinct boto session but no resolvable identity or credentials: scope to this
+        # session object so it cannot reconnect to another caller's cached sessions.
         return f"session:{id(boto_session)}"
 
     def _scoped_key(self, session_name: str) -> str:
