@@ -184,3 +184,17 @@ def test_load_tool_consent_bypassed(mock_get_user_input, temp_tool_file):
     mock_agent.tool_registry.load_tool_from_filepath.assert_called_once()
     # No prompt should be shown when consent is bypassed.
     mock_get_user_input.assert_not_called()
+
+
+@patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"})
+@patch("strands_tools.load_tool.get_user_input")
+def test_load_tool_consent_non_interactive(mock_get_user_input, temp_tool_file):
+    """Test that STRANDS_NON_INTERACTIVE skips the prompt and loads directly, matching shell."""
+    os.environ.pop("BYPASS_TOOL_CONSENT", None)
+    mock_agent = MagicMock()
+    result = load_tool.load_tool(path=temp_tool_file, name="sample_tool", agent=mock_agent)
+
+    assert result["status"] == "success"
+    mock_agent.tool_registry.load_tool_from_filepath.assert_called_once()
+    # No prompt should be shown in non-interactive mode.
+    mock_get_user_input.assert_not_called()

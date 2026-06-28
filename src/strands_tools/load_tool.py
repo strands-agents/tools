@@ -177,7 +177,8 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
 
     Notes:
         - Because loading a file executes its top-level code, the user is prompted to confirm
-          before the file is loaded; set BYPASS_TOOL_CONSENT=true to skip the prompt
+          before the file is loaded; set BYPASS_TOOL_CONSENT=true or STRANDS_NON_INTERACTIVE=true
+          to skip the prompt
         - The tool loading can be disabled via STRANDS_DISABLE_LOAD_TOOL=true environment variable
         - Python files in the cwd()/tools/ directory are automatically hot reloaded without
           requiring explicit calls to load_tool
@@ -205,7 +206,8 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
         # Loading a tool runs the target file, so ask the user to confirm before doing so,
         # matching the confirmation prompt used by other tools such as shell.
         strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
-        if not strands_dev:
+        non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+        if not strands_dev and not non_interactive_mode:
             confirm = get_user_input(
                 f"<yellow><bold>Load and execute Python file '{path}' as tool '{name}'?</bold> "
                 f"This runs arbitrary code from the file. [y/*]</yellow>"
