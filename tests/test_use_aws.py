@@ -661,7 +661,12 @@ def test_use_aws_sensitive_operations_proceeds_with_redaction(mock_input):
 
 @patch("strands_tools.use_aws.get_user_input")
 def test_use_aws_sensitive_operations_bypass_consent(mock_input):
-    """BYPASS_TOOL_CONSENT=true skips consent for sensitive operations."""
+    """BYPASS_TOOL_CONSENT=true skips consent and returns values unredacted.
+
+    Setting BYPASS_TOOL_CONSENT=true is the operator's explicit opt-out: it
+    disables the confirmation prompt and, consistently, the redaction that is
+    part of the same consent gate.
+    """
     mock_client = MagicMock()
     mock_client.get_session_token.return_value = {
         "Credentials": {
@@ -692,7 +697,45 @@ def test_use_aws_sensitive_operations_bypass_consent(mock_input):
 
         mock_input.assert_not_called()
         assert result["status"] == "success"
-        assert "**REDACTED**" in result["content"][0]["text"]
+        assert "**REDACTED**" not in result["content"][0]["text"]
+        assert "secret-key-value" in result["content"][0]["text"]
+        assert "session-token-value" in result["content"][0]["text"]
+
+
+@patch("strands_tools.use_aws.get_user_input")
+def test_use_aws_ssm_get_parameter_value_unredacted_with_bypass(mock_input):
+    """With BYPASS_TOOL_CONSENT=true, SSM parameter values are returned unredacted."""
+    mock_client = MagicMock()
+    mock_client.get_parameter.return_value = {
+        "Parameter": {
+            "Name": "/app/db-password",
+            "Type": "SecureString",
+            "Value": "super-secret-parameter-value",
+        }
+    }
+
+    with (
+        patch("strands_tools.use_aws.get_available_services", return_value=["ssm"]),
+        patch("strands_tools.use_aws.get_available_operations", return_value=["get_parameter"]),
+        patch("strands_tools.use_aws.get_boto3_client", return_value=mock_client),
+        patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"}),
+    ):
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {
+                "service_name": "ssm",
+                "operation_name": "get_parameter",
+                "parameters": {"Name": "/app/db-password", "WithDecryption": True},
+                "region": "us-east-1",
+                "label": "Test",
+            },
+        }
+        result = use_aws.use_aws(tool=tool_use)
+
+        mock_input.assert_not_called()
+        assert result["status"] == "success"
+        assert "**REDACTED**" not in result["content"][0]["text"]
+        assert "super-secret-parameter-value" in result["content"][0]["text"]
 
 
 @pytest.mark.parametrize(
@@ -832,6 +875,43 @@ def test_use_aws_kms_decrypt_plaintext_redacted(mock_input):
         assert result["status"] == "success"
         assert "**REDACTED**" in result["content"][0]["text"]
         assert "decrypted-plaintext-bytes" not in result["content"][0]["text"]
+
+
+@patch("strands_tools.use_aws.get_user_input", return_value="y")
+def test_use_aws_kms_generate_data_key_pair_private_key_redacted(mock_input):
+    """KMS generate_data_key_pair PrivateKeyPlaintext output is gated and redacted by default."""
+    mock_client = MagicMock()
+    mock_client.generate_data_key_pair.return_value = {
+        "KeyId": "arn:aws:kms:us-east-1:111122223333:key/abcd",
+        "PrivateKeyPlaintext": "private-key-plaintext-bytes",
+        "PublicKey": "public-key-bytes",
+    }
+
+    with (
+        patch("strands_tools.use_aws.get_available_services", return_value=["kms"]),
+        patch("strands_tools.use_aws.get_available_operations", return_value=["generate_data_key_pair"]),
+        patch("strands_tools.use_aws.get_boto3_client", return_value=mock_client),
+        patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}),
+    ):
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {
+                "service_name": "kms",
+                "operation_name": "generate_data_key_pair",
+                "parameters": {"KeyId": "abcd", "KeyPairSpec": "RSA_2048"},
+                "region": "us-east-1",
+                "label": "Test",
+            },
+        }
+        result = use_aws.use_aws(tool=tool_use)
+
+        # Consent is required (prompt shown) and the private key is redacted.
+        mock_input.assert_called_once()
+        assert result["status"] == "success"
+        assert "**REDACTED**" in result["content"][0]["text"]
+        assert "private-key-plaintext-bytes" not in result["content"][0]["text"]
+        # Non-secret fields remain visible.
+        assert "public-key-bytes" in result["content"][0]["text"]
 
 
 def test_redact_ssm_parameter_values_non_ssm_passthrough():
