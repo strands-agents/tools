@@ -153,10 +153,13 @@ def resolve_workflow_path(workflow_id: str) -> Path:
     """Resolve the JSON file path for a workflow_id and confine it to WORKFLOW_DIR.
 
     Returns the resolved path of ``WORKFLOW_DIR/<workflow_id>.json`` and raises
-    ValueError if the result would fall outside WORKFLOW_DIR. This is a
-    defense-in-depth check applied at every filesystem sink, independent of the
-    allowlist validation at the tool boundary.
+    ValueError if the result would fall outside WORKFLOW_DIR. This is the check
+    that provides traversal safety at every filesystem sink, independent of the
+    create-time allowlist at the tool boundary. The explicit "." and ".." reject
+    is cheap and is never a legitimate id.
     """
+    if not isinstance(workflow_id, str) or workflow_id in (".", ".."):
+        raise ValueError(f"Invalid workflow_id: {workflow_id!r}")
     workflow_root = WORKFLOW_DIR.resolve()
     file_path = (workflow_root / f"{workflow_id}.json").resolve()
     if not file_path.is_relative_to(workflow_root):
@@ -1151,26 +1154,29 @@ def workflow(
         if _manager is None:
             _manager = WorkflowManager(parent_agent=agent)
 
-        # Auto-generate an id for create when one is not supplied, then validate any
-        # caller-supplied workflow_id against the allowlist before it reaches a
-        # filesystem sink. workflow_id maps directly to a file name in WORKFLOW_DIR.
-        if action == "create" and not workflow_id:
-            workflow_id = str(uuid.uuid4())
-
-        if workflow_id is not None and not is_valid_workflow_id(workflow_id):
-            return {
-                "status": "error",
-                "content": [
-                    {
-                        "text": (
-                            "❌ Invalid workflow_id. Use 1-128 characters limited to letters, digits, '.', '_' and '-'."
-                        )
-                    }
-                ],
-            }
-
         # Route to appropriate handler
         if action == "create":
+            # Auto-generate an id when one is not supplied, then apply the strict
+            # charset allowlist to new ids only. The allowlist is intentionally
+            # scoped to create so pre-existing workflows whose ids contain spaces,
+            # unicode, or are longer than 128 characters can still be read and
+            # deleted. Traversal safety for every action comes from
+            # resolve_workflow_path, which confines each filesystem sink to
+            # WORKFLOW_DIR.
+            if not workflow_id:
+                workflow_id = str(uuid.uuid4())
+            if not is_valid_workflow_id(workflow_id):
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": (
+                                "❌ Invalid workflow_id. Use 1-128 characters limited to "
+                                "letters, digits, '.', '_' and '-'."
+                            )
+                        }
+                    ],
+                }
             if not tasks:
                 return {
                     "status": "error",
