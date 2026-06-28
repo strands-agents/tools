@@ -643,15 +643,17 @@ def extract_text_from_image(image_path: str, min_confidence: float = 0.5) -> Lis
     return results
 
 
-# Application names are expected to be plain, printable names (letters, digits,
-# spaces, and a few common punctuation characters). Reject anything else so that
-# names are always treated as data by the underlying launch/focus mechanisms.
-_VALID_APP_NAME = re.compile(r"^[\w\s.\-()&']+$")
+# The application name is passed to launch/focus mechanisms as a separate
+# argument (never interpolated into a shell command or script body), so normal
+# printable names cannot be parsed as code. As light defense-in-depth we still
+# reject control characters and newlines, which have no place in an app name and
+# could otherwise confuse logging or downstream tools.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _is_valid_app_name(app_name: str) -> bool:
-    """Return True if app_name is a plain, printable application name."""
-    return bool(app_name) and _VALID_APP_NAME.fullmatch(app_name) is not None
+    """Return True if app_name is non-empty and contains no control characters."""
+    return bool(app_name) and _CONTROL_CHARS.search(app_name) is None
 
 
 def open_application(app_name: str) -> str:

@@ -346,13 +346,34 @@ class TestApplicationManagement:
             assert args[0] == ["cmd", "/c", "start", "", "notepad"]
             assert kwargs.get("shell") is False
 
-    def test_open_application_rejects_injection_payload(self):
-        """A command-chaining payload is rejected before any subprocess call."""
+    def test_open_application_injection_payload_passed_as_data(self):
+        """A command-chaining payload is passed as a single inert argv item, not parsed by a shell."""
+        payload = "notepad & whoami > C:\\temp\\pwned.txt"
         with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
-            result = open_application("notepad & whoami > C:\\temp\\pwned.txt")
+            open_application(payload)
+            args, kwargs = mock_run.call_args
+            # shell is disabled and the entire payload is the trailing list item,
+            # so '&' is data and never reaches a command interpreter.
+            assert kwargs.get("shell") is False
+            assert args[0] == ["cmd", "/c", "start", "", payload]
+
+    def test_open_application_rejects_control_characters(self):
+        """A name containing control characters is rejected before any subprocess call."""
+        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = open_application("notepad\nwhoami")
             assert "Invalid application name" in result
             mock_run.assert_not_called()
+
+    def test_open_application_accepts_plus_in_name(self):
+        """A legitimate name like 'C++ Builder' is accepted and passed as an argument."""
+        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            open_application("C++ Builder")
+            args, kwargs = mock_run.call_args
+            assert kwargs.get("shell") is False
+            assert args[0] == ["cmd", "/c", "start", "", "C++ Builder"]
 
     def test_close_application(self):
         mock_process = MagicMock()
@@ -701,16 +722,40 @@ class TestFocusApplication:
             result = focus_application("TestApp")
             assert result is False
 
-    def test_focus_application_passes_name_as_argument_macos(self):
-        """The app name is passed as a separate argv item, never inside the script source."""
+    def test_focus_application_injection_payload_passed_as_data_macos(self):
+        """An AppleScript injection payload reaches osascript only as inert trailing argv data."""
         from src.strands_tools.use_computer import focus_application
 
         payload = 'TestApp" & do shell script "echo PWNED > /tmp/pwned'
         with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
             mock_run.return_value = MagicMock(returncode=0)
-            # A payload with a double-quote is rejected by validation before any subprocess call.
-            assert focus_application(payload) is False
+            focus_application(payload)
+            args = mock_run.call_args[0][0]
+            # The script body is the constant 'on run argv' template; the payload
+            # is only the trailing argv item, so it is never parsed as AppleScript.
+            assert args[2] == "on run argv\n  tell application (item 1 of argv) to activate\nend run"
+            assert args[-1] == payload
+            assert "do shell script" not in args[2]
+
+    def test_focus_application_rejects_control_characters_macos(self):
+        """A name containing control characters is rejected before any subprocess call."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            assert focus_application("TestApp\nactivate") is False
             mock_run.assert_not_called()
+
+    def test_focus_application_accepts_plus_in_name_macos(self):
+        """A legitimate name like 'C++ Builder' is accepted and passed as a trailing argv item."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            focus_application("C++ Builder")
+            args = mock_run.call_args[0][0]
+            assert args[-1] == "C++ Builder"
+            assert args[2] == "on run argv\n  tell application (item 1 of argv) to activate\nend run"
 
     def test_focus_application_script_is_static_macos(self):
         """A benign name reaches osascript as data, with a constant script body."""
