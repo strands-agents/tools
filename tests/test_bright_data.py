@@ -311,3 +311,115 @@ def test_zone_default_fallback():
 
         # Verify the client was created with the default zone
         mock_client_class.assert_called_with(verbose=True, zone="web_unlocker1")
+
+
+def _mock_screenshot_response():
+    """Return a mocked successful screenshot HTTP response."""
+    response = MagicMock()
+    response.status_code = 200
+    response.content = b"\x89PNG fake screenshot bytes"
+    return response
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_writes_within_output_dir(tmp_path):
+    """A relative output_path is written inside the configured output directory."""
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(tmp_path)}):
+        with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+            client = BrightDataClient()
+            result = client.get_screenshot("https://example.com", "shot.png")
+
+    expected = tmp_path / "shot.png"
+    assert result == str(expected)
+    assert expected.read_bytes() == b"\x89PNG fake screenshot bytes"
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejects_relative_traversal(tmp_path):
+    """A relative path escaping the output directory is rejected and nothing is written."""
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(tmp_path)}):
+        with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+            client = BrightDataClient()
+            with pytest.raises(ValueError):
+                client.get_screenshot("https://example.com", "../../etc/x")
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejects_absolute_path_outside_root(tmp_path):
+    """An absolute path outside the output directory is rejected."""
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(tmp_path)}):
+        target = "/tmp/strands_bright_data_should_not_exist.png"
+        with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+            client = BrightDataClient()
+            with pytest.raises(ValueError):
+                client.get_screenshot("https://example.com", target)
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejects_symlink_target(tmp_path):
+    """A final path component that is a symlink is rejected."""
+    outside = tmp_path / "outside_target.png"
+    root = tmp_path / "root"
+    root.mkdir()
+    link = root / "link.png"
+    link.symlink_to(outside)
+
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(root)}):
+        with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+            client = BrightDataClient()
+            with pytest.raises(ValueError):
+                client.get_screenshot("https://example.com", "link.png")
+
+    assert not outside.exists()
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_default_root_rejects_traversal(tmp_path, monkeypatch):
+    """With no STRANDS_BRIGHT_DATA_OUTPUT_DIR set, confinement defaults to the working directory."""
+    monkeypatch.delenv("STRANDS_BRIGHT_DATA_OUTPUT_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+        client = BrightDataClient()
+        with pytest.raises(ValueError):
+            client.get_screenshot("https://example.com", "../../etc/x")
+        with pytest.raises(ValueError):
+            client.get_screenshot("https://example.com", "/tmp/strands_default_root_outside.png")
+
+    assert not (tmp_path.parent.parent / "etc" / "x").exists()
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejection_message_is_actionable(tmp_path, monkeypatch):
+    """The rejection message points at the working directory and the env override."""
+    monkeypatch.delenv("STRANDS_BRIGHT_DATA_OUTPUT_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+        client = BrightDataClient()
+        with pytest.raises(ValueError) as excinfo:
+            client.get_screenshot("https://example.com", "/tmp/strands_actionable_message.png")
+
+    message = str(excinfo.value)
+    assert "working directory" in message
+    assert "STRANDS_BRIGHT_DATA_OUTPUT_DIR" in message
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_env_dir_allows_arbitrary_operator_location(tmp_path, monkeypatch):
+    """An operator-chosen STRANDS_BRIGHT_DATA_OUTPUT_DIR allows writing within it, even via absolute path."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    output_dir = tmp_path / "operator_chosen"
+    output_dir.mkdir()
+
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(output_dir)}):
+        with patch("strands_tools.bright_data.requests.post", return_value=_mock_screenshot_response()):
+            client = BrightDataClient()
+            absolute_target = str(output_dir / "shot.png")
+            result = client.get_screenshot("https://example.com", absolute_target)
+
+    expected = output_dir / "shot.png"
+    assert result == str(expected)
+    assert expected.read_bytes() == b"\x89PNG fake screenshot bytes"

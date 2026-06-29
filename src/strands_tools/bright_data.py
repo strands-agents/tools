@@ -73,6 +73,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Dict, Optional
 from urllib.parse import quote
 
@@ -86,6 +87,48 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 console = console_util.create()
+
+
+def _resolve_output_path(output_path: str) -> Path:
+    """Resolve an output path and confine it to an allowed root directory.
+
+    The allowed root is the directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR
+    environment variable, or the current working directory when that variable is
+    not set. The resolved path must be the root itself or located inside it, and
+    the final path component must not be a symlink that points elsewhere.
+
+    Args:
+        output_path (str): User-supplied path to save the screenshot.
+
+    Returns:
+        Path: The resolved, confined path.
+
+    Raises:
+        ValueError: If the resolved path falls outside the allowed root.
+    """
+    root = Path(os.environ.get("STRANDS_BRIGHT_DATA_OUTPUT_DIR", Path.cwd())).expanduser().resolve()
+
+    candidate = Path(output_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+
+    # Reject a final component that is a symlink so we do not follow it elsewhere.
+    if candidate.is_symlink():
+        raise ValueError(
+            f"output_path must not be a symlink: {output_path}. output_path must be within the "
+            f"working directory ({root}) or the directory named by STRANDS_BRIGHT_DATA_OUTPUT_DIR."
+        )
+
+    resolved = candidate.resolve()
+
+    if resolved != root and root not in resolved.parents:
+        raise ValueError(
+            f"output_path must be within the working directory ({root}) or the directory named by "
+            f"STRANDS_BRIGHT_DATA_OUTPUT_DIR. Set STRANDS_BRIGHT_DATA_OUTPUT_DIR to choose a different "
+            f"directory."
+        )
+
+    return resolved
 
 
 class BrightDataClient:
@@ -158,13 +201,25 @@ class BrightDataClient:
         """
         Take a screenshot of a webpage.
 
+        The screenshot is written within an allowed output directory. By default
+        this is the current working directory; set the STRANDS_BRIGHT_DATA_OUTPUT_DIR
+        environment variable to write somewhere else. Paths that resolve outside the
+        allowed directory (for example via ".." traversal, an absolute path outside
+        it, or a symlinked final component) are rejected.
+
         Args:
             url (str): URL to screenshot
-            output_path (str): Path to save the screenshot
+            output_path (str): Path to save the screenshot. Relative paths are taken
+                from the allowed output directory. The resolved path must stay within
+                that directory (the current working directory by default, or
+                STRANDS_BRIGHT_DATA_OUTPUT_DIR when set).
             zone (Optional[str]): Override default zone
 
         Returns:
             str: Path to saved screenshot
+
+        Raises:
+            ValueError: If output_path resolves outside the allowed output directory.
         """
         payload = {"url": url, "zone": zone or self.zone, "format": "raw", "data_format": "screenshot"}
 
@@ -173,10 +228,12 @@ class BrightDataClient:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
 
-        with open(output_path, "wb") as f:
+        resolved_path = _resolve_output_path(output_path)
+
+        with open(resolved_path, "wb") as f:
             f.write(response.content)
 
-        return output_path
+        return str(resolved_path)
 
     @staticmethod
     def encode_query(query: str) -> str:
@@ -421,7 +478,11 @@ def bright_data(
     Args:
     action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
     url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
-    output_path: Path to save the screenshot (for get_screenshot)
+    output_path: Path to save the screenshot (for get_screenshot). The screenshot is written
+          within an allowed output directory: the current working directory by default, or the
+          directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR environment variable when set.
+          STRANDS_BRIGHT_DATA_OUTPUT_DIR may point anywhere the operator chooses. Relative paths
+          are taken from that directory; paths that resolve outside it are rejected.
     zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment
           variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to
           configure your specific Web Unlocker zone name (e.g., BRIGHTDATA_ZONE=web_unlocker_12345)
