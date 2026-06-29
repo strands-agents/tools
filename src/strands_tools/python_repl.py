@@ -45,6 +45,7 @@ import termios
 import threading
 import traceback
 import types
+import warnings
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
@@ -73,7 +74,8 @@ TOOL_SPEC = {
     "3. State Management: Maintains variables between executions, default controlled by PYTHON_REPL_RESET_STATE\n"
     "4. Error Handling: Captures and formats errors with suggestions\n"
     "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n"
-    "6. Interactive Control: Can enable/disable interactive PTY mode in PYTHON_REPL_INTERACTIVE environments\n\n"
+    "6. Interactive Control: Can enable/disable interactive PTY mode in PYTHON_REPL_INTERACTIVE environments\n"
+    "7. Non-Interactive Mode: Set STRANDS_NON_INTERACTIVE=true to suppress confirmation prompts\n\n"
     "Key Features:\n"
     "- Persistent state between executions\n"
     "- Interactive PTY support for real-time feedback\n"
@@ -577,8 +579,21 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check for development mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
+    # Non-interactive mode is driven by the environment, mirroring shell.py, so
+    # that suppressing the confirmation prompt is an operator decision rather
+    # than something a caller can request per invocation.
+    non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+
+    # The non_interactive_mode keyword argument is no longer honored; suppressing
+    # the prompt is driven solely by STRANDS_NON_INTERACTIVE. Warn callers that
+    # still pass it so the change is visible rather than silently ignored.
+    if "non_interactive_mode" in kwargs:
+        warnings.warn(
+            "The 'non_interactive_mode' argument to python_repl is no longer honored. "
+            "Set the STRANDS_NON_INTERACTIVE=true environment variable instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     try:
         # Handle state reset if requested
