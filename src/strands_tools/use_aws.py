@@ -135,6 +135,12 @@ SENSITIVE_OPERATIONS = {
     ("cognito-identity", "get_open_id_token_for_developer_identity"),
     ("cognito-idp", "initiate_auth"),
     ("cognito-idp", "admin_initiate_auth"),
+    ("ssm", "get_parameter"),
+    ("ssm", "get_parameters"),
+    ("ssm", "get_parameters_by_path"),
+    ("kms", "decrypt"),
+    ("kms", "generate_data_key"),
+    ("kms", "generate_data_key_pair"),
 }
 
 # Response keys whose values must be redacted before returning to LLM context.
@@ -157,7 +163,10 @@ SENSITIVE_RESPONSE_KEYS = {
     "sharedsecret",
     "dbpassword",
     "masteruserpassword",
+    "plaintext",
+    "privatekeyplaintext",
 }
+
 
 def redact_sensitive_values(obj: Any) -> Any:
     """Recursively redact values of known sensitive keys from an AWS response.
@@ -179,6 +188,37 @@ def redact_sensitive_values(obj: Any) -> Any:
     elif isinstance(obj, list):
         return [redact_sensitive_values(item) for item in obj]
     return obj
+
+
+def redact_ssm_parameter_values(service_name: str, response: Any) -> Any:
+    """Redact SSM parameter values returned by Parameter Store reads.
+
+    SSM SecureString parameters carry their decrypted contents under a generic
+    "Value" key, which is too broad to add to SENSITIVE_RESPONSE_KEYS without
+    redacting unrelated fields. This narrowly targets the SSM response shapes:
+    a single "Parameter" object (get_parameter) and a "Parameters" list
+    (get_parameters / get_parameters_by_path).
+
+    Args:
+        service_name: The AWS service name for the call.
+        response: The AWS response, after key-name based redaction.
+
+    Returns:
+        The response with SSM parameter values redacted.
+    """
+    if service_name.lower() != "ssm" or not isinstance(response, dict):
+        return response
+
+    def _redact_param(param: Any) -> Any:
+        if isinstance(param, dict) and "Value" in param:
+            param = {**param, "Value": "**REDACTED**"}
+        return param
+
+    if isinstance(response.get("Parameter"), dict):
+        response = {**response, "Parameter": _redact_param(response["Parameter"])}
+    if isinstance(response.get("Parameters"), list):
+        response = {**response, "Parameters": [_redact_param(p) for p in response["Parameters"]]}
+    return response
 
 
 def get_boto3_client(
@@ -452,7 +492,12 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
         response = operation_method(**parameters)
         response = handle_streaming_body(response)
         response = convert_datetime_to_str(response)
+        # Always redact sensitive values from the response. Redaction protects
+        # what is returned into the model's context and is independent of the
+        # consent prompt: BYPASS_TOOL_CONSENT only skips the human confirmation,
+        # it does not authorize returning secrets to the model.
         response = redact_sensitive_values(response)
+        response = redact_ssm_parameter_values(service_name, response)
 
         return {
             "toolUseId": tool_use_id,
