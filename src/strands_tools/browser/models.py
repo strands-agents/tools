@@ -12,6 +12,8 @@ from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import BrowserContext, Page
 from pydantic import BaseModel, Field
 
+WaitUntil = Literal["load", "domcontentloaded", "networkidle", "commit"]
+
 
 @dataclass
 class BrowserSession:
@@ -104,6 +106,10 @@ class NavigateAction(BaseModel):
     type: Literal["navigate"] = Field(description="Navigate to a URL")
     session_name: str = Field(description="Required session name from a previous init_session call")
     url: str = Field(description="URL to navigate to")
+    wait_until: WaitUntil = Field(
+        default="load",
+        description="Playwright wait_until value for navigation. Defaults to 'load' to preserve Playwright's navigation behavior without brittle extra 'networkidle' waits.",
+    )
 
 
 class ClickAction(BaseModel):
@@ -176,6 +182,10 @@ class RefreshAction(BaseModel):
 
     type: Literal["refresh"] = Field(description="Refresh the current page")
     session_name: str = Field(description="Required session name from a previous init_session call")
+    wait_until: WaitUntil = Field(
+        default="load",
+        description="Playwright wait_until value for reload. Defaults to 'load' to preserve Playwright's navigation behavior without brittle extra 'networkidle' waits.",
+    )
 
 
 class BackAction(BaseModel):
@@ -184,6 +194,10 @@ class BackAction(BaseModel):
 
     type: Literal["back"] = Field(description="Navigate back in browser history")
     session_name: str = Field(description="Required session name from a previous init_session call")
+    wait_until: WaitUntil = Field(
+        default="load",
+        description="Playwright wait_until value for back navigation. Defaults to 'load' to preserve Playwright's navigation behavior without brittle extra 'networkidle' waits.",
+    )
 
 
 class ForwardAction(BaseModel):
@@ -192,6 +206,10 @@ class ForwardAction(BaseModel):
 
     type: Literal["forward"] = Field(description="Navigate forward in browser history")
     session_name: str = Field(description="Required session name from a previous init_session call")
+    wait_until: WaitUntil = Field(
+        default="load",
+        description="Playwright wait_until value for forward navigation. Defaults to 'load' to preserve Playwright's navigation behavior without brittle extra 'networkidle' waits.",
+    )
 
 
 class NewTabAction(BaseModel):
