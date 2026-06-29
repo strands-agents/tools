@@ -63,7 +63,7 @@ agent.tool.bright_data(
 # Extract structured data for a supported source type
 agent.tool.bright_data(
     action="web_data_feed",
-    source_type="linkedin_person_profile",
+    source_type="examples_person_profile",
     url="https://www.example.com/profile-url"
 )
 ```
