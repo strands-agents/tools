@@ -45,6 +45,7 @@ import termios
 import threading
 import traceback
 import types
+import warnings
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
@@ -582,6 +583,17 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # that suppressing the confirmation prompt is an operator decision rather
     # than something a caller can request per invocation.
     non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
+
+    # The non_interactive_mode keyword argument is no longer honored; suppressing
+    # the prompt is driven solely by STRANDS_NON_INTERACTIVE. Warn callers that
+    # still pass it so the change is visible rather than silently ignored.
+    if "non_interactive_mode" in kwargs:
+        warnings.warn(
+            "The 'non_interactive_mode' argument to python_repl is no longer honored. "
+            "Set the STRANDS_NON_INTERACTIVE=true environment variable instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     try:
         # Handle state reset if requested

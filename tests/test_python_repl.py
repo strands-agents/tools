@@ -370,9 +370,11 @@ class TestPythonRepl:
 
         # Without the env var set, the confirmation prompt must run even if a
         # caller passes non_interactive_mode=True. Simulate the user declining.
+        # Passing the now-ignored kwarg must also emit a DeprecationWarning.
         with (
             patch("strands_tools.python_repl.get_user_input", side_effect=["n", "declining"]),
             patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "false", "STRANDS_NON_INTERACTIVE": ""}, clear=False),
+            pytest.warns(DeprecationWarning, match="non_interactive_mode"),
         ):
             result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
 
