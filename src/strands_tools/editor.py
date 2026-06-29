@@ -315,6 +315,8 @@ def editor(
 
     try:
         path = os.path.expanduser(path)
+        if path:
+            path = os.path.abspath(path)
 
         if not command:
             raise ValueError("Command is required")
