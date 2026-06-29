@@ -661,11 +661,11 @@ def test_use_aws_sensitive_operations_proceeds_with_redaction(mock_input):
 
 @patch("strands_tools.use_aws.get_user_input")
 def test_use_aws_sensitive_operations_bypass_consent(mock_input):
-    """BYPASS_TOOL_CONSENT=true skips consent and returns values unredacted.
+    """BYPASS_TOOL_CONSENT=true skips the prompt but values are still redacted.
 
-    Setting BYPASS_TOOL_CONSENT=true is the operator's explicit opt-out: it
-    disables the confirmation prompt and, consistently, the redaction that is
-    part of the same consent gate.
+    The bypass disables the human confirmation prompt only. Redaction protects
+    what is returned into the model's context and stays in force regardless, so
+    sensitive values never reach the model unredacted.
     """
     mock_client = MagicMock()
     mock_client.get_session_token.return_value = {
@@ -697,14 +697,14 @@ def test_use_aws_sensitive_operations_bypass_consent(mock_input):
 
         mock_input.assert_not_called()
         assert result["status"] == "success"
-        assert "**REDACTED**" not in result["content"][0]["text"]
-        assert "secret-key-value" in result["content"][0]["text"]
-        assert "session-token-value" in result["content"][0]["text"]
+        assert "**REDACTED**" in result["content"][0]["text"]
+        assert "secret-key-value" not in result["content"][0]["text"]
+        assert "session-token-value" not in result["content"][0]["text"]
 
 
 @patch("strands_tools.use_aws.get_user_input")
-def test_use_aws_ssm_get_parameter_value_unredacted_with_bypass(mock_input):
-    """With BYPASS_TOOL_CONSENT=true, SSM parameter values are returned unredacted."""
+def test_use_aws_ssm_get_parameter_value_redacted_with_bypass(mock_input):
+    """BYPASS_TOOL_CONSENT=true skips the prompt but SSM values are still redacted."""
     mock_client = MagicMock()
     mock_client.get_parameter.return_value = {
         "Parameter": {
@@ -734,8 +734,8 @@ def test_use_aws_ssm_get_parameter_value_unredacted_with_bypass(mock_input):
 
         mock_input.assert_not_called()
         assert result["status"] == "success"
-        assert "**REDACTED**" not in result["content"][0]["text"]
-        assert "super-secret-parameter-value" in result["content"][0]["text"]
+        assert "**REDACTED**" in result["content"][0]["text"]
+        assert "super-secret-parameter-value" not in result["content"][0]["text"]
 
 
 @pytest.mark.parametrize(

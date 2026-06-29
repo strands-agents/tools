@@ -492,13 +492,12 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
         response = operation_method(**parameters)
         response = handle_streaming_body(response)
         response = convert_datetime_to_str(response)
-        # Redaction is part of the default consent gate. When the operator has
-        # explicitly set BYPASS_TOOL_CONSENT=true, consent is disabled and
-        # sensitive values are returned as-is, consistent with how the bypass
-        # already disables the confirmation prompt above.
-        if not STRANDS_BYPASS_TOOL_CONSENT:
-            response = redact_sensitive_values(response)
-            response = redact_ssm_parameter_values(service_name, response)
+        # Always redact sensitive values from the response. Redaction protects
+        # what is returned into the model's context and is independent of the
+        # consent prompt: BYPASS_TOOL_CONSENT only skips the human confirmation,
+        # it does not authorize returning secrets to the model.
+        response = redact_sensitive_values(response)
+        response = redact_ssm_parameter_values(service_name, response)
 
         return {
             "toolUseId": tool_use_id,
