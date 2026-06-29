@@ -581,6 +581,28 @@ class WorkflowManager:
         ready_tasks.sort(key=lambda x: x.get("priority", 3), reverse=True)
         return ready_tasks
 
+    def _get_task_timeout(self, workflow: Dict, task_id: str) -> float:
+        """Return the configured timeout (seconds) for a task, defaulting to 300."""
+        for task in workflow["tasks"]:
+            if task["task_id"] == task_id:
+                return task.get("timeout", 300)
+        return 300
+
+    def _next_task_deadline(self, active_futures: Dict, workflow: Dict) -> Optional[float]:
+        """Return seconds until the soonest active-task deadline, or None if no active tasks."""
+        if not active_futures:
+            return None
+        now = time.time()
+        soonest = None
+        for namespaced_task_id in active_futures:
+            task_id = namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
+            task_timeout = self._get_task_timeout(workflow, task_id)
+            start_time = self.task_executor.start_times.get(namespaced_task_id, now)
+            deadline_remaining = (start_time + task_timeout) - now
+            if soonest is None or deadline_remaining < soonest:
+                soonest = deadline_remaining
+        return max(0.0, soonest) if soonest is not None else None
+
     def start_workflow(self, workflow_id: str) -> Dict:
         """Start or resume workflow execution with true parallel processing."""
         try:
@@ -633,19 +655,22 @@ class WorkflowManager:
                     active_futures.update(new_futures)
                     logger.debug(f"📤 Submitted {len(tasks_to_submit)} tasks for execution")
 
-                # Wait for any task to complete
+                # Wait for any task to complete, but no longer than the next task deadline
                 if active_futures:
-                    done, _ = wait(active_futures.values(), return_when=FIRST_COMPLETED)
+                    wait_timeout = self._next_task_deadline(active_futures, workflow)
+                    done, _ = wait(active_futures.values(), return_when=FIRST_COMPLETED, timeout=wait_timeout)
 
-                    # Process completed tasks
-                    completed_task_ids = []
+                    # Process completed and timed-out tasks
+                    finished_namespaced_ids = []
+                    now = time.time()
                     for namespaced_task_id, future in active_futures.items():
+                        # Extract original task_id from namespaced version
+                        task_id = (
+                            namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
+                        )
+
                         if future in done:
-                            # Extract original task_id from namespaced version
-                            task_id = (
-                                namespaced_task_id.split(":", 1)[1] if ":" in namespaced_task_id else namespaced_task_id
-                            )
-                            completed_task_ids.append(namespaced_task_id)
+                            finished_namespaced_ids.append(namespaced_task_id)
                             try:
                                 result = future.result()
 
@@ -676,9 +701,27 @@ class WorkflowManager:
                                 }
                                 completed_tasks.add(task_id)
                                 logger.error(f"❌ Task '{task_id}' failed: {str(e)}")
+                        else:
+                            # Still-running future: enforce per-task timeout. We can't reliably
+                            # terminate the worker thread (Python lacks a portable mechanism),
+                            # but we mark the task failed so dependent tasks and the overall
+                            # workflow can make progress instead of blocking indefinitely.
+                            task_timeout = self._get_task_timeout(workflow, task_id)
+                            start_time = self.task_executor.start_times.get(namespaced_task_id, now)
+                            if (now - start_time) >= task_timeout:
+                                future.cancel()
+                                workflow["task_results"][task_id] = {
+                                    **workflow["task_results"][task_id],
+                                    "status": "error",
+                                    "result": [{"text": f"Task execution timeout after {task_timeout}s"}],
+                                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                                }
+                                completed_tasks.add(task_id)
+                                logger.error(f"⏱️ Task '{task_id}' timed out after {task_timeout}s")
+                                finished_namespaced_ids.append(namespaced_task_id)
 
-                    # Remove completed tasks from active futures
-                    for task_id in completed_task_ids:
+                    # Remove completed and timed-out tasks from active futures
+                    for task_id in finished_namespaced_ids:
                         del active_futures[task_id]
 
                 # Store updated workflow state
