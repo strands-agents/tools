@@ -972,101 +972,84 @@ def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
         mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
 
 
-def _make_boto_session(account, arn, access_key="AKIAAAAAAAAAAAAAAAA"):
-    """Build a mock boto3 session whose STS GetCallerIdentity returns a fixed account/ARN."""
-    session = MagicMock()
-    sts_client = MagicMock()
-    sts_client.get_caller_identity.return_value = {"Account": account, "Arn": arn}
-    session.client.return_value = sts_client
-    session.get_credentials.return_value.access_key = access_key
-    return session
-
-
-def test_session_cache_scoped_per_identity_keys():
-    """Instances with different caller identities produce different module-cache keys for the same name."""
+def test_partition_key_defaults_to_shared_default():
+    """When no partition_key is given, the partition is the shared 'default' (single-caller)."""
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        session_a = _make_boto_session("111111111111", "arn:aws:sts::111111111111:assumed-role/RoleA/sessA")
-        session_b = _make_boto_session("222222222222", "arn:aws:sts::222222222222:assumed-role/RoleB/sessB")
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2", session_name="my-session")
 
-        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_a)
-        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_b)
+        assert interpreter.partition_key == "default"
+        assert interpreter._scoped_key("my-session") == "default\x00my-session"
+
+
+def test_session_cache_scoped_per_partition_keys():
+    """Instances in different partitions produce different module-cache keys for the same name."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+
+        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", partition_key="tenant-a")
+        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", partition_key="tenant-b")
 
         # Same user-facing session name resolves to different module-cache keys.
         assert interpreter_a._scoped_key("shared-name") != interpreter_b._scoped_key("shared-name")
 
 
-def test_isolation_key_stable_across_credential_rotation():
-    """The isolation key stays stable when STS credentials rotate but the caller identity is unchanged.
+def test_partition_key_independent_of_credential_rotation():
+    """The cache key depends only on partition_key, not on AWS credentials.
 
-    Regression test for STS/SSO/assumed-role users: the live access key id rotates on every
-    credential refresh, but GetCallerIdentity reports the same Account + Arn. Keying the cache
-    on the caller identity (not the access key) keeps the scoped key stable across rotation, so
-    a later instance reconnects to the earlier instance's cached session instead of missing it.
+    A service runs under one IAM identity but serves many callers; two instances given the
+    same partition_key must produce the same scoped key (so reconnection works) regardless of
+    which boto session or credentials back them. The cache key is no longer derived from AWS
+    credentials, so rotating credentials cannot cause a reconnect miss.
     """
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        account = "111111111111"
-        arn = "arn:aws:sts::111111111111:assumed-role/MyRole/agentcore"
+        interpreter_before = AgentCoreCodeInterpreter(
+            region="us-west-2", partition_key="user-1", boto_session=MagicMock()
+        )
+        interpreter_after = AgentCoreCodeInterpreter(
+            region="us-west-2", partition_key="user-1", boto_session=MagicMock()
+        )
 
-        # First instance: initial (pre-rotation) access key.
-        session_before = MagicMock()
-        sts_before = MagicMock()
-        sts_before.get_caller_identity.return_value = {"Account": account, "Arn": arn}
-        session_before.client.return_value = sts_before
-        session_before.get_credentials.return_value.access_key = "AKIAOLDOLDOLDOLDOLDO"
-
-        # Second instance: credentials have rotated (new access key) but same caller identity.
-        session_after = MagicMock()
-        sts_after = MagicMock()
-        sts_after.get_caller_identity.return_value = {"Account": account, "Arn": arn}
-        session_after.client.return_value = sts_after
-        session_after.get_credentials.return_value.access_key = "AKIANEWNEWNEWNEWNEWN"
-
-        interpreter_before = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_before)
-        interpreter_after = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_after)
-
-        # Despite the rotated access key, the scoped cache key is identical, so reconnection works.
         assert interpreter_before._scoped_key("shared-name") == interpreter_after._scoped_key("shared-name")
 
 
 @patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
-def test_session_not_shared_across_instances_with_different_identity(mock_client_class):
-    """A session cached by one instance is not reachable from an instance with a different identity.
+def test_session_not_shared_across_partitions(mock_client_class):
+    """A session cached in one partition is not reachable from an instance in another partition.
 
-    Regression test: instance A initializes a session under a given session_name; instance B,
-    configured with different credentials, must not reconnect to A's session by reusing that name.
+    This is the multi-tenant case the maintainer review called out: one IAM identity serves
+    many callers, so isolation must be keyed on a per-caller partition rather than on AWS
+    credentials. Instance A initializes a session under partition "tenant-a"; instance B in
+    partition "tenant-b" must not reconnect to A's session by reusing the same session name.
     """
     with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
         mock_resolve.return_value = "us-west-2"
 
-        session_a = _make_boto_session("111111111111", "arn:aws:sts::111111111111:assumed-role/RoleA/sessA")
-        session_b = _make_boto_session("222222222222", "arn:aws:sts::222222222222:assumed-role/RoleB/sessB")
-
-        # Instance A creates a session named "shared-name".
+        # Instance A creates a session named "shared-name" in partition tenant-a.
         client_a = MagicMock()
         client_a.session_id = "aws-session-a"
         mock_client_class.return_value = client_a
 
-        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_a)
+        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", partition_key="tenant-a")
         result = interpreter_a.init_session(
             InitSessionAction(type="initSession", description="A", session_name="shared-name")
         )
         assert result["status"] == "success"
         assert _session_mapping[interpreter_a._scoped_key("shared-name")] == "aws-session-a"
 
-        # Instance B (different credentials) tries to reach "shared-name".
+        # Instance B in a different partition tries to reach "shared-name".
         # It must NOT reconnect to A's session; with auto_create it creates its own instead.
         client_b = MagicMock()
         client_b.session_id = "aws-session-b"
         client_b.get_session.return_value = {"status": "READY"}
         mock_client_class.return_value = client_b
 
-        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", boto_session=session_b, auto_create=True)
+        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", partition_key="tenant-b", auto_create=True)
 
-        # B does not see A's cached entry under its own identity scope.
+        # B does not see A's cached entry under its own partition scope.
         assert interpreter_b._scoped_key("shared-name") not in _session_mapping
 
         session_name, error = interpreter_b._ensure_session("shared-name")
@@ -1077,3 +1060,30 @@ def test_session_not_shared_across_instances_with_different_identity(mock_client
         client_b.get_session.assert_not_called()
         # A's cached mapping is unchanged by B's activity.
         assert _session_mapping[interpreter_a._scoped_key("shared-name")] == "aws-session-a"
+
+
+@patch("strands_tools.code_interpreter.agent_core_code_interpreter.BedrockAgentCoreCodeInterpreterClient")
+def test_same_partition_reconnects_across_instances(mock_client_class):
+    """Two instances sharing a partition_key reconnect to the same cached AWS session."""
+    with patch("strands_tools.code_interpreter.agent_core_code_interpreter.resolve_region") as mock_resolve:
+        mock_resolve.return_value = "us-west-2"
+
+        client_a = MagicMock()
+        client_a.session_id = "aws-session-shared"
+        mock_client_class.return_value = client_a
+
+        interpreter_a = AgentCoreCodeInterpreter(region="us-west-2", partition_key="user-1")
+        interpreter_a.init_session(InitSessionAction(type="initSession", description="A", session_name="shared-name"))
+
+        # A second instance in the same partition reconnects to the existing AWS session.
+        client_b = MagicMock()
+        client_b.get_session.return_value = {"status": "READY"}
+        mock_client_class.return_value = client_b
+
+        interpreter_b = AgentCoreCodeInterpreter(region="us-west-2", partition_key="user-1")
+        session_name, error = interpreter_b._ensure_session("shared-name")
+
+        assert error is None
+        client_b.get_session.assert_called_once_with(
+            interpreter_id=interpreter_b.identifier, session_id="aws-session-shared"
+        )

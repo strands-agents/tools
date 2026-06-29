@@ -21,18 +21,19 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level session cache - persists across object instances within a single process.
+# Module-level session cache - lets a new object instance in the same process reconnect to
+# an AWS code interpreter session a previous instance started, instead of paying to recreate
+# it. Keys are partitioned per caller (see partition_key / _scoped_key) so that a session name
+# supplied in one caller's partition can never address a session created in another's.
 #
-# Keys are scoped per caller identity (see _resolve_isolation_key) so that instances
-# configured with different AWS credentials do not reconnect to each other's sessions
-# when they happen to use the same session_name. Instances that share the same identity
-# (the common case: one process, one set of credentials) still reconnect as before.
-#
-# NOTE: this in-process cache is a performance optimization, not an isolation boundary.
-# It only persists within a single Python process and is keyed on a best-effort identity.
-# Deployments that serve multiple distinct callers must run them in separate processes and
-# use distinct, unguessable session names. Do not rely on this cache to keep callers apart.
-_session_mapping: Dict[str, str] = {}  # "isolation_key\x00user_session_name" -> aws_session_id
+# The real isolation boundary is AWS-side, not this map: a session is reachable only by holding
+# its server-issued, unguessable sessionId, and every operation is authorized against the
+# interpreter's IAM execution role. This cache is a per-process reconnect convenience. The
+# partition_key is what keeps callers apart within one process; it is bound at construction
+# from operator-controlled input and is never taken from a tool action, so a model-supplied
+# session name cannot reach across partitions. Multi-tenant deployments should pass a distinct
+# partition_key per caller (e.g. the authenticated principal or agent session id).
+_session_mapping: Dict[str, str] = {}  # "partition_key\x00session_name" -> aws_session_id
 
 
 @dataclass
@@ -66,6 +67,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         persist_sessions: bool = True,
         session_timeout_seconds: int = 900,
         boto_session: Optional[boto3.Session] = None,
+        partition_key: Optional[str] = None,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter with session persistence support.
@@ -121,6 +123,18 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 If provided, this session is passed to the underlying Bedrock AgentCore client,
                 enabling cross-account access or custom credential configurations.
                 If None (default), the client uses the default credential chain.
+
+            partition_key (Optional[str]): Caller partition for the in-process reconnect cache.
+                Session names are namespaced under this key, so a session name used in one
+                partition can never address a session created in another. Bind it at construction
+                from operator-controlled input (it is never read from a tool action), passing a
+                distinct value per caller in multi-tenant deployments:
+                    - The authenticated principal / tenant id, or
+                    - The agent session id (e.g. context.session_id), when one identity may run
+                      several isolated sessions.
+                Defaults to a shared "default" partition when not provided, which preserves the
+                prior single-caller reconnect behavior. The cache key is no longer derived from
+                AWS credentials.
 
         Session Lifecycle:
             Invocation 1 (Instance #1):
@@ -183,19 +197,17 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Notes:
             - Module-level cache persists in long-running Python processes (AgentCore)
             - Cache does NOT persist across container restarts (cold starts)
-            - Cache keys are scoped per caller identity (derived from STS GetCallerIdentity
-              for the configured credentials), so instances using different identities do not
-              reconnect to each other's sessions through a shared session_name. The key stays
-              stable across credential refreshes for STS/SSO/assumed-role callers
-            - Session names must be unique per user/conversation for isolation
+            - Cache keys are namespaced by partition_key, so a session name used in one
+              partition cannot address a session created in another. partition_key is bound at
+              construction and is never taken from a tool action
             - AWS session IDs are globally unique (ULID format)
             - Sessions can be manually stopped via AWS console/API if needed
 
-            The in-process cache is a performance optimization, NOT a security boundary.
-            It lives only within a single Python process and is keyed on a best-effort
-            identity. Deployments that serve multiple distinct callers must run them in
-            separate processes and use distinct, unguessable session names rather than
-            relying on this cache to keep callers separated.
+            The in-process cache is a reconnect convenience, NOT the isolation boundary. The
+            real boundary is AWS-side: a session is reachable only by holding its server-issued,
+            unguessable sessionId, and every operation is authorized against the interpreter's
+            IAM execution role. Within a single process, partition_key is what keeps callers
+            apart, so multi-tenant deployments must pass a distinct partition_key per caller.
 
         Raises:
             ValueError: If auto_create=False and session doesn't exist, or if
@@ -214,70 +226,30 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.persist_sessions = persist_sessions
         self.session_timeout_seconds = session_timeout_seconds
         self.boto_session = boto_session
-        # Computed lazily and memoized on first use (see _resolve_isolation_key).
-        self._isolation_key = self._resolve_isolation_key(boto_session)
 
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
         else:
             self.default_session = session_name
 
+        # Partition for the in-process reconnect cache. Bound here from operator-controlled
+        # input and never read from a tool action, so a model-supplied session name cannot
+        # reach across partitions. Defaults to a shared "default" partition, preserving the
+        # prior single-caller reconnect behavior; multi-tenant callers must pass a distinct
+        # partition_key per principal to keep their sessions isolated.
+        self.partition_key = partition_key if partition_key is not None else "default"
+
         self._sessions: Dict[str, SessionInfo] = {}
 
         logger.info(
             f"Initialized CodeInterpreter with session='{self.default_session}', "
-            f"identifier='{self.identifier}', auto_create={auto_create}, "
-            f"persist_sessions={persist_sessions}"
+            f"partition='{self.partition_key}', identifier='{self.identifier}', "
+            f"auto_create={auto_create}, persist_sessions={persist_sessions}"
         )
 
-    def _resolve_isolation_key(self, boto_session: Optional[boto3.Session]) -> str:
-        """Derive a rotation-stable cache-scoping key for the configured credentials.
-
-        Instances that resolve to the same key share cached sessions in the module-level
-        cache; instances with different keys do not. The goal is that two instances backed
-        by the same caller identity always reconnect to each other's cached sessions via a
-        shared session_name, while instances backed by a different identity never do.
-
-        The key is derived from the caller identity reported by STS GetCallerIdentity
-        (Account + Arn). For STS/SSO/assumed-role credentials the access key id rotates on
-        refresh, but the account and ARN stay constant, so keying on them keeps the cache
-        key stable across credential refreshes and lets reconnection succeed.
-
-        The result is memoized on the instance (this method is invoked once at init), so STS
-        is contacted at most once per interpreter. If STS is unavailable (offline, no creds,
-        permission denied), this falls back to the access key id and finally to the boto
-        session object identity, so cache scoping never crashes the interpreter.
-        """
-        if boto_session is None:
-            return "default"
-
-        try:
-            sts = boto_session.client("sts", region_name=self.region)
-            identity = sts.get_caller_identity()
-            account = identity.get("Account")
-            arn = identity.get("Arn")
-            if account or arn:
-                return f"caller:{account}/{arn}"
-        except Exception as e:
-            logger.debug(f"Could not resolve caller identity via STS for cache scoping: {e}")
-
-        # STS unavailable: fall back to the access key id of the resolved credentials.
-        # This is not rotation-stable, but it preserves the previous best-effort behavior.
-        try:
-            credentials = boto_session.get_credentials()
-            access_key = getattr(credentials, "access_key", None) if credentials else None
-            if access_key:
-                return f"akid:{access_key}"
-        except Exception as e:
-            logger.debug(f"Could not resolve credentials for cache scoping: {e}")
-
-        # Distinct boto session but no resolvable identity or credentials: scope to this
-        # session object so it cannot reconnect to another caller's cached sessions.
-        return f"session:{id(boto_session)}"
-
     def _scoped_key(self, session_name: str) -> str:
-        """Build the module-level cache key for a session name under this instance's identity."""
-        return f"{self._isolation_key}\x00{session_name}"
+        """Build the module-level cache key for a session name under this instance's partition."""
+        return f"{self.partition_key}\x00{session_name}"
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""
@@ -333,7 +305,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name in self._sessions:
             return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
 
-        # Check if session name already in use (module-level cache, scoped to this identity)
+        # Check if session name already in use (module-level cache, scoped to this partition)
         if self._scoped_key(session_name) in _session_mapping:
             error_msg = (
                 f"Session '{session_name}' is already in use by another instance. "
@@ -355,7 +327,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
             aws_session_id = client.session_id
 
-            # Store mapping in module-level cache (scoped to this identity)
+            # Store mapping in module-level cache (scoped to this partition)
             _session_mapping[self._scoped_key(session_name)] = aws_session_id
 
             # Store session info locally
@@ -431,7 +403,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.debug(f"Using cached session: {target_session}")
             return target_session, None
 
-        # Check module-level cache for AWS session ID (scoped to this identity)
+        # Check module-level cache for AWS session ID (scoped to this partition)
         scoped_key = self._scoped_key(target_session)
         aws_session_id = _session_mapping.get(scoped_key)
 
