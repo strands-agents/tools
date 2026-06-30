@@ -292,6 +292,13 @@ def _validate_expression_ast(expr_str: str) -> None:
     for node in ast.walk(tree):
         if type(node) not in _ALLOWED_AST_NODES:
             raise ValueError(f"Invalid mathematical expression: unsupported syntax '{type(node).__name__}'")
+        # Reject string literals. Mathematical expressions operate on numbers,
+        # symbols, and containers, never on string values. Several functions in
+        # the safe locals (e.g. N, simplify, solve) re-parse string arguments
+        # through SymPy's sympify, which evaluates them with full builtins and
+        # escapes the restricted namespace used for the top-level expression.
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            raise ValueError("Invalid mathematical expression: string literals are not supported")
 
 
 def parse_expression(expr_str: str) -> Any:

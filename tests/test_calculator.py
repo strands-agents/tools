@@ -677,6 +677,35 @@ def test_ast_validation_rejects_unsafe_input(payload):
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        # String-literal argument to a function that re-parses it through sympify
+        "N(\"__import__('os').system('id')\")",
+        "simplify(\"__import__('os').system('id')\")",
+        "solve(\"__import__('os').getpid()\")",
+        "integrate(\"__import__('subprocess').run(['id'])\")",
+        # Plain string literals in various positions
+        "'abc'",
+        "Max(1, 'abc')",
+        "Matrix([['a', 'b'], ['c', 'd']])",
+    ],
+)
+def test_ast_validation_rejects_string_literals(payload):
+    """Verify that string-literal arguments are rejected before reaching sympify."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_string_argument_does_not_execute(tmp_path):
+    """Verify a string argument to a sympify-backed function does not run code."""
+    marker = tmp_path / "marker"
+    payload = f"N(\"__import__('os').system('touch {marker}')\")"
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
     "expression",
     [
         "2 + 3",
