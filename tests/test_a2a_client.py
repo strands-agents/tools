@@ -3,7 +3,13 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from a2a.types import Message
 
-from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider
+from strands_tools.a2a_client import (
+    DEFAULT_TIMEOUT,
+    TERMINAL_TASK_STATES,
+    A2AClientToolProvider,
+    ActiveTask,
+    ConversationState,
+)
 
 
 def test_init_default_parameters():
@@ -14,6 +20,7 @@ def test_init_default_parameters():
     assert provider._known_agent_urls == []
     assert provider._discovered_agents == {}
     assert provider._httpx_client_args == {"timeout": DEFAULT_TIMEOUT}
+    assert provider._conversation_states == {}
 
 
 def test_init_custom_parameters():
@@ -56,11 +63,15 @@ def test_tools_property():
     provider = A2AClientToolProvider()
     tools = provider.tools
 
-    # Should have the three @tool decorated methods
+    # Should have the seven @tool decorated methods (including task management tools)
     tool_names = [tool.tool_name for tool in tools]
     assert "a2a_discover_agent" in tool_names
     assert "a2a_list_discovered_agents" in tool_names
     assert "a2a_send_message" in tool_names
+    assert "a2a_get_conversation_state" in tool_names
+    assert "a2a_clear_conversation_state" in tool_names
+    assert "a2a_get_task" in tool_names
+    assert "a2a_cancel_task" in tool_names
 
 
 def test_get_httpx_client_creates_new_client():
@@ -108,6 +119,135 @@ def test_get_httpx_client_creates_fresh_each_time():
         assert mock_client_class.call_count == 2
         assert result1 == mock_client1
         assert result2 == mock_client2
+
+
+# Conversation state management tests
+def test_get_conversation_state_creates_new():
+    """Test _get_conversation_state creates new state for unknown URL."""
+    provider = A2AClientToolProvider()
+
+    state = provider._get_conversation_state("http://new-agent.com")
+
+    assert isinstance(state, ConversationState)
+    assert state.context_id is None
+    assert state.active_tasks == {}
+    assert "http://new-agent.com" in provider._conversation_states
+
+
+def test_get_conversation_state_returns_existing():
+    """Test _get_conversation_state returns existing state."""
+    provider = A2AClientToolProvider()
+    existing_state = ConversationState(context_id="existing-context")
+    provider._conversation_states["http://agent.com"] = existing_state
+
+    state = provider._get_conversation_state("http://agent.com")
+
+    assert state is existing_state
+    assert state.context_id == "existing-context"
+
+
+def test_update_conversation_state_stores_context_id():
+    """Test _update_conversation_state stores context_id on first response."""
+    provider = A2AClientToolProvider()
+
+    provider._update_conversation_state("http://agent.com", context_id="ctx-123")
+
+    state = provider._conversation_states["http://agent.com"]
+    assert state.context_id == "ctx-123"
+
+
+def test_update_conversation_state_does_not_overwrite_context_id():
+    """Test _update_conversation_state does not overwrite existing context_id."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(context_id="original")
+
+    provider._update_conversation_state("http://agent.com", context_id="new-context")
+
+    state = provider._conversation_states["http://agent.com"]
+    assert state.context_id == "original"
+
+
+def test_update_conversation_state_tracks_active_task():
+    """Test _update_conversation_state tracks active tasks."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(context_id="ctx-123")
+
+    provider._update_conversation_state(
+        "http://agent.com", context_id="ctx-123", task_id="task-456", task_state="working"
+    )
+
+    state = provider._conversation_states["http://agent.com"]
+    assert "task-456" in state.active_tasks
+    assert state.active_tasks["task-456"].task_id == "task-456"
+    assert state.active_tasks["task-456"].state == "working"
+
+
+def test_update_conversation_state_removes_terminal_task():
+    """Test _update_conversation_state removes tasks in terminal states."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(
+        context_id="ctx-123",
+        active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
+    )
+
+    provider._update_conversation_state("http://agent.com", task_id="task-456", task_state="completed")
+
+    state = provider._conversation_states["http://agent.com"]
+    assert "task-456" not in state.active_tasks
+
+
+def test_update_conversation_state_all_terminal_states():
+    """Test all terminal task states are handled correctly."""
+    for terminal_state in TERMINAL_TASK_STATES:
+        provider = A2AClientToolProvider()
+        provider._conversation_states["http://agent.com"] = ConversationState(
+            context_id="ctx-123",
+            active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
+        )
+
+        provider._update_conversation_state("http://agent.com", task_id="task-456", task_state=terminal_state)
+
+        state = provider._conversation_states["http://agent.com"]
+        assert "task-456" not in state.active_tasks, f"Task should be removed for state: {terminal_state}"
+
+
+def test_get_task_id_for_continuation_single_active():
+    """Test _get_task_id_for_continuation returns task_id when exactly one active."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(
+        context_id="ctx-123",
+        active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
+    )
+
+    task_id = provider._get_task_id_for_continuation("http://agent.com")
+
+    assert task_id == "task-456"
+
+
+def test_get_task_id_for_continuation_no_active():
+    """Test _get_task_id_for_continuation returns None when no active tasks."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(context_id="ctx-123")
+
+    task_id = provider._get_task_id_for_continuation("http://agent.com")
+
+    assert task_id is None
+
+
+def test_get_task_id_for_continuation_multiple_active():
+    """Test _get_task_id_for_continuation returns None when multiple active tasks."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://agent.com"] = ConversationState(
+        context_id="ctx-123",
+        active_tasks={
+            "task-1": ActiveTask(task_id="task-1", state="working", context_id="ctx-123"),
+            "task-2": ActiveTask(task_id="task-2", state="submitted", context_id="ctx-123"),
+        },
+    )
+
+    task_id = provider._get_task_id_for_continuation("http://agent.com")
+
+    assert task_id is None
 
 
 @pytest.mark.asyncio
@@ -322,13 +462,39 @@ async def test_send_message_with_message_id():
             "response": {"result": "ok"},
             "message_id": "test_id",
             "target_agent_url": "http://test.com",
+            "context_id": None,
+            "task_id": None,
         }
         mock_send_message.return_value = expected_result
 
         result = await provider.a2a_send_message("Hello", "http://test.com", "test_id")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id")
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id", None, None)
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_context_and_task_id():
+    """Test a2a_send_message with explicit context_id and task_id."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_send_message") as mock_send_message:
+        expected_result = {
+            "status": "success",
+            "response": {"result": "ok"},
+            "message_id": "test_id",
+            "target_agent_url": "http://test.com",
+            "context_id": "ctx-123",
+            "task_id": "task-456",
+        }
+        mock_send_message.return_value = expected_result
+
+        result = await provider.a2a_send_message(
+            "Hello", "http://test.com", "test_id", context_id="ctx-123", task_id="task-456"
+        )
+
+        assert result == expected_result
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", "test_id", "ctx-123", "task-456")
 
 
 @pytest.mark.asyncio
@@ -342,13 +508,15 @@ async def test_send_message_without_message_id():
             "response": {"result": "ok"},
             "message_id": "auto_generated",
             "target_agent_url": "http://test.com",
+            "context_id": None,
+            "task_id": None,
         }
         mock_send_message.return_value = expected_result
 
         result = await provider.a2a_send_message("Hello", "http://test.com")
 
         assert result == expected_result
-        mock_send_message.assert_called_once_with("Hello", "http://test.com", None)
+        mock_send_message.assert_called_once_with("Hello", "http://test.com", None, None, None)
 
 
 @pytest.mark.asyncio
@@ -378,6 +546,8 @@ async def test_send_message_success(mock_ensure, mock_factory, mock_discover, mo
     # Mock client response - simulate Message response
     mock_response = Mock(spec=Message)
     mock_response.model_dump.return_value = {"result": "success"}
+    mock_response.context_id = "response-ctx"
+    mock_response.task_id = "response-task"
 
     async def mock_send_message_iter(message):
         yield mock_response
@@ -391,11 +561,63 @@ async def test_send_message_success(mock_ensure, mock_factory, mock_discover, mo
         "response": {"result": "success"},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
+        "context_id": "response-ctx",
+        "task_id": "response-task",
     }
     assert result == expected
     mock_ensure.assert_called_once()
     mock_discover.assert_called_once_with("http://test.com")
     mock_client_factory.create.assert_called_once_with(mock_agent_card)
+
+
+@pytest.mark.asyncio
+@patch("strands_tools.a2a_client.uuid4")
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_uses_persisted_context_id(mock_ensure, mock_factory, mock_discover, mock_uuid):
+    """Test _send_message uses persisted context_id when not explicitly provided."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://test.com"] = ConversationState(context_id="persisted-ctx")
+
+    # Mock UUID generation
+    mock_message_uuid = Mock()
+    mock_message_uuid.hex = "message_id_123"
+    mock_uuid.return_value = mock_message_uuid
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock client response
+    mock_response = Mock(spec=Message)
+    mock_response.model_dump.return_value = {"result": "success"}
+    mock_response.context_id = None  # Server doesn't return context_id this time
+    mock_response.task_id = None
+
+    # Capture the message that was sent
+    sent_messages = []
+
+    async def mock_send_message_iter(message):
+        sent_messages.append(message)
+        yield mock_response
+
+    mock_client.send_message = mock_send_message_iter
+
+    result = await provider._send_message("Hello world", "http://test.com", None)
+
+    # Verify the persisted context_id was used in the request
+    assert len(sent_messages) == 1
+    assert sent_messages[0].context_id == "persisted-ctx"
+
+    # Verify the response includes the context_id
+    assert result["context_id"] == "persisted-ctx"
 
 
 @pytest.mark.asyncio
@@ -413,6 +635,8 @@ async def test_send_message_error(mock_ensure, mock_discover):
         "error": "Connection failed",
         "message_id": "test_id",
         "target_agent_url": "http://test.com",
+        "context_id": None,
+        "task_id": None,
     }
     assert result == expected
 
@@ -506,6 +730,10 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
     # Mock client response - simulate (Task, UpdateEvent) tuple response
     mock_task = Mock()
     mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_task.context_id = "task-ctx"
+    mock_task.id = "task-123"
+    mock_task.status = Mock()
+    mock_task.status.state = "working"
     mock_update_event = Mock()
     mock_update_event.model_dump.return_value = {"event": "finished"}
 
@@ -521,6 +749,8 @@ async def test_send_message_task_response(mock_ensure, mock_factory, mock_discov
         "response": {"task": {"task_id": "123", "status": "completed"}, "update": {"event": "finished"}},
         "message_id": "message_id_123",
         "target_agent_url": "http://test.com",
+        "context_id": "task-ctx",
+        "task_id": "task-123",
     }
     assert result == expected
     mock_ensure.assert_called_once()
@@ -555,6 +785,9 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
     # Mock client response - simulate (Task, None) tuple response
     mock_task = Mock()
     mock_task.model_dump.return_value = {"task_id": "123", "status": "completed"}
+    mock_task.context_id = "task-ctx"
+    mock_task.id = "task-123"
+    mock_task.status = None
 
     async def mock_send_message_iter(message):
         yield (mock_task, None)
@@ -567,6 +800,532 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
         "status": "success",
         "response": {"task": {"task_id": "123", "status": "completed"}, "update": None},
         "message_id": "message_id_123",
+        "target_agent_url": "http://test.com",
+        "context_id": "task-ctx",
+        "task_id": "task-123",
+    }
+    assert result == expected
+
+
+# Tests for new conversation state tools
+@pytest.mark.asyncio
+async def test_get_conversation_state_tool():
+    """Test a2a_get_conversation_state returns correct state."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://test.com"] = ConversationState(
+        context_id="ctx-123",
+        active_tasks={"task-456": ActiveTask(task_id="task-456", state="working", context_id="ctx-123")},
+    )
+
+    result = await provider.a2a_get_conversation_state("http://test.com")
+
+    expected = {
+        "status": "success",
+        "context_id": "ctx-123",
+        "active_tasks": [{"task_id": "task-456", "state": "working", "context_id": "ctx-123"}],
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_state_tool_empty():
+    """Test a2a_get_conversation_state for unknown agent."""
+    provider = A2AClientToolProvider()
+
+    result = await provider.a2a_get_conversation_state("http://unknown.com")
+
+    expected = {
+        "status": "success",
+        "context_id": None,
+        "active_tasks": [],
+        "target_agent_url": "http://unknown.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+async def test_clear_conversation_state_tool():
+    """Test a2a_clear_conversation_state removes state."""
+    provider = A2AClientToolProvider()
+    provider._conversation_states["http://test.com"] = ConversationState(context_id="ctx-123")
+
+    result = await provider.a2a_clear_conversation_state("http://test.com")
+
+    assert result == {"status": "success", "target_agent_url": "http://test.com"}
+    assert "http://test.com" not in provider._conversation_states
+
+
+@pytest.mark.asyncio
+async def test_clear_conversation_state_tool_nonexistent():
+    """Test a2a_clear_conversation_state handles nonexistent agent."""
+    provider = A2AClientToolProvider()
+
+    result = await provider.a2a_clear_conversation_state("http://unknown.com")
+
+    assert result == {"status": "success", "target_agent_url": "http://unknown.com"}
+
+
+# Tests for a2a_get_task tool
+@pytest.mark.asyncio
+async def test_get_task_tool():
+    """Test a2a_get_task calls internal implementation."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_get_task") as mock_get_task:
+        expected_result = {
+            "status": "success",
+            "task": {"id": "task-123", "status": {"state": "working"}},
+            "task_id": "task-123",
+            "task_state": "working",
+            "context_id": "ctx-123",
+            "target_agent_url": "http://test.com",
+        }
+        mock_get_task.return_value = expected_result
+
+        result = await provider.a2a_get_task("http://test.com", "task-123")
+
+        assert result == expected_result
+        mock_get_task.assert_called_once_with("http://test.com", "task-123", None)
+
+
+@pytest.mark.asyncio
+async def test_get_task_tool_with_history_length():
+    """Test a2a_get_task with history_length parameter."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_get_task") as mock_get_task:
+        expected_result = {
+            "status": "success",
+            "task": {"id": "task-123", "status": {"state": "working"}},
+            "task_id": "task-123",
+            "task_state": "working",
+            "context_id": "ctx-123",
+            "target_agent_url": "http://test.com",
+        }
+        mock_get_task.return_value = expected_result
+
+        result = await provider.a2a_get_task("http://test.com", "task-123", history_length=10)
+
+        assert result == expected_result
+        mock_get_task.assert_called_once_with("http://test.com", "task-123", 10)
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_get_task_success(mock_ensure, mock_factory, mock_discover):
+    """Test _get_task successfully retrieves task."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock task response
+    mock_task = Mock()
+    mock_task.model_dump.return_value = {"id": "task-123", "status": {"state": "working"}}
+    mock_task.id = "task-123"
+    mock_task.status = Mock()
+    mock_task.status.state = "working"
+    mock_task.context_id = "ctx-123"
+
+    mock_client.get_task = AsyncMock(return_value=mock_task)
+
+    result = await provider._get_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "success",
+        "task": {"id": "task-123", "status": {"state": "working"}},
+        "task_id": "task-123",
+        "task_state": "working",
+        "context_id": "ctx-123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+    mock_ensure.assert_called_once()
+    mock_discover.assert_called_once_with("http://test.com")
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_get_task_with_history_length(mock_ensure, mock_factory, mock_discover):
+    """Test _get_task with history_length parameter."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock task response
+    mock_task = Mock()
+    mock_task.model_dump.return_value = {"id": "task-123", "status": {"state": "completed"}}
+    mock_task.id = "task-123"
+    mock_task.status = Mock()
+    mock_task.status.state = "completed"
+    mock_task.context_id = "ctx-123"
+
+    mock_client.get_task = AsyncMock(return_value=mock_task)
+
+    result = await provider._get_task("http://test.com", "task-123", history_length=5)
+
+    # Verify TaskQueryParams was called with history_length
+    assert mock_client.get_task.called
+    assert result["status"] == "success"
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_get_task_not_found(mock_ensure, mock_factory, mock_discover):
+    """Test _get_task when task is not found."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task to raise exception
+    mock_client.get_task = AsyncMock(side_effect=Exception("Task not found"))
+
+    result = await provider._get_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "error",
+        "error": "Task not found: Task not found",
+        "error_type": "Exception",
+        "task_id": "task-123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_get_task_updates_conversation_state(mock_ensure, mock_factory, mock_discover):
+    """Test _get_task updates conversation state."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock task response
+    mock_task = Mock()
+    mock_task.model_dump.return_value = {"id": "task-123", "status": {"state": "working"}}
+    mock_task.id = "task-123"
+    mock_task.status = Mock()
+    mock_task.status.state = "working"
+    mock_task.context_id = "ctx-456"
+
+    mock_client.get_task = AsyncMock(return_value=mock_task)
+
+    await provider._get_task("http://test.com", "task-123")
+
+    # Verify conversation state was updated
+    state = provider._conversation_states.get("http://test.com")
+    assert state is not None
+    assert state.context_id == "ctx-456"
+    assert "task-123" in state.active_tasks
+
+
+# Tests for a2a_cancel_task tool
+@pytest.mark.asyncio
+async def test_cancel_task_tool():
+    """Test a2a_cancel_task calls internal implementation."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_cancel_task") as mock_cancel_task:
+        expected_result = {
+            "status": "success",
+            "task": {"id": "task-123", "status": {"state": "canceled"}},
+            "task_id": "task-123",
+            "task_state": "canceled",
+            "target_agent_url": "http://test.com",
+        }
+        mock_cancel_task.return_value = expected_result
+
+        result = await provider.a2a_cancel_task("http://test.com", "task-123")
+
+        assert result == expected_result
+        mock_cancel_task.assert_called_once_with("http://test.com", "task-123", None)
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_tool_with_context_id():
+    """Test a2a_cancel_task with context_id parameter."""
+    provider = A2AClientToolProvider()
+
+    with patch.object(provider, "_cancel_task") as mock_cancel_task:
+        expected_result = {
+            "status": "success",
+            "task": {"id": "task-123", "status": {"state": "canceled"}},
+            "task_id": "task-123",
+            "task_state": "canceled",
+            "target_agent_url": "http://test.com",
+        }
+        mock_cancel_task.return_value = expected_result
+
+        result = await provider.a2a_cancel_task("http://test.com", "task-123", context_id="ctx-123")
+
+        assert result == expected_result
+        mock_cancel_task.assert_called_once_with("http://test.com", "task-123", "ctx-123")
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_success(mock_ensure, mock_factory, mock_discover):
+    """Test _cancel_task successfully cancels task."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task response (task is active)
+    mock_current_task = Mock()
+    mock_current_task.status = Mock()
+    mock_current_task.status.state = "working"
+    mock_current_task.context_id = "ctx-123"
+
+    # Mock cancel_task response
+    mock_canceled_task = Mock()
+    mock_canceled_task.model_dump.return_value = {"id": "task-123", "status": {"state": "canceled"}}
+    mock_canceled_task.id = "task-123"
+    mock_canceled_task.status = Mock()
+    mock_canceled_task.status.state = "canceled"
+    mock_canceled_task.context_id = "ctx-123"
+
+    mock_client.get_task = AsyncMock(return_value=mock_current_task)
+    mock_client.cancel_task = AsyncMock(return_value=mock_canceled_task)
+
+    result = await provider._cancel_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "success",
+        "task": {"id": "task-123", "status": {"state": "canceled"}},
+        "task_id": "task-123",
+        "target_agent_url": "http://test.com",
+        "task_state": "canceled",
+    }
+    assert result == expected
+    mock_ensure.assert_called_once()
+    mock_discover.assert_called_once_with("http://test.com")
+    mock_client.cancel_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_already_terminal(mock_ensure, mock_factory, mock_discover):
+    """Test _cancel_task when task is already in terminal state."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task response (task is already completed)
+    mock_current_task = Mock()
+    mock_current_task.status = Mock()
+    mock_current_task.status.state = "completed"
+
+    mock_client.get_task = AsyncMock(return_value=mock_current_task)
+
+    result = await provider._cancel_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "error",
+        "error": "Task cannot be canceled - current state: completed",
+        "task_id": "task-123",
+        "target_agent_url": "http://test.com",
+        "task_state": "completed",
+    }
+    assert result == expected
+    # cancel_task should NOT be called
+    mock_client.cancel_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_context_id_mismatch(mock_ensure, mock_factory, mock_discover):
+    """Test _cancel_task with context_id mismatch."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task response (task has different context_id)
+    mock_current_task = Mock()
+    mock_current_task.status = Mock()
+    mock_current_task.status.state = "working"
+    mock_current_task.context_id = "ctx-different"
+
+    mock_client.get_task = AsyncMock(return_value=mock_current_task)
+
+    result = await provider._cancel_task("http://test.com", "task-123", context_id="ctx-expected")
+
+    expected = {
+        "status": "error",
+        "error": "Context ID mismatch: expected ctx-expected, got ctx-different",
+        "task_id": "task-123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+    # cancel_task should NOT be called
+    mock_client.cancel_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_not_found(mock_ensure, mock_factory, mock_discover):
+    """Test _cancel_task when task is not found."""
+    provider = A2AClientToolProvider()
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task to raise exception
+    mock_client.get_task = AsyncMock(side_effect=Exception("Task not found"))
+
+    result = await provider._cancel_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "error",
+        "error": "Task not found or inaccessible: Task not found",
+        "task_id": "task-123",
+        "target_agent_url": "http://test.com",
+    }
+    assert result == expected
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_get_client_factory")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_updates_conversation_state(mock_ensure, mock_factory, mock_discover):
+    """Test _cancel_task updates conversation state when task reaches terminal state."""
+    provider = A2AClientToolProvider()
+
+    # Set up initial active task
+    provider._conversation_states["http://test.com"] = ConversationState(
+        context_id="ctx-123",
+        active_tasks={"task-123": ActiveTask(task_id="task-123", state="working", context_id="ctx-123")},
+    )
+
+    # Mock agent card
+    mock_agent_card = Mock()
+    mock_discover.return_value = mock_agent_card
+
+    # Mock ClientFactory and Client
+    mock_client_factory = Mock()
+    mock_client = Mock()
+    mock_factory.return_value = mock_client_factory
+    mock_client_factory.create.return_value = mock_client
+
+    # Mock get_task response (task is active)
+    mock_current_task = Mock()
+    mock_current_task.status = Mock()
+    mock_current_task.status.state = "working"
+    mock_current_task.context_id = "ctx-123"
+
+    # Mock cancel_task response (task is now canceled)
+    mock_canceled_task = Mock()
+    mock_canceled_task.model_dump.return_value = {"id": "task-123", "status": {"state": "canceled"}}
+    mock_canceled_task.id = "task-123"
+    mock_canceled_task.status = Mock()
+    mock_canceled_task.status.state = "canceled"
+    mock_canceled_task.context_id = "ctx-123"
+
+    mock_client.get_task = AsyncMock(return_value=mock_current_task)
+    mock_client.cancel_task = AsyncMock(return_value=mock_canceled_task)
+
+    await provider._cancel_task("http://test.com", "task-123")
+
+    # Verify task was removed from active tasks (terminal state)
+    state = provider._conversation_states["http://test.com"]
+    assert "task-123" not in state.active_tasks
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_cancel_task_general_error(mock_ensure, mock_discover):
+    """Test _cancel_task handles general errors."""
+    provider = A2AClientToolProvider()
+
+    mock_discover.side_effect = Exception("Network error")
+
+    result = await provider._cancel_task("http://test.com", "task-123")
+
+    expected = {
+        "status": "error",
+        "error": "Network error",
+        "error_type": "Exception",
+        "task_id": "task-123",
         "target_agent_url": "http://test.com",
     }
     assert result == expected
