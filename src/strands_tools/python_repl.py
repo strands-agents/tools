@@ -593,8 +593,6 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
-    repl_state = get_repl_state()
-
     code = tool_input["code"]
     interactive = os.environ.get("PYTHON_REPL_INTERACTIVE", str(tool_input.get("interactive", True))).lower() == "true"
     reset_state = os.environ.get("PYTHON_REPL_RESET_STATE", str(tool_input.get("reset_state", False))).lower() == "true"
@@ -606,12 +604,6 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     non_interactive_mode = kwargs.get("non_interactive_mode", False)
 
     try:
-        # Handle state reset if requested
-        if reset_state:
-            console.print("[yellow]Resetting REPL state...[/]")
-            repl_state.clear_state()
-            console.print("[green]REPL state reset complete[/]")
-
         # Show code preview
         console.print(
             Panel(
@@ -666,6 +658,17 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "status": "error",
                     "content": [{"text": error_message}],
                 }
+
+        # Acquire the REPL state only after the consent gate. get_repl_state()
+        # loads the persisted state file on first use, so deferring it to here
+        # keeps that load from happening before the user has approved execution.
+        repl_state = get_repl_state()
+
+        # Handle state reset if requested (also deferred until after consent).
+        if reset_state:
+            console.print("[yellow]Resetting REPL state...[/]")
+            repl_state.clear_state()
+            console.print("[green]REPL state reset complete[/]")
 
         # Track execution time and capture output
         start_time = datetime.now()

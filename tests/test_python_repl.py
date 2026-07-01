@@ -381,6 +381,30 @@ class TestPythonRepl:
             assert "cancelled by the user" in result["content"][0]["text"]
             assert "should_not_execute" not in python_repl.repl_state.get_namespace()
 
+    def test_state_not_loaded_before_consent(self, mock_console):
+        """Declining consent must not load the persisted REPL state.
+
+        get_repl_state() loads the state file on first use, so it must only be
+        called after the user approves execution, never before the prompt.
+        """
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "should_not_execute = True", "interactive": False},
+        }
+
+        with (
+            patch("strands_tools.python_repl.get_repl_state") as mock_get_state,
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
+            result = python_repl.python_repl(tool=tool_use)
+
+            assert result["status"] == "error"
+            assert "cancelled by the user" in result["content"][0]["text"]
+            # State access is deferred until after consent, so a declined run
+            # never triggers the state load.
+            mock_get_state.assert_not_called()
+
     def test_custom_rejection_message(self, mock_console):
         """Test that custom rejection message is included."""
         # Clear REPL state to ensure clean test environment
