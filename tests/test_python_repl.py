@@ -381,6 +381,30 @@ class TestPythonRepl:
             assert "cancelled by the user" in result["content"][0]["text"]
             assert "should_not_execute" not in python_repl.repl_state.get_namespace()
 
+    def test_state_not_loaded_before_consent(self, mock_console):
+        """Declining consent must not load the persisted REPL state.
+
+        get_repl_state() loads the state file on first use, so it must only be
+        called after the user approves execution, never before the prompt.
+        """
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "should_not_execute = True", "interactive": False},
+        }
+
+        with (
+            patch("strands_tools.python_repl.get_repl_state") as mock_get_state,
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
+            result = python_repl.python_repl(tool=tool_use)
+
+            assert result["status"] == "error"
+            assert "cancelled by the user" in result["content"][0]["text"]
+            # State access is deferred until after consent, so a declined run
+            # never triggers the state load.
+            mock_get_state.assert_not_called()
+
     def test_custom_rejection_message(self, mock_console):
         """Test that custom rejection message is included."""
         # Clear REPL state to ensure clean test environment
@@ -699,3 +723,29 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+
+
+class TestLazyState:
+    """Test that the global ReplState is created lazily, not at import time."""
+
+    def test_import_does_not_create_state(self):
+        """Importing the module should not instantiate ReplState."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        try:
+            # Right after import the global instance must not exist yet.
+            assert module._repl_state is None
+        finally:
+            # Restore a usable state for subsequent tests in this session.
+            module.get_repl_state()
+
+    def test_get_repl_state_is_lazy_singleton(self):
+        """get_repl_state creates the instance on first use and reuses it."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        assert module._repl_state is None
+        first = module.get_repl_state()
+        assert module._repl_state is first
+        assert module.get_repl_state() is first

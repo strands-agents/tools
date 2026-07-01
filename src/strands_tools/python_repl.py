@@ -274,8 +274,31 @@ class ReplState:
         return objects
 
 
-# Create global state instance
-repl_state = ReplState()
+# Lazily-created global state instance. The instance is created on first use
+# rather than at import time to avoid side effects (directory creation and
+# state file loading) when the module is merely imported.
+_repl_state: Optional[ReplState] = None
+_repl_state_lock = threading.Lock()
+
+
+def get_repl_state() -> ReplState:
+    """Return the global ReplState, creating it on first use."""
+    global _repl_state
+    if _repl_state is None:
+        # Guard the check-then-set so concurrent first-use does not create
+        # two instances. Double-checked to avoid locking after initialization.
+        with _repl_state_lock:
+            if _repl_state is None:
+                _repl_state = ReplState()
+    return _repl_state
+
+
+def __getattr__(name: str) -> Any:
+    # Preserve access to ``python_repl.repl_state`` as a module attribute while
+    # keeping initialization lazy.
+    if name == "repl_state":
+        return get_repl_state()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def clean_ansi(text: str) -> str:
@@ -317,7 +340,7 @@ class PtyManager:
                 os.dup2(self.worker_fd, 2)
 
                 # Execute in REPL namespace
-                namespace = repl_state.get_namespace()
+                namespace = get_repl_state().get_namespace()
                 exec(code, namespace)
 
                 os._exit(0)
@@ -581,12 +604,6 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     non_interactive_mode = kwargs.get("non_interactive_mode", False)
 
     try:
-        # Handle state reset if requested
-        if reset_state:
-            console.print("[yellow]Resetting REPL state...[/]")
-            repl_state.clear_state()
-            console.print("[green]REPL state reset complete[/]")
-
         # Show code preview
         console.print(
             Panel(
@@ -641,6 +658,17 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "status": "error",
                     "content": [{"text": error_message}],
                 }
+
+        # Acquire the REPL state only after the consent gate. get_repl_state()
+        # loads the persisted state file on first use, so deferring it to here
+        # keeps that load from happening before the user has approved execution.
+        repl_state = get_repl_state()
+
+        # Handle state reset if requested (also deferred until after consent).
+        if reset_state:
+            console.print("[yellow]Resetting REPL state...[/]")
+            repl_state.clear_state()
+            console.print("[green]REPL state reset complete[/]")
 
         # Track execution time and capture output
         start_time = datetime.now()
