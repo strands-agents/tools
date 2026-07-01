@@ -278,13 +278,18 @@ class ReplState:
 # rather than at import time to avoid side effects (directory creation and
 # state file loading) when the module is merely imported.
 _repl_state: Optional[ReplState] = None
+_repl_state_lock = threading.Lock()
 
 
 def get_repl_state() -> ReplState:
     """Return the global ReplState, creating it on first use."""
     global _repl_state
     if _repl_state is None:
-        _repl_state = ReplState()
+        # Guard the check-then-set so concurrent first-use does not create
+        # two instances. Double-checked to avoid locking after initialization.
+        with _repl_state_lock:
+            if _repl_state is None:
+                _repl_state = ReplState()
     return _repl_state
 
 
