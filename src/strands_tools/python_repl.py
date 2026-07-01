@@ -232,7 +232,9 @@ class ReplState:
             # the file is newly created, so fchmod the descriptor to also tighten
             # a pre-existing file; using the fd avoids a TOCTOU race.
             fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            os.fchmod(fd, 0o600)
+            # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
             with os.fdopen(fd, "wb") as f:
                 dill.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
@@ -736,7 +738,9 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
         # O_CREAT only applies the mode on creation, so fchmod the descriptor to
         # also tighten a pre-existing log file; using the fd avoids a TOCTOU race.
         fd = os.open(error_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        os.fchmod(fd, 0o600)
+        # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "a") as f:
             f.write(error_msg)
         logger.debug(error_msg)
