@@ -724,3 +724,44 @@ class TestStatePermissions:
                 assert os.path.exists(repl.state_file)
                 mode = stat.S_IMODE(os.stat(repl.state_file).st_mode)
                 assert mode & 0o077 == 0, oct(mode)
+
+    def test_existing_state_file_permissions_are_tightened(self):
+        """A pre-existing, group/other-readable state file is tightened on save.
+
+        os.open with O_CREAT only applies the mode on creation, so a file left
+        behind with looser permissions must still be restricted on the next save.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                repl.clear_state()
+                # Pre-create the state file world-readable.
+                with open(repl.state_file, "wb") as f:
+                    f.write(b"stale")
+                os.chmod(repl.state_file, 0o644)
+                assert stat.S_IMODE(os.stat(repl.state_file).st_mode) & 0o077 != 0
+
+                repl.save_state("perm_test = 1")
+
+                mode = stat.S_IMODE(os.stat(repl.state_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
+
+    def test_error_log_is_owner_only(self):
+        """The error log echoes executed code, so it must be written mode 0o600."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                tool_use = {
+                    "toolUseId": "test-id",
+                    "input": {"code": "this is not valid python", "interactive": False},
+                }
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    python_repl.python_repl(tool=tool_use)
+
+                error_file = os.path.join(tmpdir, "errors", "errors.txt")
+                assert os.path.exists(error_file)
+                mode = stat.S_IMODE(os.stat(error_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
+            finally:
+                os.chdir(original_cwd)

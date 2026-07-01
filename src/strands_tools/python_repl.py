@@ -228,8 +228,11 @@ class ReplState:
 
             # Save state with owner-only permissions (0o600) so the persisted
             # namespace, which may contain sensitive values, is not readable by
-            # other users on a shared host.
+            # other users on a shared host. O_CREAT only applies the mode when
+            # the file is newly created, so fchmod the descriptor to also tighten
+            # a pre-existing file; using the fd avoids a TOCTOU race.
             fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.fchmod(fd, 0o600)
             with os.fdopen(fd, "wb") as f:
                 dill.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
@@ -730,7 +733,10 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         error_msg = f"\n[{error_time.isoformat()}] Python REPL Error:\nCode:\n{code}\nError:\n{error_tb}\n"
 
+        # O_CREAT only applies the mode on creation, so fchmod the descriptor to
+        # also tighten a pre-existing log file; using the fd avoids a TOCTOU race.
         fd = os.open(error_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        os.fchmod(fd, 0o600)
         with os.fdopen(fd, "a") as f:
             f.write(error_msg)
         logger.debug(error_msg)
