@@ -181,7 +181,10 @@ class ReplState:
                 self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
         else:
             self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
-        os.makedirs(self.persistence_dir, exist_ok=True)
+        os.makedirs(self.persistence_dir, mode=0o700, exist_ok=True)
+        # makedirs honors the mode only when it creates the directory, so set
+        # restrictive permissions explicitly in case the directory already existed.
+        os.chmod(self.persistence_dir, 0o700)
         self.state_file = os.path.join(self.persistence_dir, "repl_state.pkl")
         self.load_state()
 
@@ -223,8 +226,16 @@ class ReplState:
                     except BaseException:
                         continue
 
-            # Save state
-            with open(self.state_file, "wb") as f:
+            # Save state with owner-only permissions (0o600) so the persisted
+            # namespace, which may contain sensitive values, is not readable by
+            # other users on a shared host. O_CREAT only applies the mode when
+            # the file is newly created, so fchmod the descriptor to also tighten
+            # a pre-existing file; using the fd avoids a TOCTOU race.
+            fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "wb") as f:
                 dill.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
 
@@ -715,14 +726,22 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
         )
 
-        # Log error with details
+        # Log error with details. The error log echoes the executed code, so it
+        # is created with owner-only permissions on a private directory.
         errors_dir = os.path.join(Path.cwd(), "errors")
-        os.makedirs(errors_dir, exist_ok=True)
+        os.makedirs(errors_dir, mode=0o700, exist_ok=True)
+        os.chmod(errors_dir, 0o700)
         error_file = os.path.join(errors_dir, "errors.txt")
 
         error_msg = f"\n[{error_time.isoformat()}] Python REPL Error:\nCode:\n{code}\nError:\n{error_tb}\n"
 
-        with open(error_file, "a") as f:
+        # O_CREAT only applies the mode on creation, so fchmod the descriptor to
+        # also tighten a pre-existing log file; using the fd avoids a TOCTOU race.
+        fd = os.open(error_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "a") as f:
             f.write(error_msg)
         logger.debug(error_msg)
 
