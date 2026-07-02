@@ -586,26 +586,35 @@ def test_error_handling_in_calculation_functions():
 
 
 def test_calculator_tool_with_system_of_equations():
-    """Test the calculator tool with a system of equations."""
-    # Create a tool use with a system of equations
+    """Test the calculator tool with a system of equations using the supported syntax.
+
+    The system is passed as a comma-separated expression, which parses to a tuple of
+    SymPy expressions and is routed to the system solver. This exercises the real
+    validator and parser (no mocks).
+    """
     from src.strands_tools.calculator import calculator as calc_function
 
-    # Mock parse_expression to return a list of expressions
-    with mock.patch(
-        "src.strands_tools.calculator.parse_expression",
-        side_effect=lambda expr: (
-            [sp.Symbol("x") + sp.Symbol("y") - 10, sp.Symbol("x") - sp.Symbol("y") - 2]
-            if expr.startswith("[")
-            else expr
-        ),
-    ):
-        # This should trigger the system of equations path in calculator function
-        result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+    result = calc_function(expression="x + y - 10, x - y - 2", mode="solve")
 
-        # Check for success status
-        assert result["status"] == "success"
-        # The result should contain the solution
-        assert "Result:" in result["content"][0]["text"]
+    assert result["status"] == "success"
+    text = result["content"][0]["text"]
+    # Solution is x = 6, y = 4.
+    assert "6" in text and "4" in text
+
+
+def test_calculator_tool_rejects_string_list_system_syntax():
+    """The quoted string-list system syntax is now rejected during validation.
+
+    This syntax was never functional (parse_expr returns raw strings that the solver
+    cannot process) and string literals are now rejected outright as a hardening
+    measure, so the tool returns a validation error rather than a spurious success.
+    """
+    from src.strands_tools.calculator import calculator as calc_function
+
+    result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+
+    assert result["status"] == "error"
+    assert "string literals are not supported" in result["content"][0]["text"]
 
 
 def test_error_handling(agent):
