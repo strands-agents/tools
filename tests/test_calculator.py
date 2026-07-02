@@ -586,26 +586,35 @@ def test_error_handling_in_calculation_functions():
 
 
 def test_calculator_tool_with_system_of_equations():
-    """Test the calculator tool with a system of equations."""
-    # Create a tool use with a system of equations
+    """Test the calculator tool with a system of equations using the supported syntax.
+
+    The system is passed as a comma-separated expression, which parses to a tuple of
+    SymPy expressions and is routed to the system solver. This exercises the real
+    validator and parser (no mocks).
+    """
     from src.strands_tools.calculator import calculator as calc_function
 
-    # Mock parse_expression to return a list of expressions
-    with mock.patch(
-        "src.strands_tools.calculator.parse_expression",
-        side_effect=lambda expr: (
-            [sp.Symbol("x") + sp.Symbol("y") - 10, sp.Symbol("x") - sp.Symbol("y") - 2]
-            if expr.startswith("[")
-            else expr
-        ),
-    ):
-        # This should trigger the system of equations path in calculator function
-        result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+    result = calc_function(expression="x + y - 10, x - y - 2", mode="solve")
 
-        # Check for success status
-        assert result["status"] == "success"
-        # The result should contain the solution
-        assert "Result:" in result["content"][0]["text"]
+    assert result["status"] == "success"
+    text = result["content"][0]["text"]
+    # Solution is x = 6, y = 4.
+    assert "6" in text and "4" in text
+
+
+def test_calculator_tool_rejects_string_list_system_syntax():
+    """The quoted string-list system syntax is now rejected during validation.
+
+    This syntax was never functional (parse_expr returns raw strings that the solver
+    cannot process) and string literals are now rejected outright as a hardening
+    measure, so the tool returns a validation error rather than a spurious success.
+    """
+    from src.strands_tools.calculator import calculator as calc_function
+
+    result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+
+    assert result["status"] == "error"
+    assert "string literals are not supported" in result["content"][0]["text"]
 
 
 def test_error_handling(agent):
@@ -672,6 +681,82 @@ def test_code_execution_blocked(payload, mock_target):
 )
 def test_ast_validation_rejects_unsafe_input(payload):
     """Verify that AST validation rejects unsafe or non-Python syntax."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # String-literal argument to a function that re-parses it through sympify
+        "N(\"__import__('os').system('id')\")",
+        "simplify(\"__import__('os').system('id')\")",
+        "solve(\"__import__('os').getpid()\")",
+        "integrate(\"__import__('subprocess').run(['id'])\")",
+        # Plain string literals in various positions
+        "'abc'",
+        "Max(1, 'abc')",
+        "Matrix([['a', 'b'], ['c', 'd']])",
+    ],
+)
+def test_ast_validation_rejects_string_literals(payload):
+    """Verify that string-literal arguments are rejected before reaching sympify."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_string_argument_does_not_execute(tmp_path):
+    """Verify a string argument to a sympify-backed function does not run code."""
+    marker = tmp_path / "marker"
+    payload = f"N(\"__import__('os').system('touch {marker}')\")"
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("Symbol('x')", sp.Symbol("x")),
+        ("symbols('x y z')", (sp.Symbol("x"), sp.Symbol("y"), sp.Symbol("z"))),
+        ("Rational('1/3')", sp.Rational(1, 3)),
+        ("Integer('5')", sp.Integer(5)),
+        ("Float('3.14')", sp.Float("3.14")),
+    ],
+)
+def test_string_arg_constructors_are_allowed(expression, expected):
+    """Symbol/number constructors parse their string as a name/number, not via sympify.
+
+    These are safe (no sympify re-parse) and remain supported so the hardening does
+    not break the documented string-constructor syntax.
+    """
+    assert parse_expression(expression) == expected
+
+
+def test_symbol_string_arg_does_not_execute(tmp_path):
+    """A malicious string passed to Symbol() becomes a symbol name, never executes."""
+    marker = tmp_path / "marker"
+    payload = f"Symbol(\"__import__('os').system('touch {marker}')\")"
+    # Accepted as a symbol whose name is the literal string; no code runs.
+    result = parse_expression(payload)
+    assert isinstance(result, sp.Symbol)
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Only positional string args to the safe constructors are allowed; a
+        # string in keyword position is still rejected.
+        "Symbol(name='x')",
+        "Symbol('x', name='y')",
+        # Bytes literals are rejected everywhere, including in constructor args.
+        "Symbol(b'x')",
+        "simplify(b\"__import__('os').getpid()\")",
+    ],
+)
+def test_ast_validation_rejects_non_positional_and_bytes_literals(payload):
+    """Keyword-position strings and bytes literals stay rejected by the allowlist."""
     with pytest.raises(ValueError, match="Invalid mathematical expression"):
         parse_expression(payload)
 
