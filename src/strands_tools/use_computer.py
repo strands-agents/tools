@@ -672,7 +672,8 @@ def open_application(app_name: str) -> str:
         str: Success or error message detailing the result of the operation.
 
     Platform Support:
-        - Windows: Uses the 'start' command
+        - Windows: Uses os.startfile, which launches via the shell association
+          without going through cmd.exe
         - macOS: Uses the 'open -a' command
         - Linux: Attempts to run app_name directly as a command
     """
@@ -702,13 +703,18 @@ def open_application(app_name: str) -> str:
 
     try:
         if system == "windows":
-            # Pass the application name as a separate argument (shell=False) so it
-            # is treated as data by 'start' rather than parsed by the shell. The
-            # empty string is the optional window title argument for 'start'.
-            result = subprocess.run(
-                ["cmd", "/c", "start", "", actual_app_name], capture_output=True, text=True, shell=False
-            )
-        elif system == "darwin":  # macOS
+            # Use os.startfile rather than 'cmd /c start'. Even with shell=False,
+            # subprocess joins the argv into a command line via list2cmdline, which
+            # only quotes items containing whitespace. A spaceless payload such as
+            # "notepad&whoami" would therefore be handed to cmd.exe unquoted and the
+            # '&' re-parsed as a command separator, allowing command injection.
+            # os.startfile launches the app/document through the shell association
+            # API directly and never invokes cmd.exe, so metacharacters like
+            # & | < > ^ ( ) % stay inert.
+            os.startfile(actual_app_name)
+            return f"Launched {actual_app_name}"
+
+        if system == "darwin":  # macOS
             result = subprocess.run(["open", "-a", actual_app_name], capture_output=True, text=True)
         elif system == "linux":
             result = subprocess.run([actual_app_name.lower()], capture_output=True, text=True)

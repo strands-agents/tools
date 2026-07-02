@@ -332,48 +332,72 @@ class TestApplicationManagement:
 
     @pytest.mark.parametrize("system", ["windows", "darwin", "linux"])
     def test_open_application(self, system):
-        with patch("platform.system", return_value=system), patch("subprocess.run") as mock_run:
+        with (
+            patch("platform.system", return_value=system),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
             result = open_application("test_app")
             assert "Launched" in result
+            if system == "windows":
+                mock_startfile.assert_called_once()
 
-    def test_open_application_windows_no_shell(self):
-        """On Windows the app name is passed as a list argument with shell disabled."""
-        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+    def test_open_application_windows_uses_startfile(self):
+        """On Windows the app is launched via os.startfile, never through cmd.exe."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             open_application("notepad")
-            args, kwargs = mock_run.call_args
-            assert args[0] == ["cmd", "/c", "start", "", "notepad"]
-            assert kwargs.get("shell") is False
+            mock_startfile.assert_called_once_with("notepad")
+            # cmd.exe is never invoked, so there is no shell command line to reparse.
+            mock_run.assert_not_called()
 
     def test_open_application_injection_payload_passed_as_data(self):
-        """A command-chaining payload is passed as a single inert argv item, not parsed by a shell."""
-        payload = "notepad & whoami > C:\\temp\\pwned.txt"
-        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        """A spaceless command-chaining payload is launched literally, never reparsed by cmd.exe.
+
+        With the previous 'cmd /c start "" <name>' approach, list2cmdline only quotes
+        argv items containing whitespace, so a spaceless payload like "notepad&whoami"
+        produced the command line `cmd /c start "" notepad&whoami` and cmd.exe reparsed
+        '&' as a command separator (command injection). os.startfile receives the exact
+        literal string and never invokes a command interpreter.
+        """
+        payload = "notepad&whoami"
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             open_application(payload)
-            args, kwargs = mock_run.call_args
-            # shell is disabled and the entire payload is the trailing list item,
-            # so '&' is data and never reaches a command interpreter.
-            assert kwargs.get("shell") is False
-            assert args[0] == ["cmd", "/c", "start", "", payload]
+            # The exact literal payload is passed to startfile with no shell involved.
+            mock_startfile.assert_called_once_with(payload)
+            # cmd.exe is never spawned, so the payload cannot be split on '&'.
+            mock_run.assert_not_called()
 
     def test_open_application_rejects_control_characters(self):
-        """A name containing control characters is rejected before any subprocess call."""
-        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        """A name containing control characters is rejected before any launch attempt."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             result = open_application("notepad\nwhoami")
             assert "Invalid application name" in result
             mock_run.assert_not_called()
+            mock_startfile.assert_not_called()
 
     def test_open_application_accepts_plus_in_name(self):
-        """A legitimate name like 'C++ Builder' is accepted and passed as an argument."""
-        with patch("platform.system", return_value="windows"), patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        """A legitimate name like 'C++ Builder' is accepted and launched literally."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             open_application("C++ Builder")
-            args, kwargs = mock_run.call_args
-            assert kwargs.get("shell") is False
-            assert args[0] == ["cmd", "/c", "start", "", "C++ Builder"]
+            mock_startfile.assert_called_once_with("C++ Builder")
+            mock_run.assert_not_called()
 
     def test_close_application(self):
         mock_process = MagicMock()
