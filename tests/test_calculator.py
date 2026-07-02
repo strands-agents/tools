@@ -715,6 +715,35 @@ def test_string_argument_does_not_execute(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("Symbol('x')", sp.Symbol("x")),
+        ("symbols('x y z')", (sp.Symbol("x"), sp.Symbol("y"), sp.Symbol("z"))),
+        ("Rational('1/3')", sp.Rational(1, 3)),
+        ("Integer('5')", sp.Integer(5)),
+        ("Float('3.14')", sp.Float("3.14")),
+    ],
+)
+def test_string_arg_constructors_are_allowed(expression, expected):
+    """Symbol/number constructors parse their string as a name/number, not via sympify.
+
+    These are safe (no sympify re-parse) and remain supported so the hardening does
+    not break the documented string-constructor syntax.
+    """
+    assert parse_expression(expression) == expected
+
+
+def test_symbol_string_arg_does_not_execute(tmp_path):
+    """A malicious string passed to Symbol() becomes a symbol name, never executes."""
+    marker = tmp_path / "marker"
+    payload = f"Symbol(\"__import__('os').system('touch {marker}')\")"
+    # Accepted as a symbol whose name is the literal string; no code runs.
+    result = parse_expression(payload)
+    assert isinstance(result, sp.Symbol)
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
     "expression",
     [
         "2 + 3",
