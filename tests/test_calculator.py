@@ -705,13 +705,13 @@ def test_ast_validation_rejects_string_literals(payload):
         parse_expression(payload)
 
 
-def test_string_argument_does_not_execute(tmp_path):
+def test_string_argument_does_not_execute():
     """Verify a string argument to a sympify-backed function does not run code."""
-    marker = tmp_path / "marker"
-    payload = f"N(\"__import__('os').system('touch {marker}')\")"
-    with pytest.raises(ValueError, match="Invalid mathematical expression"):
-        parse_expression(payload)
-    assert not marker.exists()
+    payload = "N(\"__import__('os').getpid()\")"
+    with mock.patch("os.getpid") as mock_getpid:
+        with pytest.raises(ValueError, match="Invalid mathematical expression"):
+            parse_expression(payload)
+        mock_getpid.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -733,14 +733,16 @@ def test_string_arg_constructors_are_allowed(expression, expected):
     assert parse_expression(expression) == expected
 
 
-def test_symbol_string_arg_does_not_execute(tmp_path):
+def test_symbol_string_arg_does_not_execute():
     """A malicious string passed to Symbol() becomes a symbol name, never executes."""
-    marker = tmp_path / "marker"
-    payload = f"Symbol(\"__import__('os').system('touch {marker}')\")"
-    # Accepted as a symbol whose name is the literal string; no code runs.
-    result = parse_expression(payload)
+    malicious = "__import__('os').getpid()"
+    payload = f"Symbol({malicious!r})"
+    with mock.patch("os.getpid") as mock_getpid:
+        result = parse_expression(payload)
+        mock_getpid.assert_not_called()
+    # Accepted as a symbol whose name is the literal string; the string is not eval'd.
     assert isinstance(result, sp.Symbol)
-    assert not marker.exists()
+    assert result.name == malicious
 
 
 @pytest.mark.parametrize(
