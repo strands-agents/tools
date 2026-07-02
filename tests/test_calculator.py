@@ -744,6 +744,24 @@ def test_symbol_string_arg_does_not_execute(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        # Only positional string args to the safe constructors are allowed; a
+        # string in keyword position is still rejected.
+        "Symbol(name='x')",
+        "Symbol('x', name='y')",
+        # Bytes literals are rejected everywhere, including in constructor args.
+        "Symbol(b'x')",
+        "simplify(b\"__import__('os').getpid()\")",
+    ],
+)
+def test_ast_validation_rejects_non_positional_and_bytes_literals(payload):
+    """Keyword-position strings and bytes literals stay rejected by the allowlist."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
     "expression",
     [
         "2 + 3",
