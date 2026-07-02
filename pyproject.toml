@@ -88,6 +88,9 @@ mem0-memory = [
     "mem0ai>=0.1.99,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
 ]
+dakera-memory = [
+    "dakera>=0.10.0,<1.0.0",
+]
 local-chromium-browser = ["nest-asyncio>=1.5.0,<2.0.0", "playwright>=1.42.0,<2.0.0"]
 agent-core-browser = [
     "nest-asyncio>=1.5.0,<2.0.0",

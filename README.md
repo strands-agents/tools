@@ -39,7 +39,7 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 
 - 📁 **File Operations** - Read, write, and edit files with syntax highlighting and intelligent modifications
 - 🖥️ **Shell Integration** - Execute and interact with shell commands securely
-- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with both Mem0, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
+- 🧠 **Memory** - Store user and agent memories across agent runs to provide personalized experiences with Mem0, Dakera, Amazon Bedrock Knowledge Bases, Elasticsearch, and MongoDB Atlas
 - 🕸️ **Web Infrastructure** - Perform web searches, extract page content, and crawl websites with Tavily and Exa-powered tools
 - 🌐 **HTTP Client** - Make API requests with comprehensive authentication support
 - 💬 **Slack Client** - Real-time Slack events, message processing, and Slack API access
@@ -121,6 +121,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| dakera_memory | `agent.tool.dakera_memory(action="store", agent_id="alex", content="I prefer concise answers", importance=0.8)` | Persistent, decay-weighted agent memory backed by a self-hosted Dakera server |
 | bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
