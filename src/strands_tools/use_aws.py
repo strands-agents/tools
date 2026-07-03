@@ -113,6 +113,32 @@ MUTATIVE_OPERATIONS = [
     "accept",
 ]
 
+# Read-only operation-name prefixes. Detecting *mutation* by matching a fixed verb
+# denylist fails OPEN: any impactful operation whose name contains none of the verbs
+# (e.g. ssm.send_command, lambda.invoke, ecs.execute_command, ec2.run_instances,
+# ec2.authorize_security_group_ingress, rds-data.execute_statement, sqs.purge_queue)
+# silently skips the confirmation prompt. We instead treat an operation as mutative
+# UNLESS its name starts with a known read-only verb -- fail CLOSED. AWS operation
+# names are consistently verb-prefixed, so this allowlist is stable across services.
+READONLY_OPERATION_PREFIXES = (
+    "get_",
+    "list_",
+    "describe_",
+    "head_",
+    "batch_get_",
+    "select",
+    "scan",
+    "query",
+    "lookup",
+    "search",
+    "retrieve",
+    "estimate_",
+    "preview_",
+    "validate_",
+    "simulate_",
+    "generate_presigned",
+)
+
 # Operations that return credentials or secrets and require user consent
 # even though they are not mutative. These operations disclose sensitive
 # material that should not be exposed to the LLM context without explicit
@@ -158,6 +184,7 @@ SENSITIVE_RESPONSE_KEYS = {
     "dbpassword",
     "masteruserpassword",
 }
+
 
 def redact_sensitive_values(obj: Any) -> Any:
     """Recursively redact values of known sensitive keys from an AWS response.
@@ -393,8 +420,11 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
         "Invoking: service_name = %s, operation_name = %s, parameters = %s" % (service_name, operation_name, parameters)
     )
 
-    # Check if the operation is potentially mutative
-    is_mutative = any(op in operation_name.lower() for op in MUTATIVE_OPERATIONS)
+    # Check if the operation is potentially mutative. Fail CLOSED: an operation is
+    # treated as mutative unless its name starts with a known read-only verb. (A verb
+    # denylist misses impactful ops like ssm.send_command / lambda.invoke /
+    # ecs.execute_command / ec2.run_instances and skips their confirmation prompt.)
+    is_mutative = not operation_name.lower().startswith(READONLY_OPERATION_PREFIXES)
 
     # Check if the operation returns credentials or secrets
     is_sensitive = (service_name.lower(), operation_name.lower()) in SENSITIVE_OPERATIONS

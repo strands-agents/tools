@@ -234,9 +234,35 @@ def extract_content_from_html(html: str) -> str:
         return html
 
 
+class _StrandsSession(requests.Session):
+    """A Session that drops tool-injected secret headers on a cross-host redirect.
+
+    ``requests`` strips only ``Authorization`` when a redirect changes host
+    (``Session.rebuild_auth``). Secrets injected into other headers -- notably the
+    ``X-API-Key`` set for ``auth_type="api_key"`` -- would otherwise be forwarded to
+    the redirect target, leaking the credential to an arbitrary host (e.g. via an open
+    redirect on an allowlisted domain) and defeating the ``HTTP_REQUEST_TOKEN_CONFIG``
+    first-hop domain allowlist. We extend the same host-change handling to those headers.
+    """
+
+    #: Secret-bearing headers this tool may inject that are NOT ``Authorization``.
+    _SENSITIVE_REDIRECT_HEADERS = ("X-API-Key",)
+
+    def rebuild_auth(self, prepared_request: requests.PreparedRequest, response: requests.Response) -> None:
+        super().rebuild_auth(prepared_request, response)  # strips Authorization on host change
+        try:
+            original_host = urlparse(response.request.url).hostname
+            redirect_host = urlparse(prepared_request.url).hostname
+        except Exception:
+            return
+        if original_host != redirect_host:
+            for header in self._SENSITIVE_REDIRECT_HEADERS:
+                prepared_request.headers.pop(header, None)
+
+
 def create_session(config: Dict[str, Any]) -> requests.Session:
     """Create and configure a requests Session object."""
-    session = requests.Session()
+    session = _StrandsSession()
 
     if config.get("keep_alive", True):
         adapter = HTTPAdapter(

@@ -1,5 +1,6 @@
 """Tests for the python_repl tool using the Agent interface."""
 
+import json
 import os
 import sys
 import tempfile
@@ -8,7 +9,6 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-import dill
 import pytest
 from strands import Agent
 
@@ -37,11 +37,11 @@ def temp_repl_state_dir():
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = python_repl.repl_state.persistence_dir
         python_repl.repl_state.persistence_dir = tmpdir
-        python_repl.repl_state.state_file = os.path.join(tmpdir, "repl_state.pkl")
+        python_repl.repl_state.state_file = os.path.join(tmpdir, "repl_state.json")
         yield tmpdir
         # Restore original directory
         python_repl.repl_state.persistence_dir = original_dir
-        python_repl.repl_state.state_file = os.path.join(original_dir, "repl_state.pkl")
+        python_repl.repl_state.state_file = os.path.join(original_dir, "repl_state.json")
 
 
 class TestOutputCapture:
@@ -167,15 +167,15 @@ class TestReplState:
         """Test saving and loading state from a file."""
         # Create a new state file with our own content
         test_state = {"test_var": "test value"}
-        state_file_path = os.path.join(temp_repl_state_dir, "repl_state.pkl")
-        with open(state_file_path, "wb") as f:
-            dill.dump(test_state, f)
+        state_file_path = os.path.join(temp_repl_state_dir, "repl_state.json")
+        with open(state_file_path, "w", encoding="utf-8") as f:
+            json.dump(test_state, f)
 
         # Force loading of our state file
         repl = python_repl.ReplState()
         # Explicitly load the state to ensure it picks up our file
-        with open(state_file_path, "rb") as f:
-            saved_state = dill.load(f)
+        with open(state_file_path, "r", encoding="utf-8") as f:
+            saved_state = json.load(f)
         repl._namespace.update(saved_state)
 
         # Verify our variable is in the namespace
@@ -196,50 +196,33 @@ class TestReplState:
         assert "test_var" in repl.get_namespace()
         assert repl.get_namespace()["test_var"] == "directly saved"
 
-    def test_save_state_with_unpicklable_objects(self, temp_repl_state_dir):
-        """Test saving state with objects that can't be pickled."""
-        # Create a clean state
+    def test_save_state_with_unserializable_objects(self, temp_repl_state_dir):
+        """Non-JSON-serialisable values are skipped; serialisable ones persist.
+
+        State is persisted as JSON (json.load cannot execute code, unlike dill/pickle),
+        so save_state filters the namespace to JSON-serialisable values only.
+        """
         repl = python_repl.ReplState()
         repl.clear_state()
 
-        # Patch the dill.dumps function to simulate pickling failures for specific objects
-        with patch("dill.dumps") as mock_dumps:
-            # Configure mock to raise for unpicklable but work for regular values
-            def side_effect(obj):
-                if isinstance(obj, dict) and "unpicklable" in obj:
-                    # The whole dict can be pickled, but we'll test the filtering logic
-                    return bytes("mocked pickle", "utf-8")
-                elif obj == "unpicklable_value":
-                    raise TypeError("Cannot pickle 'unpicklable_value'")
-                return bytes("mocked pickle", "utf-8")
+        # A serialisable value and an unserialisable one (functions aren't JSON-serialisable).
+        repl._namespace["regular"] = "this should be saved"
+        repl._namespace["unserializable"] = lambda x: x
 
-            mock_dumps.side_effect = side_effect
+        repl.save_state()
 
-            # Add objects to namespace
-            repl._namespace["regular"] = "this should be saved"
-            repl._namespace["unpicklable"] = "unpicklable_value"
+        # Reload the persisted file directly and confirm the filtering.
+        with open(repl.state_file, "r", encoding="utf-8") as f:
+            persisted = json.load(f)
 
-            # Save state
-            repl.save_state()
-
-        # Verify that save_dict would only contain pickable objects
-        mock_calls = mock_dumps.call_args_list
-        found_unpicklable_rejection = False
-
-        # dill.dumps will be called for both individual values and the final save_dict
-        for call in mock_calls:
-            args = call[0]
-            if args[0] == "unpicklable_value":
-                # This should attempt to pickle but raise an exception
-                found_unpicklable_rejection = True
-
-        assert found_unpicklable_rejection, "The code should attempt to pickle 'unpicklable_value' but fail"
+        assert persisted.get("regular") == "this should be saved"
+        assert "unserializable" not in persisted
 
     def test_error_during_state_removal(self, temp_repl_state_dir):
         """Test handling error when removing corrupted state file."""
         # Create a corrupted state file
-        with open(os.path.join(temp_repl_state_dir, "repl_state.pkl"), "wb") as f:
-            f.write(b"This is not valid pickle data")
+        with open(os.path.join(temp_repl_state_dir, "repl_state.json"), "w", encoding="utf-8") as f:
+            f.write("This is not valid JSON data")
 
         # Mock os.remove to raise an exception
         with patch("os.remove", side_effect=PermissionError("Permission denied")):
