@@ -59,7 +59,7 @@ agent = Agent(tools=[generate_image_stability])
 agent("Generate an image of a futuristic robot in a cyberpunk city")
 ```
 
-Please see the [Stability AI tool source code](generate_image_stability.py) for details and structure of the object it returns.
+Please see the [Stability AI tool source code](../src/strands_tools/generate_image_stability.py) for details and structure of the object it returns.
 
 For example, you can access the image from the `tool_result`:
 
