@@ -4,6 +4,7 @@ Tests for the workflow tool using the Agent interface.
 
 import json
 import tempfile
+from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -571,6 +572,52 @@ class TestWorkflowManager:
         # Should return task2 since task1 is completed
         assert len(ready_tasks) == 1
         assert ready_tasks[0]["task_id"] == "task2"
+
+    def test_start_workflow_skips_tasks_blocked_by_failed_dependencies(self, mock_parent_agent, mock_workflow_dir):
+        """Test workflow exits when failed dependencies block pending tasks."""
+        with patch.object(workflow_module, "WORKFLOW_DIR", Path(mock_workflow_dir)):
+            manager = workflow_module.WorkflowManager(mock_parent_agent)
+            workflow_id = "deadlock_test"
+            tasks = [
+                {"task_id": "research", "description": "Research"},
+                {"task_id": "analysis1", "description": "Analyze", "dependencies": ["research"]},
+                {"task_id": "analysis2", "description": "Analyze", "dependencies": ["research"]},
+                {"task_id": "report", "description": "Report", "dependencies": ["analysis1", "analysis2"]},
+            ]
+            manager.create_workflow(workflow_id, tasks)
+
+            def submit_tasks(tasks_to_submit):
+                futures = {}
+                for namespaced_task_id, _task_func, args, _kwargs in tasks_to_submit:
+                    task = args[0]
+                    future = Future()
+                    if task["task_id"] == "analysis2":
+                        future.set_result({"status": "error", "content": [{"text": "failed"}]})
+                    else:
+                        future.set_result({"status": "success", "content": [{"text": "done"}]})
+                    futures[namespaced_task_id] = future
+                return futures
+
+            sleep_calls = 0
+
+            def fail_if_loop_spins(_seconds):
+                nonlocal sleep_calls
+                sleep_calls += 1
+                if sleep_calls > 10:
+                    raise AssertionError("workflow loop did not terminate")
+
+            with (
+                patch.object(manager.task_executor, "submit_tasks", side_effect=submit_tasks),
+                patch("strands_tools.workflow.time.sleep", side_effect=fail_if_loop_spins),
+            ):
+                result = manager.start_workflow(workflow_id)
+
+            workflow = manager.get_workflow(workflow_id)
+            assert result["status"] == "success"
+            assert "partial success" in result["content"][0]["text"]
+            assert workflow["task_results"]["analysis2"]["status"] == "error"
+            assert workflow["task_results"]["report"]["status"] == "skipped"
+            assert "failed dependencies" in workflow["task_results"]["report"]["result"][0]["text"]
 
 
 class TestWorkflowEdgeCases:
