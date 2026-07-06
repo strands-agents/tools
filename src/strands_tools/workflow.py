@@ -373,6 +373,7 @@ class WorkflowManager:
 
             # Create the task agent
             task_agent = Agent(
+                name=task.get("task_id"),
                 model=selected_model,
                 system_prompt=system_prompt,
                 tools=filtered_tools,
