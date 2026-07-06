@@ -251,3 +251,26 @@ def test_environment_masked_values(agent, os_environment):
     assert result["status"] == "success"
     # Now the full value should appear
     assert sensitive_value in extract_result_text(result)
+
+
+def test_direct_set_protected_var_strands_disable_load_tool(agent, os_environment):
+    """Test attempting to set a protected environment variable."""
+    os_environment["STRANDS_DISABLE_LOAD_TOOL"] = "true"
+
+    # Try to modify STRANDS_DISABLE_LOAD_TOOL which is in PROTECTED_VARS
+    result = agent.tool.environment(action="set", name="STRANDS_DISABLE_LOAD_TOOL", value="false")
+    assert result["status"] == "error"
+    # Verify STRANDS_DISABLE_LOAD_TOOL was not changed to our bad value
+    assert os.environ["STRANDS_DISABLE_LOAD_TOOL"] != "false"
+
+
+def test_direct_delete_protected_var_strands_disable_load_tool(agent, os_environment):
+    """Test attempting to delete a protected environment variable."""
+    # Try to delete STRANDS_DISABLE_LOAD_TOOL which is in PROTECTED_VARS
+    unchanging_value = "true"
+    os_environment["STRANDS_DISABLE_LOAD_TOOL"] = unchanging_value
+
+    result = agent.tool.environment(action="delete", name="STRANDS_DISABLE_LOAD_TOOL")
+    assert result["status"] == "error"
+    # Verify STRANDS_DISABLE_LOAD_TOOL still exists
+    assert os_environment["STRANDS_DISABLE_LOAD_TOOL"] == unchanging_value
