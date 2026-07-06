@@ -150,7 +150,10 @@ def test_use_aws_invalid_operation(mock_available_services, mock_available_opera
         },
     }
 
-    result = use_aws.use_aws(tool=tool_use)
+    # Bypass the consent gate so the call reaches operation-name validation. (An unknown
+    # op name is now treated as mutative -- fail-closed -- and would otherwise prompt.)
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"}):
+        result = use_aws.use_aws(tool=tool_use)
 
     assert result["status"] == "error"
     assert "Invalid AWS operation: invalid_operation" in result["content"][0]["text"]

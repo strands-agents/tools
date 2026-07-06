@@ -332,8 +332,11 @@ def editor(
         # Check if we're in development mode
         strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-        # For modifying operations, show confirmation dialog unless in BYPASS_TOOL_CONSENT mode
-        modifying_commands = {"create", "str_replace", "pattern_replace", "insert"}
+        # For modifying operations, show confirmation dialog unless in BYPASS_TOOL_CONSENT mode.
+        # NOTE: "undo_edit" MUST be included -- it overwrites `path` from `<path>.bak` and
+        # deletes that backup, so it is a state-changing operation and requires the same
+        # consent as the other mutations (omitting it let an un-consented overwrite/delete through).
+        modifying_commands = {"create", "str_replace", "pattern_replace", "insert", "undo_edit"}
         needs_confirmation = command in modifying_commands and not strands_dev
 
         if needs_confirmation:
@@ -429,6 +432,19 @@ def editor(
                     Syntax(new_str, language, theme="monokai", line_numbers=True),
                 )
                 console.print(table)
+
+            elif command == "undo_edit":
+                console.print(
+                    Panel(
+                        Text(
+                            f"Restore {path} from {path}.bak and delete the backup.",
+                            style="yellow",
+                        ),
+                        title="[bold yellow]Undo Preview",
+                        border_style="yellow",
+                        box=box.DOUBLE,
+                    )
+                )
 
             # Get user confirmation
             user_input = get_user_input(

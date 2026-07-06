@@ -33,6 +33,7 @@ agent.tool.python_repl(code="print('Fresh start')", reset_state=True)
 """
 
 import fcntl
+import json
 import logging
 import os
 import pty
@@ -50,7 +51,6 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type
 
-import dill
 from rich import box
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -182,15 +182,21 @@ class ReplState:
         else:
             self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
         os.makedirs(self.persistence_dir, exist_ok=True)
-        self.state_file = os.path.join(self.persistence_dir, "repl_state.pkl")
+        # State is persisted as JSON (see load_state/save_state). Deserializing with
+        # dill/pickle executes arbitrary code embedded in the file (CWE-502), which is a
+        # remote-code-execution sink when the state file lives at a predictable,
+        # potentially attacker-writable location (e.g. a current-working-directory-relative
+        # path in an untrusted workspace). JSON cannot execute code on load, closing that
+        # sink. The ".json" name also ensures any pre-existing ".pkl" file is never loaded.
+        self.state_file = os.path.join(self.persistence_dir, "repl_state.json")
         self.load_state()
 
     def load_state(self) -> None:
         """Load persisted state with reset on failure."""
         if os.path.exists(self.state_file):
             try:
-                with open(self.state_file, "rb") as f:
-                    saved_state = dill.load(f)
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    saved_state = json.load(f)
                 self._namespace.update(saved_state)
                 logger.debug("Successfully loaded REPL state")
             except Exception as e:
@@ -212,20 +218,22 @@ class ReplState:
             if code:
                 exec(code, self._namespace)
 
-            # Filter namespace for persistence
+            # Filter namespace for persistence. Only JSON-serialisable values are kept, so
+            # the load path (json.load) can never execute code. Non-serialisable objects
+            # (functions, custom classes, ...) are skipped, as they were before for values
+            # dill could not pickle.
             save_dict = {}
             for name, value in self._namespace.items():
                 if not name.startswith("_"):
                     try:
-                        # Try to pickle the value
-                        dill.dumps(value)
+                        json.dumps(value)
                         save_dict[name] = value
-                    except BaseException:
+                    except (TypeError, ValueError):
                         continue
 
             # Save state
-            with open(self.state_file, "wb") as f:
-                dill.dump(save_dict, f)
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
 
         except Exception as e:
