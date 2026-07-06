@@ -99,7 +99,7 @@ def ensure_journal_dir() -> Path:
     Returns:
         Path: The path to the journal directory
     """
-    journal_dir = Path.cwd() / "journal"
+    journal_dir = Path("/tmp/journal")
     journal_dir.mkdir(parents=True, exist_ok=True)
     return journal_dir
 
