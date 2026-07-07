@@ -1148,8 +1148,8 @@ The Mem0 Memory Tool supports three different backend configurations:
    - Uses FAISS as the local vector store backend
    - Requires faiss-cpu package for local vector storage
 
-4. **Neptune Analytics** (Optional Graph backend for search enhancement):
-   - Uses Neptune Analytics as the graph store backend to enhance memory recall.
+4. **Neptune Analytics** (Optional vector store backend):
+   - Uses Neptune Analytics as the vector store backend.
    - Requires AWS credentials and Neptune Analytics configuration
    ```
    # Configure your Neptune Analytics graph ID in the .env file:
@@ -1180,7 +1180,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 - If `MEM0_API_KEY` is set, the tool will use the Mem0 Platform
 - If `OPENSEARCH_HOST` is set, the tool will use OpenSearch
 - If neither is set, the tool will default to FAISS (requires `faiss-cpu` package)
-- If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set, the tool will configure Neptune Analytics as graph store to enhance memory search
+- If `NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER` is set (and `OPENSEARCH_HOST` is not), the tool will configure Neptune Analytics as the vector store
 - LLM configuration applies to all backend modes and allows customization of the language model used for memory processing
 
 #### Bright Data Tool
