@@ -8,66 +8,92 @@ a user-friendly interface and proper error handling.
 Key Features:
 ------------
 1. Memory Management:
-   • store: Add new memories with automatic ID generation and metadata
-   • delete: Remove existing memories using memory IDs
-   • list: Retrieve all memories for a user or agent
-   • get: Retrieve specific memories by memory ID
-   • retrieve: Perform semantic search across all memories
+   - store: Add new memories with automatic ID generation and metadata
+   - delete: Remove existing memories using memory IDs
+   - list: Retrieve all memories for a user or agent
+   - get: Retrieve specific memories by memory ID
+   - retrieve: Perform semantic search across all memories
 
 2. Safety Features:
-   • User confirmation for mutative operations
-   • Content previews before storage
-   • Warning messages before deletion
-   • BYPASS_TOOL_CONSENT mode for bypassing confirmations in tests
+   - User confirmation for mutative operations
+   - Content previews before storage
+   - Warning messages before deletion
+   - BYPASS_TOOL_CONSENT mode for bypassing confirmations in tests
 
 3. Advanced Capabilities:
-   • Automatic memory ID generation
-   • Structured memory storage with metadata
-   • Semantic search with relevance filtering
-   • Rich output formatting
-   • Support for both user and agent memories
-   • Multiple vector database backends (OpenSearch, Mem0 Platform, FAISS)
+   - Automatic memory ID generation
+   - Structured memory storage with metadata
+   - Semantic search with relevance filtering
+   - Rich output formatting
+   - Support for both user and agent memories
+   - Multiple vector database backends (OpenSearch, Mem0 Platform, FAISS)
 
 4. Error Handling:
-   • Memory ID validation
-   • Parameter validation
-   • Graceful API error handling
-   • Clear error messages
+   - Memory ID validation
+   - Parameter validation
+   - Graceful API error handling
+   - Clear error messages
+
+Security Model:
+--------------
+The tenant-isolation keys (``user_id`` / ``agent_id``) are **never** exposed as
+agent-facing tool parameters. The agent only chooses the ``action`` and its
+``content``/``query``/``memory_id``. This prevents a model (or prompt-injected
+content) from reading, writing, or deleting another tenant's memories by supplying
+a different user_id or agent_id value.
+
+There are two supported patterns:
+
+- **Class-based (recommended, required for multi-tenant):** construct one
+  ``Mem0MemoryTool`` per authenticated principal, binding ``user_id`` (or
+  ``agent_id``) at construction time.
+- **Standalone function (single-tenant):** the module-level ``mem0_memory`` tool
+  reads ``user_id`` / ``agent_id`` from environment variables only.
 
 Usage Examples:
 --------------
+Multi-tenant (recommended):
+
 ```python
 from strands import Agent
-from strands_tools import mem0_memory
+from strands_tools.mem0_memory import Mem0MemoryTool
+
+# Operator code, per authenticated request:
+tool = Mem0MemoryTool(user_id=f"user_{authenticated_user_id}")
+agent = Agent(tools=[tool.mem0_memory])
+
+# The agent only chooses the action and its content/query/memory_id:
+agent.tool.mem0_memory(action="store", content="User prefers vegetarian pizza")
+agent.tool.mem0_memory(action="retrieve", query="food preferences")
+```
+
+Single-tenant convenience:
+
+```python
+from strands import Agent
+from strands_tools.mem0_memory import mem0_memory
 
 agent = Agent(tools=[mem0_memory])
+agent.tool.mem0_memory(action="store", content="User prefers vegetarian pizza")
+```
 
-# Store memory in Memory
-agent.tool.mem0_memory(
-    action="store",
-    content="Important information to remember",
-    user_id="alex",  # or agent_id="agent1"
-    metadata={"category": "meeting_notes"}
-)
+Environment Variables:
+---------------------
+```bash
+# Tenant identity (standalone function only)
+export MEM0_USER_ID="my_user"          # or MEM0_AGENT_ID="my_agent"
 
-# Retrieve content using semantic search
-agent.tool.mem0_memory(
-    action="retrieve",
-    query="meeting information",
-    user_id="alex"  # or agent_id="agent1"
-)
-
-# List all memories
-agent.tool.mem0_memory(
-    action="list",
-    user_id="alex"  # or agent_id="agent1"
-)
+# Backend selection (all modes)
+export MEM0_API_KEY="..."              # Use Mem0 Platform
+export OPENSEARCH_HOST="..."           # Use OpenSearch
+# (neither set = FAISS default)
 ```
 """
 
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -92,20 +118,19 @@ TOOL_SPEC = {
     "description": (
         "Memory management tool for storing, retrieving, and managing memories in Mem0.\n\n"
         "Features:\n"
-        "1. Store memories with metadata (requires user_id or agent_id)\n"
-        "2. Retrieve memories by ID or semantic search (requires user_id or agent_id)\n"
-        "3. List all memories for a user/agent (requires user_id or agent_id)\n"
+        "1. Store memories with metadata\n"
+        "2. Retrieve memories by ID or semantic search\n"
+        "3. List all memories\n"
         "4. Delete memories\n"
         "5. Get memory history\n\n"
         "Actions:\n"
-        "- store: Store new memory (requires user_id or agent_id)\n"
+        "- store: Store new memory\n"
         "- get: Get memory by ID\n"
-        "- list: List all memories (requires user_id or agent_id)\n"
-        "- retrieve: Semantic search (requires user_id or agent_id)\n"
+        "- list: List all memories\n"
+        "- retrieve: Semantic search\n"
         "- delete: Delete memory\n"
         "- history: Get memory history\n\n"
-        "Note: Most operations require either user_id or agent_id to be specified. The tool will automatically "
-        "attempt to retrieve relevant memories when user_id or agent_id is available."
+        "Note: Tenant identity (user/agent) is configured by the operator and cannot be changed."
     ),
     "inputSchema": {
         "json": {
@@ -128,14 +153,6 @@ TOOL_SPEC = {
                     "type": "string",
                     "description": "Search query (required for retrieve action)",
                 },
-                "user_id": {
-                    "type": "string",
-                    "description": "User ID for the memory operations (required for store, list, retrieve actions)",
-                },
-                "agent_id": {
-                    "type": "string",
-                    "description": "Agent ID for the memory operations (required for store, list, retrieve actions)",
-                },
                 "metadata": {
                     "type": "object",
                     "description": "Optional metadata to store with the memory",
@@ -145,6 +162,46 @@ TOOL_SPEC = {
         }
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+_IDENTITY_PATTERN = re.compile(r"^[A-Za-z0-9_\-\.]{1,128}$")
+
+
+def _validate_identity(value: Any, name: str) -> str:
+    """Validate a user_id or agent_id value.
+
+    Args:
+        value: The identity value to validate.
+        name: Human-readable name for error messages (e.g. "user_id").
+
+    Returns:
+        The validated string.
+
+    Raises:
+        ValueError: If value is not a valid identity string.
+    """
+    if value is None:
+        raise ValueError(f"{name} must be provided")
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string, got {type(value).__name__}")
+    value = value.strip()
+    if not value:
+        raise ValueError(f"{name} cannot be empty")
+    if not _IDENTITY_PATTERN.match(value):
+        raise ValueError(
+            f"Invalid {name}: '{value}' contains invalid characters. "
+            "Only alphanumeric, underscore, hyphen, and dot are allowed (max 128 chars)."
+        )
+    return value
+
+
+# ---------------------------------------------------------------------------
+# Mem0ServiceClient (unchanged - internal, not agent-facing)
+# ---------------------------------------------------------------------------
 
 
 class Mem0ServiceClient:
@@ -416,6 +473,11 @@ class Mem0ServiceClient:
         return self.mem0.history(memory_id)
 
 
+# ---------------------------------------------------------------------------
+# Formatting helpers (unchanged)
+# ---------------------------------------------------------------------------
+
+
 def format_get_response(memory: Dict) -> Panel:
     """Format get memory response."""
     memory_id = memory.get("id", "unknown")
@@ -425,16 +487,16 @@ def format_get_response(memory: Dict) -> Panel:
     user_id = memory.get("user_id", "Unknown")
 
     result = [
-        "✅ Memory retrieved successfully:",
-        f"🔑 Memory ID: {memory_id}",
-        f"👤 User ID: {user_id}",
-        f"🕒 Created: {created_at}",
+        "Memory retrieved successfully:",
+        f"Memory ID: {memory_id}",
+        f"User ID: {user_id}",
+        f"Created: {created_at}",
     ]
 
     if metadata:
-        result.append(f"📋 Metadata: {json.dumps(metadata, indent=2)}")
+        result.append(f"Metadata: {json.dumps(metadata, indent=2)}")
 
-    result.append(f"\n📄 Memory: {content}")
+    result.append(f"\nMemory: {content}")
 
     return Panel("\n".join(result), title="[bold green]Memory Retrieved", border_style="green")
 
@@ -472,8 +534,8 @@ def format_list_response(memories: List[Dict]) -> Panel:
 def format_delete_response(memory_id: str) -> Panel:
     """Format delete memory response."""
     content = [
-        "✅ Memory deleted successfully:",
-        f"🔑 Memory ID: {memory_id}",
+        "Memory deleted successfully:",
+        f"Memory ID: {memory_id}",
     ]
     return Panel("\n".join(content), title="[bold green]Memory Deleted", border_style="green")
 
@@ -631,27 +693,146 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
     return Panel(table, title="[bold green]Memories Stored (Graph)", border_style="green")
 
 
-def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
-    """
-    Memory management tool for storing, retrieving, and managing memories in Mem0.
+# ---------------------------------------------------------------------------
+# Mem0MemoryTool - class-based, multi-tenant safe
+# ---------------------------------------------------------------------------
 
-    This tool provides a comprehensive interface for managing memories with Mem0,
-    including storing new memories, retrieving existing ones, listing all memories,
-    performing semantic searches, and managing memory history.
+
+class Mem0MemoryTool:
+    """Multi-tenant memory tool that binds user_id/agent_id at construction time.
+
+    The bound identity is used for all operations and is never exposed to the
+    agent-facing tool signature, preventing prompt-injection or model-driven
+    tenant-boundary crossing.
 
     Args:
-        tool: ToolUse object containing the following input fields:
-            - action: The action to perform (store, get, list, retrieve, delete, history)
-            - content: Content to store (for store action)
-            - memory_id: Memory ID (for get, delete, history actions)
-            - query: Search query (for retrieve action)
-            - user_id: User ID for the memory operations
-            - agent_id: Agent ID for the memory operations
-            - metadata: Optional metadata to store with the memory
-        **kwargs: Additional keyword arguments
+        user_id: User ID to bind for all memory operations. Mutually exclusive
+                 with ``agent_id``. At least one must be provided.
+        agent_id: Agent ID to bind for all memory operations. Mutually exclusive
+                  with ``user_id``. At least one must be provided.
+        config: Optional Mem0 backend configuration dictionary.
 
-    Returns:
-        ToolResult containing status and response content
+    Raises:
+        ValueError: If neither ``user_id`` nor ``agent_id`` is provided, or if
+                    the provided value fails validation.
+
+    Example::
+
+        from strands import Agent
+        from strands_tools.mem0_memory import Mem0MemoryTool
+
+        tool = Mem0MemoryTool(user_id=f"user_{authenticated_user_id}")
+        agent = Agent(tools=[tool.mem0_memory])
+        agent.tool.mem0_memory(action="store", content="User prefers dark mode")
+    """
+
+    def __init__(
+        self,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        config: Optional[Dict] = None,
+    ):
+        if not user_id and not agent_id:
+            raise ValueError("Either user_id or agent_id must be provided to Mem0MemoryTool")
+
+        if user_id:
+            self._user_id = _validate_identity(user_id, "user_id")
+            self._agent_id = None
+        else:
+            self._user_id = None
+            self._agent_id = _validate_identity(agent_id, "agent_id")
+
+        self._config = config
+
+    def mem0_memory(self, tool: ToolUse, **kwargs: Any) -> ToolResult:
+        """Agent-facing tool entry point with bound tenant identity.
+
+        The tool spec is identical to the module-level ``TOOL_SPEC`` (no user_id
+        or agent_id parameters). The bound identity is injected into every backend
+        call automatically.
+        """
+        return _execute_mem0_memory(
+            tool=tool,
+            user_id=self._user_id,
+            agent_id=self._agent_id,
+            config=self._config,
+        )
+
+    # Expose TOOL_SPEC on the bound method so the framework can discover it.
+    mem0_memory.TOOL_SPEC = TOOL_SPEC  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Standalone function - single-tenant, env-configured
+# ---------------------------------------------------------------------------
+
+
+def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
+    """Standalone agent-facing tool (single-tenant).
+
+    Reads tenant identity from environment variables:
+    - ``MEM0_USER_ID`` - user ID for memory operations
+    - ``MEM0_AGENT_ID`` - agent ID for memory operations
+
+    At least one must be set. These are never exposed to the LLM.
+    """
+    user_id = os.environ.get("MEM0_USER_ID")
+    agent_id = os.environ.get("MEM0_AGENT_ID")
+
+    if not user_id and not agent_id:
+        tool_use_id = tool.get("toolUseId", "default-id")
+        return ToolResult(
+            toolUseId=tool_use_id,
+            status="error",
+            content=[
+                ToolResultContent(text="Error: Either MEM0_USER_ID or MEM0_AGENT_ID environment variable must be set.")
+            ],
+        )
+
+    # Validate whichever is set
+    try:
+        if user_id:
+            user_id = _validate_identity(user_id, "MEM0_USER_ID")
+        if agent_id:
+            agent_id = _validate_identity(agent_id, "MEM0_AGENT_ID")
+    except ValueError as e:
+        tool_use_id = tool.get("toolUseId", "default-id")
+        return ToolResult(
+            toolUseId=tool_use_id,
+            status="error",
+            content=[ToolResultContent(text=f"Error: {str(e)}")],
+        )
+
+    return _execute_mem0_memory(
+        tool=tool,
+        user_id=user_id,
+        agent_id=agent_id,
+        config=None,
+    )
+
+
+# Attach TOOL_SPEC to the standalone function for framework discovery.
+mem0_memory.TOOL_SPEC = TOOL_SPEC  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Shared implementation
+# ---------------------------------------------------------------------------
+
+
+def _execute_mem0_memory(
+    tool: ToolUse,
+    user_id: Optional[str],
+    agent_id: Optional[str],
+    config: Optional[Dict],
+) -> ToolResult:
+    """Core implementation shared by both class-based and standalone entry points.
+
+    Args:
+        tool: The ToolUse object from the framework.
+        user_id: Bound user ID (may be None if agent_id is set).
+        agent_id: Bound agent ID (may be None if user_id is set).
+        config: Optional Mem0 backend configuration.
     """
     try:
         # Extract input from tool use object
@@ -663,7 +844,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             raise ValueError("action parameter is required")
 
         # Initialize client
-        client = Mem0ServiceClient()
+        client = Mem0ServiceClient(config=config)
 
         # Check if we're in development mode
         strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
@@ -687,11 +868,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     if len(tool_input["content"]) > 15000
                     else tool_input["content"]
                 )
-                preview_title = (
-                    f"Memory for {'user ' + tool_input.get('user_id', '')}"
-                    if tool_input.get("user_id")
-                    else f"agent {tool_input.get('agent_id', '')}"
-                )
+                preview_title = f"Memory for {'user ' + user_id}" if user_id else f"agent {agent_id}"
 
                 console.print(Panel(content_preview, title=f"[bold green]{preview_title}", border_style="green"))
 
@@ -711,7 +888,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                                 f"Memory ID: {tool_input['memory_id']}\n"
                                 f"Metadata: {json.dumps(metadata) if metadata else 'None'}"
                             ),
-                            title="[bold red]⚠️ Memory to be permanently deleted",
+                            title="[bold red]Memory to be permanently deleted",
                             border_style="red",
                         )
                     )
@@ -720,7 +897,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     console.print(
                         Panel(
                             f"Memory ID: {tool_input['memory_id']}",
-                            title="[bold red]⚠️ Memory to be permanently deleted",
+                            title="[bold red]Memory to be permanently deleted",
                             border_style="red",
                         )
                     )
@@ -732,8 +909,8 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             results = client.store_memory(
                 tool_input["content"],
-                tool_input.get("user_id"),
-                tool_input.get("agent_id"),
+                user_id,
+                agent_id,
                 tool_input.get("metadata"),
             )
 
@@ -761,6 +938,10 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
                 raise ValueError("memory_id is required for get action")
 
             memory = client.get_memory(tool_input["memory_id"])
+
+            # Verify the retrieved memory belongs to the bound principal
+            _verify_memory_ownership(memory, user_id, agent_id)
+
             panel = format_get_response(memory)
             console.print(panel)
             return ToolResult(
@@ -768,7 +949,7 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         elif action == "list":
-            memories = client.list_memories(tool_input.get("user_id"), tool_input.get("agent_id"))
+            memories = client.list_memories(user_id, agent_id)
             # Normalize to list
             results_list = memories if isinstance(memories, list) else memories.get("results", [])
             panel = format_list_response(results_list)
@@ -793,8 +974,8 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             memories = client.search_memories(
                 tool_input["query"],
-                tool_input.get("user_id"),
-                tool_input.get("agent_id"),
+                user_id,
+                agent_id,
             )
             # Normalize to list
             results_list = memories if isinstance(memories, list) else memories.get("results", [])
@@ -818,6 +999,15 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
             if not tool_input.get("memory_id"):
                 raise ValueError("memory_id is required for delete action")
 
+            # Verify ownership before deleting
+            try:
+                memory = client.get_memory(tool_input["memory_id"])
+                _verify_memory_ownership(memory, user_id, agent_id)
+            except ValueError:
+                raise  # Re-raise ownership errors
+            except Exception:
+                pass  # If we can't fetch for verification, allow the delete (backend may enforce)
+
             client.delete_memory(tool_input["memory_id"])
             panel = format_delete_response(tool_input["memory_id"])
             console.print(panel)
@@ -830,6 +1020,15 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
         elif action == "history":
             if not tool_input.get("memory_id"):
                 raise ValueError("memory_id is required for history action")
+
+            # Verify ownership before returning history
+            try:
+                memory = client.get_memory(tool_input["memory_id"])
+                _verify_memory_ownership(memory, user_id, agent_id)
+            except ValueError:
+                raise  # Re-raise ownership errors
+            except Exception:
+                pass  # If we can't fetch for verification, allow (backend may enforce)
 
             history = client.get_memory_history(tool_input["memory_id"])
             panel = format_history_response(history)
@@ -844,8 +1043,40 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
     except Exception as e:
         error_panel = Panel(
             Text(str(e), style="red"),
-            title="❌ Memory Operation Error",
+            title="Memory Operation Error",
             border_style="red",
         )
         console.print(error_panel)
         return ToolResult(toolUseId=tool_use_id, status="error", content=[ToolResultContent(text=f"Error: {str(e)}")])
+
+
+def _verify_memory_ownership(memory: Dict, user_id: Optional[str], agent_id: Optional[str]) -> None:
+    """Verify that a retrieved memory belongs to the bound principal.
+
+    This is a defense-in-depth check for ``get``, ``delete``, and ``history``
+    operations which take a raw ``memory_id``. If the backend returns ownership
+    metadata, we validate it matches the bound principal.
+
+    Args:
+        memory: The memory record returned by the backend.
+        user_id: The bound user_id (or None).
+        agent_id: The bound agent_id (or None).
+
+    Raises:
+        ValueError: If the memory belongs to a different principal.
+    """
+    if not memory or not isinstance(memory, dict):
+        return
+
+    mem_user = memory.get("user_id")
+    mem_agent = memory.get("agent_id")
+
+    # If backend doesn't return ownership info, we can't verify (rely on backend ACLs)
+    if not mem_user and not mem_agent:
+        return
+
+    # Check ownership
+    if user_id and mem_user and mem_user != user_id:
+        raise ValueError("Access denied: memory belongs to a different user")
+    if agent_id and mem_agent and mem_agent != agent_id:
+        raise ValueError("Access denied: memory belongs to a different agent")

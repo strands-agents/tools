@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from strands import Agent
 
-from src.strands_tools.elasticsearch_memory import elasticsearch_memory
+from src.strands_tools.elasticsearch_memory import ElasticsearchMemoryTool, elasticsearch_memory
 
 ES_ENV_VARS = {
     "ELASTICSEARCH_CLOUD_ID": "test-cloud-id",
@@ -97,24 +97,37 @@ def agent(mock_elasticsearch_client, mock_bedrock_client):
 
 
 @pytest.fixture
-def config():
-    """Configuration parameters for testing (non-credential params only)."""
+def tool_config():
+    """Configuration for constructing an ElasticsearchMemoryTool in tests."""
     return {
+        "cloud_id": "test-cloud-id",
+        "api_key": "test-api-key",
         "index_name": "test_index",
         "namespace": "test_namespace",
+        "region": "us-east-1",
     }
 
 
 # --- Security Tests ---
 
 
-def test_credential_params_not_in_tool_signature():
-    """Verify that credential/connection parameters cannot be passed to the tool."""
-    sig = inspect.signature(elasticsearch_memory)
-    param_names = set(sig.parameters.keys())
-    assert "es_url" not in param_names
-    assert "cloud_id" not in param_names
-    assert "api_key" not in param_names
+def test_credential_and_namespace_params_not_in_standalone_signature():
+    """IDOR guard: the standalone tool must not expose connection, credential, or namespace params.
+
+    Regression test for the IDOR where an LLM-supplied namespace/api_key/cloud_id could redirect the
+    memory layer at another tenant or cluster (or authenticate as a different principal). These must
+    be environment-only.
+    """
+    param_names = set(inspect.signature(elasticsearch_memory).parameters.keys())
+    for forbidden in ["es_url", "cloud_id", "api_key", "index_name", "namespace", "embedding_model", "region"]:
+        assert forbidden not in param_names, f"'{forbidden}' must not be an LLM-controllable tool parameter"
+
+
+def test_namespace_params_not_in_class_tool_signature():
+    """IDOR guard: ElasticsearchMemoryTool.elasticsearch_memory must not expose namespace/creds."""
+    param_names = set(inspect.signature(ElasticsearchMemoryTool.elasticsearch_memory).parameters.keys())
+    for forbidden in ["es_url", "cloud_id", "api_key", "index_name", "namespace"]:
+        assert forbidden not in param_names
 
 
 def test_missing_required_params(mock_elasticsearch_client, mock_bedrock_client):
@@ -148,7 +161,7 @@ def test_connection_failure(mock_elasticsearch_client, mock_bedrock_client):
     assert "Unable to connect to Elasticsearch cluster" in result["content"][0]["text"]
 
 
-def test_index_creation(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_index_creation(mock_elasticsearch_client, mock_bedrock_client):
     """Test that index is created with proper mappings."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -156,7 +169,7 @@ def test_index_creation(mock_elasticsearch_client, mock_bedrock_client, config):
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
     with mock.patch.dict(os.environ, ES_ENV_VARS):
-        agent.tool.elasticsearch_memory(action="record", content="Test content", **config)
+        agent.tool.elasticsearch_memory(action="record", content="Test content")
 
     # Verify index creation was called
     mock_elasticsearch_client["client"].indices.create.assert_called_once()
@@ -185,7 +198,7 @@ def test_index_creation(mock_elasticsearch_client, mock_bedrock_client, config):
     assert embedding_config["similarity"] == "cosine"
 
 
-def test_record_memory(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_record_memory(mock_elasticsearch_client, mock_bedrock_client):
     """Test recording a memory."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -195,7 +208,7 @@ def test_record_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     # Call the tool
     with mock.patch.dict(os.environ, ES_ENV_VARS):
         result = agent.tool.elasticsearch_memory(
-            action="record", content="Test memory content", metadata={"category": "test"}, **config
+            action="record", content="Test memory content", metadata={"category": "test"}
         )
 
     # Verify success response
@@ -209,7 +222,7 @@ def test_record_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
 
 
-def test_retrieve_memories(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_retrieve_memories(mock_elasticsearch_client, mock_bedrock_client):
     """Test retrieving memories with semantic search."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -233,7 +246,7 @@ def test_retrieve_memories(mock_elasticsearch_client, mock_bedrock_client, confi
     }
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="retrieve", query="test query", max_results=5, **config)
+    result = agent.tool.elasticsearch_memory(action="retrieve", query="test query", max_results=5)
 
     # Verify success response
     assert result["status"] == "success"
@@ -249,7 +262,7 @@ def test_retrieve_memories(mock_elasticsearch_client, mock_bedrock_client, confi
     mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
 
 
-def test_list_memories(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_list_memories(mock_elasticsearch_client, mock_bedrock_client):
     """Test listing all memories."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -279,7 +292,7 @@ def test_list_memories(mock_elasticsearch_client, mock_bedrock_client, config):
     }
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="list", max_results=10, **config)
+    result = agent.tool.elasticsearch_memory(action="list", max_results=10)
 
     # Verify success response
     assert result["status"] == "success"
@@ -292,11 +305,11 @@ def test_list_memories(mock_elasticsearch_client, mock_bedrock_client, config):
     assert search_call["body"]["sort"] == [{"timestamp": {"order": "desc"}}]
 
 
-def test_get_memory(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_get_memory(mock_elasticsearch_client, mock_bedrock_client):
     """Test getting a specific memory by ID."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Configure mock search response (now uses search instead of get for namespace enforcement)
+    # Configure mock search response (uses search for namespace enforcement)
     mock_elasticsearch_client["client"].search.return_value = {
         "hits": {
             "hits": [
@@ -315,7 +328,7 @@ def test_get_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     }
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_123", **config)
+    result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_123")
 
     # Verify success response
     assert result["status"] == "success"
@@ -329,7 +342,7 @@ def test_get_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     assert {"term": {"namespace": "test_namespace"}} in query
 
 
-def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client):
     """Test deleting a memory."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -337,7 +350,7 @@ def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     mock_elasticsearch_client["client"].delete_by_query.return_value = {"deleted": 1}
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123", **config)
+    result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123")
 
     # Verify success response
     assert result["status"] == "success"
@@ -351,11 +364,11 @@ def test_delete_memory(mock_elasticsearch_client, mock_bedrock_client, config):
     assert {"term": {"namespace": "test_namespace"}} in query
 
 
-def test_unsupported_action(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_unsupported_action(mock_elasticsearch_client, mock_bedrock_client):
     """Test tool with an unsupported action."""
     agent = Agent(tools=[elasticsearch_memory])
 
-    result = agent.tool.elasticsearch_memory(action="unsupported_action", **config)
+    result = agent.tool.elasticsearch_memory(action="unsupported_action")
 
     # Verify error response
     assert result["status"] == "error"
@@ -364,12 +377,12 @@ def test_unsupported_action(mock_elasticsearch_client, mock_bedrock_client, conf
     assert "retrieve" in result["content"][0]["text"]
 
 
-def test_missing_required_parameters(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_missing_required_parameters(mock_elasticsearch_client, mock_bedrock_client):
     """Test tool with missing required parameters."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Test record action without content
-    result = agent.tool.elasticsearch_memory(action="record", **config)
+    result = agent.tool.elasticsearch_memory(action="record")
 
     # Verify error response
     assert result["status"] == "error"
@@ -377,7 +390,7 @@ def test_missing_required_parameters(mock_elasticsearch_client, mock_bedrock_cli
     assert "content" in result["content"][0]["text"]
 
     # Test retrieve action without query
-    result = agent.tool.elasticsearch_memory(action="retrieve", **config)
+    result = agent.tool.elasticsearch_memory(action="retrieve")
 
     # Verify error response
     assert result["status"] == "error"
@@ -385,7 +398,7 @@ def test_missing_required_parameters(mock_elasticsearch_client, mock_bedrock_cli
     assert "query" in result["content"][0]["text"]
 
     # Test get action without memory_id
-    result = agent.tool.elasticsearch_memory(action="get", **config)
+    result = agent.tool.elasticsearch_memory(action="get")
 
     # Verify error response
     assert result["status"] == "error"
@@ -393,7 +406,7 @@ def test_missing_required_parameters(mock_elasticsearch_client, mock_bedrock_cli
     assert "memory_id" in result["content"][0]["text"]
 
 
-def test_elasticsearch_api_error_handling(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_elasticsearch_api_error_handling(mock_elasticsearch_client, mock_bedrock_client):
     """Test handling of Elasticsearch API errors."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -401,7 +414,7 @@ def test_elasticsearch_api_error_handling(mock_elasticsearch_client, mock_bedroc
     mock_elasticsearch_client["client"].index.side_effect = Exception("Elasticsearch error")
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="record", content="Test content", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="Test content")
 
     # Verify error response
     assert result["status"] == "error"
@@ -409,7 +422,7 @@ def test_elasticsearch_api_error_handling(mock_elasticsearch_client, mock_bedroc
     assert "Elasticsearch error" in result["content"][0]["text"]
 
 
-def test_bedrock_api_error_handling(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_bedrock_api_error_handling(mock_elasticsearch_client, mock_bedrock_client):
     """Test handling of Bedrock API errors."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -417,7 +430,7 @@ def test_bedrock_api_error_handling(mock_elasticsearch_client, mock_bedrock_clie
     mock_bedrock_client["bedrock"].invoke_model.side_effect = Exception("Bedrock error")
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="record", content="Test content", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="Test content")
 
     # Verify error response
     assert result["status"] == "error"
@@ -425,7 +438,7 @@ def test_bedrock_api_error_handling(mock_elasticsearch_client, mock_bedrock_clie
     assert "Embedding generation failed" in result["content"][0]["text"]
 
 
-def test_memory_not_found(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_memory_not_found(mock_elasticsearch_client, mock_bedrock_client):
     """Test handling when memory is not found."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -438,15 +451,15 @@ def test_memory_not_found(mock_elasticsearch_client, mock_bedrock_client, config
     }
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent", **config)
+    result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent")
 
     # Verify error response
     assert result["status"] == "error"
     assert "Memory nonexistent not found in namespace test_namespace" in result["content"][0]["text"]
 
 
-def test_namespace_validation(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test that memories are properly filtered by namespace."""
+def test_namespace_filtering(mock_elasticsearch_client, mock_bedrock_client):
+    """Test that memories are properly filtered by the environment-configured namespace."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Configure mock search to return empty results (memory not in this namespace)
@@ -458,7 +471,7 @@ def test_namespace_validation(mock_elasticsearch_client, mock_bedrock_client, co
     }
 
     # Call the tool
-    result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_123", **config)
+    result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_123")
 
     # Verify error response
     assert result["status"] == "error"
@@ -472,7 +485,7 @@ def test_namespace_validation(mock_elasticsearch_client, mock_bedrock_client, co
     assert {"term": {"namespace": "test_namespace"}} in query
 
 
-def test_pagination_support(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_pagination_support(mock_elasticsearch_client, mock_bedrock_client):
     """Test pagination support in list and retrieve operations."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -494,7 +507,7 @@ def test_pagination_support(mock_elasticsearch_client, mock_bedrock_client, conf
     }
 
     # Test list with pagination
-    agent.tool.elasticsearch_memory(action="list", max_results=5, next_token="10", **config)
+    agent.tool.elasticsearch_memory(action="list", max_results=5, next_token="10")
 
     # Verify search was called with correct offset
     search_call = mock_elasticsearch_client["client"].search.call_args[1]
@@ -503,7 +516,7 @@ def test_pagination_support(mock_elasticsearch_client, mock_bedrock_client, conf
 
 
 def test_environment_variable_defaults(mock_elasticsearch_client, mock_bedrock_client):
-    """Test that environment variables are used for defaults."""
+    """Test that environment variables are used for configuration."""
     agent = Agent(tools=[elasticsearch_memory])
 
     with mock.patch.dict(
@@ -527,32 +540,10 @@ def test_environment_variable_defaults(mock_elasticsearch_client, mock_bedrock_c
         assert result["status"] == "success"
         assert "Memory stored successfully" in result["content"][0]["text"]
 
-
-def test_agent_tool_usage(mock_elasticsearch_client, mock_bedrock_client):
-    """Test using the elasticsearch_memory tool through agent.tool pattern."""
-    # Configure mock responses
-    mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
-
-    # Create agent with direct tool usage - this demonstrates the standard pattern
-    agent = Agent(tools=[elasticsearch_memory])
-
-    # Test calling the tool through agent.tool with configuration parameters
-    result = agent.tool.elasticsearch_memory(
-        action="record",
-        content="Test memory content",
-        index_name="test_index",
-        namespace="test_namespace",
-    )
-
-    # Verify success response
-    assert result["status"] == "success"
-    assert "Memory stored successfully" in result["content"][0]["text"]
-
-    # Verify Elasticsearch index was called
-    mock_elasticsearch_client["client"].index.assert_called_once()
-
-    # Verify embedding generation was called
-    mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
+        # Verify the stored document used the environment-configured namespace and index
+        index_call = mock_elasticsearch_client["client"].index.call_args[1]
+        assert index_call["index"] == "env_index"
+        assert index_call["body"]["namespace"] == "env_namespace"
 
 
 def test_es_url_connection(mock_elasticsearch_client, mock_bedrock_client):
@@ -563,13 +554,8 @@ def test_es_url_connection(mock_elasticsearch_client, mock_bedrock_client):
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
     # Override env vars to use URL instead of cloud_id
-    with mock.patch.dict(os.environ, ES_URL_ENV_VARS, clear=False):
-        result = agent.tool.elasticsearch_memory(
-            action="record",
-            content="Test memory content",
-            index_name="test_index",
-            namespace="test_namespace",
-        )
+    with mock.patch.dict(os.environ, ES_URL_ENV_VARS, clear=True):
+        result = agent.tool.elasticsearch_memory(action="record", content="Test memory content")
 
     # Verify success response
     assert result["status"] == "success"
@@ -582,18 +568,16 @@ def test_es_url_connection(mock_elasticsearch_client, mock_bedrock_client):
     assert call_args["api_key"] == "test-api-key"
 
 
-def test_custom_embedding_model(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test using custom embedding model."""
+def test_custom_embedding_model(mock_elasticsearch_client, mock_bedrock_client):
+    """Test using custom embedding model from the environment."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Configure mock responses
     mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
 
-    # Call tool with custom embedding model
-    result = agent.tool.elasticsearch_memory(
-        action="record", content="Test memory content", embedding_model="amazon.titan-embed-text-v1:0",
-        index_name="test_index", namespace="test_namespace",
-    )
+    # Call tool with custom embedding model via env var
+    with mock.patch.dict(os.environ, {"ELASTICSEARCH_EMBEDDING_MODEL": "amazon.titan-embed-text-v1:0"}):
+        result = agent.tool.elasticsearch_memory(action="record", content="Test memory content")
 
     # Verify success response
     assert result["status"] == "success"
@@ -605,81 +589,7 @@ def test_custom_embedding_model(mock_elasticsearch_client, mock_bedrock_client, 
     assert call_args[1]["modelId"] == "amazon.titan-embed-text-v1:0"
 
 
-def test_multiple_namespaces(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test using different namespaces for data isolation."""
-    agent = Agent(tools=[elasticsearch_memory])
-
-    # Configure mock responses
-    mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
-
-    # Store memory in user namespace
-    result1 = agent.tool.elasticsearch_memory(
-        action="record",
-        content="Alice likes Italian food",
-        namespace="user_alice",
-        index_name="test_index",
-    )
-
-    # Store memory in system namespace
-    result2 = agent.tool.elasticsearch_memory(
-        action="record",
-        content="System maintenance scheduled",
-        namespace="system_global",
-        index_name="test_index",
-    )
-
-    # Verify both operations succeeded
-    assert result1["status"] == "success"
-    assert result2["status"] == "success"
-
-    # Verify both calls were made
-    assert mock_elasticsearch_client["client"].index.call_count == 2
-
-
-def test_configuration_dictionary_pattern(mock_elasticsearch_client, mock_bedrock_client):
-    """Test using configuration dictionary for cleaner code."""
-    agent = Agent(tools=[elasticsearch_memory])
-
-    # Configure mock responses
-    mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
-    mock_elasticsearch_client["client"].search.return_value = {
-        "hits": {
-            "hits": [
-                {
-                    "_source": {
-                        "memory_id": "mem_123",
-                        "content": "Test content",
-                        "timestamp": "2023-01-01T00:00:00Z",
-                        "metadata": {},
-                    },
-                    "_score": 0.95,
-                }
-            ],
-            "total": {"value": 1},
-            "max_score": 0.95,
-        }
-    }
-
-    # Create configuration dictionary (non-credential params only)
-    config = {
-        "index_name": "memories",
-        "namespace": "user_123",
-    }
-
-    # Store memory using config dictionary
-    result1 = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza", **config)
-
-    # Search memories using config dictionary
-    result2 = agent.tool.elasticsearch_memory(action="retrieve", query="food preferences", max_results=5, **config)
-
-    # Verify both operations succeeded
-    assert result1["status"] == "success"
-    assert result2["status"] == "success"
-    assert "Memory stored successfully" in result1["content"][0]["text"]
-    assert "Memories retrieved successfully" in result2["content"][0]["text"]
-
-
-def test_batch_operations(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_batch_operations(mock_elasticsearch_client, mock_bedrock_client):
     """Test storing multiple related memories in batch."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -695,7 +605,6 @@ def test_batch_operations(mock_elasticsearch_client, mock_bedrock_client, config
             action="record",
             content=content,
             metadata={"batch": "user_preferences", "category": "preferences"},
-            **config,
         )
         results.append(result)
 
@@ -708,13 +617,13 @@ def test_batch_operations(mock_elasticsearch_client, mock_bedrock_client, config
     assert mock_elasticsearch_client["client"].index.call_count == len(memories)
 
 
-def test_error_handling_scenarios(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_error_handling_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     """Test comprehensive error handling scenarios."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Test connection errors
     mock_elasticsearch_client["client"].ping.return_value = False
-    result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Unable to connect to Elasticsearch cluster" in result["content"][0]["text"]
 
@@ -723,7 +632,7 @@ def test_error_handling_scenarios(mock_elasticsearch_client, mock_bedrock_client
 
     # Test Elasticsearch API errors
     mock_elasticsearch_client["client"].index.side_effect = Exception("Elasticsearch connection failed")
-    result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "API error" in result["content"][0]["text"]
 
@@ -732,12 +641,12 @@ def test_error_handling_scenarios(mock_elasticsearch_client, mock_bedrock_client
 
     # Test Bedrock API errors
     mock_bedrock_client["bedrock"].invoke_model.side_effect = Exception("Bedrock access denied")
-    result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Embedding generation failed" in result["content"][0]["text"]
 
 
-def test_metadata_usage_scenarios(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_metadata_usage_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     """Test various metadata usage patterns."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -754,7 +663,7 @@ def test_metadata_usage_scenarios(mock_elasticsearch_client, mock_bedrock_client
     }
 
     result = agent.tool.elasticsearch_memory(
-        action="record", content="Important project deadline", metadata=structured_metadata, **config
+        action="record", content="Important project deadline", metadata=structured_metadata
     )
 
     assert result["status"] == "success"
@@ -766,7 +675,7 @@ def test_metadata_usage_scenarios(mock_elasticsearch_client, mock_bedrock_client
     assert call_args["body"]["metadata"] == structured_metadata
 
 
-def test_performance_scenarios(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_performance_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     """Test performance-related scenarios like pagination."""
     agent = Agent(tools=[elasticsearch_memory])
 
@@ -789,7 +698,7 @@ def test_performance_scenarios(mock_elasticsearch_client, mock_bedrock_client, c
     }
 
     # Test pagination with next_token
-    result = agent.tool.elasticsearch_memory(action="list", max_results=5, next_token="10", **config)
+    result = agent.tool.elasticsearch_memory(action="list", max_results=5, next_token="10")
 
     assert result["status"] == "success"
     assert "Memories listed successfully" in result["content"][0]["text"]
@@ -800,38 +709,13 @@ def test_performance_scenarios(mock_elasticsearch_client, mock_bedrock_client, c
     assert search_call["body"]["size"] == 5
 
 
-def test_security_scenarios(mock_elasticsearch_client, mock_bedrock_client):
-    """Test security-related scenarios like namespace isolation."""
-    agent = Agent(tools=[elasticsearch_memory])
-
-    # Configure mock search to return empty results (memory not in this namespace)
-    mock_elasticsearch_client["client"].search.return_value = {
-        "hits": {
-            "hits": [],
-            "total": {"value": 0},
-        }
-    }
-
-    # Test namespace validation - memory exists but not in requested namespace
-    with mock.patch.dict(os.environ, ES_ENV_VARS):
-        result = agent.tool.elasticsearch_memory(
-            action="get",
-            memory_id="mem_123",
-            index_name="test_index",
-            namespace="correct_namespace",
-        )
-
-    assert result["status"] == "error"
-    assert "not found in namespace correct_namespace" in result["content"][0]["text"]
-
-
-def test_troubleshooting_scenarios(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_troubleshooting_scenarios(mock_elasticsearch_client, mock_bedrock_client):
     """Test troubleshooting scenarios mentioned in documentation."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Test index creation failure
     mock_elasticsearch_client["client"].indices.create.side_effect = Exception("Index creation failed")
-    result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Failed to create index" in result["content"][0]["text"]
 
@@ -840,48 +724,19 @@ def test_troubleshooting_scenarios(mock_elasticsearch_client, mock_bedrock_clien
 
     # Test authentication errors (simulated by connection failure)
     mock_elasticsearch_client["client"].ping.return_value = False
-    result = agent.tool.elasticsearch_memory(action="record", content="test", **config)
+    result = agent.tool.elasticsearch_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Unable to connect to Elasticsearch cluster" in result["content"][0]["text"]
 
 
-def test_injection_prevention(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test that injection attempts via namespace are blocked."""
+def test_invalid_namespace_env_var(mock_elasticsearch_client, mock_bedrock_client):
+    """Test that an invalid ELASTICSEARCH_NAMESPACE env var is rejected.
+
+    The agent cannot supply a namespace, so injection cannot reach it via the tool signature. An
+    operator can still misconfigure the environment variable, so validation runs on that value.
+    """
     agent = Agent(tools=[elasticsearch_memory])
 
-    # Config without namespace
-    test_config = {"index_name": "test_index"}
-
-    # Test dict-based injection (analogous to MongoDB {"$ne": ""} attack)
-    malicious_namespace = {"$ne": ""}
-    result = agent.tool.elasticsearch_memory(action="list", namespace=malicious_namespace, **test_config)
-    assert result["status"] == "error"
-    error_text = result["content"][0]["text"]
-    assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text
-
-    # Test other injection payloads
-    injection_attempts = [
-        {"$gt": ""},
-        {"$regex": ".*"},
-        {"$exists": True},
-        {"$in": ["tenant1", "tenant2"]},
-    ]
-
-    for injection_payload in injection_attempts:
-        result = agent.tool.elasticsearch_memory(action="list", namespace=injection_payload, **test_config)
-        assert result["status"] == "error", f"Injection {injection_payload} should be blocked"
-        error_text = result["content"][0]["text"]
-        assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text
-
-
-def test_namespace_validation_strict_rules(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test strict namespace validation rules."""
-    agent = Agent(tools=[elasticsearch_memory])
-
-    # Config without namespace
-    test_config = {"index_name": "test_index"}
-
-    # Test invalid characters (should be rejected)
     invalid_namespaces = [
         "user.name",  # Dots not allowed
         "user@domain",  # @ symbol
@@ -895,14 +750,14 @@ def test_namespace_validation_strict_rules(mock_elasticsearch_client, mock_bedro
     ]
 
     for invalid_namespace in invalid_namespaces:
-        result = agent.tool.elasticsearch_memory(action="list", namespace=invalid_namespace, **test_config)
-        assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
-        error_text = result["content"][0]["text"]
-        assert "Invalid namespace" in error_text
+        with mock.patch.dict(os.environ, {"ELASTICSEARCH_NAMESPACE": invalid_namespace}):
+            result = agent.tool.elasticsearch_memory(action="list")
+            assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
+            assert "Invalid namespace" in result["content"][0]["text"]
 
 
-def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_client, config):
-    """Test that valid namespaces are accepted."""
+def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_client):
+    """Test that valid namespaces (via env var) are accepted."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Configure mock responses
@@ -912,9 +767,6 @@ def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_clien
             "total": {"value": 0},
         }
     }
-
-    # Config without namespace
-    test_config = {"index_name": "test_index"}
 
     valid_namespaces = [
         "default",
@@ -926,18 +778,19 @@ def test_valid_namespaces_accepted(mock_elasticsearch_client, mock_bedrock_clien
     ]
 
     for valid_namespace in valid_namespaces:
-        result = agent.tool.elasticsearch_memory(action="list", namespace=valid_namespace, **test_config)
-        assert result["status"] == "success", f"Valid namespace '{valid_namespace}' should be accepted"
+        with mock.patch.dict(os.environ, {"ELASTICSEARCH_NAMESPACE": valid_namespace}):
+            result = agent.tool.elasticsearch_memory(action="list")
+            assert result["status"] == "success", f"Valid namespace '{valid_namespace}' should be accepted"
 
 
-def test_delete_memory_namespace_enforcement(mock_elasticsearch_client, mock_bedrock_client, config):
+def test_delete_memory_namespace_enforcement(mock_elasticsearch_client, mock_bedrock_client):
     """Test that delete enforces namespace atomically (no TOCTOU)."""
     agent = Agent(tools=[elasticsearch_memory])
 
     # Configure delete_by_query to return 0 deleted (memory not in namespace)
     mock_elasticsearch_client["client"].delete_by_query.return_value = {"deleted": 0}
 
-    result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123", **config)
+    result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_123")
 
     # Should fail because memory not found in the requested namespace
     assert result["status"] == "error"
@@ -949,3 +802,82 @@ def test_delete_memory_namespace_enforcement(mock_elasticsearch_client, mock_bed
     query = call_args["body"]["query"]["bool"]["must"]
     assert {"term": {"memory_id": "mem_123"}} in query
     assert {"term": {"namespace": "test_namespace"}} in query
+
+
+# --- ElasticsearchMemoryTool class (per-principal binding) ---
+
+
+def test_class_requires_api_key(mock_elasticsearch_client, mock_bedrock_client):
+    """Constructing the class without an api_key raises."""
+    from src.strands_tools.elasticsearch_memory import ElasticsearchValidationError
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(ElasticsearchValidationError, match="api_key is required"):
+            ElasticsearchMemoryTool(cloud_id="test-cloud-id")
+
+
+def test_class_requires_connection(mock_elasticsearch_client, mock_bedrock_client):
+    """Constructing the class without cloud_id or es_url raises."""
+    from src.strands_tools.elasticsearch_memory import ElasticsearchValidationError
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(ElasticsearchValidationError, match="Either cloud_id or es_url is required"):
+            ElasticsearchMemoryTool(api_key="test-api-key")
+
+
+def test_class_rejects_invalid_namespace(mock_elasticsearch_client, mock_bedrock_client, tool_config):
+    """The class validates the bound namespace at construction."""
+    from src.strands_tools.elasticsearch_memory import ElasticsearchValidationError
+
+    bad_config = {**tool_config, "namespace": "user$name"}
+    with pytest.raises(ElasticsearchValidationError, match="Invalid namespace"):
+        ElasticsearchMemoryTool(**bad_config)
+
+
+def test_class_binds_namespace(mock_elasticsearch_client, mock_bedrock_client, tool_config):
+    """The class uses its constructor namespace, not any agent-supplied value."""
+    mock_elasticsearch_client["client"].search.return_value = {"hits": {"hits": [], "total": {"value": 0}}}
+
+    tool = ElasticsearchMemoryTool(**{**tool_config, "namespace": "user_alice"})
+    agent = Agent(tools=[tool.elasticsearch_memory])
+
+    result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_123")
+
+    assert result["status"] == "error"
+    assert "not found in namespace user_alice" in result["content"][0]["text"]
+
+    # Query used the bound namespace
+    search_call = mock_elasticsearch_client["client"].search.call_args[1]
+    query = search_call["body"]["query"]["bool"]["must"]
+    assert {"term": {"namespace": "user_alice"}} in query
+
+
+def test_class_record_uses_bound_namespace(mock_elasticsearch_client, mock_bedrock_client, tool_config):
+    """A record stored through the class lands in the bound namespace and index."""
+    mock_elasticsearch_client["client"].index.return_value = {"result": "created", "_id": "test_memory_id"}
+
+    tool = ElasticsearchMemoryTool(**{**tool_config, "namespace": "user_bob", "index_name": "bob_index"})
+    agent = Agent(tools=[tool.elasticsearch_memory])
+
+    result = agent.tool.elasticsearch_memory(action="record", content="Bob's secret")
+
+    assert result["status"] == "success"
+
+    # The stored document carries the bound namespace and index
+    index_call = mock_elasticsearch_client["client"].index.call_args[1]
+    assert index_call["index"] == "bob_index"
+    assert index_call["body"]["namespace"] == "user_bob"
+
+
+def test_class_namespace_falls_back_to_env(mock_elasticsearch_client, mock_bedrock_client):
+    """When namespace is not passed to the constructor, it falls back to ELASTICSEARCH_NAMESPACE."""
+    mock_elasticsearch_client["client"].search.return_value = {"hits": {"hits": [], "total": {"value": 0}}}
+
+    with mock.patch.dict(os.environ, {**ES_ENV_VARS, "ELASTICSEARCH_NAMESPACE": "env_tenant"}):
+        tool = ElasticsearchMemoryTool(cloud_id="test-cloud-id", api_key="test-api-key")
+        agent = Agent(tools=[tool.elasticsearch_memory])
+        agent.tool.elasticsearch_memory(action="get", memory_id="mem_123")
+
+    search_call = mock_elasticsearch_client["client"].search.call_args[1]
+    query = search_call["body"]["query"]["bool"]["must"]
+    assert {"term": {"namespace": "env_tenant"}} in query

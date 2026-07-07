@@ -120,7 +120,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
-| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis", user_id="alex")` | Store user and agent memories across agent runs to provide personalized experience |
+| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) |
 | bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
 | memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
 | environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
@@ -151,8 +151,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
-| mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", connection_string="mongodb+srv://...", database_name="memories")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings |
-| elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode", cloud_id="...", api_key="...")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings |
+| mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `MongoDBMemoryTool` or environment variables) |
+| elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) |
 
 \* *These tools do not work on windows*
 
@@ -935,20 +935,22 @@ result = agent.tool.graph(action="delete", graph_id="research_pipeline")
 
 ```python
 from strands import Agent
-from strands_tools.elasticsearch_memory import elasticsearch_memory
+from strands_tools.elasticsearch_memory import ElasticsearchMemoryTool, elasticsearch_memory
 
-# Create agent with direct tool usage
-agent = Agent(tools=[elasticsearch_memory])
+# Bind connection, index, and namespace per principal (kept out of the agent-facing tool)
+memory_tool = ElasticsearchMemoryTool(
+    cloud_id="your-elasticsearch-cloud-id",  # or es_url="https://...:443" for Serverless
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123",
+)
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
 
 # Store a memory with semantic embeddings
 result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     metadata={"category": "food_preferences", "type": "dietary"},
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 
 # Search memories using semantic similarity (vector search)
@@ -956,50 +958,20 @@ result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
-
-# Use configuration dictionary for cleaner code
-config = {
-    "cloud_id": "your-elasticsearch-cloud-id",
-    "api_key": "your-api-key",
-    "index_name": "memories",
-    "namespace": "user_123"
-}
 
 # List all memories with pagination
-result = agent.tool.elasticsearch_memory(
-    action="list",
-    max_results=10,
-    **config
-)
+result = agent.tool.elasticsearch_memory(action="list", max_results=10)
 
 # Get specific memory by ID
-result = agent.tool.elasticsearch_memory(
-    action="get",
-    memory_id="mem_1234567890_abcd1234",
-    **config
-)
+result = agent.tool.elasticsearch_memory(action="get", memory_id="mem_1234567890_abcd1234")
 
 # Delete a memory
-result = agent.tool.elasticsearch_memory(
-    action="delete",
-    memory_id="mem_1234567890_abcd1234",
-    **config
-)
+result = agent.tool.elasticsearch_memory(action="delete", memory_id="mem_1234567890_abcd1234")
 
-# Use Elasticsearch Serverless (URL-based connection)
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza",
-    es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
-)
+# Single-tenant: use the standalone tool with configuration from environment variables
+agent = Agent(tools=[elasticsearch_memory])
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 ### MongoDB Atlas Memory
@@ -1008,20 +980,22 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 from strands import Agent
-from strands_tools.mongodb_memory import mongodb_memory
+from strands_tools.mongodb_memory import MongoDBMemoryTool, mongodb_memory
 
-# Create agent with direct tool usage
-agent = Agent(tools=[mongodb_memory])
+# Bind connection, collection, and namespace per principal (kept out of the agent-facing tool)
+memory_tool = MongoDBMemoryTool(
+    cluster_uri="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
+    database_name="memories",
+    collection_name="user_memories",
+    namespace="user_123",
+)
+agent = Agent(tools=[memory_tool.mongodb_memory])
 
 # Store a memory with semantic embeddings
 result = agent.tool.mongodb_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese",
     metadata={"category": "food_preferences", "type": "dietary"},
-    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
-    database_name="memories",
-    collection_name="user_memories",
-    namespace="user_123"
 )
 
 # Search memories using semantic similarity (vector search)
@@ -1029,50 +1003,20 @@ result = agent.tool.mongodb_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    connection_string="mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
-    database_name="memories",
-    collection_name="user_memories",
-    namespace="user_123"
 )
-
-# Use configuration dictionary for cleaner code
-config = {
-    "connection_string": "mongodb+srv://username:password@cluster0.mongodb.net/?retryWrites=true&w=majority",
-    "database_name": "memories",
-    "collection_name": "user_memories",
-    "namespace": "user_123"
-}
 
 # List all memories with pagination
-result = agent.tool.mongodb_memory(
-    action="list",
-    max_results=10,
-    **config
-)
+result = agent.tool.mongodb_memory(action="list", max_results=10)
 
 # Get specific memory by ID
-result = agent.tool.mongodb_memory(
-    action="get",
-    memory_id="mem_1234567890_abcd1234",
-    **config
-)
+result = agent.tool.mongodb_memory(action="get", memory_id="mem_1234567890_abcd1234")
 
 # Delete a memory
-result = agent.tool.mongodb_memory(
-    action="delete",
-    memory_id="mem_1234567890_abcd1234",
-    **config
-)
+result = agent.tool.mongodb_memory(action="delete", memory_id="mem_1234567890_abcd1234")
 
-# Use environment variables for connection
-# Set MONGODB_ATLAS_CLUSTER_URI in your environment
-result = agent.tool.mongodb_memory(
-    action="record",
-    content="User prefers vegetarian pizza",
-    database_name="memories",
-    collection_name="user_memories",
-    namespace="user_123"
-)
+# Single-tenant: use the standalone tool with configuration from environment variables
+agent = Agent(tools=[mongodb_memory])
+result = agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 ## 🌍 Environment Variables Configuration
@@ -1134,6 +1078,24 @@ These variables affect multiple tools:
 
 #### Mem0 Memory Tool
 
+**Security Model:** The tenant-isolation keys (`user_id` / `agent_id`) are never exposed as agent-facing tool parameters. The agent only chooses the `action` and its `content`/`query`/`memory_id`. This prevents a model (or prompt-injected content) from reading, writing, or deleting another tenant's memories.
+
+**Usage patterns:**
+
+```python
+from strands import Agent
+from strands_tools.mem0_memory import Mem0MemoryTool, mem0_memory
+
+# Multi-tenant (recommended): bind identity per authenticated principal
+tool = Mem0MemoryTool(user_id=f"user_{authenticated_user_id}")
+agent = Agent(tools=[tool.mem0_memory])
+agent.tool.mem0_memory(action="store", content="User prefers vegetarian pizza")
+
+# Single-tenant: use the standalone function with env vars (MEM0_USER_ID / MEM0_AGENT_ID)
+agent = Agent(tools=[mem0_memory])
+agent.tool.mem0_memory(action="store", content="User prefers vegetarian pizza")
+```
+
 The Mem0 Memory Tool supports three different backend configurations:
 
 1. **Mem0 Platform**:
@@ -1154,15 +1116,17 @@ The Mem0 Memory Tool supports three different backend configurations:
    ```
    # Configure your Neptune Analytics graph ID in the .env file:
    export NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER=sample-graph-id
-   
+
    # Configure your Neptune Analytics graph ID in Python code:
    import os
    os.environ['NEPTUNE_ANALYTICS_GRAPH_IDENTIFIER'] = "g-sample-graph-id"
-   
+
    ```
 
 | Environment Variable | Description | Default | Required For |
 |----------------------|-------------|---------|--------------|
+| MEM0_USER_ID | User ID for memory operations (standalone function) | None | Standalone |
+| MEM0_AGENT_ID | Agent ID for memory operations (standalone function) | None | Standalone |
 | MEM0_API_KEY | Mem0 Platform API key | None | Mem0 Platform |
 | OPENSEARCH_HOST | OpenSearch Host URL | None | OpenSearch |
 | AWS_REGION | AWS Region for OpenSearch | us-west-2 | OpenSearch |
