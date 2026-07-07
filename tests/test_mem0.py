@@ -548,3 +548,38 @@ def test_faiss_client(mock_mem0_memory, mock_tool):
     # Assertions
     assert result["status"] == "success"
     assert "Test memory content" in str(result["content"][0]["text"])
+
+
+@patch.dict(os.environ, {"OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_console_mode_read_at_call_time(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Console is created per call so STRANDS_TOOL_CONSOLE_MODE set after import is honored.
+
+    Regression test for #377: the console used to be created once at module import time,
+    so STRANDS_TOOL_CONSOLE_MODE set afterwards (the normal usage pattern) was ignored.
+    console_util.create() reads the env var at call time, so creating the console inside the
+    tool function makes the env var take effect. We spy on console_util.create to assert it is
+    invoked during the call (not only at import), capturing the env var value seen at that time.
+    """
+    mock_mem0_client.return_value = mock_mem0_service_client
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "get", "memory_id": "mem123"},
+    }.get(key, default)
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "memory": "x"}
+
+    seen_modes = []
+    real_create = mem0_memory.console_util.create
+
+    def spy_create():
+        seen_modes.append(os.environ.get("STRANDS_TOOL_CONSOLE_MODE"))
+        return real_create()
+
+    with patch.dict(os.environ, {"STRANDS_TOOL_CONSOLE_MODE": "enabled"}):
+        with patch.object(mem0_memory.console_util, "create", side_effect=spy_create):
+            result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "success"
+    # create() must run during the call, observing the env var set after import time.
+    assert seen_modes == ["enabled"]
