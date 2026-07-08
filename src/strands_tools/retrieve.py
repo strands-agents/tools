@@ -144,12 +144,22 @@ Usage Examples:
                 "score": {
                     "type": "number",
                     "description": (
-                        "Minimum relevance score threshold (0.0-1.0). Results below this score will be filtered out. "
+                        "Score threshold (0.0-1.0). With scoreMetric='similarity', results below this score are "
+                        "filtered out. With scoreMetric='distance', results above this score are filtered out. "
                         "Default is 0.4."
                     ),
                     "default": 0.4,
                     "minimum": 0.0,
                     "maximum": 1.0,
+                },
+                "scoreMetric": {
+                    "type": "string",
+                    "description": (
+                        "How to interpret the score threshold. Use 'similarity' when higher scores are better, "
+                        "or 'distance' when lower scores are better. Default is 'similarity'."
+                    ),
+                    "enum": ["similarity", "distance"],
+                    "default": "similarity",
                 },
                 "profile_name": {
                     "type": "string",
@@ -187,22 +197,37 @@ Usage Examples:
 }
 
 
-def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> List[Dict[str, Any]]:
+def filter_results_by_score(
+    results: List[Dict[str, Any]], min_score: float, score_metric: str = "similarity"
+) -> List[Dict[str, Any]]:
     """
-    Filter results based on minimum score threshold.
+    Filter results based on score threshold.
 
     This function takes the raw results from a knowledge base query and removes
-    any items that don't meet the minimum relevance score threshold.
+    any items that don't meet the configured score threshold.
 
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
-        min_score: Minimum score threshold (0.0-1.0). Only results with scores
-            greater than or equal to this value will be returned.
+        min_score: Score threshold (0.0-1.0).
+        score_metric: Score interpretation. ``similarity`` keeps scores greater
+            than or equal to the threshold. ``distance`` keeps scores less than
+            or equal to the threshold.
 
     Returns:
-        List of filtered results that meet or exceed the score threshold
+        List of filtered results that meet the score threshold.
+
+    Raises:
+        ValueError: If score_metric is not supported.
     """
-    return [result for result in results if result.get("score", 0.0) >= min_score]
+    if score_metric == "similarity":
+        return [result for result in results if result.get("score", 0.0) >= min_score]
+    if score_metric == "distance":
+        return [result for result in results if result.get("score", float("inf")) <= min_score]
+    raise ValueError("scoreMetric must be either 'similarity' or 'distance'")
+
+
+def _score_threshold_operator(score_metric: str) -> str:
+    return "<=" if score_metric == "distance" else ">="
 
 
 # Mapping of RetrievalResultLocation types to their document identifier fields.
@@ -219,7 +244,9 @@ _LOCATION_FIELD_MAP = {
 }
 
 
-def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: bool = False) -> str:
+def format_results_for_display(
+    results: List[Dict[str, Any]], enable_metadata: bool = False, score_metric: str = "similarity"
+) -> str:
     """
     Format retrieval results for readable display.
 
@@ -230,12 +257,15 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
         enable_metadata: Whether to include metadata in the formatted output (default: False)
+        score_metric: Score interpretation, either "similarity" or "distance" (default: "similarity")
 
     Returns:
         Formatted string containing the results in a readable format, including score,
         document ID, optional metadata, and content.
     """
     if not results:
+        if score_metric == "distance":
+            return "No results found at or below score threshold."
         return "No results found above score threshold."
 
     formatted = []
@@ -296,6 +326,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             knowledgeBaseId: The ID of the knowledge base to query (default: from environment)
             region: AWS region where the knowledge base is located (default: us-west-2)
             score: Minimum relevance score threshold (default: 0.4)
+            scoreMetric: Score interpretation, either "similarity" or "distance" (default: "similarity")
             profile_name: Optional AWS profile name to use
             retrieveFilter: Optional filter to apply to the retrieval results
 
@@ -331,8 +362,16 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        score_metric = tool_input.get("scoreMetric", "similarity")
         enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
+
+        if score_metric not in {"similarity", "distance"}:
+            return {
+                "toolUseId": tool_use_id,
+                "status": "error",
+                "content": [{"text": "scoreMetric must be either 'similarity' or 'distance'"}],
+            }
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
@@ -366,17 +405,23 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         # Get and filter results
         all_results = response.get("retrievalResults", [])
-        filtered_results = filter_results_by_score(all_results, min_score)
+        filtered_results = filter_results_by_score(all_results, min_score, score_metric)
 
         # Format results for display with optional metadata
-        formatted_results = format_results_for_display(filtered_results, enable_metadata)
+        formatted_results = format_results_for_display(filtered_results, enable_metadata, score_metric)
+        score_operator = _score_threshold_operator(score_metric)
 
         # Return success with formatted results
         return {
             "toolUseId": tool_use_id,
             "status": "success",
             "content": [
-                {"text": f"Retrieved {len(filtered_results)} results with score >= {min_score}:\n{formatted_results}"}
+                {
+                    "text": (
+                        f"Retrieved {len(filtered_results)} results with score {score_operator} {min_score}:"
+                        f"\n{formatted_results}"
+                    )
+                }
             ],
         }
 

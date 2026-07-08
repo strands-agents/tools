@@ -94,6 +94,15 @@ def test_filter_results_by_score():
     assert filtered[0]["score"] == 0.9
     assert filtered[1]["score"] == 0.8
 
+    # Filter distance scores with threshold 0.5
+    filtered = retrieve.filter_results_by_score(test_results, 0.5, score_metric="distance")
+    assert len(filtered) == 2
+    assert filtered[0]["score"] == 0.5
+    assert filtered[1]["score"] == 0.3
+
+    with pytest.raises(ValueError, match="scoreMetric"):
+        retrieve.filter_results_by_score(test_results, 0.5, score_metric="unknown")
+
 
 def test_format_results_for_display():
     """Test the format_results_for_display function."""
@@ -438,6 +447,45 @@ def test_retrieve_custom_score_threshold(mock_boto3_client):
     assert "doc-001" in result["content"][0]["text"]
     # Medium score result (0.7) should not be included
     assert "doc-002" not in result["content"][0]["text"]
+
+
+def test_retrieve_distance_score_metric(mock_boto3_client):
+    """Test retrieve with distance scores, where lower is better."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "score": 0.4,
+            "scoreMetric": "distance",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert "Retrieved 1 results with score <= 0.4" in result["content"][0]["text"]
+    assert "doc-003" in result["content"][0]["text"]
+    assert "doc-001" not in result["content"][0]["text"]
+    assert "doc-002" not in result["content"][0]["text"]
+
+
+def test_retrieve_rejects_invalid_score_metric(mock_boto3_client):
+    """Test retrieve rejects unsupported score metric values."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "scoreMetric": "unknown",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "error"
+    assert "scoreMetric must be either 'similarity' or 'distance'" in result["content"][0]["text"]
+    mock_boto3_client.assert_not_called()
 
 
 def test_retrieve_via_agent(agent, mock_boto3_client):
