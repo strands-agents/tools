@@ -180,6 +180,31 @@ Usage Examples:
                         '"value": "security"}}, {"greaterThan": {"key": "year", "value": "2022"}}]}'
                     ),
                 },
+                "knowledgeBaseType": {
+                    "type": "string",
+                    "description": (
+                        "The type of knowledge base to query. 'MANAGED' uses managed search configuration, "
+                        "'VECTOR' uses vector search configuration. Default is 'MANAGED'. "
+                        "Can also be set via the KNOWLEDGE_BASE_TYPE environment variable."
+                    ),
+                    "enum": ["VECTOR", "MANAGED"],
+                },
+                "useAgenticRetrieval": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, uses AgenticRetrieveStream API for intelligent multi-step retrieval "
+                        "with query decomposition and managed reranking. Only works with MANAGED knowledge bases. "
+                        "Default is true for MANAGED KBs. Set to false to use simple Retrieve API instead."
+                    ),
+                },
+                "generateResponse": {
+                    "type": "boolean",
+                    "description": (
+                        "When using agentic retrieval, whether to generate a natural-language answer "
+                        "from retrieved results. Default is false (returns chunks only). "
+                        "Set to true to get a cited synthesized answer."
+                    ),
+                },
             },
             "required": ["text"],
         }
@@ -265,6 +290,61 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
     return "\n".join(formatted)
 
 
+def _check_sdk_version():
+    """Check if boto3 version supports AgenticRetrieveStream (requires >= 1.43.0)."""
+    import importlib.metadata
+
+    try:
+        version = importlib.metadata.version("boto3")
+        major, minor, _patch = (int(x) for x in version.split(".")[:3])
+        return (major, minor) >= (1, 43)
+    except Exception:
+        return False
+
+
+def _agentic_retrieve(client, kb_id, query, generate_response=False, number_of_results=10, retrieve_filter=None):
+    """Execute AgenticRetrieveStream API for intelligent multi-step retrieval.
+
+    Uses managed reranking and query decomposition. Only works with MANAGED KBs.
+    Returns chunks by default (generateResponse=False), or a cited answer when True.
+    """
+    retriever_config = {"knowledgeBaseId": kb_id, "retrievalOverrides": {"maxNumberOfResults": number_of_results}}
+    if retrieve_filter:
+        retriever_config["retrievalOverrides"]["filter"] = retrieve_filter
+
+    request = {
+        "messages": [{"content": {"text": query}, "role": "user"}],
+        "retrievers": [{"configuration": {"knowledgeBase": retriever_config}}],
+        "agenticRetrieveConfiguration": {
+            "foundationModelType": "MANAGED",
+            "rerankingModelType": "MANAGED",
+        },
+        "generateResponse": generate_response,
+    }
+
+    response = client.agentic_retrieve_stream(**request)
+
+    results = []
+    generated_answer = ""
+    citations = []
+
+    for event in response.get("stream", []):
+        if "result" in event:
+            result_event = event["result"]
+            results = result_event.get("results", [])
+            if "generatedResponse" in result_event:
+                gen_resp = result_event["generatedResponse"]
+                generated_answer = gen_resp.get("answer", "")
+                citations = gen_resp.get("citations", [])
+        elif "responseEvent" in event:
+            generated_answer += event["responseEvent"].get("text", "")
+
+    output = {"results": results}
+    if generate_response and generated_answer:
+        output["generatedResponse"] = {"answer": generated_answer, "citations": citations}
+    return output
+
+
 def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Retrieve relevant knowledge from Amazon Bedrock Knowledge Base.
@@ -321,6 +401,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     default_aws_region = os.getenv("AWS_REGION", "us-west-2")
     default_min_score = float(os.getenv("MIN_SCORE", "0.4"))
     default_enable_metadata = os.getenv("RETRIEVE_ENABLE_METADATA_DEFAULT", "false").lower() == "true"
+    default_kb_type = os.getenv("KNOWLEDGE_BASE_TYPE", "VECTOR")
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
@@ -333,6 +414,10 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         min_score = tool_input.get("score", default_min_score)
         enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
+        kb_type = tool_input.get("knowledgeBaseType", default_kb_type)
+        default_use_agentic = os.getenv("USE_AGENTIC_RETRIEVAL", "true" if kb_type == "MANAGED" else "false").lower() == "true"
+        use_agentic = tool_input.get("useAgenticRetrieval", default_use_agentic)
+        generate_response = tool_input.get("generateResponse", False)
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
@@ -345,13 +430,18 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         else:
             bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name, config=config)
 
-        # Default retrieval configuration
-        retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
+        # Build retrieval configuration based on knowledge base type
+        if kb_type == "MANAGED":
+            retrieval_config = {"managedSearchConfiguration": {"numberOfResults": number_of_results}}
+            search_config_key = "managedSearchConfiguration"
+        else:
+            retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
+            search_config_key = "vectorSearchConfiguration"
 
         if retrieve_filter:
             try:
                 if _validate_filter(retrieve_filter):
-                    retrieval_config["vectorSearchConfiguration"]["filter"] = retrieve_filter
+                    retrieval_config[search_config_key]["filter"] = retrieve_filter
             except ValueError as e:
                 return {
                     "toolUseId": tool_use_id,
@@ -359,7 +449,37 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [{"text": str(e)}],
                 }
 
-        # Perform retrieval
+        # Use AgenticRetrieveStream for managed KBs when available
+        if use_agentic and kb_type == "MANAGED" and _check_sdk_version():
+            try:
+                agentic_result = _agentic_retrieve(
+                    bedrock_agent_runtime_client,
+                    kb_id,
+                    query,
+                    generate_response=generate_response,
+                    number_of_results=number_of_results,
+                    retrieve_filter=retrieve_filter,
+                )
+
+                agentic_results = agentic_result.get("results", [])
+                filtered_results = filter_results_by_score(agentic_results, min_score)
+                formatted_results = format_results_for_display(filtered_results, enable_metadata)
+
+                response_text = f"Retrieved {len(filtered_results)} results with score >= {min_score} (agentic retrieval with managed reranking):\n{formatted_results}"
+
+                if generate_response and "generatedResponse" in agentic_result:
+                    answer = agentic_result["generatedResponse"]["answer"]
+                    response_text += f"\n\n--- Generated Answer ---\n{answer}"
+
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "success",
+                    "content": [{"text": response_text}],
+                }
+            except Exception:
+                pass  # Fall through to standard Retrieve API
+
+        # Fallback: standard Retrieve API
         response = bedrock_agent_runtime_client.retrieve(
             retrievalQuery={"text": query}, knowledgeBaseId=kb_id, retrievalConfiguration=retrieval_config
         )

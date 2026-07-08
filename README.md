@@ -117,7 +117,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
+| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases (managed or vector) with AgenticRetrieveStream and optional metadata |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) |
@@ -537,6 +537,63 @@ result = agent.tool.retrieve(
     # enableMetadata will default to the environment variable value
 )
 ```
+
+#### Managed Knowledge Base Support
+
+The retrieve tool supports **Managed KB** with **AgenticRetrieveStream** (query decomposition + managed reranking):
+
+```bash
+# Environment variables:
+export KNOWLEDGE_BASE_ID="ABCDEFGHIJ"
+export KNOWLEDGE_BASE_TYPE="MANAGED"        # opt-in (default: VECTOR)
+export USE_AGENTIC_RETRIEVAL="true"         # default
+```
+
+```python
+# Disable agentic for faster single-pass retrieval:
+result = agent.tool.retrieve(text="Quick lookup", useAgenticRetrieval=False)
+
+# Generate a cited answer:
+result = agent.tool.retrieve(text="Compare X and Y", generateResponse=True)
+
+# Use vector KB (legacy):
+result = agent.tool.retrieve(text="Search", knowledgeBaseType="VECTOR")
+```
+
+Requires `boto3 >= 1.43` for agentic retrieval. Falls back to standard Retrieve automatically if unavailable.
+
+#### Managed Knowledge Bases (Recommended)
+
+The retrieve tool supports **Managed Knowledge Bases**, which let Bedrock handle embedding, storage, and retrieval automatically — no external vector store required. Set the following environment variables:
+
+```bash
+export KNOWLEDGE_BASE_ID="your-managed-kb-id"
+export KNOWLEDGE_BASE_TYPE="MANAGED"
+```
+
+Managed KBs automatically use **agentic retrieval** (`AgenticRetrieveStream` API) which provides:
+- Intelligent query decomposition for complex questions
+- Managed reranking for improved relevance
+- Optional response generation with citations
+
+```python
+import os
+os.environ["KNOWLEDGE_BASE_ID"] = "ABCDEFGHIJ"
+os.environ["KNOWLEDGE_BASE_TYPE"] = "MANAGED"
+
+from strands import Agent
+from strands_tools import retrieve
+
+agent = Agent(tools=[retrieve])
+result = agent.tool.retrieve(text="What are our company policies on remote work?")
+```
+
+To disable agentic retrieval and use simple managed search:
+```bash
+export USE_AGENTIC_RETRIEVAL="false"
+```
+
+> **SDK requirements:** `boto3 >= 1.43` for agentic retrieval. If your SDK is older, the tool automatically falls back to the standard `Retrieve` API with `managedSearchConfiguration`.
 
 ### Batch Tool
 
@@ -1267,6 +1324,26 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
+| KNOWLEDGE_BASE_ID | The ID of the Amazon Bedrock Knowledge Base | None |
+| KNOWLEDGE_BASE_TYPE | Knowledge base type: `MANAGED` or `VECTOR` | VECTOR |
+| USE_AGENTIC_RETRIEVAL | Use AgenticRetrieveStream API for managed KBs | true |
+
+**Reranking options** for managed search: `MANAGED` (default — automatic), `NONE` (disable reranking), `CUSTOM` (your own Bedrock reranking model e.g. Cohere Rerank v3.5).
+
+**Required IAM Permissions:**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "bedrock:Retrieve",
+    "bedrock:AgenticRetrieve"
+  ],
+  "Resource": "arn:aws:bedrock:<region>:<account-id>:knowledge-base/<kb-id>"
+}
+```
+
+**Resources:** [Build a Managed KB](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-build-managed.html) | [Retrieve API](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-retrieve.html) | [Agentic Retrieval](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-agentic.html)
+| GENERATE_RESPONSE | Generate cited answer (agentic mode only) | false |
 | RETRIEVE_ENABLE_METADATA_DEFAULT | Default setting for enabling metadata in retrieve tool responses | false |
 
 #### Use Agent Tool

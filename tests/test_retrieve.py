@@ -22,7 +22,8 @@ def agent():
 @pytest.fixture
 def mock_boto3_client():
     """Mock the boto3 client to avoid actual AWS calls during tests."""
-    with mock.patch.object(boto3, "client") as mock_client:
+    with mock.patch.object(boto3, "client") as mock_client, \
+         mock.patch("strands_tools.retrieve._check_sdk_version", return_value=False):
         # Create a mock response object
         mock_response = {
             "retrievalResults": [
@@ -491,7 +492,8 @@ def test_retrieve_with_custom_profile(mock_boto3_client):
 
 def test_retrieve_with_custom_region():
     """Test retrieve with custom AWS region."""
-    with mock.patch.object(boto3, "client") as mock_client:
+    with mock.patch.object(boto3, "client") as mock_client, \
+         mock.patch("strands_tools.retrieve._check_sdk_version", return_value=False):
         # Configure mock client
         mock_client_instance = mock_client.return_value
         mock_client_instance.retrieve.return_value = {
@@ -746,3 +748,167 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     assert "results with score >=" in result_text
     assert "Metadata:" not in result_text
     assert "test-source" not in result_text
+
+
+def test_managed_kb_retrieval_config(mock_boto3_client):
+    """Test that managed knowledge base type builds managedSearchConfiguration."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "numberOfResults": 5,
+            "knowledgeBaseType": "MANAGED",
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+
+    # Verify the client was called with managedSearchConfiguration
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={"managedSearchConfiguration": {"numberOfResults": 5}},
+    )
+
+
+def test_managed_kb_with_filter(mock_boto3_client):
+    """Test that filter works correctly within managedSearchConfiguration."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "numberOfResults": 3,
+            "knowledgeBaseType": "MANAGED",
+            "retrieveFilter": {
+                "andAll": [
+                    {"equals": {"key": "category", "value": "security"}},
+                    {"greaterThan": {"key": "year", "value": "2022"}},
+                ]
+            },
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+
+    # Verify the client was called with filter inside managedSearchConfiguration
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={
+            "managedSearchConfiguration": {
+                "numberOfResults": 3,
+                "filter": {
+                    "andAll": [
+                        {"equals": {"key": "category", "value": "security"}},
+                        {"greaterThan": {"key": "year", "value": "2022"}},
+                    ]
+                },
+            }
+        },
+    )
+
+
+def test_default_is_vector_config(mock_boto3_client):
+    """Test that default behavior (no knowledgeBaseType) uses vectorSearchConfiguration."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "numberOfResults": 10,
+        },
+    }
+
+    result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+
+    # Verify the client was called with vectorSearchConfiguration (default)
+    mock_boto3_client.return_value.retrieve.assert_called_once_with(
+        retrievalQuery={"text": "test query"},
+        knowledgeBaseId="test-kb-id",
+        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 10}},
+    )
+
+
+def test_agentic_retrieve_stream_path(mock_boto3_client):
+    """Test that agentic retrieval path works when SDK supports it."""
+    # Mock agentic_retrieve_stream response
+    mock_boto3_client.return_value.agentic_retrieve_stream.return_value = {
+        "stream": [
+            {"result": {"results": [
+                {"content": {"text": "Agentic result"}, "score": 0.95}
+            ]}}
+        ]
+    }
+
+    with mock.patch("strands_tools.retrieve._check_sdk_version", return_value=True):
+        tool_use = {
+            "toolUseId": "test-agentic",
+            "input": {
+                "text": "test query",
+                "knowledgeBaseId": "test-kb-id",
+                "numberOfResults": 5,
+                "knowledgeBaseType": "MANAGED",
+            },
+        }
+        result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert "agentic retrieval with managed reranking" in result["content"][0]["text"]
+
+
+def test_agentic_retrieve_stream_fallback(mock_boto3_client):
+    """Test that agentic falls back to Retrieve when SDK call fails."""
+    # Make agentic call raise an exception
+    mock_boto3_client.return_value.agentic_retrieve_stream.side_effect = Exception("agentic not available")
+
+    with mock.patch("strands_tools.retrieve._check_sdk_version", return_value=True):
+        tool_use = {
+            "toolUseId": "test-fallback",
+            "input": {
+                "text": "test query",
+                "knowledgeBaseId": "test-kb-id",
+                "numberOfResults": 3,
+            },
+        }
+        result = retrieve.retrieve(tool=tool_use)
+
+    # Should fall back to regular retrieve and succeed
+    assert result["status"] == "success"
+    assert "agentic" not in result["content"][0]["text"].lower() or "error" in result["content"][0]["text"].lower()
+
+
+def test_agentic_retrieve_with_generate_response(mock_boto3_client):
+    """Test agentic retrieval with generateResponse=True returns generated answer."""
+    mock_boto3_client.return_value.agentic_retrieve_stream.return_value = {
+        "stream": [
+            {"result": {"results": [
+                {"content": {"text": "Source chunk"}, "score": 0.9}
+            ],
+            "generatedResponse": {"answer": "This is the generated answer.", "citations": []}}}
+        ]
+    }
+
+    with mock.patch("strands_tools.retrieve._check_sdk_version", return_value=True):
+        tool_use = {
+            "toolUseId": "test-gen",
+            "input": {
+                "text": "test query",
+                "knowledgeBaseId": "test-kb-id",
+                "numberOfResults": 5,
+                "generateResponse": True,
+                "knowledgeBaseType": "MANAGED",
+            },
+        }
+        result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert "Generated Answer" in result["content"][0]["text"]
+    assert "This is the generated answer." in result["content"][0]["text"]
