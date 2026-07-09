@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import handoff_to_user
 
 
@@ -31,7 +32,10 @@ def test_handoff_with_breakout_true_direct(mock_request_state):
     # Create a tool use dictionary similar to how the agent would call it
     tool_use = {
         "toolUseId": "test-tool-use-id",
-        "input": {"message": "Task completed. Please review the results.", "breakout_of_loop": True},
+        "input": {
+            "message": "Task completed. Please review the results.",
+            "breakout_of_loop": True,
+        },
     }
 
     # Call the handoff_to_user function directly with our mock request state
@@ -60,7 +64,9 @@ def test_handoff_with_breakout_false_direct(mock_get_user_input, mock_request_st
     result = handoff_to_user.handoff_to_user(tool=tool_use, request_state=mock_request_state)
 
     # Verify get_user_input was called
-    mock_get_user_input.assert_called_once_with("<bold>Your response:</bold> ")
+    mock_get_user_input.assert_called_once_with(
+        "<bold>Agent requested user input:</bold> Please confirm the action.\n<bold>Your response:</bold> "
+    )
 
     # Verify the result has the expected structure
     assert result["toolUseId"] == "test-tool-use-id"
@@ -95,7 +101,10 @@ def test_handoff_keyboard_interrupt_direct(mock_get_user_input, mock_request_sta
 def test_handoff_missing_request_state():
     """Test handoff works even without request_state."""
     # Create a tool use dictionary
-    tool_use = {"toolUseId": "test-tool-use-id", "input": {"message": "Task completed.", "breakout_of_loop": True}}
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"message": "Task completed.", "breakout_of_loop": True},
+    }
 
     # Call the handoff_to_user function without request_state
     result = handoff_to_user.handoff_to_user(tool=tool_use)

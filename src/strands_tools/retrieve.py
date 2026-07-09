@@ -34,13 +34,26 @@ agent = Agent(tools=[retrieve])
 # Basic search with default knowledge base and region
 results = agent.tool.retrieve(text="What is the STRANDS SDK?")
 
+# Search with metadata enabled for source information
+results = agent.tool.retrieve(
+    text="What is the STRANDS SDK?",
+    enableMetadata=True
+)
+
 # Advanced search with custom parameters
 results = agent.tool.retrieve(
     text="deployment steps for production",
     numberOfResults=5,
     score=0.7,
     knowledgeBaseId="custom-kb-id",
-    region="us-east-1"
+    region="us-east-1",
+    enableMetadata=True,
+    retrieveFilter={
+        "andAll": [
+            {"equals": {"key": "category", "value": "security"}},
+            {"greaterThan": {"key": "year", "value": "2022"}}
+        ]
+    }
 )
 ```
 
@@ -51,6 +64,7 @@ import os
 from typing import Any, Dict, List
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
 
 TOOL_SPEC = {
@@ -62,7 +76,7 @@ Key Features:
    - Vector-based similarity matching
    - Relevance scoring (0.0-1.0)
    - Score-based filtering
-   
+
 2. Advanced Configuration:
    - Custom result limits
    - Score thresholds
@@ -144,6 +158,28 @@ Usage Examples:
                         "specified."
                     ),
                 },
+                "enableMetadata": {
+                    "type": "boolean",
+                    "description": (
+                        "Whether to include metadata in the response. When enabled, shows source URI, chunk ID, "
+                        "data source ID, and other document metadata. Default is false."
+                    ),
+                    "default": False,
+                },
+                "retrieveFilter": {
+                    "type": "object",
+                    "description": (
+                        "Optional filter to apply to retrieval results based on metadata attributes in the "
+                        "knowledge base. This is a UNION type - only one operator can be specified at the top level. "
+                        "Available operators: "
+                        "equals (exact match), notEquals, greaterThan, greaterThanOrEquals, lessThan, "
+                        "lessThanOrEquals, in (value in list), notIn, listContains (list contains value), "
+                        "stringContains (substring match), startsWith (OpenSearch Serverless only), "
+                        "andAll (all conditions must match, min 2 items), orAll (at least one condition must match, "
+                        'min 2 items). Example: {"andAll": [{"equals": {"key": "category", '
+                        '"value": "security"}}, {"greaterThan": {"key": "year", "value": "2022"}}]}'
+                    ),
+                },
             },
             "required": ["text"],
         }
@@ -169,25 +205,48 @@ def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> 
     return [result for result in results if result.get("score", 0.0) >= min_score]
 
 
-def format_results_for_display(results: List[Dict[str, Any]]) -> str:
+# Mapping of RetrievalResultLocation types to their document identifier fields.
+# See: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalResultLocation.html
+_LOCATION_FIELD_MAP = {
+    "customDocumentLocation": "id",
+    "s3Location": "uri",
+    "webLocation": "url",
+    "confluenceLocation": "url",
+    "salesforceLocation": "url",
+    "sharePointLocation": "url",
+    "kendraDocumentLocation": "uri",
+    "sqlLocation": "query",
+}
+
+
+def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: bool = False) -> str:
     """
     Format retrieval results for readable display.
 
     This function takes the raw results from a knowledge base query and formats
     them into a human-readable string with scores, document IDs, and content.
+    Optionally includes metadata when enabled.
 
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
+        enable_metadata: Whether to include metadata in the formatted output (default: False)
 
     Returns:
-        Formatted string containing the results in a readable format
+        Formatted string containing the results in a readable format, including score,
+        document ID, optional metadata, and content.
     """
     if not results:
         return "No results found above score threshold."
 
     formatted = []
     for result in results:
-        doc_id = result.get("location", {}).get("customDocumentLocation", {}).get("id", "Unknown")
+        # Extract document location - handle all RetrievalResultLocation types
+        location = result.get("location", {})
+        doc_id = "Unknown"
+        for loc_key, field in _LOCATION_FIELD_MAP.items():
+            if loc_key in location:
+                doc_id = location[loc_key].get(field, "Unknown")
+                break
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
@@ -196,6 +255,12 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
         if content and isinstance(content.get("text"), str):
             text = content["text"]
             formatted.append(f"Content: {text}\n")
+
+        # Add metadata if enabled and present
+        if enable_metadata:
+            metadata = result.get("metadata")
+            if metadata:
+                formatted.append(f"Metadata: {metadata}")
 
     return "\n".join(formatted)
 
@@ -232,6 +297,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             region: AWS region where the knowledge base is located (default: us-west-2)
             score: Minimum relevance score threshold (default: 0.4)
             profile_name: Optional AWS profile name to use
+            retrieveFilter: Optional filter to apply to the retrieval results
 
     Returns:
         Dictionary containing status and response content in the format:
@@ -254,6 +320,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     default_knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
     default_aws_region = os.getenv("AWS_REGION", "us-west-2")
     default_min_score = float(os.getenv("MIN_SCORE", "0.4"))
+    default_enable_metadata = os.getenv("RETRIEVE_ENABLE_METADATA_DEFAULT", "false").lower() == "true"
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
@@ -264,30 +331,45 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
+        retrieve_filter = tool_input.get("retrieveFilter")
 
         # Initialize Bedrock client with optional profile name
         profile_name = tool_input.get("profile_name")
+        config = BotocoreConfig(user_agent_extra="strands-agents-retrieve")
         if profile_name:
             session = boto3.Session(profile_name=profile_name)
-            bedrock_agent_runtime_client = session.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = session.client(
+                "bedrock-agent-runtime", region_name=region_name, config=config
+            )
         else:
-            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name)
+            bedrock_agent_runtime_client = boto3.client("bedrock-agent-runtime", region_name=region_name, config=config)
+
+        # Default retrieval configuration
+        retrieval_config = {"vectorSearchConfiguration": {"numberOfResults": number_of_results}}
+
+        if retrieve_filter:
+            try:
+                if _validate_filter(retrieve_filter):
+                    retrieval_config["vectorSearchConfiguration"]["filter"] = retrieve_filter
+            except ValueError as e:
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "error",
+                    "content": [{"text": str(e)}],
+                }
 
         # Perform retrieval
         response = bedrock_agent_runtime_client.retrieve(
-            retrievalQuery={"text": query},
-            knowledgeBaseId=kb_id,
-            retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": number_of_results},
-            },
+            retrievalQuery={"text": query}, knowledgeBaseId=kb_id, retrievalConfiguration=retrieval_config
         )
 
         # Get and filter results
         all_results = response.get("retrievalResults", [])
         filtered_results = filter_results_by_score(all_results, min_score)
 
-        # Format results for display
-        formatted_results = format_results_for_display(filtered_results)
+        # Format results for display with optional metadata
+        formatted_results = format_results_for_display(filtered_results, enable_metadata)
 
         # Return success with formatted results
         return {
@@ -305,3 +387,48 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": f"Error during retrieval: {str(e)}"}],
         }
+
+
+# A simple validator to check filter is in valid shape
+def _validate_filter(retrieve_filter):
+    """Validate the structure of a retrieveFilter."""
+    try:
+        if not isinstance(retrieve_filter, dict):
+            raise ValueError("retrieveFilter must be a dictionary")
+
+        # Valid operators according to AWS Bedrock documentation
+        valid_operators = [
+            "equals",
+            "greaterThan",
+            "greaterThanOrEquals",
+            "in",
+            "lessThan",
+            "lessThanOrEquals",
+            "listContains",
+            "notEquals",
+            "notIn",
+            "orAll",
+            "andAll",
+            "startsWith",
+            "stringContains",
+        ]
+
+        # Validate each operator in the filter
+        for key, value in retrieve_filter.items():
+            if key not in valid_operators:
+                raise ValueError(f"Invalid operator: {key}")
+
+            # Validate operator value structure
+            if key in ["orAll", "andAll"]:  # Both orAll and andAll require arrays
+                if not isinstance(value, list):
+                    raise ValueError(f"Value for '{key}' operator must be a list")
+                if len(value) < 2:  # Both require minimum 2 items
+                    raise ValueError(f"Value for '{key}' operator must contain at least 2 items")
+                for sub_filter in value:
+                    _validate_filter(sub_filter)
+            else:
+                if not isinstance(value, dict):
+                    raise ValueError(f"Value for '{key}' operator must be a dictionary")
+        return True
+    except Exception as e:
+        raise Exception(f"Unexpected error while validating retrieve filter: {str(e)}") from e

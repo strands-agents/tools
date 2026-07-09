@@ -1,19 +1,9 @@
-"""
-Integration test for the Bedrock Knowledge Base (memory) tool.
-
-This test creates real AWS resources (IAM Role, OpenSearch Collection, Bedrock KB)
-to validate the end-to-end functionality of the memory tool.
-"""
-
 import json
 import logging
 import os
 import time
-import uuid
-from unittest.mock import patch
 
 import boto3
-import pytest
 from botocore.exceptions import ClientError
 from opensearchpy import (
     AuthenticationException,
@@ -22,8 +12,6 @@ from opensearchpy import (
     OpenSearch,
     RequestsHttpConnection,
 )
-from strands import Agent
-from strands_tools import memory
 
 AWS_REGION = "us-east-1"
 EMBEDDING_MODEL_ARN = f"arn:aws:bedrock:{AWS_REGION}::foundation-model/amazon.titan-embed-text-v1"
@@ -32,87 +20,9 @@ EMBEDDING_DIMENSION = 1536  # Dimension for amazon.titan-embed-text-v1
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
-def managed_knowledge_base():
-    helper = KnowledgeBaseHelper()
-    kb_id = helper.try_get_existing()
-    if kb_id is not None:
-        yield kb_id
-    else:
-        kb_id = helper.create_resources()
-        yield kb_id
-        if helper.should_teardown:
-            helper.destroy()
-
-
-@patch.dict(os.environ, {"BYPASS_TOOL_CONSENT": "true"})
-def test_memory_integration_store_and_retrieve(managed_knowledge_base):
-    """
-    End-to-end test for Bedrock Knowledge Base memory tool:
-      - Store a unique document
-      - Poll until it is INDEXED
-      - Retrieve via semantic search and verify presence
-    """
-    kb_id = managed_knowledge_base
-    agent = Agent(tools=[memory])
-    clients = KnowledgeBaseHelper._get_boto_clients()
-
-    test_uuid = str(uuid.uuid4())
-    unique_content = f"The secret password for the test is {test_uuid}."
-    store_result = agent.tool.memory(
-        action="store",
-        content=unique_content,
-        title="Integration Test Document",
-        STRANDS_KNOWLEDGE_BASE_ID=kb_id,
-        region_name=AWS_REGION,
-    )
-    assert store_result["status"] == "success", f"Store failed: {store_result}"
-
-    # Extract document ID
-    doc_id = next(
-        (
-            item["text"].split(":", 1)[1].strip()
-            for item in store_result["content"]
-            if "Document ID" in item.get("text", "")
-        ),
-        None,
-    )
-    assert doc_id, f"No document_id returned from store operation. Got: {store_result}"
-
-    ds_id = clients["bedrock-agent"].list_data_sources(knowledgeBaseId=kb_id)["dataSourceSummaries"][0]["dataSourceId"]
-    for _ in range(18):
-        docs = clients["bedrock-agent"].list_knowledge_base_documents(knowledgeBaseId=kb_id, dataSourceId=ds_id)[
-            "documentDetails"
-        ]
-        found = next((d for d in docs if d.get("identifier", {}).get("custom", {}).get("id") == doc_id), None)
-        if found and found.get("status") == "INDEXED":
-            break
-        time.sleep(10)
-    else:
-        raise AssertionError("Stored document did not become INDEXED in time.")
-
-    # Try up to 2 minutes for the content to appear in retrieval results
-    for _ in range(12):
-        retrieve_result = agent.tool.memory(
-            action="retrieve",
-            query=test_uuid,  # use uuid as query is always order by semantic relevance
-            STRANDS_KNOWLEDGE_BASE_ID=kb_id,
-            region_name=AWS_REGION,
-            min_score=0.0,
-            max_results=10,
-        )
-
-        full_retrieved_text = " ".join(item.get("text", "") for item in retrieve_result.get("content", []))
-        if unique_content in full_retrieved_text:
-            break
-        time.sleep(10)
-    else:
-        raise AssertionError("Stored content not found in retrieval after waiting.")
-
-
 class KnowledgeBaseHelper:
     def __init__(self):
-        self.clients = self._get_boto_clients()
+        self.clients = self.get_boto_clients()
         self.index = {
             "role_name": "StrandsMemoryIntegTestRole",
             "kb_name": "strands-memory-integ-test-kb",
@@ -126,10 +36,10 @@ class KnowledgeBaseHelper:
         }
         self.resource_names = self.index
         self.created_resources = {}
-        self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "true").lower() == "true"
+        self.should_teardown = os.environ.get("STRANDS_TEARDOWN_RESOURCES", "false").lower() == "true"
 
     @staticmethod
-    def _get_boto_clients():
+    def get_boto_clients():
         return {
             "iam": boto3.client("iam", region_name=AWS_REGION),
             "bedrock-agent": boto3.client("bedrock-agent", region_name=AWS_REGION),
@@ -212,20 +122,13 @@ class KnowledgeBaseHelper:
             collection_arn = collection_details["arn"]
         self.created_resources["collection_id"] = collection_id
 
-        # 3. IAM Role and Policies
+        # 3. IAM Role and Policies (create first to get ARN)
         try:
             role_res = client["iam"].get_role(RoleName=resources["role_name"])
             self.created_resources["role_arn"] = role_res["Role"]["Arn"]
         except ClientError as e:
             if e.response["Error"]["Code"] != "NoSuchEntity":
                 raise
-            iam_policy_doc = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {"Effect": "Allow", "Action": "bedrock:InvokeModel", "Resource": EMBEDDING_MODEL_ARN},
-                    {"Effect": "Allow", "Action": "aoss:APIAccessAll", "Resource": collection_arn},
-                ],
-            }
             assume_role_policy = {
                 "Version": "2012-10-17",
                 "Statement": [
@@ -236,14 +139,9 @@ class KnowledgeBaseHelper:
                 RoleName=resources["role_name"], AssumeRolePolicyDocument=json.dumps(assume_role_policy)
             )
             self.created_resources["role_arn"] = role_res["Role"]["Arn"]
-            client["iam"].put_role_policy(
-                RoleName=resources["role_name"],
-                PolicyName=resources["policy_name"],
-                PolicyDocument=json.dumps(iam_policy_doc),
-            )
-            time.sleep(15)
+            time.sleep(10)  # Wait for role to propagate
 
-        # 4. OpenSearch Data Access Policy
+        # 4. OpenSearch Data Access Policy (create before collection is active)
         try:
             user_arn = client["sts"].get_caller_identity()["Arn"]
             access_policy_doc = [
@@ -274,8 +172,27 @@ class KnowledgeBaseHelper:
             lambda: client["opensearchserverless"].batch_get_collection(ids=[collection_id])["collectionDetails"][0],
             resource_name=f"OpenSearch Collection ({collection_id})",
         )
+        
+        # 6. Add IAM policy after collection is ready
+        try:
+            iam_policy_doc = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {"Effect": "Allow", "Action": "bedrock:InvokeModel", "Resource": EMBEDDING_MODEL_ARN},
+                    {"Effect": "Allow", "Action": "aoss:APIAccessAll", "Resource": collection_arn},
+                ],
+            }
+            client["iam"].put_role_policy(
+                RoleName=resources["role_name"],
+                PolicyName=resources["policy_name"],
+                PolicyDocument=json.dumps(iam_policy_doc),
+            )
+            time.sleep(30)  # Wait for policy to propagate
+        except ClientError as e:
+            if "EntityAlreadyExists" not in str(e):
+                raise
 
-        # 6. Create vector index
+        # 7. Create vector index
         collection_endpoint = collection_details["collectionEndpoint"]
         host = collection_endpoint.replace("https://", "")
         auth = AWSV4SignerAuth(boto3.Session().get_credentials(), AWS_REGION, "aoss")
@@ -313,7 +230,7 @@ class KnowledgeBaseHelper:
                         raise e
             time.sleep(10)
 
-        # 7. Knowledge Base
+        # 8. Knowledge Base
         kb_res = client["bedrock-agent"].create_knowledge_base(
             name=resources["kb_name"],
             roleArn=self.created_resources["role_arn"],
@@ -341,7 +258,7 @@ class KnowledgeBaseHelper:
             ],
             resource_name=f"Knowledge Base ({self.created_resources['kb_id']})",
         )
-        # 8. Data Source
+        # 9. Data Source
         ds_resource = client["bedrock-agent"].create_data_source(
             knowledgeBaseId=self.created_resources["kb_id"],
             name=resources["ds_name"],

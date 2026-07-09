@@ -1,10 +1,24 @@
 """
 Calculator tool powered by SymPy for comprehensive mathematical operations.
 
-This module provides a powerful mathematical calculation engine built on SymPy
+This module provides a mathematical calculation engine built on SymPy
 that can handle everything from basic arithmetic to advanced calculus, equation solving,
-and matrix operations. It's designed to provide formatted, precise results with
+and matrix operations. It provides formatted, precise results with
 proper error handling and robust type conversion.
+
+Security:
+    All expressions are validated against an AST allowlist before evaluation.
+    Only mathematical syntax (operators, function calls, numeric/boolean literals,
+    names, containers) is permitted. Attribute access, subscripts, lambdas,
+    comprehensions, and imports are rejected, preventing code execution via eval.
+
+    String-literal arguments are rejected as a hardening measure. Several safe
+    SymPy helpers (for example N, simplify, solve) re-parse string arguments through
+    sympify, which evaluates them with full builtins and escapes the restricted
+    namespace used for the top-level expression. String literals are therefore only
+    permitted as positional arguments to the constructors that parse them as a plain
+    name or numeric literal rather than through sympify (Symbol, symbols, Rational,
+    Integer, Float); for example Symbol('x') and Rational('1/3') remain supported.
 
 Key Features:
 1. Expression Evaluation:
@@ -19,7 +33,7 @@ Key Features:
    • Integration (indefinite integrals)
    • Limit calculation (at specified points or infinity)
    • Series expansions (Taylor and Laurent series)
-   • Matrix operations (determinants, multiplication, etc.)
+   • Matrix operations (det, transpose, trace, arithmetic)
 
 3. Display and Formatting:
    • Configurable precision for numeric results
@@ -34,7 +48,7 @@ from strands_tools import calculator
 
 agent = Agent(tools=[calculator])
 
-# Basic arithmetic evaluation
+# Basic arithmetic (expressions must be valid Python with explicit operators)
 agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")
 
 # Equation solving
@@ -54,6 +68,9 @@ agent.tool.calculator(
     mode="integrate",
     wrt="x"
 )
+
+# Matrix determinant
+agent.tool.calculator(expression="det(Matrix([[1, 2], [3, 4]]))")
 ```
 
 See the calculator function docstring for more details on available modes and parameters.
@@ -71,6 +88,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from strands import tool
+from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication_application,
+    parse_expr,
+    standard_transformations,
+)
 
 from strands_tools.utils import console_util
 
@@ -111,63 +134,235 @@ def create_error_panel(console: Console, error_message: str) -> None:
     )
 
 
-def parse_expression(expr_str: str) -> Any:
-    """Parse a string expression into a SymPy expression."""
+# Restricted namespace for parse_expr. Only math functions and constants are available.
+_SAFE_SYMPY_LOCALS: Dict[str, Any] = {
+    # Constants
+    "pi": sp.pi,
+    "e": sp.E,
+    "E": sp.E,
+    "I": sp.I,
+    "oo": sp.oo,
+    "inf": sp.oo,
+    "nan": sp.nan,
+    "zoo": sp.zoo,
+    "true": True,
+    "false": False,
+    "True": True,
+    "False": False,
+    # Trig
+    "sin": sp.sin,
+    "cos": sp.cos,
+    "tan": sp.tan,
+    "cot": sp.cot,
+    "sec": sp.sec,
+    "csc": sp.csc,
+    "asin": sp.asin,
+    "acos": sp.acos,
+    "atan": sp.atan,
+    "atan2": sp.atan2,
+    # Hyperbolic
+    "sinh": sp.sinh,
+    "cosh": sp.cosh,
+    "tanh": sp.tanh,
+    "asinh": sp.asinh,
+    "acosh": sp.acosh,
+    "atanh": sp.atanh,
+    # Exponential/logarithmic
+    "exp": sp.exp,
+    "log": sp.log,
+    "ln": sp.ln,
+    # Powers and roots
+    "sqrt": sp.sqrt,
+    "cbrt": sp.cbrt,
+    "Abs": sp.Abs,
+    "abs": sp.Abs,
+    "sign": sp.sign,
+    # Combinatorics
+    "factorial": sp.factorial,
+    "binomial": sp.binomial,
+    # Floor/ceiling
+    "floor": sp.floor,
+    "ceiling": sp.ceiling,
+    # Special functions
+    "gamma": sp.gamma,
+    "zeta": sp.zeta,
+    "erf": sp.erf,
+    # Min/Max
+    "Max": sp.Max,
+    "Min": sp.Min,
+    "max": sp.Max,
+    "min": sp.Min,
+    # Constructors
+    "Eq": sp.Eq,
+    "Matrix": sp.Matrix,
+    "Rational": sp.Rational,
+    "Integer": sp.Integer,
+    "Float": sp.Float,
+    "Symbol": sp.Symbol,
+    "symbols": sp.symbols,
+    "N": sp.N,
+    # Matrix operations
+    "det": sp.det,
+    "transpose": sp.transpose,
+    "trace": sp.trace,
+    # Solving/simplification
+    "solve": sp.solve,
+    "simplify": sp.simplify,
+    "expand": sp.expand,
+    "factor": sp.factor,
+    "collect": sp.collect,
+    "cancel": sp.cancel,
+    "apart": sp.apart,
+    "together": sp.together,
+    "limit": sp.limit,
+    "diff": sp.diff,
+    "integrate": sp.integrate,
+    "series": sp.series,
+    "Sum": sp.Sum,
+    "Product": sp.Product,
+}
+
+# Restricted globals with builtins neutralized to prevent code execution.
+# Setting __builtins__ to an empty dict ensures __import__, eval, exec, open,
+# and all other Python builtins are inaccessible during eval.
+_SAFE_GLOBALS: Dict[str, Any] = {
+    "__builtins__": {},
+}
+
+
+_ALLOWED_AST_NODES = {
+    # Structural
+    ast.Expression,
+    # Literals
+    ast.Constant,
+    # Names and loading
+    ast.Name,
+    ast.Load,
+    # Expressions
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.BoolOp,
+    ast.Compare,
+    ast.IfExp,
+    ast.Call,
+    # Operators
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
+    ast.USub,
+    ast.UAdd,
+    ast.BitXor,  # used for exponentiation via convert_xor
+    # Comparisons (needed for Eq() style expressions)
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    # Containers (for Matrix([[...]]), function args, etc.)
+    ast.Tuple,
+    ast.List,
+    # Boolean
+    ast.And,
+    ast.Or,
+    ast.Not,
+    # Star args (for function calls like Max(*values))
+    ast.Starred,
+    # keyword arguments (for Symbol('x', positive=True) style calls)
+    ast.keyword,
+}
+
+
+# Constructors whose string arguments are parsed as plain symbol names or numeric
+# literals, not re-evaluated through sympify. A string literal is permitted only as
+# a positional argument to one of these; anywhere else it is rejected, which blocks
+# the sympify-backed re-parse escape (e.g. N("..."), simplify("..."), solve("...")).
+_STRING_ARG_CONSTRUCTORS = frozenset({"Symbol", "symbols", "Rational", "Integer", "Float"})
+
+
+def _validate_expression_ast(expr_str: str) -> None:
+    """Reject expressions containing attribute access, subscripts, or other unsafe syntax.
+
+    This blocks attacks like:
+        solve.__globals__['__builtins__']['__import__']('os').system('...')
+
+    Only pure mathematical expressions (calls, operators, literals, names, containers)
+    are permitted. Inputs that are not valid Python are rejected outright.
+
+    Args:
+        expr_str: The raw expression string to validate.
+
+    Raises:
+        ValueError: If the expression contains disallowed syntax or is not valid Python.
+    """
     try:
-        # Validate expression string
-        if not isinstance(expr_str, str):
-            raise ValueError("Expression must be a string")
+        tree = ast.parse(expr_str, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Invalid mathematical expression: {e.msg}") from e
 
-        # Replace common mathematical notations
-        expr_str = expr_str.replace("^", "**")
+    # Collect the string-literal nodes that appear as positional arguments to a
+    # safe string constructor (e.g. Symbol('x')). Those are the only string
+    # literals we allow; every other string literal is rejected below.
+    allowed_string_nodes: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _STRING_ARG_CONSTRUCTORS:
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    allowed_string_nodes.add(id(arg))
 
-        # Handle logarithm notations
-        if "log(" in expr_str:
-            expr_str = expr_str.replace("log(", "ln(")  # Convert to natural log
+    for node in ast.walk(tree):
+        if type(node) not in _ALLOWED_AST_NODES:
+            raise ValueError(f"Invalid mathematical expression: unsupported syntax '{type(node).__name__}'")
+        # Reject string (and bytes) literals except as positional arguments to
+        # the safe string constructors above. Several functions in the safe
+        # locals (e.g. N, simplify, solve) re-parse string arguments through
+        # SymPy's sympify, which evaluates them with full builtins and escapes
+        # the restricted namespace used for the top-level expression. Symbol('x')
+        # and friends only parse their string as a name or numeric literal, so
+        # they stay allowed while the sympify-backed re-parse remains blocked.
+        if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+            if id(node) not in allowed_string_nodes:
+                raise ValueError("Invalid mathematical expression: string literals are not supported")
 
-        # Pre-process pi and e for better evaluation - using word boundaries to avoid replacing 'e' in function names
-        expr_str = expr_str.replace(" pi ", " " + str(sp.N(sp.pi, 50)) + " ")
-        expr_str = expr_str.replace("(pi)", "(" + str(sp.N(sp.pi, 50)) + ")")
-        expr_str = expr_str.replace("pi+", str(sp.N(sp.pi, 50)) + "+")
-        expr_str = expr_str.replace("pi-", str(sp.N(sp.pi, 50)) + "-")
-        expr_str = expr_str.replace("pi*", str(sp.N(sp.pi, 50)) + "*")
-        expr_str = expr_str.replace("pi/", str(sp.N(sp.pi, 50)) + "/")
-        expr_str = expr_str.replace("pi)", str(sp.N(sp.pi, 50)) + ")")
 
-        # Handle standalone 'e' constant but preserve function names like 'exp'
-        expr_str = expr_str.replace(" e ", " " + str(sp.N(sp.E, 50)) + " ")
-        expr_str = expr_str.replace("(e)", "(" + str(sp.N(sp.E, 50)) + ")")
-        expr_str = expr_str.replace("e+", str(sp.N(sp.E, 50)) + "+")
-        expr_str = expr_str.replace("e-", str(sp.N(sp.E, 50)) + "-")
-        expr_str = expr_str.replace("e*", str(sp.N(sp.E, 50)) + "*")
-        expr_str = expr_str.replace("e/", str(sp.N(sp.E, 50)) + "/")
-        expr_str = expr_str.replace("e)", str(sp.N(sp.E, 50)) + ")")
+def parse_expression(expr_str: str) -> Any:
+    """Parse a string expression into a SymPy expression safely.
 
-        # Basic validation for common invalid patterns
-        if "//" in expr_str:  # Catch integer division which is not supported
-            raise ValueError("Invalid operator: //. Use / for division.")
+    Validates the expression AST against an allowlist of safe node types,
+    then uses sympy.parsing.sympy_parser.parse_expr with a restricted local_dict
+    and empty __builtins__ to prevent code execution via eval.
+    """
+    if not isinstance(expr_str, str):
+        raise ValueError("Expression must be a string")
 
-        if "**/" in expr_str:  # Catch power/division confusion
-            raise ValueError("Invalid operator sequence: **/")
+    # Validate AST before eval to block attribute traversal attacks
+    _validate_expression_ast(expr_str)
 
-        if any(op in expr_str for op in ["&&", "||", "&", "|"]):  # Catch logical operators
-            raise ValueError("Logical operators are not supported in mathematical expressions")
+    transformations = standard_transformations + (
+        implicit_multiplication_application,
+        convert_xor,
+    )
 
-        try:
-            # First try parsing with pre-evaluated constants
-            expr = sp.sympify(expr_str, evaluate=True)  # type: ignore
-
-            # If we got any symbolic constants, substitute their values
-            if expr.has(sp.pi) or expr.has(sp.E):
-                expr = expr.subs({sp.pi: sp.N(sp.pi, 50), sp.E: sp.N(sp.E, 50)})
-
-            return expr
-
-        except sp.SympifyError as e:
-            raise ValueError(f"Invalid mathematical expression: {str(e)}") from e
-
+    try:
+        expr = parse_expr(
+            expr_str,
+            local_dict=_SAFE_SYMPY_LOCALS,
+            global_dict=_SAFE_GLOBALS,
+            transformations=transformations,
+            evaluate=True,
+        )
     except Exception as e:
-        raise ValueError(f"Invalid expression: {str(e)}") from e
+        raise ValueError(f"Invalid mathematical expression: {str(e)}") from e
+
+    # Substitute numeric values for symbolic constants for consistent evaluation
+    if isinstance(expr, sp.Basic) and (expr.has(sp.pi) or expr.has(sp.E)):
+        expr = expr.subs({sp.pi: sp.N(sp.pi, 50), sp.E: sp.N(sp.E, 50)})
+
+    return expr
 
 
 def get_precision_level(num: Union[float, int, sp.Expr]) -> int:
@@ -378,10 +573,10 @@ def numeric_evaluation(result: Any, precision: int, scientific: bool) -> Union[i
         # For floating point, evaluate numerically
         if isinstance(result, sp.Basic):
             if hasattr(result, "is_real") and result.is_real:
-                float_result = float(result.evalf(precision))  # type: ignore
+                float_result = float(result.evalf())  # type: ignore
             else:
                 # Handle complex numbers
-                complex_result = complex(result.evalf(precision))  # type: ignore
+                complex_result = complex(result.evalf())  # type: ignore
                 return format_number(complex_result, scientific, precision)
         else:
             float_result = float(result)
@@ -448,11 +643,11 @@ def evaluate_expression(
 def solve_equation(expr: Any, precision: int) -> Any:
     """Solve an equation or system of equations."""
     try:
-        # Handle system of equations
-        if isinstance(expr, list):
+        # Handle system of equations (list or tuple from comma-separated input)
+        if isinstance(expr, (list, tuple)):
             # Get all variables in the system
             variables = set().union(*[eq.free_symbols for eq in expr])
-            solution = sp.solve(expr, list(variables))
+            solution = sp.solve(list(expr), list(variables))
             return solution
 
         # Single equation
@@ -528,7 +723,7 @@ def calculate_limit(expr: Any, var: str, point: str) -> Any:
             raise ValueError(f"Cannot calculate limit of an undefined expression: {expr}") from None
 
         var_sym = sp.Symbol(var)
-        point_val = sp.sympify(point)
+        point_val = parse_expression(point)
         return sp.limit(expr, var_sym, point_val)
     except Exception as e:
         raise ValueError(f"Limit calculation error: {str(e)}") from e
@@ -548,42 +743,10 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
             raise ValueError(f"Cannot expand series of an undefined expression: {expr}") from None
 
         var_sym = sp.Symbol(var)
-        point_val = sp.sympify(point)
+        point_val = parse_expression(point)
         return sp.series(expr, var_sym, point_val, order)
     except Exception as e:
         raise ValueError(f"Series expansion error: {str(e)}") from e
-
-
-def parse_matrix_expression(expr_str: str) -> Any:
-    """Parse matrix expression and perform operations."""
-    try:
-        # Function to safely convert string to matrix
-        def safe_matrix_from_str(matrix_str: str) -> Any:
-            # Use ast.literal_eval for safe evaluation of matrix literals
-            try:
-                matrix_data = ast.literal_eval(matrix_str.strip())
-                return sp.Matrix(matrix_data)
-            except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid matrix format: {str(e)}") from e
-
-        # Split into parts for operations
-        parts = expr_str.split("*")
-        if len(parts) == 2:
-            # Handle multiplication
-            matrix1 = safe_matrix_from_str(parts[0])
-            matrix2 = safe_matrix_from_str(parts[1])
-            return matrix1 * matrix2
-        elif "+" in expr_str:
-            # Handle addition
-            parts = expr_str.split("+")
-            matrix1 = safe_matrix_from_str(parts[0])
-            matrix2 = safe_matrix_from_str(parts[1])
-            return matrix1 + matrix2
-        else:
-            # Single matrix operations
-            return safe_matrix_from_str(expr_str)
-    except Exception as e:
-        raise ValueError(f"Matrix parsing error: {str(e)}") from e
 
 
 @tool
@@ -635,9 +798,15 @@ def calculator(
     - Data science: Matrix operations and statistical calculations
 
     Args:
-        expression: The mathematical expression to evaluate, such as "2 + 2 * 3",
-            "x**2 + 2*x + 1", or "sin(pi/2)". For matrix operations, use array
-            notation like "[[1, 2], [3, 4]]".
+        expression: A SymPy-compatible mathematical expression written in valid Python
+            syntax. Use explicit operators and SymPy function names (e.g., "2*x + 1",
+            "sin(pi/2)", "factorial(5)", "Abs(x)", "Eq(x**2, 4)").
+            For matrix operations, use Matrix() with functions like det(),
+            transpose(), or trace().
+            String-literal arguments are rejected as a security hardening measure,
+            except as positional arguments to the symbol/number constructors that do
+            not re-parse them through sympify: Symbol('x'), symbols('x y z'),
+            Rational('1/3'), Integer('5') and Float('3.14') are supported.
         mode: The calculation mode to use. Options are:
             - "evaluate": Compute the value of the expression (default)
             - "solve": Solve an equation or system of equations
@@ -673,6 +842,10 @@ def calculator(
 
     Notes:
         - For equation solving, set the expression equal to zero implicitly (x**2 + 1 means x**2 + 1 = 0)
+        - To solve a system of equations, pass the equations as a comma-separated
+          expression (e.g. "x + y - 10, x - y - 2"), which parses to a tuple of
+          expressions. Passing a quoted string list (e.g. "['x + y - 10', ...]") is
+          not supported because string literals are rejected during validation.
         - Use 'pi' and 'e' for mathematical constants
         - The 'wrt' parameter is required for differentiation and integration
         - Matrix expressions use Python-like syntax: [[1, 2], [3, 4]]
@@ -697,10 +870,7 @@ def calculator(
         variables = variables or {}
 
         # Parse the expression
-        if mode == "matrix":
-            expr = parse_matrix_expression(expression)
-        else:
-            expr = parse_expression(expression)
+        expr = parse_expression(expression)
 
         # Process based on mode
         additional_info = {}

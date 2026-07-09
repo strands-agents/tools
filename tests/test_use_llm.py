@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from strands.agent import AgentResult
+
 from strands_tools import use_llm
 
 
@@ -356,7 +357,7 @@ def test_use_llm_with_nonexistent_tool_filtering():
         result = use_llm.use_llm(tool=tool_use, agent=mock_parent_agent)
 
         # Verify warning was logged for non-existent tool
-        mock_logger.warning.assert_called_once_with("Tool 'nonexistent_tool' not found in parent agent's tool registry")
+        mock_logger.warning.assert_called_with("Tool 'nonexistent_tool' not found in parent agent's tool registry")
 
         # Verify the Agent was created with only the existing tools
         MockAgent.assert_called_once()

@@ -72,6 +72,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from strands import tool
 
 from strands_tools.utils import console_util
@@ -206,7 +207,8 @@ def nova_reels(
         console.print(f"📡 Connecting to Bedrock Runtime in {aws_region}")
 
         # Create Bedrock Runtime client with configurable region
-        bedrock_runtime = boto3.client("bedrock-runtime", region_name=aws_region)
+        config = BotocoreConfig(user_agent_extra="strands-agents-nova-reels")
+        bedrock_runtime = boto3.client("bedrock-runtime", region_name=aws_region, config=config)
 
         if action == "create":
             if not text:

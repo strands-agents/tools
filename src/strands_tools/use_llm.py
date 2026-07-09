@@ -139,6 +139,11 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
+    logger.warning(
+        "DEPRECATION WARNING: use_llm will be removed in the next major release. "
+        "Migration path: replace use_llm calls with use_agent for equivalent functionality."
+    )
+
     prompt = tool_input["prompt"]
     tool_system_prompt = tool_input.get("system_prompt")
     specified_tools = tool_input.get("tools")

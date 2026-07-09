@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import UnknownServiceError
 from botocore.model import Shape
+
 from strands_tools.utils.generate_schema_util import (
     check_boto3_validity,
     clean_and_trim_description,

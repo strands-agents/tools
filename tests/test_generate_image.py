@@ -7,7 +7,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
+
 from strands_tools import generate_image
 
 
@@ -85,8 +87,16 @@ def test_generate_image_direct(mock_boto3_client, mock_os_path_exists, mock_os_m
     # Call the generate_image function directly
     result = generate_image.generate_image(tool=tool_use)
 
-    # Verify the function was called with correct parameters
-    mock_boto3_client.assert_called_once_with("bedrock-runtime", region_name="us-west-2")
+    # Verify the function was called with correct parameters including user agent
+    mock_boto3_client.assert_called_once()
+    args, kwargs = mock_boto3_client.call_args
+    assert args[0] == "bedrock-runtime"
+    assert kwargs["region_name"] == "us-west-2"
+    assert "config" in kwargs
+    config = kwargs["config"]
+    assert isinstance(config, BotocoreConfig)
+    assert config.user_agent_extra == "strands-agents-generate-image"
+
     mock_client_instance = mock_boto3_client.return_value
     mock_client_instance.invoke_model.assert_called_once()
 
@@ -133,6 +143,40 @@ def test_generate_image_default_params(mock_boto3_client, mock_os_path_exists, m
     assert request_body["negative_prompt"] == "bad lighting, harsh lighting"
 
     assert result["status"] == "success"
+
+
+def test_generate_image_saved_filename_matches_output_format(
+    mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open
+):
+    """Saved file extension should match the requested output_format (png)."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {"prompt": "A cute robot", "output_format": "png"},
+    }
+
+    result = generate_image.generate_image(tool=tool_use)
+
+    mock_open, _ = mock_file_open
+    saved_path = mock_open.call_args[0][0]
+    assert saved_path.endswith(".png")
+    assert result["content"][1]["image"]["format"] == "png"
+    # The reported path and the returned format must agree.
+    assert saved_path in result["content"][0]["text"]
+
+
+def test_generate_image_default_output_format_saved_as_jpeg(
+    mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open
+):
+    """With the default output_format (jpeg), the saved file must not be a .png."""
+    tool_use = {"toolUseId": "test-tool-use-id", "input": {"prompt": "A cute robot"}}
+
+    result = generate_image.generate_image(tool=tool_use)
+
+    mock_open, _ = mock_file_open
+    saved_path = mock_open.call_args[0][0]
+    assert result["content"][1]["image"]["format"] == "jpeg"
+    assert saved_path.endswith(".jpeg")
+    assert not saved_path.endswith(".png")
 
 
 def test_generate_image_error_handling(mock_boto3_client):

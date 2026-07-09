@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import journal
 
 

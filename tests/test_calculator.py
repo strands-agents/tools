@@ -7,9 +7,6 @@ import unittest.mock as mock
 import pytest
 import sympy as sp
 from strands import Agent
-
-# Module level import for the Agent fixture
-from strands_tools import calculator as calculator_module
 from sympy import Integer, Symbol, exp, log
 
 # Function level imports from calculator module
@@ -27,11 +24,13 @@ from src.strands_tools.calculator import (
     get_precision_level,
     numeric_evaluation,
     parse_expression,
-    parse_matrix_expression,
     preprocess_expression,
     solve_equation,
 )
 from src.strands_tools.calculator import calculator as calculator_func
+
+# Module level import for the Agent fixture
+from strands_tools import calculator as calculator_module
 
 
 @pytest.fixture
@@ -109,20 +108,20 @@ def test_equation_solving(agent):
 def test_matrix_operations(agent):
     """Test matrix operations."""
     # Test matrix addition
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]] + [[5, 6], [7, 8]]", mode="matrix")
+    result = agent.tool.calculator(expression="Matrix([[1, 2], [3, 4]]) + Matrix([[5, 6], [7, 8]])", mode="matrix")
     result_text = extract_result_text(result)
     assert "6" in result_text and "8" in result_text and "10" in result_text and "12" in result_text
 
     # Test matrix multiplication
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]] * [[5, 6], [7, 8]]", mode="matrix")
+    result = agent.tool.calculator(expression="Matrix([[1, 2], [3, 4]]) * Matrix([[5, 6], [7, 8]])", mode="matrix")
     result_text = extract_result_text(result)
     # Result should be [[19, 22], [43, 50]]
     assert "19" in result_text and "22" in result_text and "43" in result_text and "50" in result_text
 
-    # Test determinant (implicitly)
-    result = agent.tool.calculator(expression="[[1, 2], [3, 4]]", mode="matrix")
+    # Test determinant
+    result = agent.tool.calculator(expression="det(Matrix([[1, 2], [3, 4]]))")
     result_text = extract_result_text(result)
-    assert "Matrix" in result_text or "1" in result_text  # Either the matrix itself or its determinant
+    assert "-2" in result_text
 
 
 def test_scientific_notation_and_precision(agent):
@@ -146,16 +145,17 @@ def test_parse_expression_edge_cases():
     with pytest.raises(ValueError, match="Expression must be a string"):
         parse_expression(123)
 
-    # Test with invalid operators
-    with pytest.raises(ValueError, match="Invalid operator"):
-        parse_expression("2 // 3")
-
-    with pytest.raises(ValueError, match="Invalid operator sequence"):
+    # Test with invalid syntax
+    with pytest.raises(ValueError):
         parse_expression("2 **/ 3")
 
-    # Test with logical operators
-    with pytest.raises(ValueError, match="Logical operators are not supported"):
+    # Test with logical operators (invalid Python syntax)
+    with pytest.raises(ValueError):
         parse_expression("x && y")
+
+    # Test that floor division is handled (parse_expr supports it)
+    result = parse_expression("2 // 3")
+    assert result == 0
 
     # Test logarithm notation
     result = parse_expression("log(10)")
@@ -189,8 +189,8 @@ def test_parse_expression_edge_cases():
         result = parse_expression(case)
         assert isinstance(result, sp.Basic)
 
-    # Test sympify error handling
-    with mock.patch("sympy.sympify", side_effect=sp.SympifyError("Test error")):
+    # Test parse_expr error handling
+    with mock.patch("src.strands_tools.calculator.parse_expr", side_effect=SyntaxError("Test error")):
         with pytest.raises(ValueError, match="Invalid mathematical expression"):
             parse_expression("x + y")
 
@@ -396,17 +396,6 @@ def test_create_error_panel():
     mock_console.print.assert_called_once()
 
 
-def test_parse_matrix_expression_errors():
-    """Test error handling in parse_matrix_expression function."""
-    # Test with invalid matrix format
-    with pytest.raises(ValueError, match="Invalid matrix format"):
-        parse_matrix_expression("[[1, 2], [3]]")
-
-    # Test with general error
-    with pytest.raises(ValueError, match="Matrix parsing error"):
-        parse_matrix_expression("not_a_matrix")
-
-
 def test_evaluate_expression_comprehensive():
     """Test comprehensive evaluation of expressions."""
     # Test basic numeric evaluation
@@ -436,11 +425,6 @@ def test_edge_case_error_handling(agent):
     """Test more edge cases for error handling."""
     # Test with unsupported operators
     result = agent.tool.calculator(expression="x && y")
-    result_text = extract_result_text(result)
-    assert "Error" in result_text
-
-    # Test with invalid matrix input
-    result = agent.tool.calculator(expression="[[1, 2], [3]]", mode="matrix")
     result_text = extract_result_text(result)
     assert "Error" in result_text
 
@@ -602,26 +586,35 @@ def test_error_handling_in_calculation_functions():
 
 
 def test_calculator_tool_with_system_of_equations():
-    """Test the calculator tool with a system of equations."""
-    # Create a tool use with a system of equations
+    """Test the calculator tool with a system of equations using the supported syntax.
+
+    The system is passed as a comma-separated expression, which parses to a tuple of
+    SymPy expressions and is routed to the system solver. This exercises the real
+    validator and parser (no mocks).
+    """
     from src.strands_tools.calculator import calculator as calc_function
 
-    # Mock parse_expression to return a list of expressions
-    with mock.patch(
-        "src.strands_tools.calculator.parse_expression",
-        side_effect=lambda expr: (
-            [sp.Symbol("x") + sp.Symbol("y") - 10, sp.Symbol("x") - sp.Symbol("y") - 2]
-            if expr.startswith("[")
-            else expr
-        ),
-    ):
-        # This should trigger the system of equations path in calculator function
-        result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+    result = calc_function(expression="x + y - 10, x - y - 2", mode="solve")
 
-        # Check for success status
-        assert result["status"] == "success"
-        # The result should contain the solution
-        assert "Result:" in result["content"][0]["text"]
+    assert result["status"] == "success"
+    text = result["content"][0]["text"]
+    # Solution is x = 6, y = 4.
+    assert "6" in text and "4" in text
+
+
+def test_calculator_tool_rejects_string_list_system_syntax():
+    """The quoted string-list system syntax is now rejected during validation.
+
+    This syntax was never functional (parse_expr returns raw strings that the solver
+    cannot process) and string literals are now rejected outright as a hardening
+    measure, so the tool returns a validation error rather than a spurious success.
+    """
+    from src.strands_tools.calculator import calculator as calc_function
+
+    result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+
+    assert result["status"] == "error"
+    assert "string literals are not supported" in result["content"][0]["text"]
 
 
 def test_error_handling(agent):
@@ -642,3 +635,153 @@ def test_error_handling(agent):
     result_text = extract_result_text(result)
     # Should either give an error or solve in terms of y
     assert "Error" in result_text or "y" in result_text
+
+
+@pytest.mark.parametrize(
+    "payload,mock_target",
+    [
+        ("__import__('os').getpid()", "os.getpid"),
+        ("open('/dev/null')", "builtins.open"),
+        ("eval('__import__(\"os\").getpid()')", "os.getpid"),
+    ],
+)
+def test_code_execution_blocked(payload, mock_target):
+    """Verify that malicious payloads cannot achieve code execution via the calculator tool."""
+    with mock.patch(mock_target) as mock_fn:
+        result = calculator_func(expression=payload, mode="evaluate")
+        assert result["status"] == "error"
+        assert "Invalid mathematical expression" in result["content"][0]["text"]
+        mock_fn.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Attribute traversal via __globals__
+        "solve.__globals__['__builtins__']['__import__']('os').system('id')",
+        "simplify.__globals__['__builtins__']['__import__']('os').getpid()",
+        "N.__globals__['__builtins__']['__import__']('subprocess').run(['id'])",
+        # Attribute traversal via __class__
+        "solve.__class__.__bases__[0].__subclasses__()",
+        "(1).__class__.__bases__[0].__subclasses__()",
+        # Direct attribute access
+        "solve.__module__",
+        "solve.__name__",
+        # Subscript access
+        "solve.__globals__['os']",
+        # Lambda and comprehensions
+        "(lambda: __import__('os'))()",
+        "[x for x in ().__class__.__bases__[0].__subclasses__()]",
+        # Invalid Python (implicit multiplication, assignment, import)
+        "2x",
+        "2sin(x)",
+        "x = 5",
+        "import os",
+    ],
+)
+def test_ast_validation_rejects_unsafe_input(payload):
+    """Verify that AST validation rejects unsafe or non-Python syntax."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # String-literal argument to a function that re-parses it through sympify
+        "N(\"__import__('os').system('id')\")",
+        "simplify(\"__import__('os').system('id')\")",
+        "solve(\"__import__('os').getpid()\")",
+        "integrate(\"__import__('subprocess').run(['id'])\")",
+        # Plain string literals in various positions
+        "'abc'",
+        "Max(1, 'abc')",
+        "Matrix([['a', 'b'], ['c', 'd']])",
+    ],
+)
+def test_ast_validation_rejects_string_literals(payload):
+    """Verify that string-literal arguments are rejected before reaching sympify."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_string_argument_does_not_execute():
+    """Verify a string argument to a sympify-backed function does not run code."""
+    payload = "N(\"__import__('os').getpid()\")"
+    with mock.patch("os.getpid") as mock_getpid:
+        with pytest.raises(ValueError, match="Invalid mathematical expression"):
+            parse_expression(payload)
+        mock_getpid.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("Symbol('x')", sp.Symbol("x")),
+        ("symbols('x y z')", (sp.Symbol("x"), sp.Symbol("y"), sp.Symbol("z"))),
+        ("Rational('1/3')", sp.Rational(1, 3)),
+        ("Integer('5')", sp.Integer(5)),
+        ("Float('3.14')", sp.Float("3.14")),
+    ],
+)
+def test_string_arg_constructors_are_allowed(expression, expected):
+    """Symbol/number constructors parse their string as a name/number, not via sympify.
+
+    These are safe (no sympify re-parse) and remain supported so the hardening does
+    not break the documented string-constructor syntax.
+    """
+    assert parse_expression(expression) == expected
+
+
+def test_symbol_string_arg_does_not_execute():
+    """A malicious string passed to Symbol() becomes a symbol name, never executes."""
+    malicious = "__import__('os').getpid()"
+    payload = f"Symbol({malicious!r})"
+    with mock.patch("os.getpid") as mock_getpid:
+        result = parse_expression(payload)
+        mock_getpid.assert_not_called()
+    # Accepted as a symbol whose name is the literal string; the string is not eval'd.
+    assert isinstance(result, sp.Symbol)
+    assert result.name == malicious
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Only positional string args to the safe constructors are allowed; a
+        # string in keyword position is still rejected.
+        "Symbol(name='x')",
+        "Symbol('x', name='y')",
+        # Bytes literals are rejected everywhere, including in constructor args.
+        "Symbol(b'x')",
+        "simplify(b\"__import__('os').getpid()\")",
+    ],
+)
+def test_ast_validation_rejects_non_positional_and_bytes_literals(payload):
+    """Keyword-position strings and bytes literals stay rejected by the allowlist."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "2 + 3",
+        "sin(pi/4)",
+        "sqrt(2)",
+        "factorial(10)",
+        "Matrix([[1,2],[3,4]])",
+        "Eq(x**2, 4)",
+        "Max(1, 2, 3)",
+        "2^10",
+        "2*x + 3*y",
+        "log(e**2) + sin(pi)",
+        "det(Matrix([[1, 2], [3, 4]]))",
+        "transpose(Matrix([[1, 2], [3, 4]]))",
+        "trace(Matrix([[1, 0], [0, 5]]))",
+    ],
+)
+def test_ast_validation_allows_legitimate_math(expression):
+    """Verify that AST validation permits valid mathematical expressions."""
+    result = parse_expression(expression)
+    assert result is not None

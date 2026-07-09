@@ -7,6 +7,27 @@ Please read through this document before submitting any issues or pull requests 
 information to effectively respond to your bug report or contribution.
 
 
+## New Tools Policy
+
+**We are not accepting new tools into this repository.** Instead, we recommend publishing new tools as standalone community packages — this way you own your release cycle and can iterate independently.
+
+**What we accept:**
+- Bug fixes for existing tools
+- Documentation improvements
+- Performance enhancements to existing tools
+- Test coverage improvements
+
+**What we don't accept:**
+- New tool submissions (PRs adding new tools will be closed)
+- New tool feature requests (issues requesting new tools will be closed)
+
+**Want to build a tool?** Use our [extension template](https://github.com/strands-agents/extension-template-python) to scaffold your own tool package and publish it to PyPI. Once published, you can get it featured in our docs and community catalog:
+
+- Extension template: https://github.com/strands-agents/extension-template-python
+- Get featured in docs: https://strandsagents.com/docs/community/get-featured/
+- Contribution guide: https://strandsagents.com/docs/contribute/
+
+
 ## Reporting Bugs/Feature Requests
 
 We welcome you to use the [Bug Reports](../../issues/new?template=bug_report.yml) file to report bugs or [Feature Requests](../../issues/new?template=feature_request.yml) to suggest features.
@@ -23,6 +44,16 @@ Please try to include as much information as you can. Details like these are inc
 * The version of our code being used (commit ID)
 * Any modifications you've made relevant to the bug
 * Anything unusual about your environment or deployment
+
+## Finding contributions to work on
+Looking at the existing issues is a great way to find something to contribute to. We label issues that are well-defined and ready for community contributions with the "ready for contribution" label.
+
+Check our [Ready for Contribution](../../issues?q=is%3Aissue%20state%3Aopen%20label%3A%22ready%20for%20contribution%22) issues for items you can work on.
+
+Before starting work on any issue:
+1. Check if someone is already assigned or working on it
+2. Comment on the issue to express your interest and ask any clarifying questions
+3. Wait for maintainer confirmation before beginning significant work
 
 
 ## Development Environment

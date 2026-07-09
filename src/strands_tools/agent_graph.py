@@ -514,6 +514,11 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     messages = kwargs.get("messages")
     tool_config = kwargs.get("tool_config")
 
+    logger.warning(
+        "DEPRECATION WARNING: agent_graph will be removed in the next major release. "
+        "Migration path: replace agent_graph calls with graph for equivalent functionality."
+    )
+
     try:
         # Create tool context
         tool_context = {

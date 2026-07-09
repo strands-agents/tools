@@ -6,17 +6,34 @@ This tool provides functionality to discover and communicate with A2A-compliant 
 Key Features:
 - Agent discovery through agent cards from multiple URLs
 - Message sending to specific A2A agents
+- Push notification support for real-time task completion alerts
+- Custom authentication support via httpx client arguments
+
+Usage Examples:
+
+    Basic usage without authentication:
+        >>> provider = A2AClientToolProvider(
+        ...     known_agent_urls=["http://agent1.example.com", "http://agent2.example.com"]
+        ... )
+
+    With OAuth/Bearer token authentication:
+        >>> provider = A2AClientToolProvider(
+        ...     known_agent_urls=["http://secure-agent.example.com"],
+        ...     httpx_client_args={
+        ...         "headers": {"Authorization": "Bearer your-token-here"},
+        ...         "timeout": 300
+        ...     }
+        ... )
 """
 
 import asyncio
-import atexit
 import logging
 from typing import Any
 from uuid import uuid4
 
 import httpx
-from a2a.client import A2ACardResolver, A2AClient
-from a2a.types import AgentCard, Message, MessageSendParams, Part, Role, SendMessageRequest, TextPart
+from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
 
@@ -32,22 +49,49 @@ class A2AClientToolProvider:
         self,
         known_agent_urls: list[str] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
+        webhook_url: str | None = None,
+        webhook_token: str | None = None,
+        httpx_client_args: dict[str, Any] | None = None,
     ):
         """
         Initialize A2A client tool provider.
 
         Args:
-            agent_urls: List of A2A agent URLs to use (defaults to None)
-            timeout: Timeout for HTTP operations in seconds (defaults to 30)
+            known_agent_urls: List of A2A agent URLs to use (defaults to None)
+            timeout: Timeout for HTTP operations in seconds (defaults to 300)
+            webhook_url: Optional webhook URL for push notifications
+            webhook_token: Optional authentication token for webhook notifications
+            httpx_client_args: Optional dictionary of arguments to pass to httpx.AsyncClient
+                constructor. This allows custom auth, headers, proxies, etc.
+                Example: {"headers": {"Authorization": "Bearer token"}, "timeout": 60}
+
+                Note: To avoid event loop issues in multi-turn conversations,
+                a fresh client is created for each async operation using these args.
+                This prevents "Event loop is closed" errors when the provider is used
+                across multiple asyncio.run() calls.
         """
         self.timeout = timeout
         self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}
-        self._httpx_client: httpx.AsyncClient | None = None
+
+        # Store client args instead of client instance to avoid event loop issues
+        self._httpx_client_args: dict[str, Any] = httpx_client_args or {}
+
+        # Set default timeout if not provided in client args
+        if "timeout" not in self._httpx_client_args:
+            self._httpx_client_args["timeout"] = self.timeout
+
         self._initial_discovery_done: bool = False
 
-        # Register resource cleanup on program exit
-        atexit.register(self.close)
+        # Push notification configuration
+        self._webhook_url = webhook_url
+        self._webhook_token = webhook_token
+        self._push_config: PushNotificationConfig | None = None
+
+        if self._webhook_url and self._webhook_token:
+            self._push_config = PushNotificationConfig(
+                id=f"strands-webhook-{uuid4().hex[:8]}", url=self._webhook_url, token=self._webhook_token
+            )
 
     @property
     def tools(self) -> list[AgentTool]:
@@ -64,31 +108,39 @@ class A2AClientToolProvider:
 
         return tools
 
-    def _run_async(self, coro):
-        """Handle async-to-sync conversion internally."""
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
+    def _get_httpx_client(self) -> httpx.AsyncClient:
+        """
+        Get a fresh httpx client for the current operation.
 
-    async def _ensure_httpx_client(self) -> httpx.AsyncClient:
-        """Ensure the shared HTTP client is initialized."""
-        if self._httpx_client is None:
-            self._httpx_client = httpx.AsyncClient(timeout=self.timeout)
-        return self._httpx_client
+        Creates a new client using the stored client args. This prevents event loop
+        issues when the provider is used across multiple asyncio.run() calls.
 
-    async def _create_a2a_client(self, url: str) -> A2AClient:
-        """Create a new A2A client for the given URL."""
-        httpx_client = await self._ensure_httpx_client()
-        agent_card = await self._async_discover_agent_card(url)
-        logger.info(f"A2AClient created for {url}")
-        return A2AClient(httpx_client=httpx_client, agent_card=agent_card)
+        Similar to the Gemini model provider fix in strands-agents/sdk-python#932,
+        we create fresh clients per operation rather than reusing a single instance.
+        """
+        return httpx.AsyncClient(**self._httpx_client_args)
+
+    def _get_client_factory(self) -> ClientFactory:
+        """
+        Get a ClientFactory for the current operation.
+
+        Creates a fresh ClientFactory with a fresh httpx client for each call to avoid
+        event loop issues when the provider is used across multiple asyncio.run() calls.
+
+        Note: We don't cache the ClientFactory because it contains the httpx client,
+        which would cause "Event loop is closed" errors in multi-turn conversations.
+        """
+        httpx_client = self._get_httpx_client()
+        config = ClientConfig(
+            httpx_client=httpx_client,
+            streaming=False,  # Use non-streaming mode for simpler response handling
+            push_notification_configs=[self._push_config] if self._push_config else [],
+        )
+        return ClientFactory(config)
 
     async def _create_a2a_card_resolver(self, url: str) -> A2ACardResolver:
-        """Create a new A2A client for the given URL."""
-        httpx_client = await self._ensure_httpx_client()
+        """Create a new A2A card resolver for the given URL."""
+        httpx_client = self._get_httpx_client()
         logger.info(f"A2ACardResolver created for {url}")
         return A2ACardResolver(httpx_client=httpx_client, base_url=url)
 
@@ -98,7 +150,7 @@ class A2AClientToolProvider:
         async def _discover_agent_with_error_handling(url: str):
             """Helper method to discover an agent with error handling."""
             try:
-                await self._async_discover_agent_card(url)
+                await self._discover_agent_card(url)
             except Exception as e:
                 logger.error(f"Failed to discover agent at {url}: {e}")
 
@@ -113,7 +165,7 @@ class A2AClientToolProvider:
         if not self._initial_discovery_done and self._known_agent_urls:
             await self._discover_known_agents()
 
-    async def _async_discover_agent_card(self, url: str) -> AgentCard:
+    async def _discover_agent_card(self, url: str) -> AgentCard:
         """Internal method to discover and cache an agent card."""
         if url in self._discovered_agents:
             return self._discovered_agents[url]
@@ -126,12 +178,13 @@ class A2AClientToolProvider:
         return agent_card
 
     @tool
-    def a2a_discover_agent(self, url: str) -> dict[str, Any]:
+    async def a2a_discover_agent(self, url: str) -> dict[str, Any]:
         """
         Discover an A2A agent and return its agent card with capabilities.
 
         This function fetches the agent card from the specified A2A agent URL
-        and caches it for future use.
+        and caches it for future use. Use this when you need to discover a new
+        agent that is not in the known agents list.
 
         Args:
             url: The base URL of the A2A agent to discover
@@ -143,13 +196,13 @@ class A2AClientToolProvider:
                 - error: Error message (if failed)
                 - url: The agent URL that was queried
         """
-        return self._run_async(self._async_discover_agent_card_tool(url))
+        return await self._discover_agent_card_tool(url)
 
-    async def _async_discover_agent_card_tool(self, url: str) -> dict[str, Any]:
+    async def _discover_agent_card_tool(self, url: str) -> dict[str, Any]:
         """Internal async implementation for discover_agent_card tool."""
         try:
             await self._ensure_discovered_known_agents()
-            agent_card = await self._async_discover_agent_card(url)
+            agent_card = await self._discover_agent_card(url)
             return {
                 "status": "success",
                 "agent_card": agent_card.model_dump(mode="python", exclude_none=True),
@@ -164,7 +217,7 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def a2a_list_discovered_agents(self) -> dict[str, Any]:
+    async def a2a_list_discovered_agents(self) -> dict[str, Any]:
         """
         List all discovered A2A agents and their capabilities.
 
@@ -174,9 +227,9 @@ class A2AClientToolProvider:
                 - agents: List of discovered agents with their details
                 - total_count: Total number of discovered agents
         """
-        return self._run_async(self._async_list_discovered_agents())
+        return await self._list_discovered_agents()
 
-    async def _async_list_discovered_agents(self) -> dict[str, Any]:
+    async def _list_discovered_agents(self) -> dict[str, Any]:
         """Internal async implementation for list_discovered_agents."""
         try:
             await self._ensure_discovered_known_agents()
@@ -198,15 +251,20 @@ class A2AClientToolProvider:
             }
 
     @tool
-    def a2a_send_message(
+    async def a2a_send_message(
         self, message_text: str, target_agent_url: str, message_id: str | None = None
     ) -> dict[str, Any]:
         """
         Send a message to a specific A2A agent and return the response.
 
+        IMPORTANT: If the user provides a specific URL, use it directly. If the user
+        refers to an agent by name only, use a2a_list_discovered_agents first to get
+        the correct URL. Never guess, generate, or hallucinate URLs.
+
         Args:
             message_text: The message content to send to the agent
-            target_agent_url: The URL of the target A2A agent
+            target_agent_url: The exact URL of the target A2A agent
+                (user-provided URL or from a2a_list_discovered_agents)
             message_id: Optional message ID for tracking (generates UUID if not provided)
 
         Returns:
@@ -217,16 +275,20 @@ class A2AClientToolProvider:
                 - message_id: The message ID used
                 - target_agent_url: The agent URL that was contacted
         """
-        return self._run_async(self._async_send_message(message_text, target_agent_url, message_id))
+        return await self._send_message(message_text, target_agent_url, message_id)
 
-    async def _async_send_message(
+    async def _send_message(
         self, message_text: str, target_agent_url: str, message_id: str | None = None
     ) -> dict[str, Any]:
         """Internal async implementation for send_message."""
 
         try:
             await self._ensure_discovered_known_agents()
-            client = await self._create_a2a_client(target_agent_url)
+
+            # Get the agent card and create client using factory
+            agent_card = await self._discover_agent_card(target_agent_url)
+            client_factory = self._get_client_factory()
+            client = client_factory.create(agent_card)
 
             if message_id is None:
                 message_id = uuid4().hex
@@ -235,17 +297,48 @@ class A2AClientToolProvider:
                 kind="message",
                 role=Role.user,
                 parts=[Part(TextPart(kind="text", text=message_text))],
-                messageId=message_id,
+                message_id=message_id,
             )
 
-            request = SendMessageRequest(id=str(uuid4()), params=MessageSendParams(message=message))
-
             logger.info(f"Sending message to {target_agent_url}")
-            response = await client.send_message(request)
 
+            # With streaming=False, this will yield exactly one result
+            async for event in client.send_message(message):
+                if isinstance(event, Message):
+                    # Direct message response
+                    return {
+                        "status": "success",
+                        "response": event.model_dump(mode="python", exclude_none=True),
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+                elif isinstance(event, tuple) and len(event) == 2:
+                    # (Task, UpdateEvent) tuple - extract the task
+                    task, update_event = event
+                    return {
+                        "status": "success",
+                        "response": {
+                            "task": task.model_dump(mode="python", exclude_none=True),
+                            "update": (
+                                update_event.model_dump(mode="python", exclude_none=True) if update_event else None
+                            ),
+                        },
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+                else:
+                    # Fallback for unexpected response types
+                    return {
+                        "status": "success",
+                        "response": {"raw_response": str(event)},
+                        "message_id": message_id,
+                        "target_agent_url": target_agent_url,
+                    }
+
+            # This should never be reached with streaming=False
             return {
-                "status": "success",
-                "response": response.model_dump(mode="python", exclude_none=True),
+                "status": "error",
+                "error": "No response received from agent",
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
             }
@@ -258,19 +351,3 @@ class A2AClientToolProvider:
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
             }
-
-    def close(self):
-        """Close the HTTP client and clean up resources. Safe to call multiple times."""
-        if self._httpx_client is not None:
-            logger.debug("Closing HTTP client and cleaning up resources")
-            self._run_async(self._async_close())
-            self._httpx_client = None
-            self._discovered_agents.clear()
-            logger.info("A2AClientToolProvider resources cleaned up")
-        else:
-            logger.debug("A2AClientToolProvider already cleaned up, skipping")
-
-    async def _async_close(self):
-        """Internal async method to close the HTTP client."""
-        if self._httpx_client is not None:
-            await self._httpx_client.aclose()

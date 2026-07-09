@@ -4,6 +4,7 @@ Tests for the stop tool using the Agent interface.
 
 import pytest
 from strands import Agent
+
 from strands_tools import stop
 
 

@@ -358,7 +358,7 @@ def editor(
             elif command in {"str_replace", "pattern_replace"}:
                 old = old_str if command == "str_replace" else pattern
                 new = new_str
-                if not old or not new:
+                if not old or new is None:
                     param_name = "old_str" if command == "str_replace" else "pattern"
                     raise ValueError(f"Both {param_name} and new_str are required for {command} command")
                 language = detect_language(path)
@@ -515,7 +515,7 @@ def editor(
             result = f"File {path} created successfully"
 
         elif command == "str_replace":
-            if not old_str or not new_str:
+            if not old_str or new_str is None:
                 raise ValueError("Both old_str and new_str are required for str_replace command")
 
             # Check content history first
@@ -536,8 +536,10 @@ def editor(
 
             # Make replacements and backup
             new_content = content.replace(old_str, new_str)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -551,7 +553,7 @@ def editor(
             )
 
         elif command == "pattern_replace":
-            if not pattern or not new_str:
+            if not pattern or new_str is None:
                 raise ValueError("Both pattern and new_str are required for pattern_replace command")
 
             # Validate pattern
@@ -606,8 +608,12 @@ def editor(
 
             # Make replacements and backup
             new_content = regex.sub(new_str, content)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
+            else:
+                backup_path = "Disabled"
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -678,8 +684,10 @@ def editor(
                 raise ValueError(f"insert_line {insert_line} is out of range")
 
             # Make backup
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Insert and write
             lines.insert(insert_line, new_str)
