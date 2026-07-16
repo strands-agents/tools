@@ -1030,6 +1030,7 @@ These variables affect multiple tools:
 | Environment Variable | Description | Default | Affected Tools |
 |----------------------|-------------|---------|---------------|
 | BYPASS_TOOL_CONSENT | Bypass consent for tool invocation, set to "true" to enable | false | All tools that require consent (e.g. shell, file_write, python_repl) |
+| STRANDS_NON_INTERACTIVE | Run tools without interactive prompts, set to "true" to suppress confirmation dialogs | false | Tools with a confirmation prompt (e.g. shell, python_repl) |
 | STRANDS_TOOL_CONSOLE_MODE | Enable rich UI for tools, set to "enabled" to enable | disabled | All tools that have optional rich UI |
 | AWS_REGION | Default AWS region for AWS operations | us-west-2 | use_aws, retrieve, generate_image, memory, nova_reels |
 | AWS_PROFILE | AWS profile name to use from ~/.aws/credentials | default | use_aws, retrieve |
