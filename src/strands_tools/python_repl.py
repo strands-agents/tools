@@ -30,6 +30,13 @@ agent.tool.python_repl(code="input('Enter your name: ')", interactive=True)
 # Reset the REPL state if needed
 agent.tool.python_repl(code="print('Fresh start')", reset_state=True)
 ```
+
+Configuration:
+- STRANDS_NON_INTERACTIVE (environment variable): Set to "true" to run the tool
+  in a non-interactive mode, suppressing the user confirmation prompt before code
+  execution.
+- BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
+  user confirmation prompt, even in an otherwise interactive session.
 """
 
 import fcntl
@@ -611,8 +618,7 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check for development mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
+    non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
 
     try:
         # Show code preview
