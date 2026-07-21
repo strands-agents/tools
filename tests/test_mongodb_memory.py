@@ -839,7 +839,7 @@ def test_driver_info_constant_name():
     """_DRIVER_INFO has the expected name."""
     from src.strands_tools.mongodb_memory import _DRIVER_INFO
 
-    assert _DRIVER_INFO.name == "Strands-Tools"
+    assert _DRIVER_INFO.name == "Strands"
 
 
 def test_standalone_monogclient_passes_driver_info(mock_mongodb_client):

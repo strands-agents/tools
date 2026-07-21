@@ -108,7 +108,7 @@ try:
 except Exception:
     _VERSION = None
 
-_DRIVER_INFO = DriverInfo(name="Strands-Tools", version=_VERSION)
+_DRIVER_INFO = DriverInfo(name="Strands", version=_VERSION)
 
 
 # Custom exceptions for better error handling
