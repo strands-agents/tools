@@ -8,9 +8,17 @@ proper error handling and robust type conversion.
 
 Security:
     All expressions are validated against an AST allowlist before evaluation.
-    Only mathematical syntax (operators, function calls, literals, names, containers)
-    is permitted. Attribute access, subscripts, lambdas, comprehensions, and imports
-    are rejected, preventing code execution via eval.
+    Only mathematical syntax (operators, function calls, numeric/boolean literals,
+    names, containers) is permitted. Attribute access, subscripts, lambdas,
+    comprehensions, and imports are rejected, preventing code execution via eval.
+
+    String-literal arguments are rejected as a hardening measure. Several safe
+    SymPy helpers (for example N, simplify, solve) re-parse string arguments through
+    sympify, which evaluates them with full builtins and escapes the restricted
+    namespace used for the top-level expression. String literals are therefore only
+    permitted as positional arguments to the constructors that parse them as a plain
+    name or numeric literal rather than through sympify (Symbol, symbols, Rational,
+    Integer, Float); for example Symbol('x') and Rational('1/3') remain supported.
 
 Key Features:
 1. Expression Evaluation:
@@ -269,6 +277,13 @@ _ALLOWED_AST_NODES = {
 }
 
 
+# Constructors whose string arguments are parsed as plain symbol names or numeric
+# literals, not re-evaluated through sympify. A string literal is permitted only as
+# a positional argument to one of these; anywhere else it is rejected, which blocks
+# the sympify-backed re-parse escape (e.g. N("..."), simplify("..."), solve("...")).
+_STRING_ARG_CONSTRUCTORS = frozenset({"Symbol", "symbols", "Rational", "Integer", "Float"})
+
+
 def _validate_expression_ast(expr_str: str) -> None:
     """Reject expressions containing attribute access, subscripts, or other unsafe syntax.
 
@@ -289,9 +304,29 @@ def _validate_expression_ast(expr_str: str) -> None:
     except SyntaxError as e:
         raise ValueError(f"Invalid mathematical expression: {e.msg}") from e
 
+    # Collect the string-literal nodes that appear as positional arguments to a
+    # safe string constructor (e.g. Symbol('x')). Those are the only string
+    # literals we allow; every other string literal is rejected below.
+    allowed_string_nodes: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _STRING_ARG_CONSTRUCTORS:
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    allowed_string_nodes.add(id(arg))
+
     for node in ast.walk(tree):
         if type(node) not in _ALLOWED_AST_NODES:
             raise ValueError(f"Invalid mathematical expression: unsupported syntax '{type(node).__name__}'")
+        # Reject string (and bytes) literals except as positional arguments to
+        # the safe string constructors above. Several functions in the safe
+        # locals (e.g. N, simplify, solve) re-parse string arguments through
+        # SymPy's sympify, which evaluates them with full builtins and escapes
+        # the restricted namespace used for the top-level expression. Symbol('x')
+        # and friends only parse their string as a name or numeric literal, so
+        # they stay allowed while the sympify-backed re-parse remains blocked.
+        if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+            if id(node) not in allowed_string_nodes:
+                raise ValueError("Invalid mathematical expression: string literals are not supported")
 
 
 def parse_expression(expr_str: str) -> Any:
@@ -768,6 +803,10 @@ def calculator(
             "sin(pi/2)", "factorial(5)", "Abs(x)", "Eq(x**2, 4)").
             For matrix operations, use Matrix() with functions like det(),
             transpose(), or trace().
+            String-literal arguments are rejected as a security hardening measure,
+            except as positional arguments to the symbol/number constructors that do
+            not re-parse them through sympify: Symbol('x'), symbols('x y z'),
+            Rational('1/3'), Integer('5') and Float('3.14') are supported.
         mode: The calculation mode to use. Options are:
             - "evaluate": Compute the value of the expression (default)
             - "solve": Solve an equation or system of equations
@@ -803,6 +842,10 @@ def calculator(
 
     Notes:
         - For equation solving, set the expression equal to zero implicitly (x**2 + 1 means x**2 + 1 = 0)
+        - To solve a system of equations, pass the equations as a comma-separated
+          expression (e.g. "x + y - 10, x - y - 2"), which parses to a tuple of
+          expressions. Passing a quoted string list (e.g. "['x + y - 10', ...]") is
+          not supported because string literals are rejected during validation.
         - Use 'pi' and 'e' for mathematical constants
         - The 'wrt' parameter is required for differentiation and integration
         - Matrix expressions use Python-like syntax: [[1, 2], [3, 4]]

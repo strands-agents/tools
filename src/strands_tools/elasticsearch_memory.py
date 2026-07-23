@@ -32,54 +32,37 @@ Key Features:
 
 Usage Examples:
 --------------
+Multi-tenant (recommended): bind credentials, index, and the tenant namespace per authenticated
+principal via ``ElasticsearchMemoryTool``. The agent-facing tool cannot override them.
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import ElasticsearchMemoryTool
+
+# Operator code, per authenticated request:
+tool = ElasticsearchMemoryTool(
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace=f"user_{authenticated_user_id}",  # bound, not LLM-controllable
+)
+agent = Agent(tools=[tool.elasticsearch_memory])
+
+# The agent only chooses the action and its content/query/memory_id:
+agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
+agent.tool.elasticsearch_memory(action="retrieve", query="food preferences", max_results=5)
+```
+
+Single-tenant convenience: the module-level ``elasticsearch_memory`` function reads all connection,
+index, namespace, and embedding configuration from environment variables only. It exposes no
+connection or namespace parameter to the agent.
+
 ```python
 from strands import Agent
 from strands_tools.elasticsearch_memory import elasticsearch_memory
 
-# Create agent with elasticsearch_memory tool (credentials via env vars)
 agent = Agent(tools=[elasticsearch_memory])
-
-# Store a memory with semantic embeddings
-elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza with extra cheese",
-    metadata={"category": "food_preferences", "type": "dietary"},
-    index_name="memories",
-    namespace="user_123"
-)
-
-# Search memories using semantic similarity (vector search)
-elasticsearch_memory(
-    action="retrieve",
-    query="food preferences and dietary restrictions",
-    max_results=5,
-    index_name="memories",
-    namespace="user_123"
-)
-
-# List all memories with pagination
-elasticsearch_memory(
-    action="list",
-    max_results=10,
-    index_name="memories",
-    namespace="user_123"
-)
-
-# Get specific memory by ID
-elasticsearch_memory(
-    action="get",
-    memory_id="mem_1234567890_abcd1234",
-    index_name="memories",
-    namespace="user_123"
-)
-
-# Delete a memory
-elasticsearch_memory(
-    action="delete",
-    memory_id="mem_1234567890_abcd1234",
-    index_name="memories",
-    namespace="user_123"
-)
+agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 Environment Variables:
@@ -580,6 +563,180 @@ def _delete_memory(es_client: Elasticsearch, index_name: str, namespace: str, me
         raise ElasticsearchMemoryError(f"Failed to delete memory {memory_id}: {str(e)}") from e
 
 
+def _run_memory_operation(
+    *,
+    cloud_id: Optional[str],
+    es_url: Optional[str],
+    api_key: Optional[str],
+    index_name: str,
+    safe_namespace: str,
+    embedding_model: str,
+    region: str,
+    action: str,
+    content: Optional[str],
+    query: Optional[str],
+    memory_id: Optional[str],
+    max_results: Optional[int],
+    next_token: Optional[str],
+    metadata: Optional[Dict],
+) -> Dict:
+    """Execute a memory operation against Elasticsearch.
+
+    Shared runtime path for both entry points (the standalone ``elasticsearch_memory`` function
+    and ``ElasticsearchMemoryTool``). It receives an already-validated ``safe_namespace`` and fully
+    resolved connection/embedding configuration, so tenant isolation is enforced with the same
+    namespace value regardless of which entry point is used. Callers are responsible for resolving
+    that configuration from a trusted source (environment variables or constructor arguments), never
+    from LLM-supplied parameters.
+
+    Args:
+        cloud_id: Elasticsearch Cloud ID (used when es_url is not set).
+        es_url: Elasticsearch URL for serverless/URL-based connections.
+        api_key: Elasticsearch API key for authentication.
+        index_name: Elasticsearch index to operate on.
+        safe_namespace: Validated tenant namespace used to filter every operation.
+        embedding_model: Amazon Bedrock embedding model ID.
+        region: AWS region for the Bedrock client.
+        action: The memory operation to perform.
+        content: Text content to store (record action).
+        query: Search query (retrieve action).
+        memory_id: Memory ID (get and delete actions).
+        max_results: Maximum number of results to return.
+        next_token: Pagination token.
+        metadata: Optional metadata to store with the memory.
+
+    Returns:
+        Dict: Response containing the requested memory information or operation status.
+    """
+    max_results = max_results or DEFAULT_MAX_RESULTS
+
+    # Initialize Elasticsearch client
+    try:
+        if es_url:
+            # Use URL-based connection (for serverless)
+            es_client = Elasticsearch(
+                hosts=[es_url],
+                api_key=api_key,
+                request_timeout=30,
+                retry_on_timeout=True,
+                max_retries=3,
+            )
+        else:
+            # Use cloud_id connection
+            es_client = Elasticsearch(
+                cloud_id=cloud_id,
+                api_key=api_key,
+                request_timeout=30,
+                retry_on_timeout=True,
+                max_retries=3,
+            )
+
+        # Test connection
+        if not es_client.ping():
+            return {"status": "error", "content": [{"text": "Unable to connect to Elasticsearch cluster"}]}
+
+    except Exception as e:
+        return {"status": "error", "content": [{"text": f"Failed to initialize Elasticsearch client: {str(e)}"}]}
+
+    # Initialize Amazon Bedrock client for embeddings
+    try:
+        bedrock_runtime = boto3.client("bedrock-runtime", region_name=region)
+    except Exception as e:
+        return {"status": "error", "content": [{"text": f"Failed to initialize Bedrock client: {str(e)}"}]}
+
+    # Ensure index exists with proper mappings
+    _ensure_index_exists(es_client, index_name, es_url)
+
+    # Validate action
+    try:
+        action_enum = MemoryAction(action)
+    except ValueError:
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": f"Action '{action}' is not supported. "
+                    f"Supported actions: {', '.join([a.value for a in MemoryAction])}"
+                }
+            ],
+        }
+
+    # Validate required parameters
+    param_values = {
+        "content": content,
+        "query": query,
+        "memory_id": memory_id,
+    }
+
+    missing_params = [param for param in REQUIRED_PARAMS[action_enum] if param_values.get(param) is None]
+
+    if missing_params:
+        return {
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        f"The following parameters are required for {action_enum.value} action: "
+                        f"{', '.join(missing_params)}"
+                    )
+                }
+            ],
+        }
+
+    # Execute the appropriate action
+    try:
+        if action_enum == MemoryAction.RECORD:
+            response = _record_memory(
+                es_client, bedrock_runtime, index_name, safe_namespace, embedding_model, content, metadata
+            )
+            return {
+                "status": "success",
+                "content": [{"text": f"Memory stored successfully: {json.dumps(response, default=str)}"}],
+            }
+
+        elif action_enum == MemoryAction.RETRIEVE:
+            response = _retrieve_memories(
+                es_client,
+                bedrock_runtime,
+                index_name,
+                safe_namespace,
+                embedding_model,
+                query,
+                max_results,
+                next_token,
+            )
+            return {
+                "status": "success",
+                "content": [{"text": f"Memories retrieved successfully: {json.dumps(response, default=str)}"}],
+            }
+
+        elif action_enum == MemoryAction.LIST:
+            response = _list_memories(es_client, index_name, safe_namespace, max_results, next_token)
+            return {
+                "status": "success",
+                "content": [{"text": f"Memories listed successfully: {json.dumps(response, default=str)}"}],
+            }
+
+        elif action_enum == MemoryAction.GET:
+            response = _get_memory(es_client, index_name, safe_namespace, memory_id)
+            return {
+                "status": "success",
+                "content": [{"text": f"Memory retrieved successfully: {json.dumps(response, default=str)}"}],
+            }
+
+        elif action_enum == MemoryAction.DELETE:
+            response = _delete_memory(es_client, index_name, safe_namespace, memory_id)
+            return {
+                "status": "success",
+                "content": [{"text": f"Memory deleted successfully: {memory_id}"}],
+            }
+
+    except Exception as e:
+        error_msg = f"API error: {str(e)}"
+        logger.error(error_msg)
+        return {"status": "error", "content": [{"text": error_msg}]}
+
+
 @tool
 def elasticsearch_memory(
     action: str,
@@ -589,16 +746,18 @@ def elasticsearch_memory(
     max_results: Optional[int] = None,
     next_token: Optional[str] = None,
     metadata: Optional[Dict] = None,
-    index_name: Optional[str] = None,
-    namespace: Optional[str] = None,
-    embedding_model: Optional[str] = None,
-    region: Optional[str] = None,
 ) -> Dict:
     """
     Work with Elasticsearch memories - create, search, retrieve, list, and manage memory records.
 
     This tool helps agents store and access memories using Elasticsearch with semantic search
     capabilities, allowing them to remember important information across conversations.
+
+    Connection, index, tenant namespace, and embedding configuration are read exclusively from
+    environment variables and are never exposed as tool parameters, so an agent cannot redirect the
+    memory layer at another cluster/index or read/write another tenant's namespace. For multi-tenant
+    deployments, construct one ElasticsearchMemoryTool per authenticated principal with an explicit
+    namespace instead of using this single-tenant, environment-driven function.
 
     Key Capabilities:
     - Store new memories with automatic embedding generation
@@ -626,9 +785,13 @@ def elasticsearch_memory(
     - delete: Remove a specific memory
       Use this to delete memories that are no longer needed.
 
-    Connection credentials are read from environment variables:
+    Configuration (read from environment variables only):
     - ELASTICSEARCH_CLOUD_ID or ELASTICSEARCH_URL for connection
     - ELASTICSEARCH_API_KEY for authentication
+    - ELASTICSEARCH_INDEX_NAME: Index name (defaults to 'strands_memory')
+    - ELASTICSEARCH_NAMESPACE: Tenant namespace (defaults to 'default')
+    - ELASTICSEARCH_EMBEDDING_MODEL: Amazon Bedrock embedding model (defaults to Titan)
+    - AWS_REGION: AWS region for Bedrock service (defaults to 'us-west-2')
 
     Args:
         action: The memory operation to perform (one of: "record", "retrieve", "list", "get", "delete")
@@ -638,17 +801,20 @@ def elasticsearch_memory(
         max_results: Maximum number of results to return (optional, default: 10)
         next_token: Pagination token for list action (optional)
         metadata: Additional metadata to store with the memory (optional)
-        index_name: Name of the Elasticsearch index (defaults to 'strands_memory')
-        namespace: Namespace for memory operations (defaults to 'default')
-        embedding_model: Amazon Bedrock model for embeddings (defaults to Titan)
-        region: AWS region for Bedrock service (defaults to 'us-west-2')
 
     Returns:
         Dict: Response containing the requested memory information or operation status
     """
+    # All connection, index, namespace, and embedding configuration is sourced from the environment
+    # only. These are deliberately not tool parameters: exposing them would let the LLM point the
+    # tool at an arbitrary cluster/index, supply its own api_key, or forge another tenant's namespace.
     cloud_id = os.getenv("ELASTICSEARCH_CLOUD_ID")
     es_url = os.getenv("ELASTICSEARCH_URL")
     api_key = os.getenv("ELASTICSEARCH_API_KEY")
+    index_name = os.getenv("ELASTICSEARCH_INDEX_NAME", DEFAULT_INDEX_NAME)
+    namespace = os.getenv("ELASTICSEARCH_NAMESPACE", DEFAULT_NAMESPACE)
+    embedding_model = os.getenv("ELASTICSEARCH_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    region = os.getenv("AWS_REGION", "us-west-2")
 
     try:
         # Validate required parameters
@@ -656,14 +822,6 @@ def elasticsearch_memory(
             return {"status": "error", "content": [{"text": "api_key is required"}]}
         if not cloud_id and not es_url:
             return {"status": "error", "content": [{"text": "Either cloud_id or es_url is required"}]}
-
-        # Set defaults
-        index_name = index_name or os.getenv("ELASTICSEARCH_INDEX_NAME", DEFAULT_INDEX_NAME)
-        if namespace is None:
-            namespace = os.getenv("ELASTICSEARCH_NAMESPACE", DEFAULT_NAMESPACE)
-        embedding_model = embedding_model or os.getenv("ELASTICSEARCH_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
-        region = region or os.getenv("AWS_REGION", "us-west-2")
-        max_results = max_results or DEFAULT_MAX_RESULTS
 
         # Validate namespace to prevent injection attacks
         try:
@@ -674,132 +832,162 @@ def elasticsearch_memory(
                 "content": [{"text": f"Invalid namespace: {str(e)}"}],
             }
 
-        # Initialize Elasticsearch client
-        try:
-            if es_url:
-                # Use URL-based connection (for serverless)
-                es_client = Elasticsearch(
-                    hosts=[es_url],
-                    api_key=api_key,
-                    request_timeout=30,
-                    retry_on_timeout=True,
-                    max_retries=3,
-                )
-            else:
-                # Use cloud_id connection
-                es_client = Elasticsearch(
-                    cloud_id=cloud_id,
-                    api_key=api_key,
-                    request_timeout=30,
-                    retry_on_timeout=True,
-                    max_retries=3,
-                )
-
-            # Test connection
-            if not es_client.ping():
-                return {"status": "error", "content": [{"text": "Unable to connect to Elasticsearch cluster"}]}
-
-        except Exception as e:
-            return {"status": "error", "content": [{"text": f"Failed to initialize Elasticsearch client: {str(e)}"}]}
-
-        # Initialize Amazon Bedrock client for embeddings
-        try:
-            bedrock_runtime = boto3.client("bedrock-runtime", region_name=region)
-        except Exception as e:
-            return {"status": "error", "content": [{"text": f"Failed to initialize Bedrock client: {str(e)}"}]}
-
-        # Ensure index exists with proper mappings
-        _ensure_index_exists(es_client, index_name, es_url)
-
-        # Validate action
-        try:
-            action_enum = MemoryAction(action)
-        except ValueError:
-            return {
-                "status": "error",
-                "content": [
-                    {
-                        "text": f"Action '{action}' is not supported. "
-                        f"Supported actions: {', '.join([a.value for a in MemoryAction])}"
-                    }
-                ],
-            }
-
-        # Validate required parameters
-        param_values = {
-            "content": content,
-            "query": query,
-            "memory_id": memory_id,
-        }
-
-        missing_params = [param for param in REQUIRED_PARAMS[action_enum] if param_values.get(param) is None]
-
-        if missing_params:
-            return {
-                "status": "error",
-                "content": [
-                    {
-                        "text": (
-                            f"The following parameters are required for {action_enum.value} action: "
-                            f"{', '.join(missing_params)}"
-                        )
-                    }
-                ],
-            }
-
-        # Execute the appropriate action
-        try:
-            if action_enum == MemoryAction.RECORD:
-                response = _record_memory(
-                    es_client, bedrock_runtime, index_name, safe_namespace, embedding_model, content, metadata
-                )
-                return {
-                    "status": "success",
-                    "content": [{"text": f"Memory stored successfully: {json.dumps(response, default=str)}"}],
-                }
-
-            elif action_enum == MemoryAction.RETRIEVE:
-                response = _retrieve_memories(
-                    es_client,
-                    bedrock_runtime,
-                    index_name,
-                    safe_namespace,
-                    embedding_model,
-                    query,
-                    max_results,
-                    next_token,
-                )
-                return {
-                    "status": "success",
-                    "content": [{"text": f"Memories retrieved successfully: {json.dumps(response, default=str)}"}],
-                }
-
-            elif action_enum == MemoryAction.LIST:
-                response = _list_memories(es_client, index_name, safe_namespace, max_results, next_token)
-                return {
-                    "status": "success",
-                    "content": [{"text": f"Memories listed successfully: {json.dumps(response, default=str)}"}],
-                }
-
-            elif action_enum == MemoryAction.GET:
-                response = _get_memory(es_client, index_name, safe_namespace, memory_id)
-                return {
-                    "status": "success",
-                    "content": [{"text": f"Memory retrieved successfully: {json.dumps(response, default=str)}"}],
-                }
-
-            elif action_enum == MemoryAction.DELETE:
-                response = _delete_memory(es_client, index_name, safe_namespace, memory_id)
-                return {
-                    "status": "success",
-                    "content": [{"text": f"Memory deleted successfully: {memory_id}"}],
-                }
-
-        except Exception as e:
-            error_msg = f"API error: {str(e)}"
-            logger.error(error_msg)
-            return {"status": "error", "content": [{"text": error_msg}]}
+        return _run_memory_operation(
+            cloud_id=cloud_id,
+            es_url=es_url,
+            api_key=api_key,
+            index_name=index_name,
+            safe_namespace=safe_namespace,
+            embedding_model=embedding_model,
+            region=region,
+            action=action,
+            content=content,
+            query=query,
+            memory_id=memory_id,
+            max_results=max_results,
+            next_token=next_token,
+            metadata=metadata,
+        )
 
     except Exception as e:
         logger.error(f"Unexpected error in elasticsearch_memory tool: {str(e)}")
         return {"status": "error", "content": [{"text": str(e)}]}
+
+
+class ElasticsearchMemoryTool:
+    """
+    Elasticsearch Memory Tool with secure credential and tenant management.
+
+    This class encapsulates the Elasticsearch connection credentials, target index, and tenant
+    namespace, preventing agents from accessing sensitive information (API keys, connection targets)
+    or choosing which tenant's memories to read or write. Bind one instance per authenticated
+    principal and pass its ``elasticsearch_memory`` method to the agent.
+    """
+
+    def __init__(
+        self,
+        cloud_id: Optional[str] = None,
+        es_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        index_name: Optional[str] = None,
+        namespace: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        region: Optional[str] = None,
+    ):
+        """
+        Initialize Elasticsearch Memory Tool with secure credential and namespace storage.
+
+        Args:
+            cloud_id: Elasticsearch Cloud ID (kept private from agents). Falls back to the
+                ELASTICSEARCH_CLOUD_ID environment variable.
+            es_url: Elasticsearch URL for serverless/URL-based connections (kept private from
+                agents). Falls back to the ELASTICSEARCH_URL environment variable.
+            api_key: Elasticsearch API key (kept private from agents). Falls back to the
+                ELASTICSEARCH_API_KEY environment variable.
+            index_name: Name of the Elasticsearch index. Falls back to ELASTICSEARCH_INDEX_NAME,
+                then 'strands_memory'.
+            namespace: Tenant-isolation key bound at construction (kept private from agents).
+                Falls back to the ELASTICSEARCH_NAMESPACE environment variable, then 'default'.
+                Serve multiple principals by constructing one tool per principal, e.g.
+                namespace=f"user_{authenticated_user_id}".
+            embedding_model: Amazon Bedrock model for embeddings. Falls back to
+                ELASTICSEARCH_EMBEDDING_MODEL, then the Titan default.
+            region: AWS region for Bedrock service. Falls back to AWS_REGION, then 'us-west-2'.
+
+        Raises:
+            ElasticsearchValidationError: If credentials are missing or the namespace is invalid.
+        """
+        # Private attributes - not accessible to agents
+        self._cloud_id = cloud_id or os.getenv("ELASTICSEARCH_CLOUD_ID")
+        self._es_url = es_url or os.getenv("ELASTICSEARCH_URL")
+        self._api_key = api_key or os.getenv("ELASTICSEARCH_API_KEY")
+        self._index_name = index_name or os.getenv("ELASTICSEARCH_INDEX_NAME", DEFAULT_INDEX_NAME)
+        self._embedding_model = embedding_model or os.getenv("ELASTICSEARCH_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+        self._region = region or os.getenv("AWS_REGION", "us-west-2")
+
+        # Validate credentials during initialization so misconfiguration fails fast for the operator.
+        if not self._api_key:
+            raise ElasticsearchValidationError("api_key is required for Elasticsearch Memory Tool initialization")
+        if not self._cloud_id and not self._es_url:
+            raise ElasticsearchValidationError(
+                "Either cloud_id or es_url is required for Elasticsearch Memory Tool initialization"
+            )
+
+        # Namespace is the sole tenant-isolation key, so it is bound here and never taken from the
+        # LLM-controlled @tool signature. An agent cannot read or write another tenant's memories
+        # by choosing a namespace. Validate once at construction.
+        if namespace is None:
+            namespace = os.getenv("ELASTICSEARCH_NAMESPACE", DEFAULT_NAMESPACE)
+        self._namespace = _validate_namespace(namespace)
+
+    @tool
+    def elasticsearch_memory(
+        self,
+        action: str,
+        content: Optional[str] = None,
+        query: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        max_results: Optional[int] = None,
+        next_token: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Work with Elasticsearch memories - create, search, retrieve, list, and manage memory records.
+
+        This tool helps agents store and access memories using Elasticsearch with semantic search
+        capabilities, allowing them to remember important information across conversations.
+
+        Note: Credentials and the tenant namespace are securely managed by the class and not
+        exposed to agents.
+
+        Key Capabilities:
+        - Store new memories with automatic embedding generation
+        - Search for memories using semantic similarity
+        - Browse and list all stored memories
+        - Retrieve specific memories by ID
+        - Delete unwanted memories
+
+        Supported Actions:
+        -----------------
+        Memory Management:
+        - record: Store a new memory with semantic embeddings
+        - retrieve: Find relevant memories using semantic search
+        - list: Browse all stored memories with pagination
+        - get: Fetch a specific memory by ID
+        - delete: Remove a specific memory
+
+        Args:
+            action: The memory operation to perform (one of: "record", "retrieve", "list", "get", "delete")
+            content: For record action: Text content to store as a memory
+            query: Search terms for semantic search (required for retrieve action)
+            memory_id: ID of a specific memory (required for get and delete actions)
+            max_results: Maximum number of results to return (optional, default: 10)
+            next_token: Pagination token for list action (optional)
+            metadata: Additional metadata to store with the memory (optional)
+
+        Returns:
+            Dict: Response containing the requested memory information or operation status
+        """
+        try:
+            # Namespace and connection config are bound at construction; the agent cannot supply a
+            # different tenant key, index, or cluster. Namespace was already validated in __init__.
+            return _run_memory_operation(
+                cloud_id=self._cloud_id,
+                es_url=self._es_url,
+                api_key=self._api_key,
+                index_name=self._index_name,
+                safe_namespace=self._namespace,
+                embedding_model=self._embedding_model,
+                region=self._region,
+                action=action,
+                content=content,
+                query=query,
+                memory_id=memory_id,
+                max_results=max_results,
+                next_token=next_token,
+                metadata=metadata,
+            )
+
+        except Exception as e:
+            logger.error(f"Unexpected error in elasticsearch_memory tool: {str(e)}")
+            return {"status": "error", "content": [{"text": str(e)}]}

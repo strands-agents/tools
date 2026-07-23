@@ -32,30 +32,37 @@ Key Features:
 
 Usage Examples:
 --------------
+Multi-tenant (recommended): bind credentials and the tenant namespace per authenticated
+principal via ``MongoDBMemoryTool``. The agent-facing tool cannot override them.
+
+```python
+from strands import Agent
+from strands_tools.mongodb_memory import MongoDBMemoryTool
+
+# Operator code, per authenticated request:
+tool = MongoDBMemoryTool(
+    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
+    database_name="memory_db",
+    collection_name="memories",
+    namespace=f"user_{authenticated_user_id}",  # bound, not LLM-controllable
+)
+agent = Agent(tools=[tool.mongodb_memory])
+
+# The agent only chooses the action and its content/query/memory_id:
+agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")
+agent.tool.mongodb_memory(action="retrieve", query="food preferences", max_results=5)
+```
+
+Single-tenant convenience: the module-level ``mongodb_memory`` function reads all connection,
+location, namespace, and embedding configuration from environment variables only. It exposes no
+connection or namespace parameter to the agent.
+
 ```python
 from strands import Agent
 from strands_tools.mongodb_memory import mongodb_memory
 
-# Store a memory
-result = mongodb_memory(
-    action="record",
-    content="User prefers vegetarian pizza with extra cheese",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
-    database_name="memory_db",
-    collection_name="memories",
-    namespace="user_123"
-)
-
-# Search memories
-result = mongodb_memory(
-    action="retrieve",
-    query="food preferences",
-    cluster_uri="mongodb+srv://user:password@cluster.mongodb.net/",
-    database_name="memory_db",
-    collection_name="memories",
-    namespace="user_123",
-    max_results=5
-)
+agent = Agent(tools=[mongodb_memory])
+agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 Environment Variables:
@@ -732,6 +739,7 @@ class MongoDBMemoryTool:
         cluster_uri: Optional[str] = None,
         database_name: Optional[str] = None,
         collection_name: Optional[str] = None,
+        namespace: Optional[str] = None,
         embedding_model: Optional[str] = None,
         region: Optional[str] = None,
         vector_index_name: Optional[str] = None,
@@ -743,6 +751,10 @@ class MongoDBMemoryTool:
             cluster_uri: MongoDB Atlas cluster URI (kept private from agents)
             database_name: Name of the MongoDB database
             collection_name: Name of the MongoDB collection
+            namespace: Tenant-isolation key bound at construction (kept private from agents).
+                Falls back to the MONGODB_NAMESPACE environment variable, then 'default'.
+                Serve multiple principals by constructing one tool per principal, e.g.
+                namespace=f"user_{authenticated_user_id}".
             embedding_model: Amazon Bedrock model for embeddings
             region: AWS region for Bedrock service
             vector_index_name: Name of the vector search index
@@ -754,6 +766,14 @@ class MongoDBMemoryTool:
         self._embedding_model = embedding_model or os.getenv("MONGODB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
         self._region = region or os.getenv("AWS_REGION", DEFAULT_AWS_REGION)
         self._vector_index_name = vector_index_name or DEFAULT_VECTOR_INDEX_NAME
+
+        # Namespace is the sole tenant-isolation key, so it is bound here and never taken from
+        # the LLM-controlled @tool signature. An agent cannot read or write another tenant's
+        # memories by choosing a namespace. Validate once at construction so a bad value fails
+        # fast for the operator instead of on every tool call.
+        if namespace is None:
+            namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
+        self._namespace = _validate_namespace(namespace)
 
         # Validate credentials during initialization
         if not self._cluster_uri:
@@ -772,7 +792,6 @@ class MongoDBMemoryTool:
         max_results: Optional[int] = None,
         next_token: Optional[str] = None,
         metadata: Optional[Dict] = None,
-        namespace: Optional[str] = None,
     ) -> Dict:
         """
         Work with MongoDB Atlas memories - create, search, retrieve, list, and manage memory records.
@@ -780,7 +799,8 @@ class MongoDBMemoryTool:
         This tool helps agents store and access memories using MongoDB Atlas with semantic search
         capabilities, allowing them to remember important information across conversations.
 
-        Note: Credentials are securely managed by the class and not exposed to agents.
+        Note: Credentials and the tenant namespace are securely managed by the class and not
+        exposed to agents.
 
         Key Capabilities:
         - Store new memories with automatic embedding generation
@@ -806,24 +826,15 @@ class MongoDBMemoryTool:
             max_results: Maximum number of results to return (optional, default: 10)
             next_token: Pagination token for list action (optional)
             metadata: Additional metadata to store with the memory (optional)
-            namespace: Namespace for memory operations (defaults to 'default')
 
         Returns:
             Dict: Response containing the requested memory information or operation status
         """
         try:
-            # Use private configuration (credentials not exposed to agents)
-            if namespace is None:
-                namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
+            # Namespace is bound at construction (self._namespace); the agent cannot supply a
+            # different tenant key. It was already validated in __init__.
+            safe_namespace = self._namespace
             max_results = max_results or DEFAULT_MAX_RESULTS
-
-            try:
-                safe_namespace = _validate_namespace(namespace)
-            except MongoDBValidationError as e:
-                return {
-                    "status": "error",
-                    "content": [{"text": f"Invalid namespace: {str(e)}"}],
-                }
 
             # Initialize MongoDB client with secure error handling
             try:
@@ -968,19 +979,18 @@ def mongodb_memory(
     max_results: Optional[int] = None,
     next_token: Optional[str] = None,
     metadata: Optional[Dict] = None,
-    cluster_uri: Optional[str] = None,
-    database_name: Optional[str] = None,
-    collection_name: Optional[str] = None,
-    namespace: Optional[str] = None,
-    embedding_model: Optional[str] = None,
-    region: Optional[str] = None,
-    vector_index_name: Optional[str] = None,
 ) -> Dict:
     """
     Work with MongoDB Atlas memories - create, search, retrieve, list, and manage memory records.
 
     This tool helps agents store and access memories using MongoDB Atlas with semantic search
     capabilities, allowing them to remember important information across conversations.
+
+    Connection, database/collection, tenant namespace, and embedding configuration are read
+    exclusively from environment variables and are never exposed as tool parameters, so an agent
+    cannot redirect the memory layer at another cluster or read/write another tenant's namespace.
+    For multi-tenant deployments, construct one MongoDBMemoryTool per authenticated principal with
+    an explicit namespace instead of using this single-tenant, environment-driven function.
 
     Key Capabilities:
     - Store new memories with automatic embedding generation
@@ -998,6 +1008,14 @@ def mongodb_memory(
     - get: Retrieve specific memories by memory ID
     - delete: Remove specific memories by memory ID
 
+    Configuration (read from environment variables only):
+    - MONGODB_ATLAS_CLUSTER_URI: MongoDB Atlas cluster URI (required)
+    - MONGODB_DATABASE_NAME: Database name (defaults to 'strands_memory')
+    - MONGODB_COLLECTION_NAME: Collection name (defaults to 'memories')
+    - MONGODB_NAMESPACE: Tenant namespace (defaults to 'default')
+    - MONGODB_EMBEDDING_MODEL: Amazon Bedrock embedding model (defaults to Titan)
+    - AWS_REGION: AWS region for Bedrock service (defaults to 'us-west-2')
+
     Args:
         action: The memory operation to perform (one of: "record", "retrieve", "list", "get", "delete")
         content: For record action: Text content to store as a memory
@@ -1006,31 +1024,21 @@ def mongodb_memory(
         max_results: Maximum number of results to return (optional, default: 10)
         next_token: Pagination token for list action (optional)
         metadata: Additional metadata to store with the memory (optional)
-        cluster_uri: MongoDB Atlas cluster URI. If the MONGODB_ATLAS_CLUSTER_URI environment variable
-            is set, it takes precedence and this parameter is ignored.
-        database_name: Name of the MongoDB database. If the MONGODB_DATABASE_NAME environment variable
-            is set, it takes precedence. Defaults to 'strands_memory'.
-        collection_name: Name of the MongoDB collection. If the MONGODB_COLLECTION_NAME environment
-            variable is set, it takes precedence. Defaults to 'memories'.
-        namespace: Namespace for memory operations (defaults to 'default')
-        embedding_model: Amazon Bedrock model for embeddings (defaults to Titan)
-        region: AWS region for Bedrock service (defaults to 'us-west-2')
-        vector_index_name: Name of the vector search index (defaults to 'vector_index')
 
     Returns:
         Dict: Response containing the requested memory information or operation status
     """
     try:
-        # Environment variables take precedence over agent-provided parameters to prevent
-        # the agent from redirecting connections to untrusted servers.
-        cluster_uri = os.getenv("MONGODB_ATLAS_CLUSTER_URI") or cluster_uri
-        database_name = os.getenv("MONGODB_DATABASE_NAME", database_name or DEFAULT_DATABASE_NAME)
-        collection_name = os.getenv("MONGODB_COLLECTION_NAME", collection_name or DEFAULT_COLLECTION_NAME)
-        embedding_model = os.getenv("MONGODB_EMBEDDING_MODEL", embedding_model or DEFAULT_EMBEDDING_MODEL)
-        region = os.getenv("AWS_REGION", region or DEFAULT_AWS_REGION)
-        vector_index_name = vector_index_name or DEFAULT_VECTOR_INDEX_NAME
-        if namespace is None:
-            namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
+        # All connection, location, namespace, and embedding configuration is sourced from the
+        # environment only. These are deliberately not tool parameters: exposing them would let
+        # the LLM point the tool at an arbitrary cluster or forge another tenant's namespace.
+        cluster_uri = os.getenv("MONGODB_ATLAS_CLUSTER_URI")
+        database_name = os.getenv("MONGODB_DATABASE_NAME", DEFAULT_DATABASE_NAME)
+        collection_name = os.getenv("MONGODB_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
+        embedding_model = os.getenv("MONGODB_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+        region = os.getenv("AWS_REGION", DEFAULT_AWS_REGION)
+        vector_index_name = DEFAULT_VECTOR_INDEX_NAME
+        namespace = os.getenv("MONGODB_NAMESPACE", DEFAULT_NAMESPACE)
         max_results = max_results or DEFAULT_MAX_RESULTS
 
         try:
@@ -1049,7 +1057,7 @@ def mongodb_memory(
                     {
                         "text": (
                             "cluster_uri is required for MongoDB Memory Tool. "
-                            "Set MONGODB_ATLAS_CLUSTER_URI environment variable or provide cluster_uri parameter."
+                            "Set the MONGODB_ATLAS_CLUSTER_URI environment variable."
                         )
                     }
                 ],
