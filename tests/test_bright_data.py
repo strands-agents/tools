@@ -406,6 +406,67 @@ def test_get_screenshot_rejection_message_is_actionable(tmp_path, monkeypatch):
 
 
 @patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejects_path_before_remote_request(tmp_path):
+    """An invalid output_path is rejected before any HTTP request is made."""
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(tmp_path)}):
+        with patch("strands_tools.bright_data.requests.post") as mock_post:
+            client = BrightDataClient()
+            with pytest.raises(ValueError):
+                client.get_screenshot("https://example.com", "../../etc/x")
+
+    mock_post.assert_not_called()
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_rejects_directory_swapped_for_symlink_after_validation(tmp_path):
+    """A validated directory replaced by a symlink before the write cannot redirect it."""
+    root = tmp_path / "allowed"
+    images = root / "images"
+    images.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    def swap_then_respond(*args, **kwargs):
+        # Simulate an attacker racing the check: swap the already-validated
+        # directory for a symlink while the remote request is in flight.
+        images.rmdir()
+        images.symlink_to(outside)
+        return _mock_screenshot_response()
+
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(root)}):
+        with patch("strands_tools.bright_data.requests.post", side_effect=swap_then_respond):
+            client = BrightDataClient()
+            with pytest.raises(ValueError):
+                client.get_screenshot("https://example.com", "images/shot.png")
+
+    assert not (outside / "shot.png").exists()
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
+def test_get_screenshot_configured_root_rejection_message(tmp_path):
+    """With STRANDS_BRIGHT_DATA_OUTPUT_DIR set, the error names the configured directory only."""
+    with patch.dict(os.environ, {"STRANDS_BRIGHT_DATA_OUTPUT_DIR": str(tmp_path)}):
+        with patch("strands_tools.bright_data.requests.post") as mock_post:
+            client = BrightDataClient()
+            with pytest.raises(ValueError) as excinfo:
+                client.get_screenshot("https://example.com", "/tmp/strands_configured_root_outside.png")
+
+    mock_post.assert_not_called()
+    message = str(excinfo.value)
+    assert f"configured output directory ({tmp_path.resolve()})" in message
+    assert "working directory" not in message
+
+
+def test_bright_data_tool_spec_describes_output_path_confinement():
+    """The generated tool schema exposes the output_path confinement contract to the model."""
+    properties = bright_data.bright_data.tool_spec["inputSchema"]["json"]["properties"]
+    description = properties["output_path"]["description"]
+    assert "STRANDS_BRIGHT_DATA_OUTPUT_DIR" in description
+    assert "working directory" in description
+    assert "rejected" in description
+
+
+@patch.dict(os.environ, {"BRIGHTDATA_API_KEY": "test_api_key"})
 def test_get_screenshot_env_dir_allows_arbitrary_operator_location(tmp_path, monkeypatch):
     """An operator-chosen STRANDS_BRIGHT_DATA_OUTPUT_DIR allows writing within it, even via absolute path."""
     cwd = tmp_path / "cwd"

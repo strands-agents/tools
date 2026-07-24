@@ -31,6 +31,9 @@ Setup Requirements:
 3. Set environment variables in your .env file:
    BRIGHTDATA_API_KEY=your_api_key_here  # Required
    BRIGHTDATA_ZONE=your_zone_name_here    # Optional, defaults to "web_unlocker1"
+   STRANDS_BRIGHT_DATA_OUTPUT_DIR=/path/to/screenshots  # Optional, directory get_screenshot
+                                                        # may write to; defaults to the
+                                                        # current working directory
 4. DO NOT use Datacenter/Residential proxy zones - they will be blocked
 
 Example .env configuration:
@@ -69,6 +72,7 @@ agent.tool.bright_data(
 ```
 """
 
+import errno
 import json
 import logging
 import os
@@ -89,46 +93,113 @@ logger = logging.getLogger(__name__)
 console = console_util.create()
 
 
-def _resolve_output_path(output_path: str) -> Path:
-    """Resolve an output path and confine it to an allowed root directory.
+def _confinement_error(root: Path, detail: str) -> ValueError:
+    """Build the rejection error for a path that violates output confinement."""
+    if "STRANDS_BRIGHT_DATA_OUTPUT_DIR" in os.environ:
+        return ValueError(
+            f"{detail} output_path must be within the configured output directory ({root}), "
+            f"set by STRANDS_BRIGHT_DATA_OUTPUT_DIR. Use a path under that directory."
+        )
+    return ValueError(
+        f"{detail} output_path must be within the working directory ({root}). "
+        f"Set STRANDS_BRIGHT_DATA_OUTPUT_DIR to choose a different directory."
+    )
+
+
+def _split_confined_output_path(output_path: str) -> "tuple[Path, tuple[str, ...]]":
+    """Validate an output path lexically against the allowed root directory.
 
     The allowed root is the directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR
     environment variable, or the current working directory when that variable is
-    not set. The resolved path must be the root itself or located inside it, and
-    the final path component must not be a symlink that points elsewhere.
+    not set. Relative paths are taken from the root. The normalized path must name
+    a file located inside the root.
+
+    This check is purely lexical so it can run before any remote request is made;
+    enforcement against symlink races happens in _open_confined_output_file, which
+    performs the actual filesystem traversal without following symlinks.
 
     Args:
         output_path (str): User-supplied path to save the screenshot.
 
     Returns:
-        Path: The resolved, confined path.
+        tuple[Path, tuple[str, ...]]: The resolved root and the path components of
+        the output file relative to it.
 
     Raises:
-        ValueError: If the resolved path falls outside the allowed root.
+        ValueError: If the path escapes the allowed root or names the root itself.
     """
     root = Path(os.environ.get("STRANDS_BRIGHT_DATA_OUTPUT_DIR", Path.cwd())).expanduser().resolve()
 
     candidate = Path(output_path).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
+    candidate = Path(os.path.normpath(candidate))
 
-    # Reject a final component that is a symlink so we do not follow it elsewhere.
-    if candidate.is_symlink():
-        raise ValueError(
-            f"output_path must not be a symlink: {output_path}. output_path must be within the "
-            f"working directory ({root}) or the directory named by STRANDS_BRIGHT_DATA_OUTPUT_DIR."
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError:
+        raise _confinement_error(root, f"Invalid output_path: {output_path}.") from None
+
+    if not relative.parts:
+        raise _confinement_error(root, f"output_path must name a file, not the output directory itself: {output_path}.")
+
+    return root, relative.parts
+
+
+def _open_confined_output_file(root: Path, parts: "tuple[str, ...]"):
+    """Open the confined output file for writing without following symlinks.
+
+    Traversal and file creation are anchored to a descriptor of the trusted root
+    (openat-style, O_NOFOLLOW at every step) on platforms that support dir_fd, so
+    a directory swapped for a symlink after validation cannot redirect the write.
+    On platforms without dir_fd support (Windows), each component is checked for
+    symlinks and the file is opened with O_NOFOLLOW where available.
+
+    Args:
+        root (Path): The trusted, resolved root directory.
+        parts (tuple[str, ...]): Path components of the output file below root.
+
+    Returns:
+        tuple: A binary file object open for writing and the output path string.
+
+    Raises:
+        ValueError: If any path component is a symlink.
+    """
+    final_path = str(root.joinpath(*parts))
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    # ELOOP is the POSIX result of O_NOFOLLOW hitting a symlink (FreeBSD uses
+    # EMLINK); macOS reports ENOTDIR when O_NOFOLLOW|O_DIRECTORY hits one.
+    symlink_errnos = {errno.ELOOP, errno.ENOTDIR, getattr(errno, "EMLINK", errno.ELOOP)}
+
+    if os.open in os.supports_dir_fd:
+        dir_fd = os.open(str(root), os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for part in parts[:-1]:
+                next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | nofollow, dir_fd=dir_fd)
+                os.close(dir_fd)
+                dir_fd = next_fd
+            fd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_TRUNC | nofollow, 0o666, dir_fd=dir_fd)
+        except OSError as e:
+            if e.errno in symlink_errnos:
+                raise _confinement_error(
+                    root, f"output_path must not contain a symlink or non-directory component: {final_path}."
+                ) from None
+            raise
+        finally:
+            os.close(dir_fd)
+    else:
+        probe = root
+        for part in parts:
+            probe = probe / part
+            if probe.is_symlink():
+                raise _confinement_error(root, f"output_path must not contain a symlink: {final_path}.")
+        fd = os.open(
+            final_path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | nofollow | getattr(os, "O_BINARY", 0),
+            0o666,
         )
 
-    resolved = candidate.resolve()
-
-    if resolved != root and root not in resolved.parents:
-        raise ValueError(
-            f"output_path must be within the working directory ({root}) or the directory named by "
-            f"STRANDS_BRIGHT_DATA_OUTPUT_DIR. Set STRANDS_BRIGHT_DATA_OUTPUT_DIR to choose a different "
-            f"directory."
-        )
-
-    return resolved
+    return os.fdopen(fd, "wb"), final_path
 
 
 class BrightDataClient:
@@ -205,7 +276,8 @@ class BrightDataClient:
         this is the current working directory; set the STRANDS_BRIGHT_DATA_OUTPUT_DIR
         environment variable to write somewhere else. Paths that resolve outside the
         allowed directory (for example via ".." traversal, an absolute path outside
-        it, or a symlinked final component) are rejected.
+        it, or a symlinked path component) are rejected, and the destination is
+        validated before the remote request is made.
 
         Args:
             url (str): URL to screenshot
@@ -221,6 +293,9 @@ class BrightDataClient:
         Raises:
             ValueError: If output_path resolves outside the allowed output directory.
         """
+        # Validate the destination before making the (billable) remote request.
+        root, parts = _split_confined_output_path(output_path)
+
         payload = {"url": url, "zone": zone or self.zone, "format": "raw", "data_format": "screenshot"}
 
         response = requests.post(self.endpoint, headers=self.headers, data=json.dumps(payload))
@@ -228,12 +303,11 @@ class BrightDataClient:
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.text}")
 
-        resolved_path = _resolve_output_path(output_path)
-
-        with open(resolved_path, "wb") as f:
+        f, final_path = _open_confined_output_file(root, parts)
+        with f:
             f.write(response.content)
 
-        return str(resolved_path)
+        return final_path
 
     @staticmethod
     def encode_query(query: str) -> str:
@@ -476,30 +550,30 @@ def bright_data(
     search queries, and extracting structured data from various websites.
 
     Args:
-    action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
-    url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
-    output_path: Path to save the screenshot (for get_screenshot). The screenshot is written
-          within an allowed output directory: the current working directory by default, or the
-          directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR environment variable when set.
-          STRANDS_BRIGHT_DATA_OUTPUT_DIR may point anywhere the operator chooses. Relative paths
-          are taken from that directory; paths that resolve outside it are rejected.
-    zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment
-          variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to
-          configure your specific Web Unlocker zone name (e.g., BRIGHTDATA_ZONE=web_unlocker_12345)
-    query: Search query (for search_engine)
-    engine: Search engine to use (google, bing, yandex, default: google)
-    language: Two-letter language code for search results (hl parameter for Google)
-    country_code: Two-letter country code for search results (gl parameter for Google)
-    search_type: Type of search (images, shopping, news, etc.)
-    start: Results pagination offset (0=first page, 10=second page)
-    num_results: Number of results to return (default: 10)
-    location: Location for search results (uule parameter)
-    device: Device type (mobile, ios, android, ipad, android_tablet)
-    return_json: Return parsed JSON instead of HTML/Markdown (default: False)
-    source_type: Type of data source for web_data_feed (e.g., 'linkedin_person_profile', 'amazon_product')
-    num_of_reviews: Number of reviews to retrieve (only for facebook_company_reviews)
-    timeout: Maximum time in seconds to wait for data retrieval (default: 600)
-    polling_interval: Time in seconds between polling attempts (default: 1)
+        action: The action to perform (scrape_as_markdown, get_screenshot, search_engine, web_data_feed)
+        url: URL to scrape or extract data from (for scrape_as_markdown, get_screenshot, web_data_feed)
+        output_path: Path to save the screenshot (for get_screenshot). The screenshot is written
+            within an allowed output directory: the current working directory by default, or the
+            directory named by the STRANDS_BRIGHT_DATA_OUTPUT_DIR environment variable when set.
+            STRANDS_BRIGHT_DATA_OUTPUT_DIR may point anywhere the operator chooses. Relative paths
+            are taken from that directory; paths that resolve outside it are rejected.
+        zone: Web Unlocker zone name (optional). If not provided, uses BRIGHTDATA_ZONE environment
+            variable, or defaults to "web_unlocker1". Set BRIGHTDATA_ZONE in your .env file to
+            configure your specific Web Unlocker zone name (e.g., BRIGHTDATA_ZONE=web_unlocker_12345)
+        query: Search query (for search_engine)
+        engine: Search engine to use (google, bing, yandex, default: google)
+        language: Two-letter language code for search results (hl parameter for Google)
+        country_code: Two-letter country code for search results (gl parameter for Google)
+        search_type: Type of search (images, shopping, news, etc.)
+        start: Results pagination offset (0=first page, 10=second page)
+        num_results: Number of results to return (default: 10)
+        location: Location for search results (uule parameter)
+        device: Device type (mobile, ios, android, ipad, android_tablet)
+        return_json: Return parsed JSON instead of HTML/Markdown (default: False)
+        source_type: Type of data source for web_data_feed (e.g., 'linkedin_person_profile', 'amazon_product')
+        num_of_reviews: Number of reviews to retrieve (only for facebook_company_reviews)
+        timeout: Maximum time in seconds to wait for data retrieval (default: 600)
+        polling_interval: Time in seconds between polling attempts (default: 1)
 
     Returns:
         str: Response content from the requested operation
