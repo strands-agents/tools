@@ -2,6 +2,7 @@
 Tests for the mongodb_memory tool.
 """
 
+import inspect
 import json
 import os
 from unittest import mock
@@ -10,7 +11,24 @@ from unittest.mock import MagicMock
 import pytest
 from strands import Agent
 
-from src.strands_tools.mongodb_memory import mongodb_memory
+from src.strands_tools.mongodb_memory import MongoDBMemoryTool, mongodb_memory
+
+# The standalone function sources all connection and namespace configuration from the environment,
+# so tests provide it via these variables rather than as tool-call parameters.
+MONGODB_ENV_VARS = {
+    "MONGODB_ATLAS_CLUSTER_URI": "mongodb+srv://test:test@cluster.mongodb.net/",
+    "MONGODB_DATABASE_NAME": "test_db",
+    "MONGODB_COLLECTION_NAME": "test_collection",
+    "MONGODB_NAMESPACE": "test_namespace",
+    "AWS_REGION": "us-east-1",
+}
+
+
+@pytest.fixture(autouse=True)
+def set_mongodb_env_vars():
+    """Auto-set MongoDB environment variables for all tests."""
+    with mock.patch.dict(os.environ, MONGODB_ENV_VARS):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -93,8 +111,8 @@ def agent(mock_mongodb_client, mock_bedrock_client):
 
 
 @pytest.fixture
-def config():
-    """Configuration parameters for testing."""
+def tool_config():
+    """Configuration for constructing a MongoDBMemoryTool in tests."""
     return {
         "cluster_uri": "mongodb+srv://test:test@cluster.mongodb.net/",
         "database_name": "test_db",
@@ -104,14 +122,47 @@ def config():
     }
 
 
+# --- Security Tests ---
+
+
+def test_credential_and_namespace_params_not_in_standalone_signature():
+    """IDOR guard: the standalone tool must not expose connection, credential, or namespace params.
+
+    Regression test for the IDOR where an LLM-supplied namespace/connection string could redirect
+    the memory layer at another tenant or cluster. These must be environment-only.
+    """
+    param_names = set(inspect.signature(mongodb_memory).parameters.keys())
+    for forbidden in [
+        "namespace",
+        "cluster_uri",
+        "database_name",
+        "collection_name",
+        "embedding_model",
+        "region",
+        "vector_index_name",
+    ]:
+        assert forbidden not in param_names, f"'{forbidden}' must not be an LLM-controllable tool parameter"
+
+
+def test_namespace_params_not_in_class_tool_signature():
+    """IDOR guard: MongoDBMemoryTool.mongodb_memory must not expose namespace/connection to the agent.
+
+    Namespace and connection are bound at construction; the LLM cannot select a different tenant key.
+    """
+    param_names = set(inspect.signature(MongoDBMemoryTool.mongodb_memory).parameters.keys())
+    assert "namespace" not in param_names
+    assert "cluster_uri" not in param_names
+
+
 def test_missing_required_params(mock_mongodb_client, mock_bedrock_client):
-    """Test tool with missing required parameters."""
+    """Test tool with missing required environment variables."""
     agent = Agent(tools=[mongodb_memory])
 
-    # Test missing cluster_uri
-    result = agent.tool.mongodb_memory(action="record", content="test")
-    assert result["status"] == "error"
-    assert "cluster_uri is required for MongoDB Memory Tool" in result["content"][0]["text"]
+    # Test missing cluster_uri (no env var)
+    with mock.patch.dict(os.environ, {}, clear=True):
+        result = agent.tool.mongodb_memory(action="record", content="test")
+        assert result["status"] == "error"
+        assert "cluster_uri is required for MongoDB Memory Tool" in result["content"][0]["text"]
 
 
 def test_connection_failure(mock_mongodb_client, mock_bedrock_client):
@@ -123,22 +174,20 @@ def test_connection_failure(mock_mongodb_client, mock_bedrock_client):
 
     mock_mongodb_client["client"].admin.command.side_effect = ConnectionFailure("Connection failed")
 
-    result = agent.tool.mongodb_memory(
-        action="record", content="test", cluster_uri="mongodb+srv://test:test@cluster.mongodb.net/"
-    )
+    result = agent.tool.mongodb_memory(action="record", content="test")
 
     assert result["status"] == "error"
     assert "Unable to connect to MongoDB cluster" in result["content"][0]["text"]
 
 
-def test_vector_index_creation(mock_mongodb_client, mock_bedrock_client, config):
+def test_vector_index_creation(mock_mongodb_client, mock_bedrock_client):
     """Test that vector search index is created with proper configuration."""
     agent = Agent(tools=[mongodb_memory])
 
     # Configure mock responses
     mock_mongodb_client["collection"].insert_one.return_value = MagicMock(inserted_id="test_id")
 
-    agent.tool.mongodb_memory(action="record", content="Test content", **config)
+    agent.tool.mongodb_memory(action="record", content="Test content")
 
     # Verify index creation was called for record (it shouldn't be)
     # Index creation only happens for retrieve operations
@@ -146,7 +195,7 @@ def test_vector_index_creation(mock_mongodb_client, mock_bedrock_client, config)
 
     # Test retrieve action which should create index
     mock_mongodb_client["collection"].aggregate.return_value = []
-    agent.tool.mongodb_memory(action="retrieve", query="test query", **config)
+    agent.tool.mongodb_memory(action="retrieve", query="test query")
 
     # Verify index creation was called
     mock_mongodb_client["collection"].create_search_index.assert_called_once()
@@ -160,7 +209,7 @@ def test_vector_index_creation(mock_mongodb_client, mock_bedrock_client, config)
     assert call_args["definition"]["mappings"]["fields"]["namespace"]["type"] == "string"
 
 
-def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
+def test_record_memory(mock_mongodb_client, mock_bedrock_client):
     """Test recording a memory."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -170,9 +219,7 @@ def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
     mock_mongodb_client["collection"].insert_one.return_value = mock_result
 
     # Call the tool
-    result = agent.tool.mongodb_memory(
-        action="record", content="Test memory content", metadata={"category": "test"}, **config
-    )
+    result = agent.tool.mongodb_memory(action="record", content="Test memory content", metadata={"category": "test"})
 
     # Verify success response
     assert result["status"] == "success"
@@ -191,7 +238,7 @@ def test_record_memory(mock_mongodb_client, mock_bedrock_client, config):
     mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
 
 
-def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client, config):
+def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client):
     """Test retrieving memories with semantic search."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -207,7 +254,7 @@ def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client, config):
     ]
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="retrieve", query="test query", max_results=5, **config)
+    result = agent.tool.mongodb_memory(action="retrieve", query="test query", max_results=5)
 
     # Verify success response
     assert result["status"] == "success"
@@ -229,7 +276,7 @@ def test_retrieve_memories(mock_mongodb_client, mock_bedrock_client, config):
     mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
 
 
-def test_list_memories(mock_mongodb_client, mock_bedrock_client, config):
+def test_list_memories(mock_mongodb_client, mock_bedrock_client):
     """Test listing all memories."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -257,7 +304,7 @@ def test_list_memories(mock_mongodb_client, mock_bedrock_client, config):
     mock_mongodb_client["collection"].count_documents.return_value = 2
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="list", max_results=10, **config)
+    result = agent.tool.mongodb_memory(action="list", max_results=10)
 
     # Verify success response
     assert result["status"] == "success"
@@ -269,13 +316,13 @@ def test_list_memories(mock_mongodb_client, mock_bedrock_client, config):
     assert "memories" in response_data
     assert "total" in response_data
 
-    # Verify find was called with proper query
+    # Verify find was called with proper query (namespace from environment)
     mock_mongodb_client["collection"].find.assert_called_once()
     call_args = mock_mongodb_client["collection"].find.call_args[0]
     assert call_args[0] == {"namespace": "test_namespace"}
 
 
-def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
+def test_get_memory(mock_mongodb_client, mock_bedrock_client):
     """Test getting a specific memory by ID."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -289,7 +336,7 @@ def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
     }
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="get", memory_id="mem_123", **config)
+    result = agent.tool.mongodb_memory(action="get", memory_id="mem_123")
 
     # Verify success response
     assert result["status"] == "success"
@@ -307,7 +354,7 @@ def test_get_memory(mock_mongodb_client, mock_bedrock_client, config):
     assert call_args[0] == {"memory_id": "mem_123", "namespace": "test_namespace"}
 
 
-def test_delete_memory(mock_mongodb_client, mock_bedrock_client, config):
+def test_delete_memory(mock_mongodb_client, mock_bedrock_client):
     """Test deleting a memory."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -325,7 +372,7 @@ def test_delete_memory(mock_mongodb_client, mock_bedrock_client, config):
     mock_mongodb_client["collection"].delete_one.return_value = mock_delete_result
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="delete", memory_id="mem_123", **config)
+    result = agent.tool.mongodb_memory(action="delete", memory_id="mem_123")
 
     # Verify success response
     assert result["status"] == "success"
@@ -338,11 +385,11 @@ def test_delete_memory(mock_mongodb_client, mock_bedrock_client, config):
     assert call_args[0] == {"memory_id": "mem_123", "namespace": "test_namespace"}
 
 
-def test_unsupported_action(mock_mongodb_client, mock_bedrock_client, config):
+def test_unsupported_action(mock_mongodb_client, mock_bedrock_client):
     """Test tool with an unsupported action."""
     agent = Agent(tools=[mongodb_memory])
 
-    result = agent.tool.mongodb_memory(action="unsupported_action", **config)
+    result = agent.tool.mongodb_memory(action="unsupported_action")
 
     # Verify error response
     assert result["status"] == "error"
@@ -351,12 +398,12 @@ def test_unsupported_action(mock_mongodb_client, mock_bedrock_client, config):
     assert "retrieve" in result["content"][0]["text"]
 
 
-def test_missing_required_parameters(mock_mongodb_client, mock_bedrock_client, config):
+def test_missing_required_parameters(mock_mongodb_client, mock_bedrock_client):
     """Test tool with missing required parameters."""
     agent = Agent(tools=[mongodb_memory])
 
     # Test record action without content
-    result = agent.tool.mongodb_memory(action="record", **config)
+    result = agent.tool.mongodb_memory(action="record")
 
     # Verify error response
     assert result["status"] == "error"
@@ -364,7 +411,7 @@ def test_missing_required_parameters(mock_mongodb_client, mock_bedrock_client, c
     assert "content" in result["content"][0]["text"]
 
     # Test retrieve action without query
-    result = agent.tool.mongodb_memory(action="retrieve", **config)
+    result = agent.tool.mongodb_memory(action="retrieve")
 
     # Verify error response
     assert result["status"] == "error"
@@ -372,7 +419,7 @@ def test_missing_required_parameters(mock_mongodb_client, mock_bedrock_client, c
     assert "query" in result["content"][0]["text"]
 
     # Test get action without memory_id
-    result = agent.tool.mongodb_memory(action="get", **config)
+    result = agent.tool.mongodb_memory(action="get")
 
     # Verify error response
     assert result["status"] == "error"
@@ -380,7 +427,7 @@ def test_missing_required_parameters(mock_mongodb_client, mock_bedrock_client, c
     assert "memory_id" in result["content"][0]["text"]
 
 
-def test_mongodb_api_error_handling(mock_mongodb_client, mock_bedrock_client, config):
+def test_mongodb_api_error_handling(mock_mongodb_client, mock_bedrock_client):
     """Test handling of MongoDB API errors."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -388,7 +435,7 @@ def test_mongodb_api_error_handling(mock_mongodb_client, mock_bedrock_client, co
     mock_mongodb_client["collection"].insert_one.side_effect = Exception("MongoDB error")
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="record", content="Test content", **config)
+    result = agent.tool.mongodb_memory(action="record", content="Test content")
 
     # Verify error response
     assert result["status"] == "error"
@@ -396,7 +443,7 @@ def test_mongodb_api_error_handling(mock_mongodb_client, mock_bedrock_client, co
     assert "MongoDB error" in result["content"][0]["text"]
 
 
-def test_bedrock_api_error_handling(mock_mongodb_client, mock_bedrock_client, config):
+def test_bedrock_api_error_handling(mock_mongodb_client, mock_bedrock_client):
     """Test handling of Bedrock API errors."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -404,7 +451,7 @@ def test_bedrock_api_error_handling(mock_mongodb_client, mock_bedrock_client, co
     mock_bedrock_client["bedrock"].invoke_model.side_effect = Exception("Bedrock error")
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="record", content="Test content", **config)
+    result = agent.tool.mongodb_memory(action="record", content="Test content")
 
     # Verify error response
     assert result["status"] == "error"
@@ -412,7 +459,7 @@ def test_bedrock_api_error_handling(mock_mongodb_client, mock_bedrock_client, co
     assert "Embedding generation failed" in result["content"][0]["text"]
 
 
-def test_memory_not_found(mock_mongodb_client, mock_bedrock_client, config):
+def test_memory_not_found(mock_mongodb_client, mock_bedrock_client):
     """Test handling when memory is not found."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -420,20 +467,20 @@ def test_memory_not_found(mock_mongodb_client, mock_bedrock_client, config):
     mock_mongodb_client["collection"].find_one.return_value = None
 
     # Call the tool
-    result = agent.tool.mongodb_memory(action="get", memory_id="nonexistent", **config)
+    result = agent.tool.mongodb_memory(action="get", memory_id="nonexistent")
 
     # Verify error response
     assert result["status"] == "error"
     assert "Memory nonexistent not found" in result["content"][0]["text"]
 
 
-def test_namespace_validation(mock_mongodb_client, mock_bedrock_client, config):
-    """Test that memories are properly filtered by namespace."""
+def test_namespace_filtering(mock_mongodb_client, mock_bedrock_client):
+    """Test that memories are properly filtered by the environment-configured namespace."""
     agent = Agent(tools=[mongodb_memory])
 
     mock_mongodb_client["collection"].find_one.return_value = None
 
-    result = agent.tool.mongodb_memory(action="get", memory_id="mem_123", **config)
+    result = agent.tool.mongodb_memory(action="get", memory_id="mem_123")
 
     # Verify error response
     assert result["status"] == "error"
@@ -444,7 +491,7 @@ def test_namespace_validation(mock_mongodb_client, mock_bedrock_client, config):
     assert call_args[0] == {"memory_id": "mem_123", "namespace": "test_namespace"}
 
 
-def test_pagination_support(mock_mongodb_client, mock_bedrock_client, config):
+def test_pagination_support(mock_mongodb_client, mock_bedrock_client):
     """Test pagination support in list and retrieve operations."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -466,7 +513,7 @@ def test_pagination_support(mock_mongodb_client, mock_bedrock_client, config):
     mock_mongodb_client["collection"].count_documents.return_value = 20  # More results available
 
     # Test list with pagination
-    agent.tool.mongodb_memory(action="list", max_results=5, next_token="10", **config)
+    agent.tool.mongodb_memory(action="list", max_results=5, next_token="10")
 
     # Verify skip was called with correct offset
     mock_cursor.skip.assert_called_with(10)
@@ -474,7 +521,7 @@ def test_pagination_support(mock_mongodb_client, mock_bedrock_client, config):
 
 
 def test_environment_variable_defaults(mock_mongodb_client, mock_bedrock_client):
-    """Test that environment variables are used for defaults."""
+    """Test that environment variables are used for configuration."""
     agent = Agent(tools=[mongodb_memory])
 
     with mock.patch.dict(
@@ -493,7 +540,7 @@ def test_environment_variable_defaults(mock_mongodb_client, mock_bedrock_client)
         mock_result.inserted_id = "test_id"
         mock_mongodb_client["collection"].insert_one.return_value = mock_result
 
-        # Call tool without explicit parameters (should use env vars)
+        # Call tool (config comes entirely from env vars)
         result = agent.tool.mongodb_memory(action="record", content="Test content")
 
         # Verify success (means env vars were used correctly)
@@ -504,41 +551,12 @@ def test_environment_variable_defaults(mock_mongodb_client, mock_bedrock_client)
         assert "json" in result["content"][1]
         response_data = result["content"][1]["json"]
         assert "memory_id" in response_data
+        # Namespace used was the environment-configured one
+        assert response_data["namespace"] == "env_namespace"
 
 
-def test_agent_tool_usage(mock_mongodb_client, mock_bedrock_client):
-    """Test using the mongodb_memory tool through agent.tool pattern."""
-    # Configure mock responses
-    mock_result = MagicMock()
-    mock_result.inserted_id = "test_id"
-    mock_mongodb_client["collection"].insert_one.return_value = mock_result
-
-    # Create agent with direct tool usage - this demonstrates the standard pattern
-    agent = Agent(tools=[mongodb_memory])
-
-    # Test calling the tool through agent.tool with configuration parameters
-    result = agent.tool.mongodb_memory(
-        action="record",
-        content="Test memory content",
-        cluster_uri="mongodb+srv://test:test@cluster.mongodb.net/",
-        database_name="test_db",
-        collection_name="test_collection",
-        namespace="test_namespace",
-    )
-
-    # Verify success response
-    assert result["status"] == "success"
-    assert "Memory stored successfully" in result["content"][0]["text"]
-
-    # Verify MongoDB insert was called
-    mock_mongodb_client["collection"].insert_one.assert_called_once()
-
-    # Verify embedding generation was called
-    mock_bedrock_client["bedrock"].invoke_model.assert_called_once()
-
-
-def test_custom_embedding_model(mock_mongodb_client, mock_bedrock_client, config):
-    """Test using custom embedding model."""
+def test_custom_embedding_model(mock_mongodb_client, mock_bedrock_client):
+    """Test using custom embedding model from the environment."""
     agent = Agent(tools=[mongodb_memory])
 
     # Configure mock responses
@@ -546,10 +564,9 @@ def test_custom_embedding_model(mock_mongodb_client, mock_bedrock_client, config
     mock_result.inserted_id = "test_id"
     mock_mongodb_client["collection"].insert_one.return_value = mock_result
 
-    # Call tool with custom embedding model
-    result = agent.tool.mongodb_memory(
-        action="record", content="Test memory content", embedding_model="amazon.titan-embed-text-v1:0", **config
-    )
+    # Call tool with custom embedding model via env var
+    with mock.patch.dict(os.environ, {"MONGODB_EMBEDDING_MODEL": "amazon.titan-embed-text-v1:0"}):
+        result = agent.tool.mongodb_memory(action="record", content="Test memory content")
 
     # Verify success response
     assert result["status"] == "success"
@@ -561,81 +578,7 @@ def test_custom_embedding_model(mock_mongodb_client, mock_bedrock_client, config
     assert call_args[1]["modelId"] == "amazon.titan-embed-text-v1:0"
 
 
-def test_multiple_namespaces(mock_mongodb_client, mock_bedrock_client, config):
-    """Test using different namespaces for data isolation."""
-    agent = Agent(tools=[mongodb_memory])
-
-    # Configure mock responses
-    mock_result = MagicMock()
-    mock_result.inserted_id = "test_id"
-    mock_mongodb_client["collection"].insert_one.return_value = mock_result
-
-    # Store memory in user namespace
-    result1 = agent.tool.mongodb_memory(
-        action="record",
-        content="Alice likes Italian food",
-        namespace="user_alice",
-        **{k: v for k, v in config.items() if k != "namespace"},
-    )
-
-    # Store memory in system namespace
-    result2 = agent.tool.mongodb_memory(
-        action="record",
-        content="System maintenance scheduled",
-        namespace="system_global",
-        **{k: v for k, v in config.items() if k != "namespace"},
-    )
-
-    # Verify both operations succeeded
-    assert result1["status"] == "success"
-    assert result2["status"] == "success"
-
-    # Verify both calls were made
-    assert mock_mongodb_client["collection"].insert_one.call_count == 2
-
-
-def test_configuration_dictionary_pattern(mock_mongodb_client, mock_bedrock_client):
-    """Test using configuration dictionary for cleaner code."""
-    agent = Agent(tools=[mongodb_memory])
-
-    # Configure mock responses
-    mock_result = MagicMock()
-    mock_result.inserted_id = "test_id"
-    mock_mongodb_client["collection"].insert_one.return_value = mock_result
-
-    mock_mongodb_client["collection"].aggregate.return_value = [
-        {
-            "memory_id": "mem_123",
-            "content": "Test content",
-            "timestamp": "2023-01-01T00:00:00Z",
-            "metadata": {},
-            "score": 0.95,
-        }
-    ]
-
-    # Create configuration dictionary
-    config = {
-        "cluster_uri": "mongodb+srv://test:test@cluster.mongodb.net/",
-        "database_name": "memories_db",
-        "collection_name": "memories",
-        "namespace": "user_123",
-        "region": "us-east-1",
-    }
-
-    # Store memory using config dictionary
-    result1 = agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza", **config)
-
-    # Search memories using config dictionary
-    result2 = agent.tool.mongodb_memory(action="retrieve", query="food preferences", max_results=5, **config)
-
-    # Verify both operations succeeded
-    assert result1["status"] == "success"
-    assert result2["status"] == "success"
-    assert "Memory stored successfully" in result1["content"][0]["text"]
-    assert "Memories retrieved successfully" in result2["content"][0]["text"]
-
-
-def test_batch_operations(mock_mongodb_client, mock_bedrock_client, config):
+def test_batch_operations(mock_mongodb_client, mock_bedrock_client):
     """Test storing multiple related memories in batch."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -653,7 +596,6 @@ def test_batch_operations(mock_mongodb_client, mock_bedrock_client, config):
             action="record",
             content=content,
             metadata={"batch": "user_preferences", "category": "preferences"},
-            **config,
         )
         results.append(result)
 
@@ -666,7 +608,7 @@ def test_batch_operations(mock_mongodb_client, mock_bedrock_client, config):
     assert mock_mongodb_client["collection"].insert_one.call_count == len(memories)
 
 
-def test_error_handling_scenarios(mock_mongodb_client, mock_bedrock_client, config):
+def test_error_handling_scenarios(mock_mongodb_client, mock_bedrock_client):
     """Test comprehensive error handling scenarios."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -674,7 +616,7 @@ def test_error_handling_scenarios(mock_mongodb_client, mock_bedrock_client, conf
     from pymongo.errors import ConnectionFailure
 
     mock_mongodb_client["client"].admin.command.side_effect = ConnectionFailure("Connection failed")
-    result = agent.tool.mongodb_memory(action="record", content="test", **config)
+    result = agent.tool.mongodb_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Unable to connect to MongoDB cluster" in result["content"][0]["text"]
 
@@ -684,7 +626,7 @@ def test_error_handling_scenarios(mock_mongodb_client, mock_bedrock_client, conf
 
     # Test MongoDB API errors
     mock_mongodb_client["collection"].insert_one.side_effect = Exception("MongoDB connection failed")
-    result = agent.tool.mongodb_memory(action="record", content="test", **config)
+    result = agent.tool.mongodb_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "API error" in result["content"][0]["text"]
 
@@ -693,12 +635,12 @@ def test_error_handling_scenarios(mock_mongodb_client, mock_bedrock_client, conf
 
     # Test Bedrock API errors
     mock_bedrock_client["bedrock"].invoke_model.side_effect = Exception("Bedrock access denied")
-    result = agent.tool.mongodb_memory(action="record", content="test", **config)
+    result = agent.tool.mongodb_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Embedding generation failed" in result["content"][0]["text"]
 
 
-def test_metadata_usage_scenarios(mock_mongodb_client, mock_bedrock_client, config):
+def test_metadata_usage_scenarios(mock_mongodb_client, mock_bedrock_client):
     """Test various metadata usage patterns."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -717,7 +659,7 @@ def test_metadata_usage_scenarios(mock_mongodb_client, mock_bedrock_client, conf
     }
 
     result = agent.tool.mongodb_memory(
-        action="record", content="Important project deadline", metadata=structured_metadata, **config
+        action="record", content="Important project deadline", metadata=structured_metadata
     )
 
     assert result["status"] == "success"
@@ -729,70 +671,15 @@ def test_metadata_usage_scenarios(mock_mongodb_client, mock_bedrock_client, conf
     assert call_args["metadata"] == structured_metadata
 
 
-def test_performance_scenarios(mock_mongodb_client, mock_bedrock_client, config):
-    """Test performance-related scenarios like pagination."""
-    agent = Agent(tools=[mongodb_memory])
-
-    # Configure mock find response with pagination
-    mock_cursor = MagicMock()
-    mock_cursor.sort.return_value = mock_cursor
-    mock_cursor.skip.return_value = mock_cursor
-    mock_cursor.limit.return_value = mock_cursor
-    mock_cursor.__iter__.return_value = [
-        {
-            "memory_id": f"mem_{i}",
-            "content": f"Test content {i}",
-            "timestamp": "2023-01-01T00:00:00Z",
-            "metadata": {},
-        }
-        for i in range(5)
-    ]
-
-    mock_mongodb_client["collection"].find.return_value = mock_cursor
-    mock_mongodb_client["collection"].count_documents.return_value = 25  # More results available
-
-    # Test pagination with next_token
-    result = agent.tool.mongodb_memory(action="list", max_results=5, next_token="10", **config)
-
-    assert result["status"] == "success"
-    assert "Memories listed successfully" in result["content"][0]["text"]
-
-    # Verify pagination parameters were used
-    mock_cursor.skip.assert_called_with(10)
-    mock_cursor.limit.assert_called_with(5)
-
-
-def test_security_scenarios(mock_mongodb_client, mock_bedrock_client):
-    """Test security-related scenarios like namespace isolation."""
-    agent = Agent(tools=[mongodb_memory])
-
-    # Configure mock find_one response to return None (not found)
-    # This simulates the new behavior where we query with both memory_id and namespace
-    mock_mongodb_client["collection"].find_one.return_value = None
-
-    # Test namespace validation
-    result = agent.tool.mongodb_memory(
-        action="get",
-        memory_id="mem_123",
-        cluster_uri="mongodb+srv://test:test@cluster.mongodb.net/",
-        database_name="test_db",
-        collection_name="test_collection",
-        namespace="correct_namespace",
-    )
-
-    assert result["status"] == "error"
-    assert "Memory mem_123 not found in namespace correct_namespace" in result["content"][0]["text"]
-
-
-def test_troubleshooting_scenarios(mock_mongodb_client, mock_bedrock_client, config):
+def test_troubleshooting_scenarios(mock_mongodb_client, mock_bedrock_client):
     """Test troubleshooting scenarios mentioned in documentation."""
     agent = Agent(tools=[mongodb_memory])
 
-    # Test index creation failure - now it should succeed with warning, not error
+    # Index creation failure is non-fatal: retrieve logs a warning and still succeeds.
     mock_mongodb_client["collection"].create_search_index.side_effect = Exception("Index creation failed")
     mock_mongodb_client["collection"].aggregate.return_value = []
-    result = agent.tool.mongodb_memory(action="retrieve", query="test", **config)
-    assert result["status"] == "success"  # Should succeed despite index creation failure
+    result = agent.tool.mongodb_memory(action="retrieve", query="test")
+    assert result["status"] == "success"
 
     # Reset side effect
     mock_mongodb_client["collection"].create_search_index.side_effect = None
@@ -801,57 +688,20 @@ def test_troubleshooting_scenarios(mock_mongodb_client, mock_bedrock_client, con
     from pymongo.errors import ConnectionFailure
 
     mock_mongodb_client["client"].admin.command.side_effect = ConnectionFailure("Authentication failed")
-    result = agent.tool.mongodb_memory(action="record", content="test", **config)
+    result = agent.tool.mongodb_memory(action="record", content="test")
     assert result["status"] == "error"
     assert "Unable to connect to MongoDB cluster" in result["content"][0]["text"]
 
 
-def test_nosql_injection_prevention(mock_mongodb_client, mock_bedrock_client, config):
-    """Test that NoSQL injection attempts are blocked."""
+def test_invalid_namespace_env_var(mock_mongodb_client, mock_bedrock_client):
+    """Test that an invalid MONGODB_NAMESPACE env var is rejected.
+
+    The agent cannot supply a namespace, so NoSQL operator injection cannot reach it via the tool
+    signature. An operator can still misconfigure the environment variable, so validation runs on
+    that value.
+    """
     agent = Agent(tools=[mongodb_memory])
 
-    # Test the specific PoC attack: namespace={"$ne": ""}
-    malicious_namespace = {"$ne": ""}
-
-    # Remove namespace from config to avoid conflict
-    test_config = {k: v for k, v in config.items() if k != "namespace"}
-
-    # Test with list action (most common attack vector)
-    result = agent.tool.mongodb_memory(action="list", namespace=malicious_namespace, **test_config)
-
-    # Should be blocked - either by Pydantic validation or our custom validation
-    assert result["status"] == "error"
-    error_text = result["content"][0]["text"]
-    assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text, (
-        f"Expected validation error, got: {error_text}"
-    )
-
-    # Test other MongoDB operators
-    other_injection_attempts = [
-        {"$gt": ""},
-        {"$regex": ".*"},
-        {"$exists": True},
-        {"$in": ["tenant1", "tenant2"]},
-    ]
-
-    for injection_payload in other_injection_attempts:
-        result = agent.tool.mongodb_memory(action="list", namespace=injection_payload, **test_config)
-
-        assert result["status"] == "error", f"Injection {injection_payload} should be blocked"
-        error_text = result["content"][0]["text"]
-        assert "Invalid namespace" in error_text or "Input should be a valid string" in error_text, (
-            f"Expected validation error for {injection_payload}"
-        )
-
-
-def test_namespace_validation_strict_rules(mock_mongodb_client, mock_bedrock_client, config):
-    """Test strict namespace validation rules."""
-    agent = Agent(tools=[mongodb_memory])
-
-    # Remove namespace from config to avoid conflict
-    test_config = {k: v for k, v in config.items() if k != "namespace"}
-
-    # Test invalid characters (should be rejected)
     invalid_namespaces = [
         "user.name",  # Dots not allowed in strict mode
         "user@domain",  # @ symbol
@@ -865,14 +715,13 @@ def test_namespace_validation_strict_rules(mock_mongodb_client, mock_bedrock_cli
     ]
 
     for invalid_namespace in invalid_namespaces:
-        result = agent.tool.mongodb_memory(action="list", namespace=invalid_namespace, **test_config)
+        with mock.patch.dict(os.environ, {"MONGODB_NAMESPACE": invalid_namespace}):
+            result = agent.tool.mongodb_memory(action="list")
+            assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
+            assert "Invalid namespace" in result["content"][0]["text"]
 
-        assert result["status"] == "error", f"Invalid namespace '{invalid_namespace}' should be rejected"
-        error_text = result["content"][0]["text"]
-        assert "Invalid namespace" in error_text, f"Expected validation error for '{invalid_namespace}'"
 
-
-def test_vector_search_pipeline_structure(mock_mongodb_client, mock_bedrock_client, config):
+def test_vector_search_pipeline_structure(mock_mongodb_client, mock_bedrock_client):
     """Test that the vector search pipeline is structured correctly."""
     agent = Agent(tools=[mongodb_memory])
 
@@ -888,7 +737,7 @@ def test_vector_search_pipeline_structure(mock_mongodb_client, mock_bedrock_clie
     ]
 
     # Call retrieve action
-    agent.tool.mongodb_memory(action="retrieve", query="test query", **config)
+    agent.tool.mongodb_memory(action="retrieve", query="test query")
 
     # Verify aggregate was called
     mock_mongodb_client["collection"].aggregate.assert_called()
@@ -913,3 +762,74 @@ def test_vector_search_pipeline_structure(mock_mongodb_client, mock_bedrock_clie
     vector_search = main_pipeline[0]["$vectorSearch"]
     assert vector_search["index"] == "vector_index"
     assert vector_search["path"] == "embedding"
+
+
+# --- MongoDBMemoryTool class (per-principal binding) ---
+
+
+def test_class_requires_cluster_uri(mock_mongodb_client, mock_bedrock_client):
+    """Constructing the class without a cluster URI raises."""
+    from src.strands_tools.mongodb_memory import MongoDBValidationError
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(MongoDBValidationError, match="cluster_uri is required"):
+            MongoDBMemoryTool()
+
+
+def test_class_rejects_invalid_namespace(mock_mongodb_client, mock_bedrock_client, tool_config):
+    """The class validates the bound namespace at construction."""
+    from src.strands_tools.mongodb_memory import MongoDBValidationError
+
+    bad_config = {**tool_config, "namespace": "user$name"}
+    with pytest.raises(MongoDBValidationError, match="Invalid namespace"):
+        MongoDBMemoryTool(**bad_config)
+
+
+def test_class_binds_namespace(mock_mongodb_client, mock_bedrock_client, tool_config):
+    """The class uses its constructor namespace, not any agent-supplied value."""
+    mock_mongodb_client["collection"].find_one.return_value = None
+
+    tool = MongoDBMemoryTool(**{**tool_config, "namespace": "user_alice"})
+    agent = Agent(tools=[tool.mongodb_memory])
+
+    result = agent.tool.mongodb_memory(action="get", memory_id="mem_123")
+
+    assert result["status"] == "error"
+    assert "not found in namespace user_alice" in result["content"][0]["text"]
+
+    # Query used the bound namespace
+    call_args = mock_mongodb_client["collection"].find_one.call_args[0]
+    assert call_args[0] == {"memory_id": "mem_123", "namespace": "user_alice"}
+
+
+def test_class_record_uses_bound_namespace(mock_mongodb_client, mock_bedrock_client, tool_config):
+    """A record stored through the class lands in the bound namespace."""
+    mock_result = MagicMock()
+    mock_result.inserted_id = "test_id"
+    mock_mongodb_client["collection"].insert_one.return_value = mock_result
+
+    tool = MongoDBMemoryTool(**{**tool_config, "namespace": "user_bob"})
+    agent = Agent(tools=[tool.mongodb_memory])
+
+    result = agent.tool.mongodb_memory(action="record", content="Bob's secret")
+
+    assert result["status"] == "success"
+    assert result["content"][1]["json"]["namespace"] == "user_bob"
+
+    # The stored document carries the bound namespace
+    stored_doc = mock_mongodb_client["collection"].insert_one.call_args[0][0]
+    assert stored_doc["namespace"] == "user_bob"
+
+
+def test_class_namespace_falls_back_to_env(mock_mongodb_client, mock_bedrock_client):
+    """When namespace is not passed to the constructor, it falls back to MONGODB_NAMESPACE."""
+    mock_mongodb_client["collection"].find_one.return_value = None
+
+    with mock.patch.dict(os.environ, {"MONGODB_NAMESPACE": "env_tenant"}):
+        tool = MongoDBMemoryTool(cluster_uri="mongodb+srv://test:test@cluster.mongodb.net/")
+    agent = Agent(tools=[tool.mongodb_memory])
+
+    agent.tool.mongodb_memory(action="get", memory_id="mem_123")
+
+    call_args = mock_mongodb_client["collection"].find_one.call_args[0]
+    assert call_args[0] == {"memory_id": "mem_123", "namespace": "env_tenant"}

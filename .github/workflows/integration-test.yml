@@ -3,10 +3,65 @@ name: Secure Integration test
 on:
   pull_request_target:
     branches: main
+  # workflow_call entry — TRUST INVARIANT.
+  #
+  # Lets another workflow in this repo reuse the integ tests against an
+  # arbitrary `ref` while keeping AWS_*. The collaborator check below is
+  # short-circuited on this path because the only caller (release.yml) is
+  # workflow_dispatch-gated, which already requires repo write access.
+  #
+  # Before adding another caller, check all of:
+  #   1. Cannot be triggered by an unauthenticated user or a fork
+  #      (no pull_request; no pull_request_target without an auth gate;
+  #      no push from non-main branches).
+  #   2. Cannot be coerced into a fork-PR ref. validate-call-ref below is
+  #      the runtime guard, but condition 1 should make that unnecessary.
+  #   3. STRANDS_INTEG_TEST_ROLE is scoped to least privilege.
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
 
 jobs:
+  validate-call-ref:
+    name: Validate workflow_call ref
+    if: inputs.ref != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Reject ref shapes that could check out untrusted code:
+    # `refs/pull/*` (fork-PR merge refs) and `owner:branch` (cross-repo
+    # refs) fail; plain branches and SHAs pass.
+    steps:
+      - name: Reject untrusted-shaped refs
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          case "$REF" in
+            refs/pull/*|*:*)
+              echo "::error::workflow_call ref '$REF' looks like a fork PR or cross-repo ref."
+              exit 1
+              ;;
+          esac
+          echo "ref '$REF' passed shape check."
+
   authorization-check:
-    permissions: read-all
+    needs: [validate-call-ref]
+    # `needs` only runs after non-skipped predecessors. validate-call-ref is
+    # skipped on pull_request_target (inputs.ref is empty), so use
+    # `if: always()` to ensure this still runs there. On workflow_call,
+    # validate-call-ref must have succeeded.
+    if: |
+      always() &&
+      (needs.validate-call-ref.result == 'success' || needs.validate-call-ref.result == 'skipped')
+    # Kept within what the workflow_call caller (release.yml's `integ` job)
+    # grants — a called workflow's job cannot request more than the caller.
+    # The collaborator lookup only needs repo read.
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       approval-env: ${{ steps.collab-check.outputs.result }}
@@ -14,9 +69,18 @@ jobs:
       - name: Collaborator Check
         uses: actions/github-script@v7
         id: collab-check
+        env:
+          # Only a workflow_call caller (release.yml) sets this; empty on
+          # pull_request_target. When set, skip the collaborator lookup — the
+          # caller is workflow_dispatch-gated and already requires write access.
+          CALL_REF: ${{ inputs.ref }}
         with:
           result-encoding: string
           script: |
+            if (process.env.CALL_REF) {
+              console.log("workflow_call path (release); skipping collaborator check.")
+              return "auto-approve"
+            }
             try {
               const permissionResponse = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner: context.repo.owner,
@@ -39,6 +103,7 @@ jobs:
   check-access-and-checkout:
     runs-on: ubuntu-latest
     needs: authorization-check
+    if: always() && needs.authorization-check.result == 'success'
     environment: ${{ needs.authorization-check.outputs.approval-env }}
     permissions:
       id-token: write
@@ -54,7 +119,9 @@ jobs:
       - name: Checkout head commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }} # Pull the commit from the forked repo
+          # On workflow_call (release) use the pinned ref; on
+          # pull_request_target pull the PR head from the forked repo.
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
           persist-credentials: false  # Don't persist credentials for subsequent actions
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,4 +138,3 @@ jobs:
         id: tests
         run: |
           hatch test tests_integ
-
