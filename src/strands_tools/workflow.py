@@ -1,8 +1,8 @@
 """Workflow orchestration tool for managing parallel AI tasks with advanced model support.
 
 This module provides an advanced workflow orchestration system that supports parallel AI task
-execution with granular control over model providers, tool access, and execution parameters.
-Built on modern Strands SDK patterns with rich monitoring and robust error handling.
+execution with granular control over model providers, tool access, execution parameters, and
+distributed agent execution via remote URLs.
 
 Key Features:
 -------------
@@ -19,25 +19,32 @@ Key Features:
    • Environment-based model configuration
    • Fallback to parent agent model when needed
 
-3. Flexible Tool Configuration:
+3. Distributed Agent Execution:
+   • Execute tasks on remote agents via HTTP/HTTPS URLs
+   • Support for authentication tokens (Bearer auth)
+   • Mix local and remote agents in the same workflow
+   • Automatic context passing between distributed tasks
+   • Configurable timeouts for remote calls
+
+4. Flexible Tool Configuration:
    • Per-task tool access control
    • Tool inheritance from parent agent
    • Automatic tool filtering and validation
    • Support for any combination of tools per task
 
-4. Resource Optimization:
+5. Resource Optimization:
    • Automatic thread pool scaling (2-8 threads)
    • Rate limiting with exponential backoff
    • Resource-aware task distribution
    • CPU usage monitoring and optimization
 
-5. Reliability Features:
+6. Reliability Features:
    • Persistent state storage with real-time monitoring
    • Automatic error recovery with retries
    • File system watching for external updates
    • Task state preservation across restarts
 
-6. Rich Monitoring & Control:
+7. Rich Monitoring & Control:
    • Detailed status tracking with metrics
    • Progress reporting with timing statistics
    • Resource utilization insights
@@ -50,7 +57,7 @@ from strands_tools import workflow
 
 agent = Agent(tools=[workflow])
 
-# Create a multi-model research workflow
+# Create a multi-model research workflow with remote agents
 result = agent.tool.workflow(
     action="create",
     workflow_id="research_pipeline",
@@ -65,19 +72,18 @@ result = agent.tool.workflow(
             "timeout": 300
         },
         {
-            "task_id": "analysis",
-            "description": "Analyze the collected data and identify key patterns",
+            "task_id": "specialized_analysis",
+            "description": "Perform domain-specific analysis using specialized remote agent",
+            "agent_url": "https://<domain-expert-domain>",
+            "auth_token": "your-token-here",
             "dependencies": ["data_collection"],
-            "tools": ["calculator", "file_read", "file_write"],
-            "model_provider": "anthropic",
-            "model_settings": {"model_id": "claude-sonnet-4-20250514", "params": {"temperature": 0.3}},
-            "system_prompt": "You are a data analysis specialist focused on renewable energy research.",
-            "priority": 4
+            "priority": 4,
+            "timeout": 600
         },
         {
             "task_id": "report_generation",
             "description": "Generate a comprehensive report based on the analysis",
-            "dependencies": ["analysis"],
+            "dependencies": ["specialized_analysis"],
             "tools": ["file_read", "file_write", "generate_image"],
             "model_provider": "openai",
             "model_settings": {"model_id": "o4-mini", "params": {"temperature": 0.7}},
@@ -97,6 +103,7 @@ result = agent.tool.workflow(action="status", workflow_id="research_pipeline")
 See the workflow function docstring for complete configuration options and advanced usage patterns.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -111,6 +118,8 @@ from queue import Queue
 from threading import Lock, RLock
 from typing import Any, Dict, List, Optional
 
+import httpx
+import websockets
 from rich.box import ROUNDED
 from rich.panel import Panel
 from rich.table import Table
@@ -316,9 +325,18 @@ class WorkflowManager:
         return workflow
 
     def _create_task_agent(self, task: Dict) -> Agent:
-        """Create a specialized agent for a specific task with custom model and tools."""
+        """Create a specialized agent for a specific task with custom model and tools.
+
+        Supports both local agents and remote agents via URL.
+        """
         try:
-            # Get task-specific configuration
+            # Check if this is a remote agent
+            agent_url = task.get("agent_url")
+            if agent_url:
+                # Remote agent - return a proxy that will be handled differently
+                return {"type": "remote", "url": agent_url, "task": task}
+
+            # Get task-specific configuration for local agent
             task_tools = task.get("tools")
             model_provider = task.get("model_provider")
             model_settings = task.get("model_settings")
@@ -400,13 +418,169 @@ class WorkflowManager:
                 time.sleep(sleep_time)
             _last_request_time = time.time()
 
+    async def _execute_remote_task(self, task: Dict, task_prompt: str, timeout: int = 300) -> Dict:
+        """Execute a task on a remote agent via HTTP or WebSocket."""
+        agent_url = task.get("agent_url")
+        ws_url = task.get("ws_url")
+
+        # Check if this is a WebSocket connection
+        if ws_url:
+            return await self._execute_websocket_task(task, task_prompt, timeout)
+
+        # Otherwise use HTTP
+        try:
+            # Create HTTP client with timeout
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                # Check if this is an AgentCore API Gateway endpoint
+                # (URL doesn't end with /execute and might need different payload format)
+                is_agentcore_gateway = not agent_url.endswith("/execute")
+
+                # Prepare request payload
+                if is_agentcore_gateway:
+                    # AgentCore API Gateway format: {"prompt": "..."}
+                    payload = {"prompt": task_prompt}
+                    target_url = agent_url
+                else:
+                    # Standard workflow format: {"message": "...", "task_id": "...", "metadata": {...}}
+                    payload = {
+                        "message": task_prompt,
+                        "task_id": task["task_id"],
+                        "metadata": {"priority": task.get("priority", 3), "timeout": timeout},
+                    }
+                    target_url = f"{agent_url}/execute"
+
+                # Add authentication if provided
+                headers = {"Content-Type": "application/json"}
+                if task.get("auth_token"):
+                    headers["Authorization"] = f"Bearer {task['auth_token']}"
+
+                logger.info(f"Sending task {task['task_id']} to remote agent at {target_url}")
+
+                # Send request to remote agent
+                response = await client.post(target_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+                # Parse response
+                result_data = response.json()
+
+                # Extract content from response
+                # Handle both standard format and AgentCore format
+                if "result" in result_data:
+                    # AgentCore format: {"result": {...}}
+                    content = [{"text": json.dumps(result_data["result"])}]
+                elif "content" in result_data:
+                    # Standard format: {"content": [...]}
+                    content = result_data["content"]
+                    if isinstance(content, str):
+                        content = [{"text": content}]
+                    elif not isinstance(content, list):
+                        content = [{"text": str(content)}]
+                else:
+                    # Fallback: use entire response
+                    content = [{"text": json.dumps(result_data)}]
+
+                return {
+                    "status": result_data.get("status", "success"),
+                    "content": content,
+                    "metrics": result_data.get("metrics"),
+                    "remote_agent": agent_url,
+                }
+
+        except httpx.TimeoutException:
+            error_msg = f"Remote agent at {agent_url} timed out after {timeout}s"
+            logger.error(error_msg)
+            return {"status": "error", "content": [{"text": error_msg}]}
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Remote agent at {agent_url} returned error: {e.response.status_code} - {e.response.text}"
+            logger.error(error_msg)
+            return {"status": "error", "content": [{"text": error_msg}]}
+        except Exception as e:
+            error_msg = f"Error communicating with remote agent at {agent_url}: {str(e)}"
+            logger.error(error_msg)
+            return {"status": "error", "content": [{"text": error_msg}]}
+
+    async def _execute_websocket_task(self, task: Dict, task_prompt: str, timeout: int = 300) -> Dict:
+        """Execute a task on a remote agent via WebSocket."""
+        ws_url = task.get("ws_url")
+
+        try:
+            # Prepare headers for WebSocket connection
+            headers = {}
+            if task.get("auth_token"):
+                headers["Authorization"] = f"Bearer {task['auth_token']}"
+
+            # Add session ID if provided
+            session_id = task.get("session_id")
+            if session_id:
+                headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = session_id
+
+            logger.info(f"Connecting to WebSocket agent at {ws_url} for task {task['task_id']}")
+
+            # Connect to WebSocket with timeout
+            async with websockets.connect(
+                ws_url, additional_headers=headers, open_timeout=timeout, close_timeout=10
+            ) as websocket:
+                # Prepare message payload
+                payload = {
+                    "prompt": task_prompt,
+                    "task_id": task["task_id"],
+                    "metadata": {"priority": task.get("priority", 3), "timeout": timeout},
+                }
+
+                # Send message
+                await websocket.send(json.dumps(payload))
+                logger.debug(f"Sent message to WebSocket agent for task {task['task_id']}")
+
+                # Receive response (with timeout)
+                try:
+                    response_text = await asyncio.wait_for(websocket.recv(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    error_msg = f"WebSocket agent at {ws_url} timed out after {timeout}s"
+                    logger.error(error_msg)
+                    return {"status": "error", "content": [{"text": error_msg}]}
+
+                # Parse response
+                try:
+                    result_data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # If not JSON, treat as plain text
+                    result_data = {"result": response_text}
+
+                # Extract content from response
+                if "result" in result_data:
+                    content = [{"text": json.dumps(result_data["result"])}]
+                elif "content" in result_data:
+                    content = result_data["content"]
+                    if isinstance(content, str):
+                        content = [{"text": content}]
+                    elif not isinstance(content, list):
+                        content = [{"text": str(content)}]
+                else:
+                    content = [{"text": response_text}]
+
+                return {
+                    "status": "success",
+                    "content": content,
+                    "metrics": result_data.get("metrics"),
+                    "remote_agent": ws_url,
+                }
+
+        except websockets.exceptions.WebSocketException as e:
+            error_msg = f"WebSocket error connecting to {ws_url}: {str(e)}"
+            logger.error(error_msg)
+            return {"status": "error", "content": [{"text": error_msg}]}
+        except Exception as e:
+            error_msg = f"Error communicating with WebSocket agent at {ws_url}: {str(e)}"
+            logger.error(error_msg)
+            return {"status": "error", "content": [{"text": error_msg}]}
+
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=4, max=30),
         reraise=True,
     )
     def execute_task(self, task: Dict, workflow: Dict) -> Dict:
-        """Execute a single task using a specialized agent with rate limiting and retries."""
+        """Execute a single task using a specialized agent (local or remote) with rate limiting and retries."""
         try:
             task_id = task["task_id"]
 
@@ -436,11 +610,36 @@ class WorkflowManager:
             # Apply rate limiting before making API call
             self._wait_for_rate_limit()
 
+            # Check if this is a remote agent task (HTTP or WebSocket)
+            if task.get("agent_url") or task.get("ws_url"):
+                # Execute on remote agent
+                agent_identifier = task.get("ws_url") or task.get("agent_url")
+                logger.debug(f"Executing task {task_id} on remote agent: {agent_identifier}")
+                timeout = task.get("timeout", 300)
+
+                # Run async function in sync context
+                import asyncio
+
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                result = loop.run_until_complete(self._execute_remote_task(task, task_prompt, timeout))
+
+                return {
+                    "status": result["status"],
+                    "content": result["content"],
+                    "metrics": result.get("metrics"),
+                }
+
+            # Local agent execution
             # Create specialized agent for this task
             task_agent = self._create_task_agent(task)
 
             # Execute task
-            logger.debug(f"Executing task {task_id} with specialized agent")
+            logger.debug(f"Executing task {task_id} with specialized local agent")
             result = task_agent(task_prompt)
 
             # Extract response content - handle both dict and custom object return types
@@ -977,9 +1176,11 @@ def workflow(
             • description (str): Task prompt for AI execution [REQUIRED]
             • system_prompt (str): Custom system prompt for this task [OPTIONAL]
             • tools (List[str]): Tool names available to this task [OPTIONAL]
-            • model_provider (str): Model provider for this task [OPTIONAL]
+            • agent_url (str): URL of remote agent to execute this task [OPTIONAL]
+            • auth_token (str): Bearer token for remote agent authentication [OPTIONAL]
+            • model_provider (str): Model provider for local tasks [OPTIONAL]
               Options: "bedrock", "anthropic", "ollama", "openai", "github", "env"
-            • model_settings (Dict): Model configuration [OPTIONAL]
+            • model_settings (Dict): Model configuration for local tasks [OPTIONAL]
               Example: {"model_id": "claude-sonnet-4", "params": {"temperature": 0.7}}
             • dependencies (List[str]): Task IDs this task depends on [OPTIONAL]
             • priority (int): Task priority 1-5, higher is more important [OPTIONAL, default: 3]
@@ -999,7 +1200,18 @@ def workflow(
         "description": "Research renewable energy trends for 2024"
     }
 
-    # Advanced task with custom model and tools
+    # Remote agent task (distributed execution)
+    {
+        "task_id": "specialized_analysis",
+        "description": "Perform specialized domain analysis",
+        "agent_url": "https://<analysis-agent-domain>",
+        "auth_token": "your-bearer-token-here",
+        "dependencies": ["research"],
+        "priority": 5,
+        "timeout": 600
+    }
+
+    # Advanced task with custom model and tools (local execution)
     {
         "task_id": "analysis",
         "description": "Analyze the research data and identify key insights",
@@ -1029,7 +1241,7 @@ def workflow(
     Usage Examples:
     --------------
     ```python
-    # Create a multi-model data analysis workflow
+    # Example 1: Multi-model data analysis workflow (local execution)
     result = agent.tool.workflow(
         action="create",
         workflow_id="data_pipeline",
@@ -1087,11 +1299,86 @@ def workflow(
         ]
     )
 
+    # Example 2: Distributed workflow with remote agents
+    result = agent.tool.workflow(
+        action="create",
+        workflow_id="distributed_order_processing",
+        tasks=[
+            {
+                "task_id": "check_inventory",
+                "description": "Verify product availability and stock levels for order #12345",
+                "agent_url": "https://<inventory-agent-domain>",
+                "auth_token": "inv_token_abc123",
+                "priority": 5,
+                "timeout": 300
+            },
+            {
+                "task_id": "validate_payment",
+                "description": "Validate payment method and authorize transaction for order #12345",
+                "agent_url": "https://<payment-agent-domain>",
+                "auth_token": "pay_token_xyz789",
+                "priority": 5,
+                "timeout": 300
+            },
+            {
+                "task_id": "prepare_shipping",
+                "description": "Calculate shipping costs and prepare labels based on inventory results",
+                "agent_url": "https://<shipping-agent-domain>",
+                "auth_token": "ship_token_def456",
+                "dependencies": ["check_inventory"],
+                "priority": 3,
+                "timeout": 300
+            },
+            {
+                "task_id": "confirm_order",
+                "description": "Generate final order confirmation with all details",
+                "dependencies": ["check_inventory", "validate_payment", "prepare_shipping"],
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"},
+                "system_prompt": "You are an order confirmation specialist.",
+                "priority": 2
+            }
+        ]
+    )
+
+    # Example 3: Hybrid workflow (mix of local and remote agents)
+    result = agent.tool.workflow(
+        action="create",
+        workflow_id="hybrid_research",
+        tasks=[
+            {
+                "task_id": "web_research",
+                "description": "Research latest AI trends and developments",
+                "tools": ["retrieve", "http_request"],
+                "model_provider": "anthropic",
+                "model_settings": {"model_id": "claude-sonnet-4-20250514"},
+                "priority": 5
+            },
+            {
+                "task_id": "specialized_analysis",
+                "description": "Perform domain-specific analysis using specialized agent",
+                "agent_url": "https://<domain-expert-agent-domain>",
+                "dependencies": ["web_research"],
+                "priority": 4,
+                "timeout": 600
+            },
+            {
+                "task_id": "synthesis",
+                "description": "Synthesize findings into actionable insights",
+                "dependencies": ["web_research", "specialized_analysis"],
+                "tools": ["file_write"],
+                "model_provider": "bedrock",
+                "model_settings": {"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"},
+                "priority": 3
+            }
+        ]
+    )
+
     # Start the workflow
-    result = agent.tool.workflow(action="start", workflow_id="data_pipeline")
+    result = agent.tool.workflow(action="start", workflow_id="distributed_order_processing")
 
     # Monitor progress
-    result = agent.tool.workflow(action="status", workflow_id="data_pipeline")
+    result = agent.tool.workflow(action="status", workflow_id="distributed_order_processing")
 
     # List all workflows
     result = agent.tool.workflow(action="list")
