@@ -58,6 +58,11 @@ agent.tool.environment(action="set", name="MY_SETTING", value="new_value")
 agent.tool.environment(action="delete", name="TEMP_VAR")
 ```
 
+Configuration:
+- ENV_VARS_MASKED_DEFAULT (environment variable): Set to "false" to return sensitive
+  values unmasked. Masking is configured by the operator only; it cannot be changed
+  through tool input.
+
 See the environment function docstring for more details on available actions and parameters.
 """
 
@@ -133,11 +138,6 @@ Key Features:
                 "prefix": {
                     "type": "string",
                     "description": "Filter variables by prefix",
-                },
-                "masked": {
-                    "type": "boolean",
-                    "description": "Mask sensitive values in output",
-                    "default": True,
                 },
             },
             "required": ["action"],
@@ -400,7 +400,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Security Features:
     ---------------
     - Protected system variables cannot be modified
-    - Sensitive values are masked in output by default
+    - Sensitive values are masked in output unless ENV_VARS_MASKED_DEFAULT is "false"
     - Destructive actions require explicit confirmation
     - Clear risk level indicators for all operations
     - BYPASS_TOOL_CONSENT mode controls for testing and automation
@@ -411,7 +411,6 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             tool["input"]["name"]: Environment variable name (for get/set/delete/validate)
             tool["input"]["value"]: Value to set (for set action)
             tool["input"]["prefix"]: Filter prefix for list action
-            tool["input"]["masked"]: Whether to mask sensitive values (default: True)
         **kwargs: Additional keyword arguments (unused)
 
     Returns:
@@ -424,7 +423,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - The ENV var "BYPASS_TOOL_CONSENT" can be set to "true" to bypass confirmation prompts
         - Protected variables include PATH, PYTHONPATH, STRANDS_HOME, SHELL, USER, HOME
         - Sensitive variables are detected by keywords in their names (TOKEN, SECRET, etc.)
-        - For security reasons, values of sensitive variables are masked in output
+        - Masking is controlled by the ENV var "ENV_VARS_MASKED_DEFAULT" (default: "true")
     """
     console = console_util.create()
 
@@ -439,8 +438,8 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
-    # Get environment variables at runtime
-    env_vars_masked_default = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").lower() == "true"
+    # Masking is operator-controlled and cannot be overridden through tool input
+    masked = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").lower() == "true"
 
     # Check for BYPASS_TOOL_CONSENT mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
@@ -460,7 +459,6 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         if action == "list":
             prefix = tool_input.get("prefix")
-            masked = tool_input.get("masked", env_vars_masked_default)
 
             # Format rich table
             table = format_env_vars_table(dict(os.environ), masked=masked, prefix=prefix)
@@ -507,7 +505,6 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "content": [{"text": error_msg}],
                 }
 
-            masked = tool_input.get("masked", env_vars_masked_default)
             safe_value = value if value is not None else ""
             display_value = mask_sensitive_value(name, safe_value) if masked else safe_value
 
@@ -546,8 +543,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             # Show success message
             show_operation_result(console, True, f"Successfully retrieved {name}")
             # Create a return object with properly cast types
-            final_display_value = display_value if masked else safe_value
-            get_content: List[ToolResultContent] = [{"text": f"{name} = {final_display_value}"}]
+            get_content: List[ToolResultContent] = [{"text": f"{name} = {display_value}"}]
             return {
                 "toolUseId": tool_use_id,
                 "status": "success",

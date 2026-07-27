@@ -246,11 +246,39 @@ def test_environment_masked_values(agent, os_environment):
     # The full value should not appear in the output
     assert sensitive_value not in extract_result_text(result)
 
-    # Test with masking disabled
-    result = agent.tool.environment(action="get", name=sensitive_name, masked=False)
+    # Test with masking disabled by the operator
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = "false"
+    result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
     # Now the full value should appear
     assert sensitive_value in extract_result_text(result)
+
+
+def test_masked_not_in_input_schema():
+    """Masking must not be configurable through the model-facing tool input schema."""
+    assert "masked" not in environment.TOOL_SPEC["inputSchema"]["json"]["properties"]
+
+
+def test_get_ignores_masked_tool_input(agent, os_environment):
+    """A masked value in tool input must not unmask a sensitive value."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+
+    result = agent.tool.environment(action="get", name=sensitive_name, masked=False)
+    assert result["status"] == "success"
+    assert sensitive_value not in extract_result_text(result)
+
+
+def test_list_ignores_masked_tool_input(agent, os_environment):
+    """A masked value in tool input must not unmask sensitive values in a listing."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+
+    result = agent.tool.environment(action="list", masked=False)
+    assert result["status"] == "success"
+    assert sensitive_value not in extract_result_text(result)
 
 
 def test_direct_set_protected_var_strands_disable_load_tool(agent, os_environment):
