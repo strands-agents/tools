@@ -301,9 +301,9 @@ def test_cannot_set_masking_variable(agent, os_environment):
     assert sensitive_value not in extract_result_text(result)
 
 
-@pytest.mark.parametrize("value", ["1", "yes", "on", " true", "true ", ""])
+@pytest.mark.parametrize("value", ["1", "yes", "on", " true", "true ", "", " false", "0", "no", "off"])
 def test_masking_stays_on_for_non_false_values(agent, os_environment, value):
-    """Only an explicit "false" disables masking, so a typo cannot unmask values."""
+    """Only an exact "false" disables masking, so a typo or stray space cannot unmask values."""
     sensitive_name = "TEST_TOKEN_SECRET"
     sensitive_value = "abcd1234efgh5678"
     os_environment[sensitive_name] = sensitive_value
@@ -312,6 +312,56 @@ def test_masking_stays_on_for_non_false_values(agent, os_environment, value):
     result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
     assert sensitive_value not in extract_result_text(result)
+
+
+@pytest.mark.parametrize("value", ["false", "False", "FALSE"])
+def test_masking_off_for_explicit_false(agent, os_environment, value):
+    """An explicit "false" in any case disables masking."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = value
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
+    assert result["status"] == "success"
+    assert sensitive_value in extract_result_text(result)
+
+
+def test_list_honors_operator_unmasking(agent, os_environment):
+    """The list action honors ENV_VARS_MASKED_DEFAULT=false, not just get."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = "false"
+
+    result = agent.tool.environment(action="list")
+    assert result["status"] == "success"
+    assert sensitive_value in extract_result_text(result)
+
+
+def test_protected_check_is_case_insensitive_on_windows(agent, os_environment, monkeypatch):
+    """Windows upper-cases names on write, so a lowercase name must not bypass protection."""
+    monkeypatch.setattr(os, "name", "nt")
+    os_environment["BYPASS_TOOL_CONSENT"] = "true"
+
+    result = agent.tool.environment(action="set", name="env_vars_masked_default", value="false")
+    assert result["status"] == "error"
+
+    result = agent.tool.environment(action="delete", name="path")
+    assert result["status"] == "error"
+
+
+def test_protected_vars_covers_operator_only_flags():
+    """Every env var that gates a safety control elsewhere must be unsettable here."""
+    operator_only_flags = {
+        "BYPASS_TOOL_CONSENT",
+        "STRANDS_NON_INTERACTIVE",
+        "STRANDS_DISABLE_LOAD_TOOL",
+        "ENV_VARS_MASKED_DEFAULT",
+        "STRANDS_HTTP_ALLOW_INSECURE_SSL",
+        "EDITOR_DISABLE_BACKUP",
+    }
+    assert operator_only_flags <= environment.PROTECTED_VARS
 
 
 def test_direct_set_protected_var_strands_disable_load_tool(agent, os_environment):

@@ -1217,7 +1217,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| ENV_VARS_MASKED_DEFAULT | Masking of values whose name contains TOKEN, SECRET, PASSWORD, KEY, or AUTH. Set to `false` to disable. This is the only way to configure masking: the agent cannot override it through tool input, and the variable is protected so the tool cannot set it | true |
+| ENV_VARS_MASKED_DEFAULT | Masking of values whose name contains TOKEN, SECRET, PASSWORD, KEY, or AUTH. Set to `false` to disable. This is the only way to configure masking: the agent cannot override it through tool input, and the `environment` tool cannot set it. Tools that execute arbitrary code in the agent process, such as `python_repl` and `shell`, can still write it | true |
 
 #### HTTP Request Tool
 

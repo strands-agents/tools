@@ -61,7 +61,9 @@ agent.tool.environment(action="delete", name="TEMP_VAR")
 Configuration:
 - ENV_VARS_MASKED_DEFAULT (environment variable): Set to "false" to return sensitive
   values unmasked. Masking is configured by the operator only; it cannot be changed
-  through tool input, and the variable is protected so the tool cannot set it either.
+  through tool input, and this tool cannot set it. Note that tools which execute
+  arbitrary code in the agent process, such as python_repl and shell, can still write
+  the process environment, so isolate those separately.
 
 See the environment function docstring for more details on available actions and parameters.
 """
@@ -160,7 +162,18 @@ PROTECTED_VARS = {
     "STRANDS_NON_INTERACTIVE",
     "STRANDS_DISABLE_LOAD_TOOL",
     "ENV_VARS_MASKED_DEFAULT",
+    "STRANDS_HTTP_ALLOW_INSECURE_SSL",
+    "EDITOR_DISABLE_BACKUP",
 }
+
+
+def is_protected(name: str) -> bool:
+    """Check whether a variable name is protected from modification.
+
+    Windows upper-cases environment variable names on write, so a case-sensitive
+    check would let "path" through and store it as "PATH".
+    """
+    return (name.upper() if os.name == "nt" else name) in PROTECTED_VARS
 
 
 def mask_sensitive_value(name: str, value: str) -> str:
@@ -208,7 +221,7 @@ def format_env_vars_table(env_vars: Dict[str, str], masked: bool, prefix: Option
         if prefix and not name.startswith(prefix):
             continue
 
-        protected = "🔒" if name in PROTECTED_VARS else ""
+        protected = "🔒" if is_protected(name) else ""
         display_value = mask_sensitive_value(name, value) if masked else value
         table.add_row(protected, name, str(display_value))
 
@@ -252,7 +265,7 @@ def format_operation_preview(
     table.add_row("Action", f"[{action_style}]{action.upper()}[/{action_style}]")
 
     if name:
-        protected = name in PROTECTED_VARS
+        protected = is_protected(name)
         name_style = "red" if protected else "white"
         table.add_row(
             "Variable",
@@ -264,7 +277,7 @@ def format_operation_preview(
         table.add_row("Prefix Filter", prefix)
 
     # Add warning for protected variables
-    if name and name in PROTECTED_VARS:
+    if name and is_protected(name):
         table.add_row(
             "⚠️ Warning",
             "[red]This is a protected system variable that cannot be modified[/red]",
@@ -317,7 +330,7 @@ def format_env_vars(env_vars: Dict[str, str], masked: bool, prefix: Optional[str
             {
                 "name": name,
                 "value": mask_sensitive_value(name, value) if masked else value,
-                "protected": name in PROTECTED_VARS,
+                "protected": is_protected(name),
             }
         )
 
@@ -426,7 +439,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     Notes:
         - The ENV var "BYPASS_TOOL_CONSENT" can be set to "true" to bypass confirmation prompts
-        - Protected variables include PATH, PYTHONPATH, STRANDS_HOME, SHELL, USER, HOME
+        - Protected variables are listed in PROTECTED_VARS and cannot be set or deleted
         - Sensitive variables are detected by keywords in their names (TOKEN, SECRET, etc.)
         - Masking is controlled by the ENV var "ENV_VARS_MASKED_DEFAULT" (default: "true")
     """
@@ -444,7 +457,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
 
     # Masking is operator-controlled and cannot be overridden through tool input
-    masked = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").strip().lower() != "false"
+    masked = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").lower() != "false"
 
     # Check for BYPASS_TOOL_CONSENT mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
@@ -523,7 +536,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
             # Add variable details
             table.add_row("Name", name)
-            table.add_row("Type", "Protected" if name in PROTECTED_VARS else "Standard")
+            table.add_row("Type", "Protected" if is_protected(name) else "Standard")
             table.add_row("Value", display_value)
 
             # Add value properties
@@ -537,10 +550,10 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             panel = Panel(
                 table,
                 title=(
-                    f"[bold {'yellow' if name in PROTECTED_VARS else 'blue'}]🔍 "
-                    f"Environment Variable Details[/bold {'yellow' if name in PROTECTED_VARS else 'blue'}]"
+                    f"[bold {'yellow' if is_protected(name) else 'blue'}]🔍 "
+                    f"Environment Variable Details[/bold {'yellow' if is_protected(name) else 'blue'}]"
                 ),
-                border_style="yellow" if name in PROTECTED_VARS else "blue",
+                border_style="yellow" if is_protected(name) else "blue",
                 box=box.ROUNDED,
             )
             console.print(panel)
@@ -565,7 +578,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             value = tool_input["value"]
 
             # Check protected status first, regardless of confirmation mode
-            if name in PROTECTED_VARS:
+            if is_protected(name):
                 error_msg = f"⚠️ Cannot modify protected variable: {name}"
                 error_details = "\nProtected variables ensure system stability and security."
                 console.print(format_error_message(f"{error_msg}{error_details}"))
@@ -674,7 +687,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
             name = tool_input["name"]
 
             # Check protected status first
-            if name in PROTECTED_VARS:
+            if is_protected(name):
                 error_msg = (
                     f"⚠️ Cannot delete protected variable: {name}\n"
                     "Protected variables ensure system stability and security."
