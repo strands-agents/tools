@@ -135,6 +135,26 @@ def test_direct_delete_protected_var(agent, os_environment):
     assert os_environment["PATH"] == unchanging_value
 
 
+def test_set_load_tool_control_var_refused(agent, os_environment):
+    """Test that setting the dynamic-tool-loading control variable is refused."""
+    os_environment["STRANDS_DISABLE_LOAD_TOOL"] = "true"
+
+    result = agent.tool.environment(action="set", name="STRANDS_DISABLE_LOAD_TOOL", value="false")
+    assert result["status"] == "error"
+    # Verify the control variable was not changed
+    assert os_environment["STRANDS_DISABLE_LOAD_TOOL"] == "true"
+
+
+def test_delete_load_tool_control_var_refused(agent, os_environment):
+    """Test that deleting the dynamic-tool-loading control variable is refused."""
+    os_environment["STRANDS_DISABLE_LOAD_TOOL"] = "true"
+
+    result = agent.tool.environment(action="delete", name="STRANDS_DISABLE_LOAD_TOOL")
+    assert result["status"] == "error"
+    # Verify the control variable still exists
+    assert os_environment["STRANDS_DISABLE_LOAD_TOOL"] == "true"
+
+
 def test_direct_delete_var_cancelled(agent, os_environment):
     """Test cancelling deletion of an environment variable."""
     var_name = "CANCEL_DELETE_VAR"
