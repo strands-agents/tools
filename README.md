@@ -1217,7 +1217,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| ENV_VARS_MASKED_DEFAULT | Masking of sensitive values. This is the only way to configure masking; the agent cannot override it through tool input | true |
+| ENV_VARS_MASKED_DEFAULT | Masking of values whose name contains TOKEN, SECRET, PASSWORD, KEY, or AUTH. Set to `false` to disable. This is the only way to configure masking: the agent cannot override it through tool input, and the variable is protected so the tool cannot set it | true |
 
 #### HTTP Request Tool
 

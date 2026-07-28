@@ -243,7 +243,9 @@ def test_environment_masked_values(agent, os_environment):
     # Test with masking enabled (default)
     result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
-    # The full value should not appear in the output
+    # The masked form should appear and the full value should not
+    assert sensitive_name in extract_result_text(result)
+    assert "abcd...5678" in extract_result_text(result)
     assert sensitive_value not in extract_result_text(result)
 
     # Test with masking disabled by the operator
@@ -267,6 +269,7 @@ def test_get_ignores_masked_tool_input(agent, os_environment):
 
     result = agent.tool.environment(action="get", name=sensitive_name, masked=False)
     assert result["status"] == "success"
+    assert "abcd...5678" in extract_result_text(result)
     assert sensitive_value not in extract_result_text(result)
 
 
@@ -277,6 +280,36 @@ def test_list_ignores_masked_tool_input(agent, os_environment):
     os_environment[sensitive_name] = sensitive_value
 
     result = agent.tool.environment(action="list", masked=False)
+    assert result["status"] == "success"
+    assert "abcd...5678" in extract_result_text(result)
+    assert sensitive_value not in extract_result_text(result)
+
+
+def test_cannot_set_masking_variable(agent, os_environment):
+    """The masking variable is protected, so the tool cannot unmask by setting it."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["BYPASS_TOOL_CONSENT"] = "true"
+
+    result = agent.tool.environment(action="set", name="ENV_VARS_MASKED_DEFAULT", value="false")
+    assert result["status"] == "error"
+    assert "ENV_VARS_MASKED_DEFAULT" not in os_environment
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
+    assert result["status"] == "success"
+    assert sensitive_value not in extract_result_text(result)
+
+
+@pytest.mark.parametrize("value", ["1", "yes", "on", " true", "true ", ""])
+def test_masking_stays_on_for_non_false_values(agent, os_environment, value):
+    """Only an explicit "false" disables masking, so a typo cannot unmask values."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = value
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
     assert sensitive_value not in extract_result_text(result)
 

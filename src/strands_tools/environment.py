@@ -61,7 +61,7 @@ agent.tool.environment(action="delete", name="TEMP_VAR")
 Configuration:
 - ENV_VARS_MASKED_DEFAULT (environment variable): Set to "false" to return sensitive
   values unmasked. Masking is configured by the operator only; it cannot be changed
-  through tool input.
+  through tool input, and the variable is protected so the tool cannot set it either.
 
 See the environment function docstring for more details on available actions and parameters.
 """
@@ -101,8 +101,10 @@ Key Features:
    - Protected variables list
    - Value validation
    - Change tracking
-   - Variable masking
-   
+   - Variable masking: values whose name matches TOKEN/SECRET/PASSWORD/KEY/AUTH are
+     masked in get/list output (e.g. "abcd...5678") as an operator-controlled policy.
+     There is no tool input to disable this.
+
 4. Usage Examples:
    # List all environment variables:
    environment(action="list")
@@ -157,6 +159,7 @@ PROTECTED_VARS = {
     "BYPASS_TOOL_CONSENT",
     "STRANDS_NON_INTERACTIVE",
     "STRANDS_DISABLE_LOAD_TOOL",
+    "ENV_VARS_MASKED_DEFAULT",
 }
 
 
@@ -385,7 +388,8 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     1. The function processes the requested action (list, get, set, delete, validate)
     2. For destructive actions, it requires user confirmation unless in BYPASS_TOOL_CONSENT mode
     3. Protected system variables are identified and cannot be modified
-    4. Sensitive values (tokens, passwords, etc.) are automatically masked
+    4. Sensitive values (tokens, passwords, etc.) are masked by default, controlled by
+       ENV_VARS_MASKED_DEFAULT
     5. Rich output formatting provides clear visual feedback on operations
     6. All operations return structured results for both human and programmatic use
 
@@ -400,7 +404,8 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Security Features:
     ---------------
     - Protected system variables cannot be modified
-    - Sensitive values are masked in output unless ENV_VARS_MASKED_DEFAULT is "false"
+    - Values of variables whose name contains TOKEN, SECRET, PASSWORD, KEY, or AUTH are
+      masked in output unless ENV_VARS_MASKED_DEFAULT is set to "false"
     - Destructive actions require explicit confirmation
     - Clear risk level indicators for all operations
     - BYPASS_TOOL_CONSENT mode controls for testing and automation
@@ -439,7 +444,7 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
 
     # Masking is operator-controlled and cannot be overridden through tool input
-    masked = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").lower() == "true"
+    masked = os.getenv("ENV_VARS_MASKED_DEFAULT", "true").strip().lower() != "false"
 
     # Check for BYPASS_TOOL_CONSENT mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
