@@ -123,6 +123,16 @@ jobs:
           # pull_request_target pull the PR head from the forked repo.
           ref: ${{ inputs.ref || github.event.pull_request.head.sha }}
           persist-credentials: false  # Don't persist credentials for subsequent actions
+          # Checking out fork code under pull_request_target is a "pwn request"
+          # risk, so checkout refuses it unless opted in. The opt-in is safe here
+          # only because of the gates above: authorization-check routes any author
+          # without write access to the `manual-approval` environment, which
+          # requires a maintainer to review the diff before this job starts, and
+          # every later push re-triggers the workflow so the approval cannot be
+          # bypassed by pushing after review. On the workflow_call path,
+          # validate-call-ref rejects fork-shaped refs outright.
+          # Removing either gate re-opens the vulnerability this flag suppresses.
+          allow-unsafe-pr-checkout: true
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
