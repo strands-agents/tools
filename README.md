@@ -63,6 +63,9 @@ Strands Agents Tools is a community-driven project that provides a powerful set 
 - 📰 **RSS Feed Manager** - Subscribe, fetch, and process RSS feeds with content filtering and persistent storage
 - 🖱️ **Computer Tool** - Automate desktop actions including mouse movements, keyboard input, screenshots, and application management
 
+> [!IMPORTANT]
+> **The tools in this repository are experimental.** Many of them grant agents powerful capabilities — executing code, accessing the file system, calling AWS APIs, connecting to external servers, and automating browsers and desktops — which carry real security implications. Any production use should be preceded by your own independent security review; see the [Responsible AI guidance](https://strandsagents.com/docs/user-guide/safety-security/responsible-ai/) for best practices. Use of these tools is at your own risk.
+
 ## 📦 Installation
 
 ### Quick Install
@@ -1345,4 +1348,8 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## Security
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+The tools in this repository are experimental and are provided as-is. Any production use should be preceded by an independent security review of the specific tools you enable.
+
+For guidance on building and deploying agents safely, see [Responsible AI](https://strandsagents.com/docs/user-guide/safety-security/responsible-ai/) in the Strands Agents documentation.
+
+To report a security issue, see [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
