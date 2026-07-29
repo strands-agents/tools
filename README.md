@@ -107,8 +107,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
-| editor | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits |
-| shell* | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts |
+| editor ⚠️ | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits <br> **Deprecated — see [Deprecations](#deprecations)** |
+| shell* ⚠️ | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts <br> **Deprecated — see [Deprecations](#deprecations)** |
 | http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
 | tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
 | tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
@@ -135,7 +135,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
 | current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
-| sleep | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) |
+| sleep ⚠️ | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | graph | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration |
 | cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
@@ -158,6 +158,49 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) |
 
 \* *These tools do not work on Windows*
+
+### Deprecations
+
+The Strands SDK now vends equivalents of the tools below from `strands.vended_tools`. To
+avoid maintaining two implementations that drift apart, these tools are deprecated here and
+users should migrate to the SDK versions.
+
+Each deprecated tool logs a warning when invoked, starting in **v0.8.6**. They are removed
+in **v0.9.0**.
+
+| Tool | Replacement | Warning added | Removed |
+|------|-------------|---------------|---------|
+| `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
+| `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
+| `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |
+
+```python
+# Before
+from strands import Agent
+from strands_tools import editor, shell, sleep
+
+agent = Agent(tools=[editor, shell, sleep])
+
+# After
+from strands import Agent
+from strands.vended_tools import file_editor, shell, sleep
+
+agent = Agent(tools=[file_editor, shell, sleep])
+```
+
+#### Behavior differences
+
+The replacements are not drop-in equivalents. Check these before migrating:
+
+- **`shell` → `shell`**: the SDK tool routes commands through the agent's configured
+  sandbox and is stateless — each call runs in a fresh shell, so variables and the working
+  directory do not persist between calls. It does not provide PTY support or batched
+  parallel/sequential command execution.
+- **`editor` → `file_editor`**: supports `view`, `create`, `str_replace`, and `insert`. The
+  `pattern_replace`, `find_line`, and `undo_edit` commands have no SDK equivalent.
+- **`sleep` → `sleep`**: the maximum duration is set with
+  `make_sleep(max_duration=...)` and defaults to 60 seconds, replacing the
+  `MAX_SLEEP_SECONDS` environment variable which defaulted to 300 seconds.
 
 ## 💻 Usage Examples
 

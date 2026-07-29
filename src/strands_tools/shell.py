@@ -485,6 +485,12 @@ def shell(
     Returns:
         Dict containing status and response content
     """
+    logger.warning(
+        "DEPRECATION WARNING: shell is deprecated and will be removed in v0.9.0. "
+        "Migration path: use the shell tool vended by strands-agents "
+        "(from strands.vended_tools import shell)."
+    )
+
     console = console_util.create()
 
     non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"

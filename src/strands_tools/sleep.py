@@ -1,9 +1,12 @@
+import logging
 import os
 import time
 from datetime import datetime
 from typing import Union
 
 from strands import tool
+
+logger = logging.getLogger(__name__)
 
 # Default maximum sleep time (5 minutes)
 max_sleep_seconds = int(os.environ.get("MAX_SLEEP_SECONDS", "300"))
@@ -37,6 +40,12 @@ def sleep(seconds: Union[int, float]) -> str:
         >>> sleep(0.5)  # Sleeps for half a second
         'Started sleep at 2025-05-30 11:30:00, slept for 0.5 seconds'
     """
+    logger.warning(
+        "DEPRECATION WARNING: sleep is deprecated and will be removed in v0.9.0. "
+        "Migration path: use the sleep tool vended by strands-agents "
+        "(from strands.vended_tools import sleep)."
+    )
+
     # Validate input
     if not isinstance(seconds, (int, float)):
         raise ValueError("Sleep duration must be a number")

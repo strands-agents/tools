@@ -478,3 +478,17 @@ def test_format_directory_tree_content(mock_console_util, temp_dir):
     # Since the string representation might vary, just verify the basic object structure
     # The Rich Tree will have format method
     assert hasattr(tree, "label") or hasattr(tree, "render")
+
+
+def test_editor_logs_deprecation_warning(caplog, temp_dir):
+    """Test that editor logs a deprecation warning naming the SDK replacement."""
+    import logging
+
+    test_file = os.path.join(temp_dir, "deprecation.txt")
+
+    with caplog.at_level(logging.WARNING, logger="strands_tools.editor"):
+        editor.editor(command="create", path=test_file, file_text="content")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "removed in v0.9.0" in caplog.text
+    assert "strands.vended_tools import file_editor" in caplog.text

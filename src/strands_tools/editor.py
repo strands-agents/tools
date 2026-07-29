@@ -68,6 +68,7 @@ agent.tool.editor(command="undo_edit", path="/path/to/file.py")
 See the editor function docstring for more details on available commands and parameters.
 """
 
+import logging
 import os
 import re
 import shutil
@@ -84,6 +85,8 @@ from strands import tool
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
 from strands_tools.utils.user_input import get_user_input
+
+logger = logging.getLogger(__name__)
 
 # Global content history cache
 CONTENT_HISTORY = {}
@@ -311,6 +314,12 @@ def editor(
         7. Undo recent change:
            editor(command="undo_edit", path="/path/to/file.py")
     """
+    logger.warning(
+        "DEPRECATION WARNING: editor is deprecated and will be removed in v0.9.0. "
+        "Migration path: use the file_editor tool vended by strands-agents "
+        "(from strands.vended_tools import file_editor)."
+    )
+
     console = console_util.create()
 
     try:

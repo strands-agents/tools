@@ -79,3 +79,18 @@ def test_sleep_exceeds_max(agent):
 
         # Verify the error message
         assert "cannot exceed 10 seconds" in result_text
+
+
+def test_sleep_logs_deprecation_warning(caplog):
+    """Test that sleep logs a deprecation warning naming the SDK replacement."""
+    import importlib
+    import logging
+
+    importlib.reload(sleep)
+
+    with caplog.at_level(logging.WARNING, logger="strands_tools.sleep"):
+        sleep.sleep(0.01)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "removed in v0.9.0" in caplog.text
+    assert "strands.vended_tools import sleep" in caplog.text
