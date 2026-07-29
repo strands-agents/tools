@@ -3,6 +3,97 @@
 This module provides functionality for deep analytical thinking through multiple recursive cycles,
 enabling sophisticated thought processing, learning, and self-reflection capabilities with support
 for different model providers for specialized thinking tasks.
+
+How It Works:
+1. The tool processes the initial thought through a specified number of thinking cycles
+2. Each cycle uses the output from the previous cycle as a foundation for deeper analysis
+3. A specialized system prompt guides the thinking process toward specific expertise domains
+4. Each cycle's output is captured and included in the final comprehensive analysis
+5. Recursion prevention: the think tool is automatically excluded from nested agents
+6. Other tools are available and encouraged for analysis within thinking cycles
+7. Optionally uses different model providers for specialized thinking capabilities
+
+Model Selection Process:
+1. If model_provider is None: uses the parent agent's model (original behavior)
+2. If model_provider is "env": uses environment variables (STRANDS_PROVIDER, etc.)
+3. If model_provider is specified: uses that provider with optional custom config
+4. Model utilities handle all provider-specific configuration automatically
+
+Usage with Strands Agent:
+```python
+from strands import Agent
+from strands_tools import think
+
+agent = Agent(tools=[think])
+
+# Use Bedrock for creative thinking
+result = agent.tool.think(
+    thought="How can we make AI more creative?",
+    cycle_count=3,
+    system_prompt="You are a creative AI researcher.",
+    model_provider="bedrock",
+)
+
+# Use Ollama for local processing
+result = agent.tool.think(
+    thought="Analyze this code architecture",
+    cycle_count=5,
+    system_prompt="You are a software architect.",
+    model_provider="ollama",
+    model_settings={"model_id": "qwen3:4b", "host": "http://localhost:11434"},
+)
+
+# Use environment configuration with a custom thinking methodology
+os.environ["STRANDS_PROVIDER"] = "anthropic"
+os.environ["STRANDS_MODEL_ID"] = "claude-sonnet-4-20250514"
+result = agent.tool.think(
+    thought="What are the ethical implications?",
+    cycle_count=4,
+    system_prompt="You are an AI ethics expert.",
+    model_provider="env",
+    thinking_system_prompt='''Use Socratic questioning method:
+    1. Question fundamental assumptions
+    2. Explore implications through dialogue
+    3. Consider multiple perspectives
+    4. Challenge each conclusion with 'but what if...'
+    5. Build understanding through systematic inquiry''',
+)
+
+# Custom thinking methodology for creative problem solving
+result = agent.tool.think(
+    thought="How can we revolutionize online education?",
+    cycle_count=3,
+    system_prompt="You are an innovative education technology expert.",
+    thinking_system_prompt='''Apply design thinking methodology:
+    1. Empathize: Understand user pain points deeply
+    2. Define: Clearly articulate the core problem
+    3. Ideate: Generate diverse, unconventional solutions
+    4. Prototype: Outline practical implementation steps
+    5. Test: Consider potential challenges and iterations''',
+)
+```
+
+Common Usage Scenarios:
+- Creative thinking: use creative models for brainstorming and ideation
+- Technical analysis: use analytical models for code review and system design
+- Multi-model comparison: compare thinking approaches across different models
+- Specialized domains: use domain-specific models (math, creative writing, etc.)
+- Cost optimization: use cheaper models for exploratory thinking cycles
+
+Configuration:
+When model_provider="env", these environment variables are used:
+- STRANDS_PROVIDER: Model provider name
+- STRANDS_MODEL_ID: Specific model identifier
+- STRANDS_MAX_TOKENS: Maximum tokens to generate
+- STRANDS_TEMPERATURE: Sampling temperature
+- Provider-specific keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
+
+Notes:
+- Model switching requires the appropriate dependencies (bedrock, anthropic, ollama, etc.)
+- When model_provider is None, behavior is identical to the original implementation
+- Custom model_settings overrides default environment-based configuration
+- Each cycle uses the same model - mixed model cycles are not currently supported
+- Model information is logged for transparency and debugging
 """
 
 import logging
@@ -210,148 +301,38 @@ def think(
     thinking_system_prompt: Optional[str] = None,
     agent: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Recursive thinking tool with model switching support for sophisticated thought generation.
+    """Process a thought through multiple recursive thinking cycles for deep analysis.
 
-    This tool implements a multi-cycle cognitive analysis approach that progressively refines thoughts
-    through iterative processing, with the ability to use different model providers for specialized
-    thinking tasks. Each cycle builds upon insights from the previous cycle, creating a depth of
-    analysis that would be difficult to achieve in a single pass.
-
-    How It Works:
-    ------------
-    1. The tool processes the initial thought through a specified number of thinking cycles
-    2. Each cycle uses the output from the previous cycle as a foundation for deeper analysis
-    3. A specialized system prompt guides the thinking process toward specific expertise domains
-    4. Each cycle's output is captured and included in the final comprehensive analysis
-    5. Recursion prevention: The think tool is automatically excluded from nested agents
-    6. Other tools are available and encouraged for analysis within thinking cycles
-    7. Optionally uses different model providers for specialized thinking capabilities
-
-    Model Selection Process:
-    ----------------------
-    1. If model_provider is None: Uses parent agent's model (original behavior)
-    2. If model_provider is "env": Uses environment variables (STRANDS_PROVIDER, etc.)
-    3. If model_provider is specified: Uses that provider with optional custom config
-    4. Model utilities handle all provider-specific configuration automatically
-
-    System Prompt vs Thinking System Prompt:
-    --------------------------------------
-    - **system_prompt**: Controls the agent's persona, role, and expertise domain
-      Example: "You are a creative AI researcher specializing in educational technology."
-
-    - **thinking_system_prompt**: Controls the thinking methodology and approach
-      Example: "Use design thinking: empathize, define, ideate, prototype, test."
-
-    Together they provide: WHO the agent is (system_prompt) + HOW it thinks (thinking_system_prompt)
-
-    Common Usage Scenarios:
-    ---------------------
-    - Creative thinking: Use creative models for brainstorming and ideation
-    - Technical analysis: Use analytical models for code review and system design
-    - Multi-model comparison: Compare thinking approaches across different models
-    - Specialized domains: Use domain-specific models (math, creative writing, etc.)
-    - Cost optimization: Use cheaper models for exploratory thinking cycles
+    Each cycle builds on the previous cycle's output, producing depth of analysis that is
+    difficult to reach in a single pass. Use this for problems that benefit from sustained
+    reasoning: architecture decisions, tradeoff analysis, ethical implications, or open-ended
+    ideation. The nested agent can call other tools during its cycles, but never itself.
 
     Args:
-        thought: The detailed thought or idea to process through multiple thinking cycles.
-            This can be a question, statement, problem description, or creative prompt.
-        cycle_count: Number of thinking cycles to perform (1-10). More cycles allow for
-            deeper analysis but require more time and resources. Typically 3-5 cycles
-            provide a good balance of depth and efficiency.
-        system_prompt: Custom system prompt to use for the LLM thinking process. This should
-            specify the expertise domain and thinking approach for processing the thought.
-        tools: List of tool names to make available to the nested agent. Tool names must
-            exist in the parent agent's tool registry. Examples: ["calculator", "file_read", "retrieve"]
-            If not provided, inherits all tools from the parent agent.
-        model_provider: Model provider to use for the thinking cycles.
-            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github"
-            Special values:
-            - None: Use parent agent's model (default, preserves original behavior)
-            - "env": Use environment variables to determine provider
-            Examples: "bedrock", "anthropic", "litellm", "env"
-        model_settings: Optional custom configuration for the model.
-            If not provided, uses default configuration for the provider.
-            Example: {"model_id": "claude-sonnet-4-20250514", "params": {"temperature": 1}}
-        thinking_system_prompt: Optional custom thinking instructions that override the default
-            thinking methodology. This controls HOW the agent thinks about the problem, separate
-            from the system_prompt which controls the agent's persona/role.
-            Example: "Use first principles reasoning. Break down complex problems into fundamental
-            components. Question assumptions at each step."
-        agent: The parent agent (automatically passed by Strands framework)
+        thought: The thought or idea to process. Can be a question, statement, problem
+            description, or creative prompt.
+        cycle_count: Number of thinking cycles to perform (1-10). More cycles give deeper
+            analysis at higher latency and cost; 3-5 is a good default.
+        system_prompt: System prompt for the thinking agent. Specifies WHO the agent is -
+            its persona, role, and expertise domain. For example, "You are a creative AI
+            researcher specializing in educational technology."
+        tools: Tool names to make available to the nested agent. Must exist in the parent
+            agent's tool registry, e.g. ["calculator", "file_read", "retrieve"]. Defaults to
+            inheriting all of the parent agent's tools.
+        model_provider: Provider for the thinking cycles. One of "bedrock", "anthropic",
+            "litellm", "llamaapi", "ollama", "openai", "github", or "env" to select the
+            provider from environment variables. Defaults to the parent agent's model.
+        model_settings: Optional model configuration, e.g.
+            {"model_id": "claude-sonnet-4-20250514", "params": {"temperature": 1}}.
+            Defaults to the provider's standard configuration.
+        thinking_system_prompt: Optional instructions controlling HOW the agent thinks, as
+            opposed to system_prompt which controls who it is. For example, "Use first
+            principles reasoning. Break down complex problems into fundamental components."
+        agent: The parent agent (supplied automatically by the framework).
 
     Returns:
-        Dict containing status and response content in the format:
-        {
-            "status": "success|error",
-            "content": [{"text": "Detailed thinking output across all cycles"}]
-        }
-
-        Success case: Returns concatenated results from all thinking cycles
-        Error case: Returns information about what went wrong during processing
-
-    Environment Variables for Model Switching:
-    ----------------------------------------
-    When model_provider="env", these variables are used:
-    - STRANDS_PROVIDER: Model provider name
-    - STRANDS_MODEL_ID: Specific model identifier
-    - STRANDS_MAX_TOKENS: Maximum tokens to generate
-    - STRANDS_TEMPERATURE: Sampling temperature
-    - Provider-specific keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
-
-    Examples:
-    --------
-    # Use Bedrock for creative thinking
-    result = agent.tool.think(
-        thought="How can we make AI more creative?",
-        cycle_count=3,
-        system_prompt="You are a creative AI researcher.",
-        model_provider="bedrock"
-    )
-
-    # Use Ollama for local processing
-    result = agent.tool.think(
-        thought="Analyze this code architecture",
-        cycle_count=5,
-        system_prompt="You are a software architect.",
-        model_provider="ollama",
-        model_settings={"model_id": "qwen3:4b", "host": "http://localhost:11434"}
-    )
-
-    # Use environment configuration with custom thinking methodology
-    os.environ["STRANDS_PROVIDER"] = "anthropic"
-    os.environ["STRANDS_MODEL_ID"] = "claude-sonnet-4-20250514"
-    result = agent.tool.think(
-        thought="What are the ethical implications?",
-        cycle_count=4,
-        system_prompt="You are an AI ethics expert.",
-        model_provider="env",
-        thinking_system_prompt=Use Socratic questioning method:
-        1. Question fundamental assumptions
-        2. Explore implications through dialogue
-        3. Consider multiple perspectives
-        4. Challenge each conclusion with 'but what if...'
-        5. Build understanding through systematic inquiry
-    )
-
-    # Custom thinking methodology for creative problem solving
-    result = agent.tool.think(
-        thought="How can we revolutionize online education?",
-        cycle_count=3,
-        system_prompt="You are an innovative education technology expert.",
-        thinking_system_prompt='''Apply design thinking methodology:
-        1. Empathize: Understand user pain points deeply
-        2. Define: Clearly articulate the core problem
-        3. Ideate: Generate diverse, unconventional solutions
-        4. Prototype: Outline practical implementation steps
-        5. Test: Consider potential challenges and iterations'''
-    )
-
-    Notes:
-        - Model switching requires the appropriate dependencies (bedrock, anthropic, ollama, etc.)
-        - When model_provider is None, behavior is identical to the original implementation
-        - Custom model_settings overrides default environment-based configuration
-        - Each cycle uses the same model - mixed model cycles not currently supported
-        - Model information is logged for transparency and debugging
+        Dict with "status" ("success" or "error") and "content", a list containing the
+        concatenated output of all thinking cycles, or error details on failure.
     """
     logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
