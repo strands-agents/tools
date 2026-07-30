@@ -146,7 +146,7 @@ Usage Examples:
                     "description": (
                         "Score threshold (0.0-1.0). With scoreMetric='similarity', results below this score are "
                         "filtered out. With scoreMetric='distance', results above this score are filtered out. "
-                        "Default is 0.4."
+                        "Defaults to 0.4 for similarity; distance results are not filtered when omitted."
                     ),
                     "default": 0.4,
                     "minimum": 0.0,
@@ -325,7 +325,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
             numberOfResults: Maximum number of results to return (default: 10)
             knowledgeBaseId: The ID of the knowledge base to query (default: from environment)
             region: AWS region where the knowledge base is located (default: us-west-2)
-            score: Minimum relevance score threshold (default: 0.4)
+            score: Score threshold (defaults to 0.4 for similarity; no default filtering for distance)
             scoreMetric: Score interpretation, either "similarity" or "distance" (default: "similarity")
             profile_name: Optional AWS profile name to use
             retrieveFilter: Optional filter to apply to the retrieval results
@@ -344,7 +344,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Notes:
         - The knowledge base ID can be set via the KNOWLEDGE_BASE_ID environment variable
         - The AWS region can be set via the AWS_REGION environment variable
-        - The minimum score threshold can be set via the MIN_SCORE environment variable
+        - The default similarity score threshold can be set via the MIN_SCORE environment variable
         - Results are automatically filtered based on the minimum score threshold
         - AWS credentials must be configured properly for this tool to work
     """
@@ -361,8 +361,9 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         number_of_results = tool_input.get("numberOfResults", 10)
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
-        min_score = tool_input.get("score", default_min_score)
         score_metric = tool_input.get("scoreMetric", "similarity")
+        default_score = default_min_score if score_metric == "similarity" else float("inf")
+        min_score = tool_input.get("score", default_score)
         enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
 

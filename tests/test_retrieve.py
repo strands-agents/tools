@@ -470,6 +470,25 @@ def test_retrieve_distance_score_metric(mock_boto3_client):
     assert "doc-002" not in result["content"][0]["text"]
 
 
+@pytest.mark.parametrize("min_score", ["0.4", "0.7", "0.9"])
+def test_retrieve_distance_default_ignores_similarity_min_score(mock_boto3_client, min_score):
+    """Test MIN_SCORE does not become a distance ceiling."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "text": "test query",
+            "knowledgeBaseId": "test-kb-id",
+            "scoreMetric": "distance",
+        },
+    }
+
+    with mock.patch.dict(os.environ, {"MIN_SCORE": min_score}):
+        result = retrieve.retrieve(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert "Retrieved 3 results with score <= inf" in result["content"][0]["text"]
+
+
 def test_retrieve_rejects_invalid_score_metric(mock_boto3_client):
     """Test retrieve rejects unsupported score metric values."""
     tool_use = {
