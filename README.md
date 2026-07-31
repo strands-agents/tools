@@ -173,6 +173,11 @@ Deprecated tools keep working. Each one logs a warning when invoked starting in 
 and that warning becomes an error log in **v0.9.0** — a louder signal for anyone who has not
 migrated, not a behavior change.
 
+They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
+call sites before you run anything. Note that Python suppresses the resulting
+`DeprecationWarning` at runtime when the agent invokes a tool, which is why the log message
+exists as well.
+
 | Tool | Replacement | Warning | Error log |
 |------|-------------|---------|-----------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |

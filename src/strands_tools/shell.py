@@ -67,12 +67,19 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "shell is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the shell tool vended by strands-agents "
+    "(from strands.vended_tools import shell)."
+)
 
 
 def read_output(fd: int) -> str:
@@ -409,7 +416,11 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter.
 @tool
+@deprecated(_DEPRECATION_MESSAGE)
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],
     parallel: bool = False,
@@ -485,11 +496,7 @@ def shell(
     Returns:
         Dict containing status and response content
     """
-    logger.warning(
-        "DEPRECATION WARNING: shell is deprecated. This warning becomes an error log in v0.9.0. "
-        "Migration path: use the shell tool vended by strands-agents "
-        "(from strands.vended_tools import shell)."
-    )
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     console = console_util.create()
 

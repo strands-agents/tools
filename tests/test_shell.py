@@ -989,3 +989,9 @@ def test_shell_logs_deprecation_warning(caplog):
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
     assert "strands.vended_tools import shell" in caplog.text
+
+
+def test_shell_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert getattr(shell.shell, "__deprecated__", None) is not None
+    assert "strands.vended_tools import shell" in shell.shell.__deprecated__
