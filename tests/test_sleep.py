@@ -92,5 +92,5 @@ def test_sleep_logs_deprecation_warning(caplog):
         sleep.sleep(0.01)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "removed in v0.9.0" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
     assert "strands.vended_tools import sleep" in caplog.text

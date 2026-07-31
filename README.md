@@ -165,11 +165,16 @@ The Strands SDK now vends equivalents of the tools below from `strands.vended_to
 avoid maintaining two implementations that drift apart, these tools are deprecated here and
 users should migrate to the SDK versions.
 
-Each deprecated tool logs a warning when invoked, starting in **v0.8.6**. They are removed
-in **v0.9.0**.
+These are the first of an ongoing set of deprecations. As more tools gain SDK equivalents
+they will be deprecated the same way, and this repository will eventually be archived.
+Migrating when a tool is first deprecated avoids a larger move later.
 
-| Tool | Replacement | Warning added | Removed |
-|------|-------------|---------------|---------|
+Deprecated tools keep working. Each one logs a warning when invoked starting in **v0.8.6**,
+and that warning becomes an error log in **v0.9.0** — a louder signal for anyone who has not
+migrated, not a behavior change.
+
+| Tool | Replacement | Warning | Error log |
+|------|-------------|---------|-----------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
 | `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
 | `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |

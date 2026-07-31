@@ -486,7 +486,7 @@ def shell(
         Dict containing status and response content
     """
     logger.warning(
-        "DEPRECATION WARNING: shell is deprecated and will be removed in v0.9.0. "
+        "DEPRECATION WARNING: shell is deprecated. This warning becomes an error log in v0.9.0. "
         "Migration path: use the shell tool vended by strands-agents "
         "(from strands.vended_tools import shell)."
     )

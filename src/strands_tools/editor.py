@@ -315,7 +315,7 @@ def editor(
            editor(command="undo_edit", path="/path/to/file.py")
     """
     logger.warning(
-        "DEPRECATION WARNING: editor is deprecated and will be removed in v0.9.0. "
+        "DEPRECATION WARNING: editor is deprecated. This warning becomes an error log in v0.9.0. "
         "Migration path: use the file_editor tool vended by strands-agents "
         "(from strands.vended_tools import file_editor)."
     )

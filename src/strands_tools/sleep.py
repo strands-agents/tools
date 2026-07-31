@@ -41,7 +41,7 @@ def sleep(seconds: Union[int, float]) -> str:
         'Started sleep at 2025-05-30 11:30:00, slept for 0.5 seconds'
     """
     logger.warning(
-        "DEPRECATION WARNING: sleep is deprecated and will be removed in v0.9.0. "
+        "DEPRECATION WARNING: sleep is deprecated. This warning becomes an error log in v0.9.0. "
         "Migration path: use the sleep tool vended by strands-agents "
         "(from strands.vended_tools import sleep)."
     )
