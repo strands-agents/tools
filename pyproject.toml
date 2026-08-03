@@ -67,7 +67,7 @@ build = [
 ]
 dev = [
     "commitizen>=4.4.0,<5.0.0",
-    "mypy>=0.981,<1.0.0",
+    "mypy>=0.981,<3.0.0",
     "pre-commit>=3.2.0,<4.2.0",
     "pytest>=8.0.0,<10.0.0",
     "ruff>=0.13.0,<0.14.0",
@@ -126,7 +126,7 @@ mongodb-memory = [
 features = ["mem0-memory", "local-chromium-browser", "agent-core-browser", "agent-core-code-interpreter", "a2a-client", "diagram", "rss", "use-computer", "twelvelabs", "elasticsearch-memory", "mongodb-memory"]
 dependencies = [
     "strands-agents>=1.0.0",
-    "mypy>=0.981,<1.0.0",
+    "mypy>=0.981,<3.0.0",
     "ruff>=0.13.0,<0.14.0",
 ]
 
