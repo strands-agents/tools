@@ -70,7 +70,7 @@ dev = [
     "mypy>=0.981,<3.0.0",
     "pre-commit>=3.2.0,<4.7.0",
     "pytest>=8.0.0,<10.0.0",
-    "ruff>=0.13.0,<0.14.0",
+    "ruff>=0.13.0,<0.17.0",
     "responses>=0.6.1,<1.0.0",
     "mem0ai>=0.1.104,<1.0.0",
     "opensearch-py>=2.8.0,<3.0.0",
@@ -127,7 +127,7 @@ features = ["mem0-memory", "local-chromium-browser", "agent-core-browser", "agen
 dependencies = [
     "strands-agents>=1.0.0",
     "mypy>=0.981,<3.0.0",
-    "ruff>=0.13.0,<0.14.0",
+    "ruff>=0.13.0,<0.17.0",
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
