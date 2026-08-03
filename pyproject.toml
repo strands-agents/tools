@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "strands-agents>=1.0.0",
-    "rich>=14.0.0,<15.0.0",
+    "rich>=14.0.0,<16.0.0",
     "sympy>=1.12.0,<2.0.0",
     "prompt_toolkit>=3.0.51,<4.0.0",
     "aws_requests_auth>=0.4.3,<0.5.0",
