@@ -132,9 +132,17 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web.client import WebClient
 from strands import Agent, tool
+from typing_extensions import deprecated
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server at https://mcp.slack.com/mcp. For Socket Mode and real-time events, which MCP does not cover, use "
+    "slack_bolt directly."
+)
+
 
 # System prompt for Slack communications
 SLACK_SYSTEM_PROMPT = """
@@ -536,7 +544,11 @@ class SocketModeHandler:
 socket_handler = SocketModeHandler()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter.
 @tool
+@deprecated(_DEPRECATION_MESSAGE)
 def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
     """Slack integration for messaging, events, and interactions.
 
@@ -610,6 +622,8 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
     - Events are stored locally at ./slack_events/events.jsonl
     - See Slack API documentation for all available methods and parameters
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     # Initialize Slack clients if needed
     if action != "get_recent_events" and client is None:
         success, error_message = initialize_slack_clients()

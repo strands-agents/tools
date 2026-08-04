@@ -223,7 +223,8 @@ def test_think_with_nonexistent_tool_filtering():
         )
 
         # Verify warning was logged for non-existent tool
-        mock_logger.warning.assert_called_once_with("Tool 'nonexistent_tool' not found in parent agent's tool registry")
+        # assert_any_call, not assert_called_once_with: the tool also logs a deprecation warning.
+        mock_logger.warning.assert_any_call("Tool 'nonexistent_tool' not found in parent agent's tool registry")
 
         # Verify the Agent was created with only the existing tools
         mock_agent_class.assert_called_once()
@@ -452,7 +453,8 @@ def test_think_tool_recursion_prevention_explicit_request():
         )
 
         # Verify warning was logged for think tool exclusion
-        mock_logger.warning.assert_called_once_with("Excluding 'think' tool from nested agent to prevent recursion")
+        # assert_any_call, not assert_called_once_with: the tool also logs a deprecation warning.
+        mock_logger.warning.assert_any_call("Excluding 'think' tool from nested agent to prevent recursion")
 
         # Verify the Agent was created without the think tool
         mock_agent_class.assert_called_once()
@@ -568,7 +570,8 @@ def test_think_tool_recursion_prevention_only_think_requested():
         )
 
         # Verify warning was logged for think tool exclusion
-        mock_logger.warning.assert_called_once_with("Excluding 'think' tool from nested agent to prevent recursion")
+        # assert_any_call, not assert_called_once_with: the tool also logs a deprecation warning.
+        mock_logger.warning.assert_any_call("Excluding 'think' tool from nested agent to prevent recursion")
 
         # Verify the Agent was created with empty tools
         mock_agent_class.assert_called_once()
@@ -642,3 +645,27 @@ def test_think_tool_recursion_prevention_multiple_cycles():
         assert "Cycle 1/3" in result["content"][0]["text"]
         assert "Cycle 2/3" in result["content"][0]["text"]
         assert "Cycle 3/3" in result["content"][0]["text"]
+
+
+def test_think_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming the migration path."""
+    import logging as _logging
+
+    from strands_tools import think as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.think"):
+        _logging.getLogger("strands_tools.think").warning("DEPRECATION WARNING: %s", _mod._DEPRECATION_MESSAGE)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "reasoning config" in caplog.text
+
+
+def test_think_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import think as _mod
+
+    fn = _mod.think
+    marker = getattr(fn, "__deprecated__", None) or getattr(getattr(fn, "_tool_func", None), "__deprecated__", None)
+    assert marker is not None
+    assert "reasoning config" in marker

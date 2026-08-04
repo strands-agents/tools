@@ -68,6 +68,7 @@ Configuration:
 See the environment function docstring for more details on available actions and parameters.
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -77,8 +78,18 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util, user_input
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "environment is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the shell tool "
+    "vended by strands-agents to inspect environment variables (from strands.vended_tools import shell). Note a child "
+    "shell cannot mutate the agent's own environment, so set variables in the process that launches the agent."
+)
+
 
 TOOL_SPEC = {
     "name": "environment",
@@ -387,6 +398,10 @@ def show_operation_result(console: Console, success: bool, message: str) -> None
         console.print(format_error_message(message))
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter.
+@deprecated(_DEPRECATION_MESSAGE)
 def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Environment variable management tool for listing, getting, setting, and deleting environment variables.
@@ -443,6 +458,8 @@ def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Sensitive variables are detected by keywords in their names (TOKEN, SECRET, etc.)
         - Masking is controlled by the ENV var "ENV_VARS_MASKED_DEFAULT" (default: "true")
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     # Default return in case of unexpected code path

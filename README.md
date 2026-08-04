@@ -117,29 +117,29 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) for optimal results, plus fast and deep search modes |
 | exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
-| calculator | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving |
+| calculator ⚠️ | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving <br> **Deprecated — see [Deprecations](#deprecations)** |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
-| retrieve | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata |
+| retrieve ⚠️ | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata <br> **Deprecated — see [Deprecations](#deprecations)** |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) |
 | bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
-| memory | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables |
-| environment | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management |
+| memory ⚠️ | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
+| environment ⚠️ | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management <br> **Deprecated — see [Deprecations](#deprecations)** |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
 | image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
 | journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
-| think | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes |
+| think ⚠️ | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes <br> **Deprecated — see [Deprecations](#deprecations)** |
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
-| current_time | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone |
+| current_time ⚠️ | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone <br> **Deprecated — see [Deprecations](#deprecations)** |
 | sleep ⚠️ | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
 | graph | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration |
-| cron* | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows |
-| slack | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring |
+| cron* ⚠️ | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows <br> **Deprecated — see [Deprecations](#deprecations)** |
+| slack ⚠️ | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring <br> **Deprecated — see [Deprecations](#deprecations)** |
 | speak | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff |
@@ -147,10 +147,10 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_agent | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
-| batch| `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. |
+| batch ⚠️ | `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools in parallel. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
-| diagram | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) |
-| rss | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources |
+| diagram ⚠️ | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) <br> **Deprecated — see [Deprecations](#deprecations)** |
+| rss ⚠️ | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources <br> **Deprecated — see [Deprecations](#deprecations)** |
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
 | search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
 | chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
@@ -161,9 +161,11 @@ Below is a comprehensive table of all available tools, how to use them with an a
 
 ### Deprecations
 
-The Strands SDK now vends equivalents of the tools below from `strands.vended_tools`. To
-avoid maintaining two implementations that drift apart, these tools are deprecated here and
-users should migrate to the SDK versions.
+The tools below are deprecated, and each row names where to go instead. Some have a direct
+replacement vended by the Strands SDK from `strands.vended_tools`; others are superseded by native
+SDK capability that needs no tool at all, by an official MCP server, or by nothing — where a capable
+model can do the job directly. Maintaining two implementations of the same thing invites drift, so
+the goal is one home per capability, not one-for-one swaps.
 
 These are the first of an ongoing set of deprecations. As more tools gain SDK equivalents
 they will be deprecated the same way, and this repository will eventually be archived.
@@ -183,6 +185,17 @@ exists as well.
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
 | `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
 | `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |
+| `batch` | none needed — concurrent tool execution is the SDK default ([docs](https://strandsagents.com/docs/user-guide/concepts/tools/executors/)) | v0.8.6 | v0.9.0 |
+| `think` | native extended thinking via model reasoning config ([docs](https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/)) | v0.8.6 | v0.9.0 |
+| `current_time` | `ContextInjector` ([docs](https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/)) | v0.8.6 | v0.9.0 |
+| `memory` | `MemoryManager` + `BedrockKnowledgeBaseStore` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/)) | v0.8.6 | v0.9.0 |
+| `retrieve` | `MemoryManager` + `BedrockKnowledgeBaseStore(writable=False)` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/overview/)) | v0.8.6 | v0.9.0 |
+| `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
+| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
+| `environment` | `from strands.vended_tools import shell` (inspect only — see notes) | v0.8.6 | v0.9.0 |
+| `slack` | [official Slack MCP server](https://mcp.slack.com/mcp); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
+| `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
+| `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
 
 ```python
 # Before
@@ -211,6 +224,36 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`sleep` → `sleep`**: the maximum duration is set with
   `make_sleep(max_duration=...)` and defaults to 60 seconds, replacing the
   `MAX_SLEEP_SECONDS` environment variable which defaulted to 300 seconds.
+- **`batch`**: nothing to migrate to — remove it. `batch` never actually ran tools in parallel (it
+  looped synchronously), and it bypassed tracing, metrics, and hooks. The SDK's
+  `ConcurrentToolExecutor` has been the default for some time.
+- **`think` → extended thinking**: single-pass model reasoning, so there are no `cycle_count`
+  refinement passes, no tool use inside the reasoning trace, and no per-cycle model switching.
+  Reasoning config is provider-specific rather than a portable flag.
+- **`current_time` → `ContextInjector`**: the injected value is chosen by your code, so the model can
+  no longer request an arbitrary IANA timezone the way `current_time(timezone=...)` allowed.
+- **`memory` / `retrieve` → memory stores**: `store`/`retrieve` map onto `add`/`search`, but `list`,
+  `get`, and `delete` have no protocol equivalent and need a `MemoryStore` subclass exposing them via
+  `get_tools()`. Neither applies `retrieve`'s default `score >= 0.4` relevance floor, so filter
+  results yourself. `retrieve`'s per-call `retrieveFilter` becomes constructor-level config.
+- **`calculator` → `shell`**: requires Python and sympy available where the shell runs. Note this is
+  a privilege increase: `calculator` validated expressions against an allowlist, whereas `shell` runs
+  arbitrary commands.
+- **`cron` → `shell`**: works against the host `crontab`, but the SDK shell is stateless and
+  sandbox-routed — under a Docker or SSH sandbox, jobs install into an environment that may have no
+  cron daemon. You also lose structured `list`/`add`/`remove`/`edit` actions and crontab-line
+  sanitization.
+- **`environment` → `shell`**: reads only. A child shell cannot mutate the agent's own process
+  environment, so `os.environ` changes are not possible this way — set variables in the process that
+  launches the agent. You also lose `PROTECTED_VARS` and secret masking.
+- **`slack` → Slack MCP server**: the MCP server exposes a fixed tool set rather than `slack.py`'s
+  passthrough to any Web API method, and MCP cannot cover Socket Mode or real-time events. Use
+  `slack_bolt` directly for event listeners. The hosted server uses OAuth instead of static tokens.
+- **`diagram`**: no replacement. The tool wrapped `graphviz` and the `diagrams` package, so a model
+  can write and run that code directly. AWS reached the same conclusion and removed their own diagram
+  MCP server as unnecessary indirection.
+- **`rss`**: no replacement. The tool wrapped `feedparser` plus a JSON file of subscriptions; both
+  are straightforward to do directly. You lose feed HTTP Basic auth and stored subscriptions.
 
 ## 💻 Usage Examples
 

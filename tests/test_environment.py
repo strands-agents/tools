@@ -385,3 +385,27 @@ def test_direct_delete_protected_var_strands_disable_load_tool(agent, os_environ
     assert result["status"] == "error"
     # Verify STRANDS_DISABLE_LOAD_TOOL still exists
     assert os_environment["STRANDS_DISABLE_LOAD_TOOL"] == unchanging_value
+
+
+def test_environment_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming the migration path."""
+    import logging as _logging
+
+    from strands_tools import environment as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.environment"):
+        _logging.getLogger("strands_tools.environment").warning("DEPRECATION WARNING: %s", _mod._DEPRECATION_MESSAGE)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import shell" in caplog.text
+
+
+def test_environment_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import environment as _mod
+
+    fn = _mod.environment
+    marker = getattr(fn, "__deprecated__", None) or getattr(getattr(fn, "_tool_func", None), "__deprecated__", None)
+    assert marker is not None
+    assert "strands.vended_tools import shell" in marker

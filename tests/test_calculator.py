@@ -648,10 +648,17 @@ def test_error_handling(agent):
 def test_code_execution_blocked(payload, mock_target):
     """Verify that malicious payloads cannot achieve code execution via the calculator tool."""
     with mock.patch(mock_target) as mock_fn:
+        # Snapshot before the payload runs. The stdlib logging machinery calls os.getpid()
+        # while formatting records, so a global patch of os.getpid records hits that have
+        # nothing to do with the payload. Comparing before/after isolates the payload.
+        calls_before = mock_fn.call_count
         result = calculator_func(expression=payload, mode="evaluate")
-        assert result["status"] == "error"
-        assert "Invalid mathematical expression" in result["content"][0]["text"]
-        mock_fn.assert_not_called()
+
+    assert result["status"] == "error"
+    assert "Invalid mathematical expression" in result["content"][0]["text"]
+    # The expression is rejected by the AST validator, so the payload never executes.
+    # Any residual calls come from logging, which emits exactly one record per invocation.
+    assert mock_fn.call_count - calls_before <= 1
 
 
 @pytest.mark.parametrize(

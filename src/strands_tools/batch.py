@@ -30,11 +30,22 @@ Example usage:
     )
 """
 
+import logging
 import traceback
 
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
+    "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
+)
+
 
 TOOL_SPEC = {
     "name": "batch",
@@ -62,6 +73,10 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter.
+@deprecated(_DEPRECATION_MESSAGE)
 def batch(tool: ToolUse, **kwargs) -> ToolResult:
     """
     Batch tool for invoking multiple tools in parallel.
@@ -89,6 +104,8 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
             ]
         }
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
     tool_use_id = tool["toolUseId"]
 

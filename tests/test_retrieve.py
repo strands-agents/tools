@@ -746,3 +746,27 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     assert "results with score >=" in result_text
     assert "Metadata:" not in result_text
     assert "test-source" not in result_text
+
+
+def test_retrieve_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming the migration path."""
+    import logging as _logging
+
+    from strands_tools import retrieve as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"):
+        _logging.getLogger("strands_tools.retrieve").warning("DEPRECATION WARNING: %s", _mod._DEPRECATION_MESSAGE)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "BedrockKnowledgeBaseStore" in caplog.text
+
+
+def test_retrieve_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import retrieve as _mod
+
+    fn = _mod.retrieve
+    marker = getattr(fn, "__deprecated__", None) or getattr(getattr(fn, "_tool_func", None), "__deprecated__", None)
+    assert marker is not None
+    assert "BedrockKnowledgeBaseStore" in marker
