@@ -754,8 +754,12 @@ def test_retrieve_logs_deprecation_warning(caplog):
 
     from strands_tools import retrieve as _mod
 
-    with caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"):
-    with mock.patch("strands_tools.retrieve.boto3.client"), caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"):
+    # boto3 is patched so the test stays offline even when a developer has
+    # STRANDS_KNOWLEDGE_BASE_ID set in their environment.
+    with (
+        mock.patch("strands_tools.retrieve.boto3.client"),
+        caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"),
+    ):
         _mod.retrieve({"toolUseId": "t", "input": {"text": "q"}})
 
     assert "DEPRECATION WARNING" in caplog.text
