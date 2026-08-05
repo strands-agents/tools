@@ -161,15 +161,18 @@ Below is a comprehensive table of all available tools, how to use them with an a
 
 ### Deprecations
 
-The tools below are deprecated, and each row names where to go instead. Some have a direct
-replacement vended by the Strands SDK from `strands.vended_tools`; others are superseded by native
-SDK capability that needs no tool at all, by an official MCP server, or by nothing — where a capable
-model can do the job directly. Maintaining two implementations of the same thing invites drift, so
-the goal is one home per capability, not one-for-one swaps.
+The tools below are deprecated, and each row points to where that capability now lives.
 
-These are the first of an ongoing set of deprecations. As more tools gain SDK equivalents
-they will be deprecated the same way, and this repository will eventually be archived.
-Migrating when a tool is first deprecated avoids a larger move later.
+When this package started, the SDK had no built-in way to do most of these things, so we shipped
+tools to fill the gap. Much of that is now native: the SDK reasons, injects context, manages memory,
+and runs tools concurrently on its own, and where a vendor maintains an official MCP server, that
+server will always track their API better than a wrapper here can. Keeping a second implementation
+alongside means two things to fix and two things to drift, so we would rather point you at the one
+that gets the attention.
+
+More tools will follow as their capabilities land elsewhere, and this repository will eventually be
+archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
+moving several at once later.
 
 Deprecated tools keep working. Each one logs a warning when invoked starting in **v0.8.6**,
 and that warning becomes an error log in **v0.9.0** — a louder signal for anyone who has not
@@ -191,9 +194,9 @@ exists as well.
 | `memory` | `MemoryManager` + `BedrockKnowledgeBaseStore` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/)) | v0.8.6 | v0.9.0 |
 | `retrieve` | `MemoryManager` + `BedrockKnowledgeBaseStore(writable=False)` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/overview/)) | v0.8.6 | v0.9.0 |
 | `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
-| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
+| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or a managed scheduler | v0.8.6 | v0.9.0 |
 | `environment` | `from strands.vended_tools import shell` (inspect only — see notes) | v0.8.6 | v0.9.0 |
-| `slack` | [official Slack MCP server](https://mcp.slack.com/mcp); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
+| `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
 | `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
 
@@ -224,36 +227,52 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`sleep` → `sleep`**: the maximum duration is set with
   `make_sleep(max_duration=...)` and defaults to 60 seconds, replacing the
   `MAX_SLEEP_SECONDS` environment variable which defaulted to 300 seconds.
-- **`batch`**: nothing to migrate to — remove it. `batch` never actually ran tools in parallel (it
-  looped synchronously), and it bypassed tracing, metrics, and hooks. The SDK's
-  `ConcurrentToolExecutor` has been the default for some time.
-- **`think` → extended thinking**: single-pass model reasoning, so there are no `cycle_count`
-  refinement passes, no tool use inside the reasoning trace, and no per-cycle model switching.
-  Reasoning config is provider-specific rather than a portable flag.
-- **`current_time` → `ContextInjector`**: the injected value is chosen by your code, so the model can
-  no longer request an arbitrary IANA timezone the way `current_time(timezone=...)` allowed.
-- **`memory` / `retrieve` → memory stores**: `store`/`retrieve` map onto `add`/`search`, but `list`,
-  `get`, and `delete` have no protocol equivalent and need a `MemoryStore` subclass exposing them via
-  `get_tools()`. Neither applies `retrieve`'s default `score >= 0.4` relevance floor, so filter
-  results yourself. `retrieve`'s per-call `retrieveFilter` becomes constructor-level config.
-- **`calculator` → `shell`**: requires Python and sympy available where the shell runs. Note this is
-  a privilege increase: `calculator` validated expressions against an allowlist, whereas `shell` runs
-  arbitrary commands.
-- **`cron` → `shell`**: works against the host `crontab`, but the SDK shell is stateless and
-  sandbox-routed — under a Docker or SSH sandbox, jobs install into an environment that may have no
-  cron daemon. You also lose structured `list`/`add`/`remove`/`edit` actions and crontab-line
-  sanitization.
-- **`environment` → `shell`**: reads only. A child shell cannot mutate the agent's own process
-  environment, so `os.environ` changes are not possible this way — set variables in the process that
-  launches the agent. You also lose `PROTECTED_VARS` and secret masking.
-- **`slack` → Slack MCP server**: the MCP server exposes a fixed tool set rather than `slack.py`'s
-  passthrough to any Web API method, and MCP cannot cover Socket Mode or real-time events. Use
-  `slack_bolt` directly for event listeners. The hosted server uses OAuth instead of static tokens.
-- **`diagram`**: no replacement. The tool wrapped `graphviz` and the `diagrams` package, so a model
-  can write and run that code directly. AWS reached the same conclusion and removed their own diagram
-  MCP server as unnecessary indirection.
-- **`rss`**: no replacement. The tool wrapped `feedparser` plus a JSON file of subscriptions; both
-  are straightforward to do directly. You lose feed HTTP Basic auth and stored subscriptions.
+- **`batch`** — you can drop it. The SDK runs tool calls concurrently by default via
+  `ConcurrentToolExecutor`, which also keeps tracing, metrics, and hooks intact. See
+  [Tool executors](https://strandsagents.com/docs/user-guide/concepts/tools/executors/).
+- **`think` → extended thinking** — reasoning is now a model capability rather than a tool, so you
+  configure it once instead of prompting for it. It is single-pass, so if you were relying on
+  `cycle_count` to refine across passes, or on tool calls inside the reasoning loop, that pattern
+  moves into your own orchestration. Config is per provider — see
+  [Amazon Bedrock](https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/).
+- **`current_time` → `ContextInjector`** — the date is context, not something the agent should have to
+  ask for, so injecting it means it is always fresh and the model cannot forget to call it. The
+  trade-off is that your code picks the timezone; if you need the model to choose one per call, the
+  official [MCP `time` server](https://github.com/modelcontextprotocol/servers/tree/main/src/time)
+  still does that. See
+  [ContextInjector](https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/).
+- **`memory` / `retrieve` → memory stores** — memory is a first-class SDK concept now, so stores plug
+  into the agent and inject context automatically instead of waiting to be called. `store`/`retrieve`
+  become `add`/`search`. `list`, `get`, and `delete` are not part of the store protocol, so keep them
+  as backend-native tools via `get_tools()`. One thing to know: the store returns relevance scores but
+  does not filter on them, so if you relied on `retrieve`'s default `score >= 0.4` floor, apply it
+  yourself. See
+  [Bedrock Knowledge Base store](https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/)
+  and [Custom stores](https://strandsagents.com/docs/user-guide/concepts/memory/overview/#custom-stores).
+- **`calculator` → `shell`** — run `python3 -c` with sympy for the same symbolic math. Worth being
+  explicit: `shell` runs whatever it is given, whereas this tool checked expressions against an
+  allowlist first. If you are evaluating untrusted input, put a sandbox behind the shell tool or keep
+  your own validation in front of it.
+- **`cron` → `shell`** — `crontab` through the shell tool covers scheduling on a host. Two things to
+  plan for: the shell is sandbox-routed, so under Docker or SSH your jobs land in an environment that
+  may not have a cron daemon, and you will be composing crontab lines yourself rather than using
+  structured `list`/`add`/`remove`/`edit` actions. For scheduling that outlives the host, a managed
+  scheduler is usually the better fit.
+- **`environment` → `shell`** — `env` and `printenv` cover reading. Setting is genuinely different: a
+  child shell cannot change the agent's own process environment, so variables need to be set where the
+  agent is launched, or passed per call. If you were leaning on `PROTECTED_VARS` or secret masking,
+  that guarding moves to your side.
+- **`slack` → Slack's official MCP server** — Slack maintains it, so it tracks their API directly, and
+  it uses OAuth rather than long-lived tokens. It exposes a curated tool set rather than this tool's
+  passthrough to any Web API method, and being request/response it does not cover Socket Mode or
+  real-time events — `slack_bolt` remains the right tool for event listeners. Endpoint and setup:
+  [docs.slack.dev/ai/mcp-server](https://docs.slack.dev/ai/mcp-server/).
+- **`diagram`** — no direct replacement, and that is deliberate: this tool was a wrapper over
+  `graphviz` and the `diagrams` package, and a capable model writes that code well on its own. The
+  wrapper mostly added a layer to keep in sync.
+- **`rss`** — no direct replacement. Fetching and parsing a feed is a few lines of `feedparser`, and
+  the subscription list was a JSON file. If you were using feed HTTP Basic auth or the stored
+  subscriptions, those move into your code.
 
 ## 💻 Usage Examples
 
