@@ -1,7 +1,8 @@
 """
 Batch Tool for Parallel Tool Invocation
 
-This tool enables invoking multiple other tools in parallel from a single LLM message response.
+This tool enables invoking multiple other tools from a single LLM message response. Note the
+invocations run sequentially, despite the historical name.
 It is designed for use with agents that support tool registration and invocation by name.
 
 Example usage:
@@ -49,7 +50,7 @@ _DEPRECATION_MESSAGE = (
 
 TOOL_SPEC = {
     "name": "batch",
-    "description": "Invoke multiple other tool calls simultaneously",
+    "description": "Invoke multiple other tool calls in sequence from one request",
     "inputSchema": {
         "json": {
             "type": "object",
@@ -79,7 +80,7 @@ TOOL_SPEC = {
 @deprecated(_DEPRECATION_MESSAGE)
 def batch(tool: ToolUse, **kwargs) -> ToolResult:
     """
-    Batch tool for invoking multiple tools in parallel.
+    Batch tool for invoking multiple tools from one request, in sequence.
 
     Args:
         tool: Tool use object.

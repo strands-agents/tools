@@ -687,6 +687,7 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
 
 
 @tool
+@deprecated(_DEPRECATION_MESSAGE)
 def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
     """Send a message to a Slack channel.
 
@@ -740,6 +741,8 @@ def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
     - This function automatically ensures the Slack clients are initialized.
     - Channel IDs typically start with 'C', direct message IDs with 'D'.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     if client is None:
         success, error_message = initialize_slack_clients()
         if not success:
