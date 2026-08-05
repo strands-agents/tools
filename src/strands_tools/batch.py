@@ -1,5 +1,5 @@
 """
-Batch Tool for Parallel Tool Invocation
+Batch Tool for Multi-Tool Invocation
 
 This tool enables invoking multiple other tools from a single LLM message response. Note the
 invocations run sequentially, despite the historical name.
