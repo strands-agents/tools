@@ -773,25 +773,17 @@ if __name__ == "__main__":
 
 
 def test_diagram_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
 
     from strands_tools import diagram as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.diagram"):
-        try:
-            _mod.diagram(diagram_type="graph", nodes=[], edges=[])
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+        _mod.diagram(diagram_type="graph", nodes=[], edges=[])
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "graphviz" in caplog.text
 
 
 def test_diagram_is_marked_deprecated_for_static_analysis():

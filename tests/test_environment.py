@@ -388,25 +388,17 @@ def test_direct_delete_protected_var_strands_disable_load_tool(agent, os_environ
 
 
 def test_environment_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
 
     from strands_tools import environment as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.environment"):
-        try:
-            _mod.environment({"toolUseId": "t", "input": {"action": "list"}})
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+        _mod.environment({"toolUseId": "t", "input": {"action": "list"}})
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import shell" in caplog.text
 
 
 def test_environment_is_marked_deprecated_for_static_analysis():

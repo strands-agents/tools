@@ -376,25 +376,17 @@ class TestSlackIntegration:
 
 
 def test_slack_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
 
     from strands_tools import slack as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.slack"):
-        try:
-            _mod.slack(action="auth_test", parameters={})
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+        _mod.slack(action="auth_test", parameters={})
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "docs.slack.dev" in caplog.text
 
 
 def test_slack_is_marked_deprecated_for_static_analysis():
@@ -403,4 +395,27 @@ def test_slack_is_marked_deprecated_for_static_analysis():
 
     marker = getattr(_mod.slack, "__deprecated__", None)
     assert marker is not None
-    assert "mcp.slack.com" in marker
+    assert "docs.slack.dev" in marker
+
+
+def test_slack_send_message_logs_deprecation_warning(caplog):
+    """slack_send_message is a second deprecated callable in the same module."""
+    import logging as _logging
+
+    from strands_tools import slack as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.slack"):
+        _mod.slack_send_message(channel="C1", text="hi")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "docs.slack.dev" in caplog.text
+
+
+def test_slack_send_message_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import slack as _mod
+
+    marker = getattr(_mod.slack_send_message, "__deprecated__", None)
+    assert marker is not None
+    assert "docs.slack.dev" in marker

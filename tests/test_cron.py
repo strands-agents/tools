@@ -432,25 +432,23 @@ def test_consent_granted_allows_write(mock_subprocess, monkeypatch):
 
 
 def test_cron_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
+    from unittest import mock as _mock
 
     from strands_tools import cron as _mod
 
-    with caplog.at_level(_logging.WARNING, logger="strands_tools.cron"):
-        try:
-            _mod.cron(action="list")
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+    # Patched so the assertion covers only the log line: the tool's real work
+    # would otherwise reach the network or the developer's own machine.
+    with (
+        _mock.patch("strands_tools.cron.subprocess.run"),
+        caplog.at_level(_logging.WARNING, logger="strands_tools.cron"),
+    ):
+        _mod.cron(action="list")
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import shell" in caplog.text
 
 
 def test_cron_is_marked_deprecated_for_static_analysis():

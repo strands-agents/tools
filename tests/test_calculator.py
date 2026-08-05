@@ -792,7 +792,7 @@ def test_ast_validation_allows_legitimate_math(expression):
 
 
 def test_calculator_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
 
     from strands_tools import calculator as _mod

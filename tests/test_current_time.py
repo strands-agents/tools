@@ -118,25 +118,17 @@ def test_current_time_agent_invalid_timezone(agent):
 
 
 def test_current_time_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
 
     from strands_tools import current_time as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.current_time"):
-        try:
-            _mod.current_time(timezone="UTC")
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+        _mod.current_time(timezone="UTC")
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "ContextInjector" in caplog.text
 
 
 def test_current_time_is_marked_deprecated_for_static_analysis():

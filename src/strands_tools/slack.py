@@ -139,8 +139,8 @@ logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
-    "server at https://mcp.slack.com/mcp. For Socket Mode and real-time events, which MCP does not cover, use "
-    "slack_bolt directly."
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
 )
 
 

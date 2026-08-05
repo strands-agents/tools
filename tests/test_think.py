@@ -648,25 +648,23 @@ def test_think_tool_recursion_prevention_multiple_cycles():
 
 
 def test_think_logs_deprecation_warning(caplog):
-    """Invoking the tool logs a deprecation warning naming the migration path."""
+    """Invoking the tool logs a deprecation warning naming its migration path."""
     import logging as _logging
+    from unittest import mock as _mock
 
     from strands_tools import think as _mod
 
-    with caplog.at_level(_logging.WARNING, logger="strands_tools.think"):
-        try:
-            _mod.think(thought="t", cycle_count=1, system_prompt="s")
-        except TypeError:
-            # A signature mismatch means the tool was never entered, so the
-            # warning would be missing for the wrong reason - fail loudly.
-            raise
-        except Exception:
-            # The tool may still fail without credentials or optional deps; the
-            # deprecation warning is logged before any of that work happens.
-            pass
+    # Patched so the assertion covers only the log line: the tool's real work
+    # would otherwise reach the network or the developer's own machine.
+    with (
+        _mock.patch("strands_tools.think.Agent"),
+        caplog.at_level(_logging.WARNING, logger="strands_tools.think"),
+    ):
+        _mod.think(thought="t", cycle_count=1, system_prompt="s")
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
+    assert "reasoning config" in caplog.text
 
 
 def test_think_is_marked_deprecated_for_static_analysis():
