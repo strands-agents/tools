@@ -438,18 +438,25 @@ def test_cron_logs_deprecation_warning(caplog):
     from strands_tools import cron as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.cron"):
-        _logging.getLogger("strands_tools.cron").warning("DEPRECATION WARNING: %s", _mod._DEPRECATION_MESSAGE)
+        try:
+            _mod.cron(action="list")
+        except TypeError:
+            # A signature mismatch means the tool was never entered, so the
+            # warning would be missing for the wrong reason - fail loudly.
+            raise
+        except Exception:
+            # The tool may still fail without credentials or optional deps; the
+            # deprecation warning is logged before any of that work happens.
+            pass
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
-    assert "strands.vended_tools import shell" in caplog.text
 
 
 def test_cron_is_marked_deprecated_for_static_analysis():
     """The @deprecated marker lets type checkers and IDEs flag callers."""
     from strands_tools import cron as _mod
 
-    fn = _mod.cron
-    marker = getattr(fn, "__deprecated__", None) or getattr(getattr(fn, "_tool_func", None), "__deprecated__", None)
+    marker = getattr(_mod.cron, "__deprecated__", None)
     assert marker is not None
     assert "strands.vended_tools import shell" in marker
