@@ -194,7 +194,7 @@ exists as well.
 | `memory` | `MemoryManager` + `BedrockKnowledgeBaseStore` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/)) | v0.8.6 | v0.9.0 |
 | `retrieve` | `MemoryManager` + `BedrockKnowledgeBaseStore(writable=False)` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/overview/)) | v0.8.6 | v0.9.0 |
 | `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
-| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or a managed scheduler | v0.8.6 | v0.9.0 |
+| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
 | `environment` | `from strands.vended_tools import shell` (inspect only — see notes) | v0.8.6 | v0.9.0 |
 | `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
@@ -256,8 +256,8 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`cron` → `shell`** — `crontab` through the shell tool covers scheduling on a host. Two things to
   plan for: the shell is sandbox-routed, so under Docker or SSH your jobs land in an environment that
   may not have a cron daemon, and you will be composing crontab lines yourself rather than using
-  structured `list`/`add`/`remove`/`edit` actions. For scheduling that outlives the host, a managed
-  scheduler is usually the better fit.
+  structured `list`/`add`/`remove`/`edit` actions. For scheduling that outlives the host, Amazon EventBridge
+  Scheduler is usually the better fit.
 - **`environment` → `shell`** — `env` and `printenv` cover reading. Setting is genuinely different: a
   child shell cannot change the agent's own process environment, so variables need to be set where the
   agent is launched, or passed per call. If you were leaning on `PROTECTED_VARS` or secret masking,
