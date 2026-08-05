@@ -755,6 +755,7 @@ def test_retrieve_logs_deprecation_warning(caplog):
     from strands_tools import retrieve as _mod
 
     with caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"):
+    with mock.patch("strands_tools.retrieve.boto3.client"), caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"):
         _mod.retrieve({"toolUseId": "t", "input": {"text": "q"}})
 
     assert "DEPRECATION WARNING" in caplog.text
