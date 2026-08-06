@@ -141,6 +141,26 @@ def test_file_read_tool_direct_search(temp_test_file):
     assert "More" in str(result["content"])
 
 
+def test_file_read_tool_direct_search_no_results(temp_test_file):
+    """Test that search mode returns a text message instead of empty list when no results found."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "path": temp_test_file,
+            "mode": "search",
+            "search_pattern": "pattern_that_does_not_exist",
+        },
+    }
+
+    result = file_read.file_read(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert isinstance(result["content"], list)
+    assert len(result["content"]) > 0
+    # Should return a text message, not an empty content list
+    assert any("No search results found" in str(item.get("text", "")) for item in result["content"])
+
+
 def test_file_read_tool_direct_stats(temp_test_file):
     """Test direct invocation of the file_read tool in stats mode."""
     tool_use = {
