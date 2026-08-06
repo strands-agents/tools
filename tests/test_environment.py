@@ -398,7 +398,7 @@ def test_environment_logs_deprecation_warning(caplog):
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
-    assert "strands.vended_tools import shell" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
 
 
 def test_environment_is_marked_deprecated_for_static_analysis():
@@ -407,4 +407,4 @@ def test_environment_is_marked_deprecated_for_static_analysis():
 
     marker = getattr(_mod.environment, "__deprecated__", None)
     assert marker is not None
-    assert "strands.vended_tools import shell" in marker
+    assert "strands.vended_tools import bash" in marker

@@ -19,9 +19,15 @@ _DEPRECATION_MESSAGE = (
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "current_time is deprecated. This warning becomes an error log in v0.9.0. Migration path: inject the current time "
+    "as context with ContextInjector instead of calling a tool. See "
+    "https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
+)
 def current_time(timezone: str = None) -> str:
     """
     Get the current time in ISO 8601 format.

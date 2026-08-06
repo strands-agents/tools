@@ -1104,9 +1104,14 @@ def open_diagram(file_path: str) -> None:
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "diagram is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; have the model "
+    "write and run diagram code directly with graphviz, mermaid, or the diagrams package."
+)
 def diagram(
     diagram_type: str,
     nodes: List[Dict[str, str]] = None,

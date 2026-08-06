@@ -101,8 +101,8 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "calculator is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the shell tool vended "
-    "by strands-agents to run python3 -c with sympy (from strands.vended_tools import shell). Note shell runs "
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended "
+    "by strands-agents to run python3 -c with sympy (from strands.vended_tools import bash). Note bash runs "
     "arbitrary commands, unlike this tool's validated expression parser."
 )
 
@@ -758,9 +758,15 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended "
+    "by strands-agents to run python3 -c with sympy (from strands.vended_tools import bash). Note bash runs "
+    "arbitrary commands, unlike this tool's validated expression parser."
+)
 def calculator(
     expression: str,
     mode: str = None,

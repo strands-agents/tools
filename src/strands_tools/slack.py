@@ -546,9 +546,15 @@ socket_handler = SocketModeHandler()
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
+)
 def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
     """Slack integration for messaging, events, and interactions.
 
@@ -687,7 +693,11 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
 
 
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
+)
 def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
     """Send a message to a Slack channel.
 

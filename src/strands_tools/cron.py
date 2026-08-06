@@ -19,8 +19,8 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "cron is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the shell tool vended by "
-    "strands-agents to manage crontab entries (from strands.vended_tools import shell), or a hosted scheduler such as "
+    "cron is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended by "
+    "strands-agents to manage crontab entries (from strands.vended_tools import bash), or a hosted scheduler such as "
     "Amazon EventBridge Scheduler."
 )
 
@@ -72,9 +72,15 @@ def _write_crontab(new_content: str, description: str) -> Optional[Dict[str, Any
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "cron is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended by "
+    "strands-agents to manage crontab entries (from strands.vended_tools import bash), or a hosted scheduler such as "
+    "Amazon EventBridge Scheduler."
+)
 def cron(
     action: str,
     schedule: Optional[str] = None,

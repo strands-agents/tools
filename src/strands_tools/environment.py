@@ -85,8 +85,8 @@ from strands_tools.utils import console_util, user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "environment is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the shell tool "
-    "vended by strands-agents to inspect environment variables (from strands.vended_tools import shell). Note a child "
+    "environment is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool "
+    "vended by strands-agents to inspect environment variables (from strands.vended_tools import bash). Note a child "
     "shell cannot mutate the agent's own environment, so set variables in the process that launches the agent."
 )
 
@@ -400,8 +400,14 @@ def show_operation_result(console: Console, success: bool, message: str) -> None
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
-@deprecated(_DEPRECATION_MESSAGE)
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "environment is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool "
+    "vended by strands-agents to inspect environment variables (from strands.vended_tools import bash). Note a child "
+    "shell cannot mutate the agent's own environment, so set variables in the process that launches the agent."
+)
 def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Environment variable management tool for listing, getting, setting, and deleting environment variables.

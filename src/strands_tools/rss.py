@@ -206,9 +206,14 @@ rss_manager = RSSManager()
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "rss is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; fetch and parse "
+    "feeds directly with feedparser."
+)
 def rss(
     action: str,
     url: Optional[str] = None,

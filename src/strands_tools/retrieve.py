@@ -278,8 +278,14 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
-@deprecated(_DEPRECATION_MESSAGE)
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "retrieve is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+)
 def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Retrieve relevant knowledge from Amazon Bedrock Knowledge Base.

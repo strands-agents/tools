@@ -802,7 +802,7 @@ def test_calculator_logs_deprecation_warning(caplog):
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
-    assert "strands.vended_tools import shell" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
 
 
 def test_calculator_is_marked_deprecated_for_static_analysis():
@@ -810,4 +810,4 @@ def test_calculator_is_marked_deprecated_for_static_analysis():
     from strands_tools import calculator as _mod
 
     assert getattr(_mod.calculator, "__deprecated__", None) is not None
-    assert "strands.vended_tools import shell" in _mod.calculator.__deprecated__
+    assert "strands.vended_tools import bash" in _mod.calculator.__deprecated__

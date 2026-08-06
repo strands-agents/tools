@@ -76,8 +76,14 @@ TOOL_SPEC = {
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
-@deprecated(_DEPRECATION_MESSAGE)
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
+    "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
+)
 def batch(tool: ToolUse, **kwargs) -> ToolResult:
     """
     Batch tool for invoking multiple tools from one request, in sequence.
