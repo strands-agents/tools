@@ -101,9 +101,10 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "calculator is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended "
-    "by strands-agents to run python3 -c with sympy (from strands.vended_tools import bash). Note bash runs "
-    "arbitrary commands, unlike this tool's validated expression parser."
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "the bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while bash executes "
+    "arbitrary commands, so review it against your threat model before switching."
 )
 
 
@@ -763,9 +764,10 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "calculator is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended "
-    "by strands-agents to run python3 -c with sympy (from strands.vended_tools import bash). Note bash runs "
-    "arbitrary commands, unlike this tool's validated expression parser."
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "the bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while bash executes "
+    "arbitrary commands, so review it against your threat model before switching."
 )
 def calculator(
     expression: str,

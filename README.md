@@ -188,8 +188,8 @@ line for only the three tools whose marker is not wrapped by `@tool`. Note that 
 suppresses the resulting `DeprecationWarning` at runtime when the agent invokes a tool, which
 is why the log message exists as well.
 
-| Tool | Replacement | Warning | Error log |
-|------|-------------|---------|-----------|
+| Tool | Suggested alternative | Warning | Error log |
+|------|-----------------------|---------|-----------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
 | `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
 | `shell` | `from strands.vended_tools import bash` | v0.8.6 | v0.9.0 |

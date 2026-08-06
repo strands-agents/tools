@@ -76,9 +76,10 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "shell is deprecated. This warning becomes an error log in v0.9.0. "
-    "Migration path: use the bash tool vended by strands-agents "
-    "(from strands.vended_tools import bash)."
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary, in the tightening direction: bash routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
 )
 
 
@@ -423,9 +424,10 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "shell is deprecated. This warning becomes an error log in v0.9.0. "
-    "Migration path: use the bash tool vended by strands-agents "
-    "(from strands.vended_tools import bash)."
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary, in the tightening direction: bash routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
 )
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],

@@ -19,9 +19,11 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "cron is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended by "
-    "strands-agents to manage crontab entries (from strands.vended_tools import bash), or a hosted scheduler such as "
-    "Amazon EventBridge Scheduler."
+    "cron is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use a hosted "
+    "scheduler such as Amazon EventBridge Scheduler, or the bash tool vended by strands-agents "
+    "(from strands.vended_tools import bash). The bash route does change the security boundary: cron exposed "
+    "structured schedule actions, while bash executes arbitrary commands, so review it against your threat model "
+    "before switching."
 )
 
 
@@ -77,9 +79,11 @@ def _write_crontab(new_content: str, description: str) -> Optional[Dict[str, Any
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "cron is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the bash tool vended by "
-    "strands-agents to manage crontab entries (from strands.vended_tools import bash), or a hosted scheduler such as "
-    "Amazon EventBridge Scheduler."
+    "cron is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use a hosted "
+    "scheduler such as Amazon EventBridge Scheduler, or the bash tool vended by strands-agents "
+    "(from strands.vended_tools import bash). The bash route does change the security boundary: cron exposed "
+    "structured schedule actions, while bash executes arbitrary commands, so review it against your threat model "
+    "before switching."
 )
 def cron(
     action: str,
