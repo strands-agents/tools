@@ -182,9 +182,11 @@ They are also marked with `@typing_extensions.deprecated`, so type checkers and 
 usage before you run anything. To list what you still need to migrate, run
 `mypy --enable-error-code deprecated` over your project: it reports the
 `from strands_tools import ...` line for each deprecated tool, without invoking any of them.
-Pyright reports direct calls once `reportDeprecated` is enabled. Note that Python suppresses
-the resulting `DeprecationWarning` at runtime when the agent invokes a tool, which is why the
-log message exists as well.
+Prefer mypy here: pyright, with `reportDeprecated` enabled, reports direct calls such as
+`calculator(expression=...)` but not `agent.tool.calculator(...)`, and it reaches the import
+line for only the three tools whose marker is not wrapped by `@tool`. Note that Python
+suppresses the resulting `DeprecationWarning` at runtime when the agent invokes a tool, which
+is why the log message exists as well.
 
 | Tool | Replacement | Warning | Error log |
 |------|-------------|---------|-----------|

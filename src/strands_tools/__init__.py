@@ -5,6 +5,10 @@ which binds the module rather than the tool inside it. Re-exporting the deprecat
 tools under ``TYPE_CHECKING`` is what lets type checkers and IDEs resolve that name to
 the ``@deprecated`` tool and flag the import. The block is typing-only, so it does not
 run and the imported name stays a module at runtime.
+
+Only names that resolve at runtime belong here. Re-exporting one that does not, such as
+``slack_send_message``, would make a type checker accept an import that raises
+ImportError.
 """
 
 from typing import TYPE_CHECKING
@@ -22,6 +26,5 @@ if TYPE_CHECKING:
     from .rss import rss as rss
     from .shell import shell as shell
     from .slack import slack as slack
-    from .slack import slack_send_message as slack_send_message
     from .sleep import sleep as sleep
     from .think import think as think
