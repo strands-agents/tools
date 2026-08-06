@@ -448,11 +448,13 @@ def swarm(
         if hasattr(result, "results") and result.results:
             response_parts.append("\n**🤖 Individual Agent Contributions:**")
             for agent_name, node_result in result.results.items():
-                if hasattr(node_result, "result") and hasattr(node_result.result, "content"):
+                if hasattr(node_result, "result") and hasattr(node_result.result, "message"):
                     agent_content = []
-                    for content_block in node_result.result.content:
-                        if hasattr(content_block, "text") and content_block.text:
-                            agent_content.append(content_block.text)
+                    message = node_result.result.message
+                    content_blocks = message.get("content", []) if hasattr(message, "get") else []
+                    for content_block in content_blocks:
+                        if isinstance(content_block, dict) and content_block.get("text"):
+                            agent_content.append(content_block["text"])
 
                     if agent_content:
                         response_parts.append(f"\n**{agent_name.upper().replace('_', ' ')}:**")
@@ -463,11 +465,13 @@ def swarm(
             last_agent = result.node_history[-1].node_id
             if last_agent in result.results:
                 last_result = result.results[last_agent]
-                if hasattr(last_result, "result") and hasattr(last_result.result, "content"):
+                if hasattr(last_result, "result") and hasattr(last_result.result, "message"):
                     response_parts.append("\n**🎯 Final Team Result:**")
-                    for content_block in last_result.result.content:
-                        if hasattr(content_block, "text") and content_block.text:
-                            response_parts.append(content_block.text)
+                    message = last_result.result.message
+                    content_blocks = message.get("content", []) if hasattr(message, "get") else []
+                    for content_block in content_blocks:
+                        if isinstance(content_block, dict) and content_block.get("text"):
+                            response_parts.append(content_block["text"])
 
         # Add resource usage metrics
         if hasattr(result, "accumulated_usage") and result.accumulated_usage:
