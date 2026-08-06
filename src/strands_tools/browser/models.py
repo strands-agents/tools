@@ -150,6 +150,11 @@ class GetTextAction(BaseModel):
     type: Literal["get_text"] = Field(description="Get text content from an element")
     session_name: str = Field(description="Required session name from a previous init_session call")
     selector: str = Field(description="CSS selector for the element")
+    method: Literal["inner_text", "text_content"] = Field(
+        default="inner_text",
+        description="Text extraction method: 'inner_text' (default) excludes script/style/hidden content, "
+        "'text_content' returns all raw text including scripts and styles",
+    )
 
 
 class GetHtmlAction(BaseModel):
@@ -159,6 +164,10 @@ class GetHtmlAction(BaseModel):
     type: Literal["get_html"] = Field(description="Get HTML content")
     session_name: str = Field(description="Required session name from a previous init_session call")
     selector: Optional[str] = Field(default=None, description="CSS selector for specific element (optional)")
+    max_length: Optional[int] = Field(
+        default=None,
+        description="Maximum character length of returned HTML. None (default) returns full content without truncation",
+    )
 
 
 class ScreenshotAction(BaseModel):
