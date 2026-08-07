@@ -608,6 +608,26 @@ class WorkflowManager:
                 # Get all ready tasks
                 ready_tasks = self.get_ready_tasks(workflow)
 
+                if not active_futures and not ready_tasks:
+                    skipped_at = datetime.now(timezone.utc).isoformat()
+                    for task in workflow["tasks"]:
+                        task_id = task["task_id"]
+                        if workflow["task_results"][task_id]["status"] != "pending":
+                            continue
+                        blocked_by = [
+                            dep_id
+                            for dep_id in task.get("dependencies", [])
+                            if workflow["task_results"][dep_id]["status"] != "completed"
+                        ]
+                        workflow["task_results"][task_id] = {
+                            **workflow["task_results"][task_id],
+                            "status": "skipped",
+                            "result": [{"text": f"Task skipped due to failed dependencies: {', '.join(blocked_by)}"}],
+                            "completed_at": skipped_at,
+                        }
+                        completed_tasks.add(task_id)
+                        logger.warning(f"⏭️ Task '{task_id}' skipped due to failed dependencies: {blocked_by}")
+
                 # Prepare tasks for parallel submission with batching
                 tasks_to_submit = []
                 max_concurrent = self.task_executor.max_workers
@@ -694,15 +714,21 @@ class WorkflowManager:
 
             # Calculate success rate
             completed_count = sum(1 for result in workflow["task_results"].values() if result["status"] == "completed")
+            failed_count = sum(1 for result in workflow["task_results"].values() if result["status"] == "error")
+            skipped_count = sum(1 for result in workflow["task_results"].values() if result["status"] == "skipped")
             success_rate = (completed_count / total_tasks) * 100 if total_tasks > 0 else 0
+            status_text = (
+                "completed with partial success" if failed_count or skipped_count else "completed successfully"
+            )
 
             return {
                 "status": "success",
                 "content": [
                     {
                         "text": (
-                            f"🎉 Workflow '{workflow_id}' completed successfully! "
-                            f"({completed_count}/{total_tasks} tasks succeeded - {success_rate:.1f}%)"
+                            f"🎉 Workflow '{workflow_id}' {status_text}! "
+                            f"({completed_count}/{total_tasks} tasks succeeded, "
+                            f"{failed_count} failed, {skipped_count} skipped - {success_rate:.1f}%)"
                         )
                     }
                 ],
@@ -805,7 +831,7 @@ class WorkflowManager:
             table.add_column("⏱️ Duration", justify="right")
 
             # Count statuses
-            status_counts = {"pending": 0, "completed": 0, "error": 0, "running": 0}
+            status_counts = {"pending": 0, "completed": 0, "error": 0, "running": 0, "skipped": 0}
             total_tasks = len(workflow["tasks"])
 
             for task in workflow["tasks"]:
@@ -837,6 +863,8 @@ class WorkflowManager:
                     status_display = "[red]❌[/red]"
                 elif status == "running":
                     status_display = "[yellow]🔄[/yellow]"
+                elif status == "skipped":
+                    status_display = "[yellow]⏭️[/yellow]"
                 else:
                     status_display = "[blue]⏳[/blue]"
 
@@ -861,6 +889,7 @@ class WorkflowManager:
                     f"✅ **Completed:** {status_counts['completed']}",
                     f"⏳ **Pending:** {status_counts['pending']}",
                     f"❌ **Failed:** {status_counts['error']}",
+                    f"⏭️ **Skipped:** {status_counts['skipped']}",
                     f"🔄 **Active Workers:** {self.task_executor.active_workers}/{self.task_executor.max_workers}",
                 ]
             )
