@@ -770,3 +770,26 @@ class TestDiagramTool:
 
 if __name__ == "__main__":
     pytest.main(["-v", "test_diagram.py"])
+
+
+def test_diagram_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import diagram as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.diagram"):
+        _mod.diagram(diagram_type="graph", nodes=[], edges=[])
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "graphviz" in caplog.text
+
+
+def test_diagram_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import diagram as _mod
+
+    marker = getattr(_mod.diagram, "__deprecated__", None)
+    assert marker is not None
+    assert "graphviz" in marker

@@ -94,10 +94,18 @@ from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
 )
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "the bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while bash executes "
+    "arbitrary commands, so review it against your threat model before switching."
+)
 
 
 def create_result_table(
@@ -749,7 +757,18 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
         raise ValueError(f"Series expansion error: {str(e)}") from e
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "the bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while bash executes "
+    "arbitrary commands, so review it against your threat model before switching."
+)
 def calculator(
     expression: str,
     mode: str = None,
@@ -852,6 +871,8 @@ def calculator(
         - Precision control impacts display only, internal calculations use higher precision
         - Symbolic results are returned when possible unless force_numeric=True
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:

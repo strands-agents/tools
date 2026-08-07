@@ -538,3 +538,26 @@ class TestRSSTool:
             result = rss(action="fetch", url="https://example.com/feed")
             assert result["status"] == "error"
             assert "Test exception" in result["content"][0]["text"]
+
+
+def test_rss_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import rss as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.rss"):
+        _mod.rss(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "feedparser" in caplog.text
+
+
+def test_rss_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import rss as _mod
+
+    marker = getattr(_mod.rss, "__deprecated__", None)
+    assert marker is not None
+    assert "feedparser" in marker

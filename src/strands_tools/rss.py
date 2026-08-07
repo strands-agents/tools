@@ -11,9 +11,16 @@ import feedparser
 import html2text
 import requests
 from strands import tool
+from typing_extensions import deprecated
 
 # Configure logging and defaults
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "rss is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; fetch and parse "
+    "feeds directly with feedparser."
+)
+
 # Always use temporary directory for storage
 DEFAULT_STORAGE_PATH = os.path.join(tempfile.gettempdir(), "strands_rss_feeds")
 DEFAULT_MAX_ENTRIES = int(os.environ.get("STRANDS_RSS_MAX_ENTRIES", "100"))
@@ -197,7 +204,16 @@ class RSSManager:
 rss_manager = RSSManager()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "rss is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; fetch and parse "
+    "feeds directly with feedparser."
+)
 def rss(
     action: str,
     url: Optional[str] = None,
@@ -237,6 +253,8 @@ def rss(
         auth_password: Password for authenticated feeds
         headers: Dictionary of HTTP headers to send with requests (e.g., {"User-Agent": "MyRSSReader/1.0"})
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         if action == "fetch":
             if not url:

@@ -76,9 +76,10 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "shell is deprecated. This warning becomes an error log in v0.9.0. "
-    "Migration path: use the shell tool vended by strands-agents "
-    "(from strands.vended_tools import shell)."
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary, in the tightening direction: bash routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
 )
 
 
@@ -418,9 +419,16 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
 
 # @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
 # users actually see, since DeprecationWarning raised from inside the SDK's tool
-# invocation path is suppressed by Python's default warning filter.
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(_DEPRECATION_MESSAGE)
+@deprecated(
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "bash tool vended by strands-agents (from strands.vended_tools import bash). This does change the security "
+    "boundary, in the tightening direction: bash routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
+)
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],
     parallel: bool = False,

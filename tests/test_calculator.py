@@ -640,13 +640,17 @@ def test_error_handling(agent):
 @pytest.mark.parametrize(
     "payload,mock_target",
     [
-        ("__import__('os').getpid()", "os.getpid"),
+        ("__import__('os').getppid()", "os.getppid"),
         ("open('/dev/null')", "builtins.open"),
-        ("eval('__import__(\"os\").getpid()')", "os.getpid"),
+        ("eval('__import__(\"os\").getppid()')", "os.getppid"),
     ],
 )
 def test_code_execution_blocked(payload, mock_target):
     """Verify that malicious payloads cannot achieve code execution via the calculator tool."""
+    # The payloads target os.getppid rather than os.getpid: stdlib logging calls
+    # getpid() while building a record, so patching it would register hits that have
+    # nothing to do with the payload and would mask a real escape. getppid is never
+    # touched by logging, so assert_not_called stays exact.
     with mock.patch(mock_target) as mock_fn:
         result = calculator_func(expression=payload, mode="evaluate")
         assert result["status"] == "error"
@@ -785,3 +789,25 @@ def test_ast_validation_allows_legitimate_math(expression):
     """Verify that AST validation permits valid mathematical expressions."""
     result = parse_expression(expression)
     assert result is not None
+
+
+def test_calculator_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import calculator as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.calculator"):
+        _mod.calculator(expression="2+2")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
+
+
+def test_calculator_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import calculator as _mod
+
+    assert getattr(_mod.calculator, "__deprecated__", None) is not None
+    assert "strands.vended_tools import bash" in _mod.calculator.__deprecated__

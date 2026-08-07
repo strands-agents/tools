@@ -14,11 +14,18 @@ from typing import Any, Dict, List, Optional
 from rich.console import Console
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "think is deprecated. This warning becomes an error log in v0.9.0. Migration path: enable native "
+    "extended thinking through your model provider's reasoning config instead of a tool. See "
+    "https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/"
+)
 
 
 class ThoughtProcessor:
@@ -182,7 +189,17 @@ Please provide your analysis directly:
         return assistant_response.strip()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "think is deprecated. This warning becomes an error log in v0.9.0. Migration path: enable native "
+    "extended thinking through your model provider's reasoning config instead of a tool. See "
+    "https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/"
+)
 def think(
     thought: str,
     cycle_count: int,
@@ -336,6 +353,8 @@ def think(
         - Each cycle uses the same model - mixed model cycles not currently supported
         - Model information is logged for transparency and debugging
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:
