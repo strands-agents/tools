@@ -10,7 +10,9 @@ identity is never an LLM-controllable tool parameter.
 import builtins
 import json
 import os
+import subprocess
 import sys
+import textwrap
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -485,6 +487,46 @@ def test_missing_opensearch_host(mock_tool):
         result = mem0_memory.mem0_memory(tool=mock_tool)
         assert result["status"] == "error"
         assert "The faiss-cpu package is required" in str(result["content"][0]["text"])
+
+
+def test_module_import_does_not_require_opensearch():
+    """FAISS users can import mem0_memory without the OpenSearch dependency."""
+    script = textwrap.dedent(
+        """
+        import builtins
+
+        real_import = builtins.__import__
+
+        def block_opensearch(name, *args, **kwargs):
+            if name == "opensearchpy" or name.startswith("opensearchpy."):
+                raise ModuleNotFoundError("No module named 'opensearchpy'", name="opensearchpy")
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = block_opensearch
+        from strands_tools.mem0_memory import Mem0ServiceClient
+
+        assert Mem0ServiceClient is not None
+        """
+    )
+
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_opensearch_backend_reports_missing_optional_dependency():
+    """The OpenSearch path explains how to install its optional dependency."""
+    client = object.__new__(Mem0ServiceClient)
+    real_import = builtins.__import__
+
+    def block_opensearch(name, *args, **kwargs):
+        if name == "opensearchpy" or name.startswith("opensearchpy."):
+            raise ModuleNotFoundError("No module named 'opensearchpy'", name="opensearchpy")
+        return real_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=block_opensearch):
+        with pytest.raises(ImportError, match="opensearch-py.*mem0-memory"):
+            client._append_opensearch_config()
 
 
 @patch("boto3.Session")
