@@ -7,6 +7,7 @@ which the per-tool tests cannot see because they import the tool directly.
 
 import ast
 import importlib
+import os
 import pathlib
 import re
 import types
@@ -43,11 +44,22 @@ SRC = pathlib.Path(strands_tools.__file__).parent
 # ``from strands.vended_tools import bash`` inside a migration message.
 MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import (\w+)")
 
+# shell pulls in termios/pty, which do not exist on Windows. Same stance as
+# test_shell.py: skipped there until issue #17 is resolved.
+WINDOWS_UNSUPPORTED = {"shell"}
+
+
+def _import_tool_module(module_name):
+    """Import a tool module, skipping the names that cannot import on this platform."""
+    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
+        pytest.skip(f"{module_name} does not import on windows (issue #17)")
+    return importlib.import_module(f"strands_tools.{module_name}")
+
 
 @pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
 def test_tool_carries_deprecation_marker(module_name, attr):
     """Each deprecated tool exposes __deprecated__ naming the error-log release."""
-    tool = getattr(importlib.import_module(f"strands_tools.{module_name}"), attr)
+    tool = getattr(_import_tool_module(module_name), attr)
 
     marker = getattr(tool, "__deprecated__", None)
     assert marker is not None
@@ -61,7 +73,7 @@ def _reexports():
     ``TYPE_CHECKING`` matters: under any other condition the imports are dead to the
     runtime and to checkers alike.
     """
-    tree = ast.parse((SRC / "__init__.py").read_text())
+    tree = ast.parse((SRC / "__init__.py").read_text(encoding="utf-8"))
 
     return {
         (node.module, alias.name)
@@ -88,7 +100,7 @@ def test_deprecated_tool_is_reexported_for_type_checkers(module_name, attr):
 def _from_import(name):
     """Emulate ``from strands_tools import <name>``: attribute first, then submodule.
 
-    A plain getattr is order-dependent — it only succeeds if something else already
+    A plain getattr is order-dependent: it only succeeds if something else already
     imported the submodule under its canonical name, which xdist workers do not
     guarantee.
     """
@@ -106,12 +118,14 @@ def test_reexports_resolve_at_runtime():
     slack_send_message`` typecheck and then raise ImportError.
     """
     for _, attr in _reexports():
+        if os.name == "nt" and attr in WINDOWS_UNSUPPORTED:
+            continue
         _from_import(attr)
 
 
 def test_importing_the_package_does_not_import_tool_modules():
     """The re-export is typing-only, so it must not pull in tool modules or their extras."""
-    tree = ast.parse((SRC / "__init__.py").read_text())
+    tree = ast.parse((SRC / "__init__.py").read_text(encoding="utf-8"))
 
     module_level_imports = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     assert [alias.name for node in module_level_imports for alias in node.names] == ["TYPE_CHECKING"]
@@ -120,6 +134,8 @@ def test_importing_the_package_does_not_import_tool_modules():
 @pytest.mark.parametrize("module_name, attr", REEXPORTED_TOOLS)
 def test_reexport_leaves_runtime_binding_untouched(module_name, attr):
     """The documented import still yields the module, so existing callers keep working."""
+    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
+        pytest.skip(f"{module_name} does not import on windows (issue #17)")
     imported = _from_import(module_name)
 
     assert isinstance(imported, types.ModuleType)
@@ -133,7 +149,7 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     Passing the shared _DEPRECATION_MESSAGE constant instead silently disables the
     check, so pin the literal in place.
     """
-    tree = ast.parse((SRC / f"{module_name}.py").read_text())
+    tree = ast.parse((SRC / f"{module_name}.py").read_text(encoding="utf-8"))
 
     decorators = [
         decorator
@@ -154,7 +170,7 @@ def test_decorator_literal_matches_the_logged_message(module_name, attr):
     Inlining the literal means each message exists twice: once for type checkers and
     once for the logger.warning users see at runtime.
     """
-    module = importlib.import_module(f"strands_tools.{module_name}")
+    module = _import_tool_module(module_name)
 
     assert getattr(module, attr).__deprecated__ == module._DEPRECATION_MESSAGE
 
@@ -167,7 +183,7 @@ def test_migration_import_resolves(module_name, attr):
     symbol from a plausible one: the messages shipped ``from strands.vended_tools import
     shell`` for four tools, and no released SDK exports it.
     """
-    message = importlib.import_module(f"strands_tools.{module_name}")._DEPRECATION_MESSAGE
+    message = _import_tool_module(module_name)._DEPRECATION_MESSAGE
 
     for module_path, symbol in MIGRATION_IMPORT.findall(message):
         assert hasattr(importlib.import_module(module_path), symbol)
