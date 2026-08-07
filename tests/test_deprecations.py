@@ -85,6 +85,19 @@ def test_deprecated_tool_is_reexported_for_type_checkers(module_name, attr):
     assert (module_name, attr) in _reexports()
 
 
+def _from_import(name):
+    """Emulate ``from strands_tools import <name>``: attribute first, then submodule.
+
+    A plain getattr is order-dependent — it only succeeds if something else already
+    imported the submodule under its canonical name, which xdist workers do not
+    guarantee.
+    """
+    try:
+        return getattr(strands_tools, name)
+    except AttributeError:
+        return importlib.import_module(f"strands_tools.{name}")
+
+
 def test_reexports_resolve_at_runtime():
     """A re-export a checker accepts but the runtime rejects would be worse than none.
 
@@ -93,7 +106,7 @@ def test_reexports_resolve_at_runtime():
     slack_send_message`` typecheck and then raise ImportError.
     """
     for _, attr in _reexports():
-        getattr(strands_tools, attr)
+        _from_import(attr)
 
 
 def test_importing_the_package_does_not_import_tool_modules():
@@ -107,7 +120,7 @@ def test_importing_the_package_does_not_import_tool_modules():
 @pytest.mark.parametrize("module_name, attr", REEXPORTED_TOOLS)
 def test_reexport_leaves_runtime_binding_untouched(module_name, attr):
     """The documented import still yields the module, so existing callers keep working."""
-    imported = getattr(strands_tools, module_name)
+    imported = _from_import(module_name)
 
     assert isinstance(imported, types.ModuleType)
     assert hasattr(imported, attr)
