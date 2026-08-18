@@ -243,14 +243,125 @@ def test_environment_masked_values(agent, os_environment):
     # Test with masking enabled (default)
     result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
-    # The full value should not appear in the output
+    # The masked form should appear and the full value should not
+    assert sensitive_name in extract_result_text(result)
+    assert "abcd...5678" in extract_result_text(result)
     assert sensitive_value not in extract_result_text(result)
 
-    # Test with masking disabled
-    result = agent.tool.environment(action="get", name=sensitive_name, masked=False)
+    # Test with masking disabled by the operator
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = "false"
+    result = agent.tool.environment(action="get", name=sensitive_name)
     assert result["status"] == "success"
     # Now the full value should appear
     assert sensitive_value in extract_result_text(result)
+
+
+def test_masked_not_in_input_schema():
+    """Masking must not be configurable through the model-facing tool input schema."""
+    assert "masked" not in environment.TOOL_SPEC["inputSchema"]["json"]["properties"]
+
+
+def test_get_ignores_masked_tool_input(agent, os_environment):
+    """A masked value in tool input must not unmask a sensitive value."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+
+    result = agent.tool.environment(action="get", name=sensitive_name, masked=False)
+    assert result["status"] == "success"
+    assert "abcd...5678" in extract_result_text(result)
+    assert sensitive_value not in extract_result_text(result)
+
+
+def test_list_ignores_masked_tool_input(agent, os_environment):
+    """A masked value in tool input must not unmask sensitive values in a listing."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+
+    result = agent.tool.environment(action="list", masked=False)
+    assert result["status"] == "success"
+    assert "abcd...5678" in extract_result_text(result)
+    assert sensitive_value not in extract_result_text(result)
+
+
+def test_cannot_set_masking_variable(agent, os_environment):
+    """The masking variable is protected, so the tool cannot unmask by setting it."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["BYPASS_TOOL_CONSENT"] = "true"
+
+    result = agent.tool.environment(action="set", name="ENV_VARS_MASKED_DEFAULT", value="false")
+    assert result["status"] == "error"
+    assert "ENV_VARS_MASKED_DEFAULT" not in os_environment
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
+    assert result["status"] == "success"
+    assert sensitive_value not in extract_result_text(result)
+
+
+@pytest.mark.parametrize("value", ["1", "yes", "on", " true", "true ", "", " false", "0", "no", "off"])
+def test_masking_stays_on_for_non_false_values(agent, os_environment, value):
+    """Only an exact "false" disables masking, so a typo or stray space cannot unmask values."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = value
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
+    assert result["status"] == "success"
+    assert sensitive_value not in extract_result_text(result)
+
+
+@pytest.mark.parametrize("value", ["false", "False", "FALSE"])
+def test_masking_off_for_explicit_false(agent, os_environment, value):
+    """An explicit "false" in any case disables masking."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = value
+
+    result = agent.tool.environment(action="get", name=sensitive_name)
+    assert result["status"] == "success"
+    assert sensitive_value in extract_result_text(result)
+
+
+def test_list_honors_operator_unmasking(agent, os_environment):
+    """The list action honors ENV_VARS_MASKED_DEFAULT=false, not just get."""
+    sensitive_name = "TEST_TOKEN_SECRET"
+    sensitive_value = "abcd1234efgh5678"
+    os_environment[sensitive_name] = sensitive_value
+    os_environment["ENV_VARS_MASKED_DEFAULT"] = "false"
+
+    result = agent.tool.environment(action="list")
+    assert result["status"] == "success"
+    assert sensitive_value in extract_result_text(result)
+
+
+def test_protected_check_is_case_insensitive_on_windows(agent, os_environment, monkeypatch):
+    """Windows upper-cases names on write, so a lowercase name must not bypass protection."""
+    monkeypatch.setattr(os, "name", "nt")
+    os_environment["BYPASS_TOOL_CONSENT"] = "true"
+
+    result = agent.tool.environment(action="set", name="env_vars_masked_default", value="false")
+    assert result["status"] == "error"
+
+    result = agent.tool.environment(action="delete", name="path")
+    assert result["status"] == "error"
+
+
+def test_protected_vars_covers_operator_only_flags():
+    """Every env var that gates a safety control elsewhere must be unsettable here."""
+    operator_only_flags = {
+        "BYPASS_TOOL_CONSENT",
+        "STRANDS_NON_INTERACTIVE",
+        "STRANDS_DISABLE_LOAD_TOOL",
+        "ENV_VARS_MASKED_DEFAULT",
+        "STRANDS_HTTP_ALLOW_INSECURE_SSL",
+        "EDITOR_DISABLE_BACKUP",
+    }
+    assert operator_only_flags <= environment.PROTECTED_VARS
 
 
 def test_direct_set_protected_var_strands_disable_load_tool(agent, os_environment):
@@ -274,3 +385,26 @@ def test_direct_delete_protected_var_strands_disable_load_tool(agent, os_environ
     assert result["status"] == "error"
     # Verify STRANDS_DISABLE_LOAD_TOOL still exists
     assert os_environment["STRANDS_DISABLE_LOAD_TOOL"] == unchanging_value
+
+
+def test_environment_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import environment as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.environment"):
+        _mod.environment({"toolUseId": "t", "input": {"action": "list"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
+
+
+def test_environment_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import environment as _mod
+
+    marker = getattr(_mod.environment, "__deprecated__", None)
+    assert marker is not None
+    assert "strands.vended_tools import bash" in marker

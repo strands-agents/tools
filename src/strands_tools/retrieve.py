@@ -60,12 +60,23 @@ results = agent.tool.retrieve(
 See the retrieve function docstring for more details on available parameters and options.
 """
 
+import logging
 import os
 from typing import Any, Dict, List
 
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "retrieve is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+)
+
 
 TOOL_SPEC = {
     "name": "retrieve",
@@ -265,6 +276,16 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
     return "\n".join(formatted)
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "retrieve is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+)
 def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Retrieve relevant knowledge from Amazon Bedrock Knowledge Base.
@@ -317,6 +338,8 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Results are automatically filtered based on the minimum score threshold
         - AWS credentials must be configured properly for this tool to work
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     default_knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
     default_aws_region = os.getenv("AWS_REGION", "us-west-2")
     default_min_score = float(os.getenv("MIN_SCORE", "0.4"))

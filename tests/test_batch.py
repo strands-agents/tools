@@ -182,3 +182,26 @@ def test_batch_top_level_error(mock_agent):
     assert result["toolUseId"] == "mock_tool_id"
     assert result["status"] == "error"  # Expect 'error' status
     assert "Agent does not have a valid 'tool' attribute." in result["content"][0]["text"]
+
+
+def test_batch_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import batch as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.batch"):
+        _mod.batch({"toolUseId": "t", "input": {"invocations": []}}, agent=None)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "ConcurrentToolExecutor" in caplog.text
+
+
+def test_batch_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import batch as _mod
+
+    marker = getattr(_mod.batch, "__deprecated__", None)
+    assert marker is not None
+    assert "ConcurrentToolExecutor" in marker

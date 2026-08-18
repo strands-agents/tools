@@ -1,7 +1,8 @@
 """
-Batch Tool for Parallel Tool Invocation
+Batch Tool for Multi-Tool Invocation
 
-This tool enables invoking multiple other tools in parallel from a single LLM message response.
+This tool enables invoking multiple other tools from a single LLM message response. Note the
+invocations run sequentially, despite the historical name.
 It is designed for use with agents that support tool registration and invocation by name.
 
 Example usage:
@@ -30,15 +31,26 @@ Example usage:
     )
 """
 
+import logging
 import traceback
 
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
+    "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
+)
+
+
 TOOL_SPEC = {
     "name": "batch",
-    "description": "Invoke multiple other tool calls simultaneously",
+    "description": "Invoke multiple other tool calls in sequence from one request",
     "inputSchema": {
         "json": {
             "type": "object",
@@ -62,9 +74,19 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
+    "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
+)
 def batch(tool: ToolUse, **kwargs) -> ToolResult:
     """
-    Batch tool for invoking multiple tools in parallel.
+    Batch tool for invoking multiple tools from one request, in sequence.
 
     Args:
         tool: Tool use object.
@@ -89,6 +111,8 @@ def batch(tool: ToolUse, **kwargs) -> ToolResult:
             ]
         }
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
     tool_use_id = tool["toolUseId"]
 

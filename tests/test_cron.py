@@ -429,3 +429,32 @@ def test_consent_granted_allows_write(mock_subprocess, monkeypatch):
     result_text = extract_result_text(result)
     assert "Successfully added new cron job" in result_text
     mock_subprocess.Popen.assert_called_once()
+
+
+def test_cron_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+    from unittest import mock as _mock
+
+    from strands_tools import cron as _mod
+
+    # Patched so the assertion covers only the log line: the tool's real work
+    # would otherwise reach the network or the developer's own machine.
+    with (
+        _mock.patch("strands_tools.cron.subprocess.run"),
+        caplog.at_level(_logging.WARNING, logger="strands_tools.cron"),
+    ):
+        _mod.cron(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
+
+
+def test_cron_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import cron as _mod
+
+    marker = getattr(_mod.cron, "__deprecated__", None)
+    assert marker is not None
+    assert "strands.vended_tools import bash" in marker
