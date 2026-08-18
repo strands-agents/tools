@@ -94,11 +94,21 @@ import boto3
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.cursor import Cursor
+from pymongo.driver_info import DriverInfo
 from pymongo.errors import ConnectionFailure
 from strands import tool
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+try:
+    from importlib.metadata import version as _get_version
+
+    _VERSION = _get_version("strands-agents-tools")
+except Exception:
+    _VERSION = None
+
+_DRIVER_INFO = DriverInfo(name="Strands", version=_VERSION)
 
 
 # Custom exceptions for better error handling
@@ -838,7 +848,7 @@ class MongoDBMemoryTool:
 
             # Initialize MongoDB client with secure error handling
             try:
-                client = MongoClient(self._cluster_uri, serverSelectionTimeoutMS=5000)
+                client = MongoClient(self._cluster_uri, serverSelectionTimeoutMS=5000, driver=_DRIVER_INFO)
                 # Test connection
                 client.admin.command("ping")
 
@@ -1068,7 +1078,7 @@ def mongodb_memory(
 
         # Initialize MongoDB client with secure error handling
         try:
-            client = MongoClient(cluster_uri, serverSelectionTimeoutMS=5000)
+            client = MongoClient(cluster_uri, serverSelectionTimeoutMS=5000, driver=_DRIVER_INFO)
             # Test connection
             client.admin.command("ping")
 

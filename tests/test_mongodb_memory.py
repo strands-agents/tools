@@ -833,3 +833,35 @@ def test_class_namespace_falls_back_to_env(mock_mongodb_client, mock_bedrock_cli
 
     call_args = mock_mongodb_client["collection"].find_one.call_args[0]
     assert call_args[0] == {"memory_id": "mem_123", "namespace": "env_tenant"}
+
+
+def test_driver_info_constant_name():
+    """_DRIVER_INFO has the expected name."""
+    from src.strands_tools.mongodb_memory import _DRIVER_INFO
+
+    assert _DRIVER_INFO.name == "Strands"
+
+
+def test_standalone_monogclient_passes_driver_info(mock_mongodb_client):
+    """The standalone mongodb_memory function passes driver=_DRIVER_INFO to MongoClient."""
+    from src.strands_tools.mongodb_memory import _DRIVER_INFO
+
+    mongodb_memory(action="list")
+
+    _, kwargs = mock_mongodb_client["mongo_class"].call_args
+    assert kwargs.get("driver") is _DRIVER_INFO
+
+
+def test_class_tool_monogclient_passes_driver_info(mock_mongodb_client, mock_bedrock_client):
+    """MongoDBMemoryTool.mongodb_memory passes driver=_DRIVER_INFO to MongoClient."""
+    from src.strands_tools.mongodb_memory import _DRIVER_INFO
+
+    mock_mongodb_client["collection"].find.return_value.sort.return_value.skip.return_value.limit.return_value = []
+    mock_mongodb_client["collection"].count_documents.return_value = 0
+
+    tool = MongoDBMemoryTool(cluster_uri="mongodb+srv://test:test@cluster.mongodb.net/")
+    agent = Agent(tools=[tool.mongodb_memory])
+    agent.tool.mongodb_memory(action="list")
+
+    _, kwargs = mock_mongodb_client["mongo_class"].call_args
+    assert kwargs.get("driver") is _DRIVER_INFO
