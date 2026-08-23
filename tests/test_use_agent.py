@@ -408,6 +408,7 @@ def test_use_agent_with_all_model_providers(mock_parent_agent, mock_agent_result
         "ollama",
         "openai",
         "github",
+        "orcarouter",
     ]
 
     for provider in providers:

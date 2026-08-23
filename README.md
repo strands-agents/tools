@@ -853,6 +853,18 @@ result = agent.tool.use_agent(
         "params": {"temperature": 1, "max_tokens": 4000}
     }
 )
+
+# Use OrcaRouter as a named provider (OpenAI-compatible gateway)
+os.environ["ORCAROUTER_API_KEY"] = "sk-orca-..."
+result = agent.tool.use_agent(
+    prompt="Analyze this code",
+    system_prompt="You are a code review assistant.",
+    model_provider="orcarouter",
+    model_settings={
+        "model_id": "orcarouter/auto",
+        "params": {"temperature": 1, "max_tokens": 4000}
+    }
+)
 ```
 
 ### A2A Client
@@ -1401,6 +1413,8 @@ The Mem0 Memory Tool supports three different backend configurations:
 | STRANDS_MODEL_ID | Default model identifier for environment-based model selection | None |
 | STRANDS_MAX_TOKENS | Maximum tokens for the nested agent model | None |
 | STRANDS_TEMPERATURE | Sampling temperature for the nested agent model | None |
+| ORCAROUTER_API_KEY | API key for the OrcaRouter provider | None |
+| ORCAROUTER_BASE_URL | Base URL for the OrcaRouter provider | https://api.orcarouter.ai/v1 |
 
 
 #### Elasticsearch Memory Tool
