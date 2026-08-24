@@ -114,7 +114,7 @@ def use_agent(
             Examples: ["calculator", "file_read", "retrieve"]
             If not provided, inherits all tools from the parent agent.
         model_provider: Model provider to use for the nested agent.
-            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github"
+            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github", "orcarouter"
             Special values:
             - None: Use parent agent's model (default, preserves original behavior)
             - "env": Use environment variables to determine provider

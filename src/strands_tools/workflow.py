@@ -978,7 +978,7 @@ def workflow(
             • system_prompt (str): Custom system prompt for this task [OPTIONAL]
             • tools (List[str]): Tool names available to this task [OPTIONAL]
             • model_provider (str): Model provider for this task [OPTIONAL]
-              Options: "bedrock", "anthropic", "ollama", "openai", "github", "env"
+              Options: "bedrock", "anthropic", "ollama", "openai", "github", "orcarouter", "env"
             • model_settings (Dict): Model configuration [OPTIONAL]
               Example: {"model_id": "claude-sonnet-4", "params": {"temperature": 0.7}}
             • dependencies (List[str]): Task IDs this task depends on [OPTIONAL]

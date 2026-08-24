@@ -264,7 +264,7 @@ def think(
             exist in the parent agent's tool registry. Examples: ["calculator", "file_read", "retrieve"]
             If not provided, inherits all tools from the parent agent.
         model_provider: Model provider to use for the thinking cycles.
-            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github"
+            Options: "bedrock", "anthropic", "litellm", "llamaapi", "ollama", "openai", "github", "orcarouter"
             Special values:
             - None: Use parent agent's model (default, preserves original behavior)
             - "env": Use environment variables to determine provider

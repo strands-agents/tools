@@ -173,6 +173,11 @@ def create_model(provider: str = None, config: dict[str, Any] = None) -> Model:
 
         return OpenAIModel(**config)
 
+    elif provider == "orcarouter":
+        from strands.models.openai import OpenAIModel
+
+        return OpenAIModel(**config)
+
     else:
         # Try to load custom model provider
         try:
@@ -284,6 +289,16 @@ def get_provider_config(provider: str) -> dict[str, Any]:
             "params": {"max_tokens": int(os.getenv("STRANDS_MAX_TOKENS", "4000"))},
         }
 
+    elif provider == "orcarouter":
+        return {
+            "client_args": {
+                "api_key": os.getenv("ORCAROUTER_API_KEY"),
+                "base_url": os.getenv("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1"),
+            },
+            "model_id": os.getenv("STRANDS_MODEL_ID", "orcarouter/auto"),
+            "params": {"max_tokens": int(os.getenv("STRANDS_MAX_TOKENS", "4000"))},
+        }
+
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -304,6 +319,7 @@ def get_available_providers() -> list[str]:
         "writer",
         "cohere",
         "github",
+        "orcarouter",
     ]
 
 
@@ -387,6 +403,17 @@ def get_provider_info(provider: str) -> dict[str, Any]:
             "env_vars": [
                 "GITHUB_TOKEN",
                 "PAT_TOKEN",
+                "STRANDS_MODEL_ID",
+                "STRANDS_MAX_TOKENS",
+            ],
+        },
+        "orcarouter": {
+            "name": "OrcaRouter",
+            "description": "Unified OpenAI-compatible gateway with zero-trust security for AI agents",
+            "default_model": "orcarouter/auto",
+            "env_vars": [
+                "ORCAROUTER_API_KEY",
+                "ORCAROUTER_BASE_URL",
                 "STRANDS_MODEL_ID",
                 "STRANDS_MAX_TOKENS",
             ],
