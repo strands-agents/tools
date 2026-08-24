@@ -99,7 +99,6 @@ from typing import Any, Dict, List, Optional
 import boto3
 from mem0 import Memory as Mem0Memory
 from mem0 import MemoryClient
-from opensearchpy import AWSV4SignerAuth, RequestsHttpConnection
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -332,6 +331,16 @@ class Mem0ServiceClient:
         Returns:
             An initialized Mem0Memory instance configured for OpenSearch.
         """
+        try:
+            from opensearchpy import AWSV4SignerAuth, RequestsHttpConnection
+        except ModuleNotFoundError as error:
+            if error.name != "opensearchpy":
+                raise
+            raise ImportError(
+                "The opensearch-py package is required for the OpenSearch backend. "
+                "Install it with: pip install 'strands-agents-tools[mem0-memory]'"
+            ) from error
+
         # Add vector portion of the config
         config = config or {}
         config["vector_store"] = {
