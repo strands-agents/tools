@@ -111,6 +111,11 @@ MUTATIVE_OPERATIONS = [
     "cancel",
     "reboot",
     "accept",
+    "send",
+    "invoke",
+    "run",
+    "execute",
+    "publish",
 ]
 
 # Operations that return credentials or secrets and require user consent
