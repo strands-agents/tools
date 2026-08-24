@@ -275,6 +275,49 @@ def test_use_aws_mutative_operation_confirm(
         assert result["status"] == "success"
 
 
+@pytest.mark.parametrize(
+    "service_name, operation_name",
+    [
+        ("ses", "send_email"),
+        ("sqs", "send_message"),
+        ("lambda", "invoke"),
+        ("ec2", "run_instances"),
+        ("rds-data", "execute_statement"),
+        ("sns", "publish"),
+    ],
+)
+@patch("strands_tools.use_aws.get_available_operations")
+@patch("strands_tools.use_aws.get_user_input")
+def test_use_aws_side_effecting_action_requires_consent(
+    mock_user_input,
+    mock_get_available_operations,
+    mock_boto3_client,
+    mock_available_services,
+    service_name,
+    operation_name,
+):
+    """Side-effecting action classes (send/invoke/run/execute/publish) require confirmation."""
+    mock_user_input.return_value = "y"
+    mock_get_available_operations.return_value = [operation_name]
+
+    with patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}):
+        tool_use = {
+            "toolUseId": "test-tool-use-id",
+            "input": {
+                "service_name": service_name,
+                "operation_name": operation_name,
+                "parameters": {},
+                "region": "us-west-2",
+                "label": "Side-effecting Operation Test",
+            },
+        }
+
+        use_aws.use_aws(tool=tool_use)
+
+        # Verify the consent gate prompted the user before executing.
+        mock_user_input.assert_called_once()
+
+
 @patch("strands_tools.use_aws.get_user_input")
 def test_use_aws_mutative_operation_cancel(
     mock_user_input,
