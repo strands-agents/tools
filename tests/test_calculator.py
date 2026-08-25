@@ -11,6 +11,7 @@ from sympy import Integer, Symbol, exp, log
 
 # Function level imports from calculator module
 from src.strands_tools.calculator import (
+    _validate_expression_ast,
     apply_symbolic_simplifications,
     calculate_derivative,
     calculate_integral,
@@ -765,6 +766,50 @@ def test_ast_validation_rejects_non_positional_and_bytes_literals(payload):
     """Keyword-position strings and bytes literals stay rejected by the allowlist."""
     with pytest.raises(ValueError, match="Invalid mathematical expression"):
         parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # cls=N reroutes symbols() to apply N() -> sympify() to the string, which is
+        # the reported sandbox-bypass RCE vector. The string positional arg must not
+        # be trusted when such a rerouting keyword is present.
+        "symbols(\"__import__('os').system('id')\",cls=N)",
+        "symbols('sqrt(16)', cls=N)",
+        "symbols('x', cls=simplify)",
+        "Symbol('x', cls=N)",
+        # ** unpacking could smuggle a cls= keyword in, so it is untrusted too.
+        "symbols('x', **{'cls': N})",
+    ],
+)
+def test_ast_validation_rejects_cls_reroute(payload):
+    """A rerouting keyword (cls=) on a string constructor rejects its string args."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_cls_reroute_does_not_execute():
+    """The symbols('...', cls=N) bypass must be blocked before any code runs."""
+    payload = "symbols(\"__import__('os').getpid()\",cls=N)"
+    with mock.patch("os.getpid") as mock_getpid:
+        with pytest.raises(ValueError, match="Invalid mathematical expression"):
+            parse_expression(payload)
+        mock_getpid.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        # Boolean assumption keywords never reroute parsing, so the string positional
+        # arg stays trusted by the AST validator (it is not rejected as a string literal).
+        "Symbol('x', positive=True)",
+        "Symbol('x', real=True)",
+        "symbols('x y', positive=True)",
+    ],
+)
+def test_string_constructor_assumption_keywords_pass_validation(expression):
+    """Assumption keywords keep the string positional arg trusted during validation."""
+    _validate_expression_ast(expression)
 
 
 @pytest.mark.parametrize(
