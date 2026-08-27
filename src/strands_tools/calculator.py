@@ -20,6 +20,11 @@ Security:
     name or numeric literal rather than through sympify (Symbol, symbols, Rational,
     Integer, Float); for example Symbol('x') and Rational('1/3') remain supported.
 
+    A string positional argument to those constructors is trusted only when the call
+    carries nothing but boolean assumption keywords (for example Symbol('x', positive=True)).
+    A keyword that reroutes parsing, most importantly symbols('...', cls=N), is rejected,
+    because cls=N makes symbols apply N (and therefore sympify) to the string.
+
 Key Features:
 1. Expression Evaluation:
    • Basic arithmetic operations (addition, multiplication, etc.)
@@ -292,6 +297,27 @@ _ALLOWED_AST_NODES = {
 _STRING_ARG_CONSTRUCTORS = frozenset({"Symbol", "symbols", "Rational", "Integer", "Float"})
 
 
+def _has_only_assumption_keywords(call: ast.Call) -> bool:
+    """Return True if every keyword on `call` is a boolean assumption flag.
+
+    The safe string constructors accept assumption keywords such as
+    `Symbol('x', positive=True)`, whose values are always boolean literals and never
+    change how the string argument is parsed. A keyword whose value is not a boolean
+    literal makes the call untrusted for the purpose of allowing string-literal
+    arguments. The important case is `symbols('...', cls=N)`: the `cls` keyword
+    reroutes `symbols` to apply an arbitrary constructor (for example `N`) to the
+    string, which re-parses it through sympify and escapes the restricted namespace.
+    `**kwargs` unpacking (`kw.arg is None`) can smuggle such a keyword in, so it is
+    treated as untrusted too.
+    """
+    for kw in call.keywords:
+        if kw.arg is None:
+            return False
+        if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, bool)):
+            return False
+    return True
+
+
 def _validate_expression_ast(expr_str: str) -> None:
     """Reject expressions containing attribute access, subscripts, or other unsafe syntax.
 
@@ -318,6 +344,12 @@ def _validate_expression_ast(expr_str: str) -> None:
     allowed_string_nodes: set[int] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _STRING_ARG_CONSTRUCTORS:
+            # A rerouting keyword such as cls=N turns symbols('...') into N('...'),
+            # which re-parses the string through sympify and escapes the sandbox. Only
+            # trust the positional string args when the call carries nothing but boolean
+            # assumption keywords (positive=True, real=True, ...).
+            if not _has_only_assumption_keywords(node):
+                continue
             for arg in node.args:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     allowed_string_nodes.add(id(arg))
