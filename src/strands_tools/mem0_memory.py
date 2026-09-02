@@ -886,9 +886,10 @@ def _execute_mem0_memory(
                 if not tool_input.get("memory_id"):
                     raise ValueError("memory_id is required for delete action")
 
-                # Try to get memory info first for better context
+                # Verify ownership before showing any preview details
                 try:
                     memory = client.get_memory(tool_input["memory_id"])
+                    _verify_memory_ownership(memory, user_id, agent_id)
                     metadata = memory.get("metadata", {})
 
                     console.print(
@@ -901,8 +902,9 @@ def _execute_mem0_memory(
                             border_style="red",
                         )
                     )
+                except ValueError:
+                    raise
                 except Exception:
-                    # Fall back to basic info if we can't get memory details
                     console.print(
                         Panel(
                             f"Memory ID: {tool_input['memory_id']}",
@@ -916,11 +918,19 @@ def _execute_mem0_memory(
             if not tool_input.get("content"):
                 raise ValueError("content is required for store action")
 
+            metadata = tool_input.get("metadata")
+            if metadata and isinstance(metadata, dict):
+                metadata = {
+                    k: v
+                    for k, v in metadata.items()
+                    if k not in ("user_id", "agent_id", "run_id", "app_id", "org_id")
+                }
+
             results = client.store_memory(
                 tool_input["content"],
                 user_id,
                 agent_id,
-                tool_input.get("metadata"),
+                metadata,
             )
 
             # Normalize to list
@@ -1008,14 +1018,8 @@ def _execute_mem0_memory(
             if not tool_input.get("memory_id"):
                 raise ValueError("memory_id is required for delete action")
 
-            # Verify ownership before deleting
-            try:
-                memory = client.get_memory(tool_input["memory_id"])
-                _verify_memory_ownership(memory, user_id, agent_id)
-            except ValueError:
-                raise  # Re-raise ownership errors
-            except Exception:
-                pass  # If we can't fetch for verification, allow the delete (backend may enforce)
+            memory = client.get_memory(tool_input["memory_id"])
+            _verify_memory_ownership(memory, user_id, agent_id)
 
             client.delete_memory(tool_input["memory_id"])
             panel = format_delete_response(tool_input["memory_id"])
@@ -1030,14 +1034,8 @@ def _execute_mem0_memory(
             if not tool_input.get("memory_id"):
                 raise ValueError("memory_id is required for history action")
 
-            # Verify ownership before returning history
-            try:
-                memory = client.get_memory(tool_input["memory_id"])
-                _verify_memory_ownership(memory, user_id, agent_id)
-            except ValueError:
-                raise  # Re-raise ownership errors
-            except Exception:
-                pass  # If we can't fetch for verification, allow (backend may enforce)
+            memory = client.get_memory(tool_input["memory_id"])
+            _verify_memory_ownership(memory, user_id, agent_id)
 
             history = client.get_memory_history(tool_input["memory_id"])
             panel = format_history_response(history)
@@ -1062,9 +1060,7 @@ def _execute_mem0_memory(
 def _verify_memory_ownership(memory: Dict, user_id: Optional[str], agent_id: Optional[str]) -> None:
     """Verify that a retrieved memory belongs to the bound principal.
 
-    This is a defense-in-depth check for ``get``, ``delete``, and ``history``
-    operations which take a raw ``memory_id``. If the backend returns ownership
-    metadata, we validate it matches the bound principal.
+    Fail-closed: if ownership cannot be positively confirmed, access is denied.
 
     Args:
         memory: The memory record returned by the backend.
@@ -1072,20 +1068,30 @@ def _verify_memory_ownership(memory: Dict, user_id: Optional[str], agent_id: Opt
         agent_id: The bound agent_id (or None).
 
     Raises:
-        ValueError: If the memory belongs to a different principal.
+        ValueError: If ownership cannot be confirmed or the memory belongs to a different principal.
     """
     if not memory or not isinstance(memory, dict):
-        return
+        raise ValueError("Access denied")
+
+    if not user_id and not agent_id:
+        raise ValueError("Access denied")
 
     mem_user = memory.get("user_id")
     mem_agent = memory.get("agent_id")
 
-    # If backend doesn't return ownership info, we can't verify (rely on backend ACLs)
     if not mem_user and not mem_agent:
-        return
+        raise ValueError("Access denied")
 
-    # Check ownership
     if user_id and mem_user and mem_user != user_id:
-        raise ValueError("Access denied: memory belongs to a different user")
+        raise ValueError("Access denied")
     if agent_id and mem_agent and mem_agent != agent_id:
-        raise ValueError("Access denied: memory belongs to a different agent")
+        raise ValueError("Access denied")
+
+    # Fail-closed: at least one of the bound principal's IDs must positively match
+    matched = False
+    if user_id and mem_user and mem_user == user_id:
+        matched = True
+    if agent_id and mem_agent and mem_agent == agent_id:
+        matched = True
+    if not matched:
+        raise ValueError("Access denied")

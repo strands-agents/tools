@@ -411,6 +411,282 @@ def test_delete_denies_cross_tenant(mock_opensearch, mock_mem0_client, mock_mem0
     mock_mem0_service_client.delete_memory.assert_not_called()
 
 
+@patch.dict(
+    os.environ,
+    {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"},
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_delete_confirmation_preview_denies_cross_tenant(
+    mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool
+):
+    """Delete confirmation preview must not leak cross-tenant metadata.
+
+    When BYPASS_TOOL_CONSENT is not set, the delete path fetches the memory
+    for a preview dialog. This preview must enforce ownership before displaying
+    any metadata.
+    """
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {
+        "id": "mem123",
+        "user_id": "other_user",
+        "metadata": {"secret_tag": "confidential"},
+    }
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "delete", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+    mock_mem0_service_client.delete_memory.assert_not_called()
+
+
+@patch.dict(
+    os.environ,
+    {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"},
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_history_denies_cross_tenant(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """Test history denies access to a memory owned by a different tenant."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "user_id": "other_user"}
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "history", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+    mock_mem0_service_client.get_memory_history.assert_not_called()
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_get_denies_when_no_ownership_metadata(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """get must deny access when backend returns a memory with no user_id/agent_id."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "memory": "content"}
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "get", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+
+
+@patch.dict(
+    os.environ,
+    {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"},
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_delete_denies_when_no_ownership_metadata(
+    mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool
+):
+    """delete must deny when ownership cannot be verified due to missing metadata."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "memory": "content"}
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "delete", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+    mock_mem0_service_client.delete_memory.assert_not_called()
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_history_denies_when_no_ownership_metadata(
+    mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool
+):
+    """history must deny when ownership cannot be verified due to missing metadata."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "memory": "content"}
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "history", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+    mock_mem0_service_client.get_memory_history.assert_not_called()
+
+
+@patch.dict(
+    os.environ,
+    {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"},
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_delete_denies_when_prefetch_raises(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """delete must NOT proceed if the ownership pre-check get_memory() raises."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.side_effect = ConnectionError("network timeout")
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "delete", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    mock_mem0_service_client.delete_memory.assert_not_called()
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_history_denies_when_prefetch_raises(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """history must NOT proceed if the ownership pre-check get_memory() raises."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.side_effect = RuntimeError("backend unavailable")
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "history", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    mock_mem0_service_client.get_memory_history.assert_not_called()
+
+
+@patch.dict(
+    os.environ,
+    {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com", "BYPASS_TOOL_CONSENT": "true"},
+)
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_store_strips_identity_keys_from_metadata(
+    mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool
+):
+    """store must strip identity keys from LLM-supplied metadata."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+    mock_mem0_service_client.store_memory.return_value = [
+        {"event": "store", "id": "mem1", "memory": "some content"}
+    ]
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {
+            "action": "store",
+            "content": "some content",
+            "metadata": {
+                "user_id": "injected_victim",
+                "agent_id": "injected_agent",
+                "org_id": "injected_org",
+                "safe_key": "safe_value",
+            },
+        },
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "success"
+    call_args = mock_mem0_service_client.store_memory.call_args
+    passed_metadata = call_args[0][3] if len(call_args[0]) > 3 else call_args[1].get("metadata")
+    assert "user_id" not in passed_metadata
+    assert "agent_id" not in passed_metadata
+    assert "org_id" not in passed_metadata
+    assert passed_metadata["safe_key"] == "safe_value"
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_get_denies_when_memory_is_none(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """get must deny when backend returns None for the memory."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = None
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "get", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_get_denies_when_memory_is_empty_dict(mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool):
+    """get must deny when backend returns empty dict."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {}
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "get", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "error"
+    assert "Access denied" in result["content"][0]["text"]
+
+
+@patch.dict(os.environ, {"MEM0_USER_ID": "bound_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
+@patch("strands_tools.mem0_memory.Mem0ServiceClient")
+@patch("opensearchpy.OpenSearch")
+def test_history_succeeds_when_ownership_matches(
+    mock_opensearch, mock_mem0_client, mock_mem0_service_client, mock_tool
+):
+    """Sanity check: history works when memory's user_id matches bound user."""
+    mock_mem0_client.return_value = mock_mem0_service_client
+
+    mock_mem0_service_client.get_memory.return_value = {"id": "mem123", "user_id": "bound_user"}
+    mock_mem0_service_client.get_memory_history.return_value = [
+        {"id": "hist1", "memory_id": "mem123", "event": "store", "new_memory": "content"}
+    ]
+
+    mock_tool.get.side_effect = lambda key, default=None: {
+        "toolUseId": "test-id",
+        "input": {"action": "history", "memory_id": "mem123"},
+    }.get(key, default)
+
+    result = mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert result["status"] == "success"
+    mock_mem0_service_client.get_memory_history.assert_called_once_with("mem123")
+
+
 @patch.dict(os.environ, {"MEM0_USER_ID": "test_user", "OPENSEARCH_HOST": "test.opensearch.amazonaws.com"})
 @patch("strands_tools.mem0_memory.Mem0ServiceClient")
 @patch("opensearchpy.OpenSearch")
