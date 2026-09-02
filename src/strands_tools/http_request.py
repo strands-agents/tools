@@ -55,6 +55,28 @@ from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
 
+_SAFE_REDIRECT_HEADERS: frozenset = frozenset({
+    "accept",
+    "accept-encoding",
+    "connection",
+    "content-length",
+    "content-type",
+    "host",
+    "transfer-encoding",
+    "user-agent",
+})
+
+
+class _SafeRedirectSession(requests.Session):
+    """Session that strips non-standard headers on cross-origin redirects."""
+
+    def rebuild_auth(self, prepared_request, response):
+        super().rebuild_auth(prepared_request, response)
+        if self.should_strip_auth(response.request.url, prepared_request.url):
+            safe = {k: v for k, v in prepared_request.headers.items() if k.lower() in _SAFE_REDIRECT_HEADERS}
+            prepared_request.headers.clear()
+            prepared_request.headers.update(safe)
+
 TOOL_SPEC = {
     "name": "http_request",
     "description": (
@@ -236,7 +258,7 @@ def extract_content_from_html(html: str) -> str:
 
 def create_session(config: Dict[str, Any]) -> requests.Session:
     """Create and configure a requests Session object."""
-    session = requests.Session()
+    session = _SafeRedirectSession()
 
     if config.get("keep_alive", True):
         adapter = HTTPAdapter(
