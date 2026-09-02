@@ -1398,3 +1398,452 @@ def test_custom_timeout_value_passed_to_request():
 
             call_kwargs = mock_session.request.call_args[1]
             assert call_kwargs["timeout"] == 120
+
+
+# ---------------------------------------------------------------------------
+# Cross-host redirect credential stripping (_SafeRedirectSession.rebuild_auth)
+# ---------------------------------------------------------------------------
+
+
+@responses.activate
+def test_cross_host_redirect_strips_custom_headers():
+    """Non-standard headers (X-API-Key, Authorization, etc.) must be stripped on cross-host redirect."""
+    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://attacker.com/steal"})
+    responses.add(responses.GET, "https://attacker.com/steal", json={"status": "ok"}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-xhost-strip",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key-123",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert len(responses.calls) == 2
+    redirected_headers = responses.calls[1].request.headers
+    assert "X-API-Key" not in redirected_headers
+    assert "x-api-key" not in redirected_headers
+
+
+@responses.activate
+def test_cross_host_redirect_strips_authorization():
+    """Authorization header must be stripped on cross-host redirect."""
+    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://other.com/ep"})
+    responses.add(responses.GET, "https://other.com/ep", json={"status": "ok"}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-xhost-authz",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/start",
+            "auth_type": "Bearer",
+            "auth_token": "my-bearer-token",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected_headers = responses.calls[1].request.headers
+    assert "Authorization" not in redirected_headers
+    assert "authorization" not in redirected_headers
+
+
+@responses.activate
+def test_same_host_redirect_preserves_all_headers():
+    """Same-host redirect keeps all headers including credentials."""
+    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://api.example.com/final"})
+    responses.add(responses.GET, "https://api.example.com/final", json={"status": "ok"}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-same-host",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key-123",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected_headers = responses.calls[1].request.headers
+    assert redirected_headers.get("X-API-Key") == "secret-key-123"
+
+
+@responses.activate
+def test_multi_hop_strips_on_cross_host_hop():
+    """Multi-hop: same-host preserves headers, cross-host strips them."""
+    responses.add(responses.GET, "https://a.com/start", status=302, headers={"Location": "https://a.com/mid"})
+    responses.add(responses.GET, "https://a.com/mid", status=302, headers={"Location": "https://b.com/final"})
+    responses.add(responses.GET, "https://b.com/final", json={"status": "ok"}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-chain",
+        "input": {
+            "method": "GET",
+            "url": "https://a.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert responses.calls[1].request.headers.get("X-API-Key") == "secret-key"
+    assert "X-API-Key" not in responses.calls[2].request.headers
+
+
+@responses.activate
+def test_no_redirect_follow_when_disabled():
+    """allow_redirects=False returns the 302 directly without following."""
+    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+
+    tool_use = {
+        "toolUseId": "test-no-redirect",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key",
+            "allow_redirects": False,
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert len(responses.calls) == 1
+    result_text = extract_result_text(result)
+    assert "Status Code: 302" in result_text
+
+
+# ---------------------------------------------------------------------------
+# CVE-2026-18394 attack vector reproduction tests
+# ---------------------------------------------------------------------------
+
+
+@responses.activate
+def test_cve_open_redirect_x_api_key_leak():
+    """Reproduce the exact CVE vector: allowlisted host open-redirects to attacker, X-API-Key must not leak."""
+    responses.add(
+        responses.GET,
+        "https://api.github.com/repos/strands/tools/redirect",
+        status=302,
+        headers={"Location": "https://attacker.com/exfiltrate"},
+    )
+    responses.add(responses.GET, "https://attacker.com/exfiltrate", json={"stolen": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-cve-repro",
+        "input": {
+            "method": "GET",
+            "url": "https://api.github.com/repos/strands/tools/redirect",
+            "auth_type": "api_key",
+            "auth_token": "sk-live-XXXXXXXXXXXXXXXX",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    attacker_request = responses.calls[1].request
+    for header_name in attacker_request.headers:
+        assert header_name.lower() not in ("x-api-key", "authorization"), (
+            f"CREDENTIAL LEAK: {header_name} header sent to attacker.com"
+        )
+
+
+@responses.activate
+def test_cve_307_preserves_method_and_strips_headers():
+    """307 preserves method but must still strip credential headers on cross-host."""
+    responses.add(
+        responses.POST,
+        "https://api.example.com/action",
+        status=307,
+        headers={"Location": "https://evil.com/capture"},
+    )
+    responses.add(responses.POST, "https://evil.com/capture", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-307-strip",
+        "input": {
+            "method": "POST",
+            "url": "https://api.example.com/action",
+            "body": '{"data": "test"}',
+            "auth_type": "api_key",
+            "auth_token": "secret",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    attacker_request = responses.calls[1].request
+    assert "X-API-Key" not in attacker_request.headers
+    assert "x-api-key" not in attacker_request.headers
+
+
+@responses.activate
+def test_cve_chain_good_good_evil_strips_on_evil_hop():
+    """good.com -> good.com -> evil.com: credentials kept for same-host, stripped for cross-host."""
+    responses.add(responses.GET, "https://good.com/1", status=302, headers={"Location": "https://good.com/2"})
+    responses.add(responses.GET, "https://good.com/2", status=302, headers={"Location": "https://evil.com/3"})
+    responses.add(responses.GET, "https://evil.com/3", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-chain-evil",
+        "input": {
+            "method": "GET",
+            "url": "https://good.com/1",
+            "auth_type": "api_key",
+            "auth_token": "secret",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert responses.calls[1].request.headers.get("X-API-Key") == "secret"
+    assert "X-API-Key" not in responses.calls[2].request.headers
+
+
+@responses.activate
+def test_cve_evil_back_to_good_does_not_restore_credentials():
+    """good.com -> evil.com -> good.com: credentials must NOT reappear on return to original host."""
+    responses.add(responses.GET, "https://good.com/1", status=302, headers={"Location": "https://evil.com/2"})
+    responses.add(responses.GET, "https://evil.com/2", status=302, headers={"Location": "https://good.com/3"})
+    responses.add(responses.GET, "https://good.com/3", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-bounce-back",
+        "input": {
+            "method": "GET",
+            "url": "https://good.com/1",
+            "auth_type": "api_key",
+            "auth_token": "secret",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    # evil.com must not get credentials
+    assert "X-API-Key" not in responses.calls[1].request.headers
+    # good.com/3 also must not get credentials back — once stripped, they're gone
+    assert "X-API-Key" not in responses.calls[2].request.headers
+
+
+@responses.activate
+def test_cve_all_auth_types_stripped_on_cross_host():
+    """Every auth_type must be stripped on cross-host redirect."""
+    auth_configs = [
+        ("api_key", "X-API-Key"),
+        ("Bearer", "Authorization"),
+        ("token", "Authorization"),
+        ("custom", "Authorization"),
+    ]
+
+    for auth_type, header_name in auth_configs:
+        responses.reset()
+        responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+        responses.add(responses.GET, "https://evil.com/steal", json={"ok": True}, status=200)
+
+        tool_use = {
+            "toolUseId": f"test-{auth_type}",
+            "input": {
+                "method": "GET",
+                "url": "https://api.example.com/start",
+                "auth_type": auth_type,
+                "auth_token": "secret-token",
+            },
+        }
+
+        http_request.SESSION_CACHE.clear()
+        with patch("strands_tools.http_request.get_user_input") as mock_input:
+            mock_input.return_value = "y"
+            result = http_request.http_request(tool=tool_use)
+
+        assert result["status"] == "success", f"Failed for auth_type={auth_type}"
+        redirected = responses.calls[1].request.headers
+        assert header_name not in redirected, (
+            f"CREDENTIAL LEAK: {header_name} leaked for auth_type={auth_type}"
+        )
+
+
+@responses.activate
+def test_cve_arbitrary_custom_header_stripped():
+    """Any non-standard header (not just known credential headers) must be stripped on cross-host."""
+    responses.add(responses.GET, "https://example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+    responses.add(responses.GET, "https://evil.com/steal", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-custom-header",
+        "input": {
+            "method": "GET",
+            "url": "https://example.com/start",
+            "headers": {
+                "X-Custom-Secret": "my-secret",
+                "X-Internal-Token": "internal-123",
+                "Accept": "application/json",
+            },
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected = responses.calls[1].request.headers
+    assert "X-Custom-Secret" not in redirected
+    assert "X-Internal-Token" not in redirected
+    # Safe headers survive
+    assert "Accept" in redirected
+
+
+@responses.activate
+def test_https_to_http_downgrade_strips_credentials():
+    """HTTPS → HTTP redirect on the same host must strip credentials (plaintext exposure)."""
+    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "http://api.example.com/insecure"})
+    responses.add(responses.GET, "http://api.example.com/insecure", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-downgrade",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected = responses.calls[1].request.headers
+    assert "X-API-Key" not in redirected
+
+
+@responses.activate
+def test_http_to_https_upgrade_preserves_credentials():
+    """HTTP → HTTPS upgrade on the same host should preserve credentials (safe upgrade)."""
+    responses.add(responses.GET, "http://api.example.com/start", status=302, headers={"Location": "https://api.example.com/secure"})
+    responses.add(responses.GET, "https://api.example.com/secure", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-upgrade",
+        "input": {
+            "method": "GET",
+            "url": "http://api.example.com/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected = responses.calls[1].request.headers
+    assert redirected.get("X-API-Key") == "secret-key"
+
+
+@responses.activate
+def test_different_port_strips_credentials():
+    """Redirect to a different port on the same host must strip credentials."""
+    responses.add(responses.GET, "https://api.example.com:8080/start", status=302, headers={"Location": "https://api.example.com:9090/other"})
+    responses.add(responses.GET, "https://api.example.com:9090/other", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-port-change",
+        "input": {
+            "method": "GET",
+            "url": "https://api.example.com:8080/start",
+            "auth_type": "api_key",
+            "auth_token": "secret-key",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected = responses.calls[1].request.headers
+    assert "X-API-Key" not in redirected
+
+
+@responses.activate
+def test_307_cross_host_preserves_content_type():
+    """307 cross-host redirect strips credentials but preserves Content-Type for the body."""
+    responses.add(
+        responses.POST,
+        "https://api.example.com/submit",
+        status=307,
+        headers={"Location": "https://other.com/submit"},
+    )
+    responses.add(responses.POST, "https://other.com/submit", json={"ok": True}, status=200)
+
+    tool_use = {
+        "toolUseId": "test-307-content-type",
+        "input": {
+            "method": "POST",
+            "url": "https://api.example.com/submit",
+            "headers": {"Content-Type": "application/json"},
+            "body": '{"data": "test"}',
+            "auth_type": "api_key",
+            "auth_token": "secret",
+        },
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with patch("strands_tools.http_request.get_user_input") as mock_input:
+        mock_input.return_value = "y"
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    redirected = responses.calls[1].request.headers
+    assert "X-API-Key" not in redirected
+    assert "application/json" in redirected.get("Content-Type", "")
