@@ -1277,6 +1277,7 @@ The Mem0 Memory Tool supports three different backend configurations:
 |----------------------|-------------|---------|
 | BRIGHTDATA_API_KEY | Bright Data API Key | None |
 | BRIGHTDATA_ZONE | Bright Data Web Unlocker Zone | web_unlocker1 |
+| STRANDS_BRIGHT_DATA_OUTPUT_DIR | Directory get_screenshot may write to (optional) | Current working directory |
 
 #### Memory Tool
 
