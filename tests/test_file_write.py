@@ -242,3 +242,162 @@ def test_file_write_alternative_rejection(mock_user_input, temp_file):
 
     # Verify file was not created
     assert not os.path.exists(temp_file)
+
+
+@patch("strands_tools.file_write.get_user_input")
+def test_file_write_append_mode(mock_user_input, temp_file):
+    """Test appending content to existing file."""
+    mock_user_input.return_value = "y"
+
+    # Write initial content
+    with open(temp_file, "w") as f:
+        f.write("Initial content\n")
+
+    # Append using the tool
+    tool_use = {
+        "toolUseId": "test-append",
+        "input": {"path": temp_file, "content": "Appended content\n", "mode": "append"},
+    }
+
+    result = file_write.file_write(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Verify both contents are present
+    with open(temp_file, "r") as f:
+        content = f.read()
+        assert "Initial content\n" in content
+        assert "Appended content\n" in content
+        assert content == "Initial content\nAppended content\n"
+
+
+@patch("strands_tools.file_write.get_user_input")
+def test_file_write_append_mode_new_file(mock_user_input, temp_file):
+    """Test that append mode creates file if it doesn't exist."""
+    mock_user_input.return_value = "y"
+
+    # Ensure file doesn't exist
+    assert not os.path.exists(temp_file)
+
+    # Append to non-existent file
+    tool_use = {
+        "toolUseId": "test-append-new",
+        "input": {"path": temp_file, "content": "New file content\n", "mode": "append"},
+    }
+
+    result = file_write.file_write(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Verify file was created with content
+    assert os.path.exists(temp_file)
+    with open(temp_file, "r") as f:
+        assert f.read() == "New file content\n"
+
+
+@patch("strands_tools.file_write.get_user_input")
+def test_file_write_default_mode_overwrites(mock_user_input, temp_file):
+    """Test that default mode (write) overwrites existing content."""
+    mock_user_input.return_value = "y"
+
+    # Write initial content
+    with open(temp_file, "w") as f:
+        f.write("Original content\n")
+
+    # Write without specifying mode (should default to overwrite)
+    tool_use = {
+        "toolUseId": "test-default-overwrite",
+        "input": {"path": temp_file, "content": "New content\n"},
+    }
+
+    result = file_write.file_write(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Verify original content was overwritten
+    with open(temp_file, "r") as f:
+        content = f.read()
+        assert content == "New content\n"
+        assert "Original content" not in content
+
+
+@patch("strands_tools.file_write.get_user_input")
+def test_file_write_write_mode_explicit(mock_user_input, temp_file):
+    """Test that explicit write mode overwrites existing content."""
+    mock_user_input.return_value = "y"
+
+    # Write initial content
+    with open(temp_file, "w") as f:
+        f.write("Original content\n")
+
+    # Write with explicit write mode
+    tool_use = {
+        "toolUseId": "test-write-mode",
+        "input": {"path": temp_file, "content": "Replacement content\n", "mode": "write"},
+    }
+
+    result = file_write.file_write(tool=tool_use)
+    assert result["status"] == "success"
+
+    # Verify original content was overwritten
+    with open(temp_file, "r") as f:
+        content = f.read()
+        assert content == "Replacement content\n"
+        assert "Original content" not in content
+
+
+def test_file_write_invalid_mode(temp_file):
+    """Test error handling for invalid mode values."""
+    tool_use = {
+        "toolUseId": "test-invalid-mode",
+        "input": {"path": temp_file, "content": "Test content", "mode": "invalid"},
+    }
+
+    result = file_write.file_write(tool=tool_use)
+
+    # Verify the error was handled correctly
+    assert result["status"] == "error"
+    assert "Invalid mode" in result["content"][0]["text"]
+    assert "invalid" in result["content"][0]["text"]
+
+
+@patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "true"})
+def test_file_write_append_via_agent(agent, temp_file):
+    """Test append mode via the agent interface."""
+    # Write initial content
+    with open(temp_file, "w") as f:
+        f.write("First line\n")
+
+    # Append via agent
+    result = agent.tool.file_write(path=temp_file, content="Second line\n", mode="append")
+
+    # Verify success
+    result_text = extract_result_text(result)
+    assert "File write success" in result_text
+
+    # Verify both lines are present
+    with open(temp_file, "r") as f:
+        content = f.read()
+        assert "First line\n" in content
+        assert "Second line\n" in content
+
+
+@patch("strands_tools.file_write.get_user_input")
+def test_file_write_append_multiple_times(mock_user_input, temp_file):
+    """Test appending multiple times to the same file."""
+    mock_user_input.return_value = "y"
+
+    # Write initial content
+    with open(temp_file, "w") as f:
+        f.write("Line 1\n")
+
+    # Append multiple times
+    for i in range(2, 5):
+        tool_use = {
+            "toolUseId": f"test-append-{i}",
+            "input": {"path": temp_file, "content": f"Line {i}\n", "mode": "append"},
+        }
+        result = file_write.file_write(tool=tool_use)
+        assert result["status"] == "success"
+
+    # Verify all lines are present in order
+    with open(temp_file, "r") as f:
+        content = f.read()
+        assert content == "Line 1\nLine 2\nLine 3\nLine 4\n"
