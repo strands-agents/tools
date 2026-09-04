@@ -11,11 +11,20 @@ import subprocess
 from typing import Any, Dict, Optional
 
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "cron is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use a hosted "
+    "scheduler such as Amazon EventBridge Scheduler, or the bash tool vended by strands-agents "
+    "(from strands.vended_tools import bash). The bash route does change the security boundary: cron exposed "
+    "structured schedule actions, while bash executes arbitrary commands, so review it against your threat model "
+    "before switching."
+)
 
 
 def _sanitize_cron_line(line: str) -> str:
@@ -63,7 +72,19 @@ def _write_crontab(new_content: str, description: str) -> Optional[Dict[str, Any
     return None
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "cron is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use a hosted "
+    "scheduler such as Amazon EventBridge Scheduler, or the bash tool vended by strands-agents "
+    "(from strands.vended_tools import bash). The bash route does change the security boundary: cron exposed "
+    "structured schedule actions, while bash executes arbitrary commands, so review it against your threat model "
+    "before switching."
+)
 def cron(
     action: str,
     schedule: Optional[str] = None,
@@ -100,6 +121,8 @@ def cron(
     Returns:
         Dict containing status and response content
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         if action.lower() == "list":
             return list_jobs()

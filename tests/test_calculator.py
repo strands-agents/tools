@@ -11,6 +11,7 @@ from sympy import Integer, Symbol, exp, log
 
 # Function level imports from calculator module
 from src.strands_tools.calculator import (
+    _validate_expression_ast,
     apply_symbolic_simplifications,
     calculate_derivative,
     calculate_integral,
@@ -586,26 +587,35 @@ def test_error_handling_in_calculation_functions():
 
 
 def test_calculator_tool_with_system_of_equations():
-    """Test the calculator tool with a system of equations."""
-    # Create a tool use with a system of equations
+    """Test the calculator tool with a system of equations using the supported syntax.
+
+    The system is passed as a comma-separated expression, which parses to a tuple of
+    SymPy expressions and is routed to the system solver. This exercises the real
+    validator and parser (no mocks).
+    """
     from src.strands_tools.calculator import calculator as calc_function
 
-    # Mock parse_expression to return a list of expressions
-    with mock.patch(
-        "src.strands_tools.calculator.parse_expression",
-        side_effect=lambda expr: (
-            [sp.Symbol("x") + sp.Symbol("y") - 10, sp.Symbol("x") - sp.Symbol("y") - 2]
-            if expr.startswith("[")
-            else expr
-        ),
-    ):
-        # This should trigger the system of equations path in calculator function
-        result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+    result = calc_function(expression="x + y - 10, x - y - 2", mode="solve")
 
-        # Check for success status
-        assert result["status"] == "success"
-        # The result should contain the solution
-        assert "Result:" in result["content"][0]["text"]
+    assert result["status"] == "success"
+    text = result["content"][0]["text"]
+    # Solution is x = 6, y = 4.
+    assert "6" in text and "4" in text
+
+
+def test_calculator_tool_rejects_string_list_system_syntax():
+    """The quoted string-list system syntax is now rejected during validation.
+
+    This syntax was never functional (parse_expr returns raw strings that the solver
+    cannot process) and string literals are now rejected outright as a hardening
+    measure, so the tool returns a validation error rather than a spurious success.
+    """
+    from src.strands_tools.calculator import calculator as calc_function
+
+    result = calc_function(expression="['x + y - 10', 'x - y - 2']", mode="solve")
+
+    assert result["status"] == "error"
+    assert "string literals are not supported" in result["content"][0]["text"]
 
 
 def test_error_handling(agent):
@@ -631,13 +641,17 @@ def test_error_handling(agent):
 @pytest.mark.parametrize(
     "payload,mock_target",
     [
-        ("__import__('os').getpid()", "os.getpid"),
+        ("__import__('os').getppid()", "os.getppid"),
         ("open('/dev/null')", "builtins.open"),
-        ("eval('__import__(\"os\").getpid()')", "os.getpid"),
+        ("eval('__import__(\"os\").getppid()')", "os.getppid"),
     ],
 )
 def test_code_execution_blocked(payload, mock_target):
     """Verify that malicious payloads cannot achieve code execution via the calculator tool."""
+    # The payloads target os.getppid rather than os.getpid: stdlib logging calls
+    # getpid() while building a record, so patching it would register hits that have
+    # nothing to do with the payload and would mask a real escape. getppid is never
+    # touched by logging, so assert_not_called stays exact.
     with mock.patch(mock_target) as mock_fn:
         result = calculator_func(expression=payload, mode="evaluate")
         assert result["status"] == "error"
@@ -677,6 +691,128 @@ def test_ast_validation_rejects_unsafe_input(payload):
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        # String-literal argument to a function that re-parses it through sympify
+        "N(\"__import__('os').system('id')\")",
+        "simplify(\"__import__('os').system('id')\")",
+        "solve(\"__import__('os').getpid()\")",
+        "integrate(\"__import__('subprocess').run(['id'])\")",
+        # Plain string literals in various positions
+        "'abc'",
+        "Max(1, 'abc')",
+        "Matrix([['a', 'b'], ['c', 'd']])",
+    ],
+)
+def test_ast_validation_rejects_string_literals(payload):
+    """Verify that string-literal arguments are rejected before reaching sympify."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_string_argument_does_not_execute():
+    """Verify a string argument to a sympify-backed function does not run code."""
+    payload = "N(\"__import__('os').getpid()\")"
+    with mock.patch("os.getpid") as mock_getpid:
+        with pytest.raises(ValueError, match="Invalid mathematical expression"):
+            parse_expression(payload)
+        mock_getpid.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("Symbol('x')", sp.Symbol("x")),
+        ("symbols('x y z')", (sp.Symbol("x"), sp.Symbol("y"), sp.Symbol("z"))),
+        ("Rational('1/3')", sp.Rational(1, 3)),
+        ("Integer('5')", sp.Integer(5)),
+        ("Float('3.14')", sp.Float("3.14")),
+    ],
+)
+def test_string_arg_constructors_are_allowed(expression, expected):
+    """Symbol/number constructors parse their string as a name/number, not via sympify.
+
+    These are safe (no sympify re-parse) and remain supported so the hardening does
+    not break the documented string-constructor syntax.
+    """
+    assert parse_expression(expression) == expected
+
+
+def test_symbol_string_arg_does_not_execute():
+    """A malicious string passed to Symbol() becomes a symbol name, never executes."""
+    malicious = "__import__('os').getpid()"
+    payload = f"Symbol({malicious!r})"
+    with mock.patch("os.getpid") as mock_getpid:
+        result = parse_expression(payload)
+        mock_getpid.assert_not_called()
+    # Accepted as a symbol whose name is the literal string; the string is not eval'd.
+    assert isinstance(result, sp.Symbol)
+    assert result.name == malicious
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # Only positional string args to the safe constructors are allowed; a
+        # string in keyword position is still rejected.
+        "Symbol(name='x')",
+        "Symbol('x', name='y')",
+        # Bytes literals are rejected everywhere, including in constructor args.
+        "Symbol(b'x')",
+        "simplify(b\"__import__('os').getpid()\")",
+    ],
+)
+def test_ast_validation_rejects_non_positional_and_bytes_literals(payload):
+    """Keyword-position strings and bytes literals stay rejected by the allowlist."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # cls=N reroutes symbols() to apply N() -> sympify() to the string, which is
+        # the reported sandbox-bypass RCE vector. The string positional arg must not
+        # be trusted when such a rerouting keyword is present.
+        "symbols(\"__import__('os').system('id')\",cls=N)",
+        "symbols('sqrt(16)', cls=N)",
+        "symbols('x', cls=simplify)",
+        "Symbol('x', cls=N)",
+        # ** unpacking could smuggle a cls= keyword in, so it is untrusted too.
+        "symbols('x', **{'cls': N})",
+    ],
+)
+def test_ast_validation_rejects_cls_reroute(payload):
+    """A rerouting keyword (cls=) on a string constructor rejects its string args."""
+    with pytest.raises(ValueError, match="Invalid mathematical expression"):
+        parse_expression(payload)
+
+
+def test_cls_reroute_does_not_execute():
+    """The symbols('...', cls=N) bypass must be blocked before any code runs."""
+    payload = "symbols(\"__import__('os').getpid()\",cls=N)"
+    with mock.patch("os.getpid") as mock_getpid:
+        with pytest.raises(ValueError, match="Invalid mathematical expression"):
+            parse_expression(payload)
+        mock_getpid.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        # Boolean assumption keywords never reroute parsing, so the string positional
+        # arg stays trusted by the AST validator (it is not rejected as a string literal).
+        "Symbol('x', positive=True)",
+        "Symbol('x', real=True)",
+        "symbols('x y', positive=True)",
+    ],
+)
+def test_string_constructor_assumption_keywords_pass_validation(expression):
+    """Assumption keywords keep the string positional arg trusted during validation."""
+    _validate_expression_ast(expression)
+
+
+@pytest.mark.parametrize(
     "expression",
     [
         "2 + 3",
@@ -698,3 +834,25 @@ def test_ast_validation_allows_legitimate_math(expression):
     """Verify that AST validation permits valid mathematical expressions."""
     result = parse_expression(expression)
     assert result is not None
+
+
+def test_calculator_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import calculator as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.calculator"):
+        _mod.calculator(expression="2+2")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
+
+
+def test_calculator_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import calculator as _mod
+
+    assert getattr(_mod.calculator, "__deprecated__", None) is not None
+    assert "strands.vended_tools import bash" in _mod.calculator.__deprecated__

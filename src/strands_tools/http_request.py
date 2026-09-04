@@ -55,13 +55,35 @@ from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
 
+_SAFE_REDIRECT_HEADERS: frozenset = frozenset({
+    "accept",
+    "accept-encoding",
+    "connection",
+    "content-length",
+    "content-type",
+    "host",
+    "transfer-encoding",
+    "user-agent",
+})
+
+
+class _SafeRedirectSession(requests.Session):
+    """Session that strips non-standard headers on cross-origin redirects."""
+
+    def rebuild_auth(self, prepared_request, response):
+        super().rebuild_auth(prepared_request, response)
+        if self.should_strip_auth(response.request.url, prepared_request.url):
+            safe = {k: v for k, v in prepared_request.headers.items() if k.lower() in _SAFE_REDIRECT_HEADERS}
+            prepared_request.headers.clear()
+            prepared_request.headers.update(safe)
+
 TOOL_SPEC = {
     "name": "http_request",
     "description": (
         "Make HTTP requests to any API with comprehensive authentication including Bearer tokens, Basic auth, "
         "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. "
         "Includes session management, metrics, "
-        "streaming support, cookie handling, redirect control, proxy support, and optional HTML to markdown conversion."
+        "streaming support, cookie handling, redirect control, and optional HTML to markdown conversion."
     ),
     "inputSchema": {
         "json": {
@@ -195,15 +217,6 @@ TOOL_SPEC = {
                         "expiry": {"type": "integer"},
                     },
                 },
-                "proxies": {
-                    "type": "object",
-                    "description": "Dictionary mapping protocol or protocol and hostname to the URL of the proxy.",
-                    "properties": {
-                        "http": {"type": "string"},
-                        "https": {"type": "string"},
-                        "ftp": {"type": "string"},
-                    },
-                },
             },
             "required": ["method", "url"],
         }
@@ -245,7 +258,7 @@ def extract_content_from_html(html: str) -> str:
 
 def create_session(config: Dict[str, Any]) -> requests.Session:
     """Create and configure a requests Session object."""
-    session = requests.Session()
+    session = _SafeRedirectSession()
 
     if config.get("keep_alive", True):
         adapter = HTTPAdapter(
@@ -673,17 +686,12 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         )
         ```
 
-    7. Using proxy:
-        ```python
-        http_request(
-            method="GET",
-            url="https://example.com/api",
-            proxies={"https": "https://proxy.example.com:8080"},
-        )
-        ```
-
     Environment Variables:
     - AWS credentials are automatically loaded from environment variables or credentials file
+    - Proxies are configured by the operator at process level via the standard
+      HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (honored by `requests`), or by
+      setting `session.proxies` in code. Proxies are intentionally not part of the
+      LLM-controllable tool input.
 
     Token Config:
     - Use HTTP_REQUEST_TOKEN_CONFIG to allow specific env vars as auth tokens for permitted domains
@@ -832,7 +840,11 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "verify": verify,
             "auth": auth,
             "allow_redirects": tool_input.get("allow_redirects", True),
-            "proxies": tool_input.get("proxies", None),
+            # Proxies, if any, are configured by the operator at process level
+            # (HTTP_PROXY / HTTPS_PROXY env vars, or session.proxies set in code).
+            # Proxies are intentionally NOT LLM-controllable: an attacker-influenced
+            # LLM could otherwise route credentialed requests through an actor proxy,
+            # bypassing the HTTP_REQUEST_TOKEN_CONFIG hostname allowlist.
         }
 
         # Set max_redirects if specified
@@ -1029,4 +1041,3 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "status": "error",
             "content": [{"text": error_text}],
         }
-

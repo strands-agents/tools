@@ -17,3 +17,27 @@ jobs:
       contents: read
     with:
       ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  # Single required status check. Branch protection can require just this one
+  # context ("CI Gate") instead of every matrix leg, whose names change
+  # whenever the matrix changes. This job fails if any needed job failed or
+  # was cancelled, so it is a faithful aggregate gate.
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [call-test-lint]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify all required jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Needed job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A required CI job did not succeed (result: $result)."
+              exit 1
+            fi
+          done
+          echo "All required CI jobs succeeded."

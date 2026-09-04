@@ -979,3 +979,19 @@ def test_shell_exception_ui_output(mock_execute_commands, mock_get_user_input, m
         assert mock_console.print.call_count == 0
 
 
+def test_shell_logs_deprecation_warning(caplog):
+    """Test that shell logs a deprecation warning naming the SDK replacement."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="strands_tools.shell"):
+        shell.shell("echo test")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import bash" in caplog.text
+
+
+def test_shell_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert getattr(shell.shell, "__deprecated__", None) is not None
+    assert "strands.vended_tools import bash" in shell.shell.__deprecated__
