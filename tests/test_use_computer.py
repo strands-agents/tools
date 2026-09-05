@@ -332,10 +332,72 @@ class TestApplicationManagement:
 
     @pytest.mark.parametrize("system", ["windows", "darwin", "linux"])
     def test_open_application(self, system):
-        with patch("platform.system", return_value=system), patch("subprocess.run") as mock_run:
+        with (
+            patch("platform.system", return_value=system),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
             result = open_application("test_app")
             assert "Launched" in result
+            if system == "windows":
+                mock_startfile.assert_called_once()
+
+    def test_open_application_windows_uses_startfile(self):
+        """On Windows the app is launched via os.startfile, never through cmd.exe."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
+            open_application("notepad")
+            mock_startfile.assert_called_once_with("notepad")
+            # cmd.exe is never invoked, so there is no shell command line to reparse.
+            mock_run.assert_not_called()
+
+    def test_open_application_injection_payload_passed_as_data(self):
+        """A spaceless command-chaining payload is launched literally, never reparsed by cmd.exe.
+
+        With the previous 'cmd /c start "" <name>' approach, list2cmdline only quotes
+        argv items containing whitespace, so a spaceless payload like "notepad&whoami"
+        produced the command line `cmd /c start "" notepad&whoami` and cmd.exe reparsed
+        '&' as a command separator (command injection). os.startfile receives the exact
+        literal string and never invokes a command interpreter.
+        """
+        payload = "notepad&whoami"
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
+            open_application(payload)
+            # The exact literal payload is passed to startfile with no shell involved.
+            mock_startfile.assert_called_once_with(payload)
+            # cmd.exe is never spawned, so the payload cannot be split on '&'.
+            mock_run.assert_not_called()
+
+    def test_open_application_rejects_control_characters(self):
+        """A name containing control characters is rejected before any launch attempt."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
+            result = open_application("notepad\nwhoami")
+            assert "Invalid application name" in result
+            mock_run.assert_not_called()
+            mock_startfile.assert_not_called()
+
+    def test_open_application_accepts_plus_in_name(self):
+        """A legitimate name like 'C++ Builder' is accepted and launched literally."""
+        with (
+            patch("platform.system", return_value="windows"),
+            patch("subprocess.run") as mock_run,
+            patch("os.startfile", create=True) as mock_startfile,
+        ):
+            open_application("C++ Builder")
+            mock_startfile.assert_called_once_with("C++ Builder")
+            mock_run.assert_not_called()
 
     def test_close_application(self):
         mock_process = MagicMock()
@@ -627,7 +689,15 @@ class TestFocusApplication:
     @pytest.mark.parametrize(
         "system,expected_command",
         [
-            ("darwin", ["osascript", "-e", 'tell application "TestApp" to activate']),
+            (
+                "darwin",
+                [
+                    "osascript",
+                    "-e",
+                    "on run argv\n  tell application (item 1 of argv) to activate\nend run",
+                    "TestApp",
+                ],
+            ),
             (
                 "windows",
                 [
@@ -635,8 +705,9 @@ class TestFocusApplication:
                     "-Command",
                     (
                         "Add-Type -AssemblyName Microsoft.VisualBasic; "
-                        "[Microsoft.VisualBasic.Interaction]::AppActivate('TestApp')"
+                        "[Microsoft.VisualBasic.Interaction]::AppActivate($args[0])"
                     ),
+                    "TestApp",
                 ],
             ),
             ("linux", ["wmctrl", "-a", "TestApp"]),
@@ -674,6 +745,54 @@ class TestFocusApplication:
         with patch("platform.system", return_value="unknown"):
             result = focus_application("TestApp")
             assert result is False
+
+    def test_focus_application_injection_payload_passed_as_data_macos(self):
+        """An AppleScript injection payload reaches osascript only as inert trailing argv data."""
+        from src.strands_tools.use_computer import focus_application
+
+        payload = 'TestApp" & do shell script "echo PWNED > /tmp/pwned'
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            focus_application(payload)
+            args = mock_run.call_args[0][0]
+            # The script body is the constant 'on run argv' template; the payload
+            # is only the trailing argv item, so it is never parsed as AppleScript.
+            assert args[2] == "on run argv\n  tell application (item 1 of argv) to activate\nend run"
+            assert args[-1] == payload
+            assert "do shell script" not in args[2]
+
+    def test_focus_application_rejects_control_characters_macos(self):
+        """A name containing control characters is rejected before any subprocess call."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            assert focus_application("TestApp\nactivate") is False
+            mock_run.assert_not_called()
+
+    def test_focus_application_accepts_plus_in_name_macos(self):
+        """A legitimate name like 'C++ Builder' is accepted and passed as a trailing argv item."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            focus_application("C++ Builder")
+            args = mock_run.call_args[0][0]
+            assert args[-1] == "C++ Builder"
+            assert args[2] == "on run argv\n  tell application (item 1 of argv) to activate\nend run"
+
+    def test_focus_application_script_is_static_macos(self):
+        """A benign name reaches osascript as data, with a constant script body."""
+        from src.strands_tools.use_computer import focus_application
+
+        with patch("platform.system", return_value="darwin"), patch("subprocess.run") as mock_run, patch("time.sleep"):
+            mock_run.return_value = MagicMock(returncode=0)
+            focus_application("Safari")
+            args = mock_run.call_args[0][0]
+            # The app name is the trailing argv item, not interpolated into the script body.
+            assert args[-1] == "Safari"
+            assert "Safari" not in args[2]
+            assert "do shell script" not in args[2]
 
 
 class TestHandleAnalyzeScreenshotPytesseract:
