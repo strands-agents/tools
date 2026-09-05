@@ -444,12 +444,21 @@ class WorkflowManager:
             result = task_agent(task_prompt)
 
             # Extract response content - handle both dict and custom object return types
+            # Check result and result.message
             try:
-                content = (
-                    result.message.get("content", [])
-                    if hasattr(result.message, "get")
-                    else getattr(result.message, "content", [])
-                )
+                content = []
+                if hasattr(result, "get"):
+                    content = result.get("content", [])
+                elif hasattr(result, "content"):
+                    content = getattr(result, "content", [])
+                elif hasattr(result, "message"):
+                    message = result.message
+                    if hasattr(message, "get"):
+                        content = message.get("content", [])
+                    elif hasattr(message, "content"):
+                        content = getattr(message, "content", [])
+                if not content:
+                    content = [{"text": str(result)}]
             except AttributeError:
                 content = [{"text": str(result)}]
 
