@@ -101,6 +101,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import traceback
 import uuid
@@ -128,6 +129,43 @@ logger = logging.getLogger(__name__)
 # Constants
 WORKFLOW_DIR = Path(os.getenv("STRANDS_WORKFLOW_DIR", Path.home() / ".strands" / "workflows"))
 os.makedirs(WORKFLOW_DIR, exist_ok=True)
+
+# Allowed characters for a workflow_id. Workflow ids map directly to file names in
+# WORKFLOW_DIR, so they are restricted to a conservative set and a bounded length.
+_SAFE_WORKFLOW_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def is_valid_workflow_id(workflow_id: str) -> bool:
+    """Check that a workflow_id is a safe, single file name within WORKFLOW_DIR.
+
+    A valid id matches the allowlist pattern and is not a relative directory
+    reference ("." or ".."). This keeps workflow ids confined to file names
+    inside WORKFLOW_DIR rather than paths that point elsewhere.
+    """
+    if not isinstance(workflow_id, str):
+        return False
+    if workflow_id in (".", ".."):
+        return False
+    return bool(_SAFE_WORKFLOW_ID.match(workflow_id))
+
+
+def resolve_workflow_path(workflow_id: str) -> Path:
+    """Resolve the JSON file path for a workflow_id and confine it to WORKFLOW_DIR.
+
+    Returns the resolved path of ``WORKFLOW_DIR/<workflow_id>.json`` and raises
+    ValueError if the result would fall outside WORKFLOW_DIR. This is the check
+    that provides traversal safety at every filesystem sink, independent of the
+    create-time allowlist at the tool boundary. The explicit "." and ".." reject
+    is cheap and is never a legitimate id.
+    """
+    if not isinstance(workflow_id, str) or workflow_id in (".", ".."):
+        raise ValueError(f"Invalid workflow_id: {workflow_id!r}")
+    workflow_root = WORKFLOW_DIR.resolve()
+    file_path = (workflow_root / f"{workflow_id}.json").resolve()
+    if not file_path.is_relative_to(workflow_root):
+        raise ValueError(f"Resolved workflow path escapes the workflow directory: {workflow_id!r}")
+    return file_path
+
 
 # Default thread pool settings
 MIN_THREADS = int(os.getenv("STRANDS_WORKFLOW_MIN_THREADS", "2"))
@@ -282,7 +320,7 @@ class WorkflowManager:
     def load_workflow(self, workflow_id: str) -> Optional[Dict]:
         """Load a workflow from its JSON file."""
         try:
-            file_path = WORKFLOW_DIR / f"{workflow_id}.json"
+            file_path = resolve_workflow_path(workflow_id)
             if file_path.exists():
                 with open(file_path, "r") as f:
                     self._workflows[workflow_id] = json.load(f)
@@ -298,7 +336,7 @@ class WorkflowManager:
             self._workflows[workflow_id] = workflow_data
 
             # Store to file
-            file_path = WORKFLOW_DIR / f"{workflow_id}.json"
+            file_path = resolve_workflow_path(workflow_id)
             with open(file_path, "w") as f:
                 json.dump(workflow_data, f, indent=2)
 
@@ -891,7 +929,7 @@ class WorkflowManager:
                 del self._workflows[workflow_id]
 
             # Remove file if exists
-            file_path = WORKFLOW_DIR / f"{workflow_id}.json"
+            file_path = resolve_workflow_path(workflow_id)
             if file_path.exists():
                 file_path.unlink()
                 return {
@@ -1118,14 +1156,32 @@ def workflow(
 
         # Route to appropriate handler
         if action == "create":
+            # Auto-generate an id when one is not supplied, then apply the strict
+            # charset allowlist to new ids only. The allowlist is intentionally
+            # scoped to create so pre-existing workflows whose ids contain spaces,
+            # unicode, or are longer than 128 characters can still be read and
+            # deleted. Traversal safety for every action comes from
+            # resolve_workflow_path, which confines each filesystem sink to
+            # WORKFLOW_DIR.
+            if not workflow_id:
+                workflow_id = str(uuid.uuid4())
+            if not is_valid_workflow_id(workflow_id):
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": (
+                                "❌ Invalid workflow_id. Use 1-128 characters limited to "
+                                "letters, digits, '.', '_' and '-'."
+                            )
+                        }
+                    ],
+                }
             if not tasks:
                 return {
                     "status": "error",
                     "content": [{"text": "❌ Tasks are required for create action"}],
                 }
-
-            if not workflow_id:
-                workflow_id = str(uuid.uuid4())
 
             return _manager.create_workflow(workflow_id, tasks)
 
