@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 
 from mcp import StdioServerParameters, stdio_client
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from strands import tool
 from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool, ToolGenerator, ToolSpec, ToolUse
@@ -231,7 +231,7 @@ def _create_transport_callable(transport: str, **params):
         if params.get("auth"):
             http_params["auth"] = params["auth"]
 
-        return lambda: streamablehttp_client(**http_params)
+        return lambda: streamable_http_client(**http_params)
 
     else:
         raise ValueError(f"Unsupported transport: {transport}. Supported: stdio, sse, streamable_http")
