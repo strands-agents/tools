@@ -11,6 +11,7 @@ import os
 import pathlib
 import re
 import types
+import warnings
 
 import pytest
 
@@ -41,7 +42,7 @@ REEXPORTED_TOOLS = [(module_name, attr) for module_name, attr in DEPRECATED_TOOL
 
 SRC = pathlib.Path(strands_tools.__file__).parent
 
-# ``from strands.vended_tools import bash`` inside a migration message.
+# ``from strands.vended_tools import shell`` inside a migration message.
 MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import (\w+)")
 
 # shell pulls in termios/pty, which do not exist on Windows. Same stance as
@@ -177,16 +178,19 @@ def test_decorator_literal_matches_the_logged_message(module_name, attr):
 
 @pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
 def test_migration_import_resolves(module_name, attr):
-    """Every import a message spells out must actually work on the installed SDK.
+    """Every migration import must resolve without another deprecation warning.
 
-    The per-tool tests assert these messages by substring, which cannot tell a real
-    symbol from a plausible one: the messages shipped ``from strands.vended_tools import
-    shell`` for four tools, and no released SDK exports it.
+    Compatibility aliases can still exist while warning users to migrate again.
+    Check attribute access separately from module import so unrelated dependency
+    warnings are not mistaken for a deprecated replacement.
     """
     message = _import_tool_module(module_name)._DEPRECATION_MESSAGE
 
     for module_path, symbol in MIGRATION_IMPORT.findall(message):
-        assert hasattr(importlib.import_module(module_path), symbol)
+        module = importlib.import_module(module_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            assert hasattr(module, symbol)
 
 
 def test_py_typed_marker_ships_with_the_package():

@@ -192,15 +192,15 @@ is why the log message exists as well.
 |------|-----------------------|---------|-----------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
 | `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
-| `shell` | `from strands.vended_tools import bash` | v0.8.6 | v0.9.0 |
+| `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |
 | `batch` | none needed — concurrent tool execution is the SDK default ([docs](https://strandsagents.com/docs/user-guide/concepts/tools/executors/)) | v0.8.6 | v0.9.0 |
 | `think` | native extended thinking via model reasoning config ([docs](https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/)) | v0.8.6 | v0.9.0 |
 | `current_time` | `ContextInjector` ([docs](https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/)) | v0.8.6 | v0.9.0 |
 | `memory` | `MemoryManager` + `BedrockKnowledgeBaseStore` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/)) | v0.8.6 | v0.9.0 |
 | `retrieve` | `MemoryManager` + `BedrockKnowledgeBaseStore(writable=False)` ([docs](https://strandsagents.com/docs/user-guide/concepts/memory/overview/)) | v0.8.6 | v0.9.0 |
-| `calculator` | `from strands.vended_tools import bash` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
-| `cron` | `from strands.vended_tools import bash` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
-| `environment` | `from strands.vended_tools import bash` (inspect only, see notes) | v0.8.6 | v0.9.0 |
+| `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
+| `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
+| `environment` | `from strands.vended_tools import shell` (inspect only, see notes) | v0.8.6 | v0.9.0 |
 | `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
 | `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
@@ -214,16 +214,16 @@ agent = Agent(tools=[editor, shell, sleep])
 
 # After
 from strands import Agent
-from strands.vended_tools import bash, file_editor, sleep
+from strands.vended_tools import file_editor, shell, sleep
 
-agent = Agent(tools=[bash, file_editor, sleep])
+agent = Agent(tools=[file_editor, shell, sleep])
 ```
 
 #### Behavior differences
 
 The replacements are not drop-in equivalents. Check these before migrating:
 
-- **`shell` → `bash`**: the SDK tool routes commands through the agent's configured
+- **`strands_tools.shell` → `strands.vended_tools.shell`**: the SDK tool routes commands through the agent's configured
   sandbox and is stateless — each call runs in a fresh shell, so variables and the working
   directory do not persist between calls. It does not provide PTY support or batched
   parallel/sequential command execution.
