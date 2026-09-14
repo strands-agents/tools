@@ -31,6 +31,7 @@ DEPRECATED_TOOLS = [
     ("http_request", "http_request"),
     ("exa", "exa_get_contents"),
     ("exa", "exa_search"),
+    ("journal", "journal"),
     ("memory", "memory"),
     ("retrieve", "retrieve"),
     ("rss", "rss"),

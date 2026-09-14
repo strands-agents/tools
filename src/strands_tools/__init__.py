@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .http_request import http_request as http_request
     from .exa import exa_get_contents as exa_get_contents
     from .exa import exa_search as exa_search
+    from .journal import journal as journal
     from .memory import memory as memory
     from .retrieve import retrieve as retrieve
     from .rss import rss as rss

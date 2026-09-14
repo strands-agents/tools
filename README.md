@@ -130,7 +130,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
 | generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
 | image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
-| journal | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation |
+| journal ⚠️ | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation <br> **Deprecated — see [Deprecations](#deprecations)** |
 | think ⚠️ | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes <br> **Deprecated — see [Deprecations](#deprecations)** |
 | load_tool | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions |
 | swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
@@ -210,6 +210,7 @@ is why the log message exists as well.
 | `exa` (`exa_search`, `exa_get_contents`) | [official Exa MCP server](https://exa.ai/docs/reference/exa-mcp) | v0.8.9 | v0.9.0 |
 | `search_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
 | `chat_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
+| `journal` | `from strands.vended_tools import notebook` | v0.8.9 | v0.9.0 |
 
 ```python
 # Before
@@ -302,6 +303,7 @@ The replacements are not drop-in equivalents. Check these before migrating:
   to `web_search_advanced_exa` via the `tools` URL parameter. Auth moves from `EXA_API_KEY` to OAuth, a key in
   the server URL, or a header.
 - **`search_video` / `chat_video` → TwelveLabs MCP servers** — Jockey adds cross-video reasoning: assemble a collection, search and ask questions across it with clip citations. Single-video search and analysis continue at `mcp-alpic.twelvelabs.io`.
+- **`journal` → `notebook`** — `notebook` is session-scoped: notes live in `agent.state` for the duration of the agent run but do not persist to disk between sessions. If persistence across runs matters, use `file_editor` instead.
 
 ## 💻 Usage Examples
 
