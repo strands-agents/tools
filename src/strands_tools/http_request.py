@@ -617,8 +617,9 @@ def format_response_preview(
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "http_request is deprecated. This warning becomes an error log in v0.9.0. Prefer a service-specific SDK or "
-    "trusted MCP server; otherwise expose a narrowly scoped custom tool using an HTTP client library."
+    "http_request is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "http_request and web_fetch tools vended by strands-agents (from strands.vended_tools import http_request, "
+    "web_fetch). http_request handles API calls; web_fetch retrieves and reads web pages."
 )
 def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
