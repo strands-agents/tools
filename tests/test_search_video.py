@@ -273,7 +273,7 @@ class TestSearchVideoTool:
 def test_search_video_logs_deprecation_warning(caplog):
     """Invoking the tool logs a deprecation warning naming its migration path."""
     tool_use = {"toolUseId": "deprecation", "input": {"query": "people discussing AI"}}
-    with caplog.at_level(logging.WARNING, logger="strands_tools.search_video"):
+    with patch.dict("os.environ", {}, clear=True), caplog.at_level(logging.WARNING, logger="strands_tools.search_video"):
         search_video.search_video(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text

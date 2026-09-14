@@ -217,7 +217,8 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 @tool
 @deprecated(
     "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
-    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+    "server, documented at https://exa.ai/docs/reference/exa-mcp.",
+    category=None,
 )
 async def exa_search(
     query: str,
@@ -490,7 +491,8 @@ async def exa_search(
 @tool
 @deprecated(
     "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
-    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+    "server, documented at https://exa.ai/docs/reference/exa-mcp.",
+    category=None,
 )
 async def exa_get_contents(
     urls: List[str],

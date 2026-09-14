@@ -349,10 +349,19 @@ def test_format_map_response():
     assert "URLs Discovered: 2" in panel.renderable
 
 
-def test_tavily_logs_deprecation_warning(caplog):
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: tavily.tavily_search(query="test query"),
+        lambda: tavily.tavily_extract(urls=["https://www.tavily.com"]),
+        lambda: tavily.tavily_crawl(url="https://www.tavily.com"),
+        lambda: tavily.tavily_map(url="https://www.tavily.com"),
+    ],
+)
+def test_tavily_logs_deprecation_warning(call, caplog):
     """Invoking a tool logs a deprecation warning naming its migration path."""
-    with caplog.at_level(logging.WARNING, logger="strands_tools.tavily"):
-        asyncio.run(tavily.tavily_search(query="test query"))
+    with patch.dict(os.environ, {}, clear=True), caplog.at_level(logging.WARNING, logger="strands_tools.tavily"):
+        asyncio.run(call())
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text

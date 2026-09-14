@@ -184,7 +184,7 @@ usage before you run anything. To list what you still need to migrate, run
 `from strands_tools import ...` line for each deprecated tool, without invoking any of them.
 Prefer mypy here: pyright, with `reportDeprecated` enabled, reports direct calls such as
 `calculator(expression=...)` but not `agent.tool.calculator(...)`, and it reaches the import
-line for only the three tools whose marker is not wrapped by `@tool`. Note that Python
+line for only the tools whose marker is not wrapped by `@tool`. Note that Python
 suppresses the resulting `DeprecationWarning` at runtime when the agent invokes a tool, which
 is why the log message exists as well.
 
@@ -302,8 +302,12 @@ The replacements are not drop-in equivalents. Check these before migrating:
   `exa_get_contents` becomes `web_fetch_exa`. For the full parameter surface of `exa_search`, opt in
   to `web_search_advanced_exa` via the `tools` URL parameter. Auth moves from `EXA_API_KEY` to OAuth, a key in
   the server URL, or a header.
-- **`search_video` / `chat_video` → TwelveLabs MCP servers** — Jockey adds cross-video reasoning: assemble a collection, search and ask questions across it with clip citations. Single-video search and analysis continue at `mcp-alpic.twelvelabs.io`.
-- **`journal` → `notebook`** — `notebook` is session-scoped: notes live in `agent.state` for the duration of the agent run but do not persist to disk between sessions. If persistence across runs matters, use `file_editor` instead.
+- **`search_video` / `chat_video` → TwelveLabs MCP servers** — Jockey adds cross-video reasoning, while single-video search and analysis continue
+  at `mcp-alpic.twelvelabs.io`. Jockey requires publicly accessible URLs and has no equivalent for `chat_video`'s local-file upload nor
+  `search_video`'s `group_by`, `threshold`, and `search_options` parameters.
+- **`journal` → `notebook`** — `notebook` keeps notes in `agent.state` instead of `./journal/<date>.md`, so persistence follows your session
+  manager. There is no `add_task` equivalent and no per-day entry, so tasks and dated entries become plain note text. If you need the entries as
+  files on disk, use `file_editor`.
 
 ## 💻 Usage Examples
 

@@ -267,7 +267,8 @@ def format_map_response(data: Dict[str, Any]) -> Panel:
 @tool
 @deprecated(
     "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
-    "server, documented at https://docs.tavily.com/documentation/mcp."
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
 )
 async def tavily_search(
     query: str,
@@ -415,7 +416,8 @@ async def tavily_search(
 @tool
 @deprecated(
     "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
-    "server, documented at https://docs.tavily.com/documentation/mcp."
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
 )
 async def tavily_extract(
     urls: Union[str, List[str]],
@@ -512,7 +514,8 @@ async def tavily_extract(
 @tool
 @deprecated(
     "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
-    "server, documented at https://docs.tavily.com/documentation/mcp."
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
 )
 async def tavily_crawl(
     url: str,
@@ -659,7 +662,8 @@ async def tavily_crawl(
 @tool
 @deprecated(
     "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
-    "server, documented at https://docs.tavily.com/documentation/mcp."
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
 )
 async def tavily_map(
     url: str,

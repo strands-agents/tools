@@ -486,10 +486,17 @@ def test_format_contents_response_with_errors():
     assert "CRAWL_NOT_FOUND" in panel.renderable
 
 
-def test_exa_logs_deprecation_warning(caplog):
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: exa.exa_search(query="test query"),
+        lambda: exa.exa_get_contents(urls=["https://example.com"]),
+    ],
+)
+def test_exa_logs_deprecation_warning(call, caplog):
     """Invoking a tool logs a deprecation warning naming its migration path."""
-    with caplog.at_level(logging.WARNING, logger="strands_tools.exa"):
-        asyncio.run(exa.exa_search(query="test query"))
+    with patch.dict(os.environ, {}, clear=True), caplog.at_level(logging.WARNING, logger="strands_tools.exa"):
+        asyncio.run(call())
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text

@@ -327,7 +327,7 @@ class TestChatVideoTool:
 def test_chat_video_logs_deprecation_warning(caplog):
     """Invoking the tool logs a deprecation warning naming its migration path."""
     tool_use = {"toolUseId": "deprecation", "input": {"prompt": "Describe this", "video_id": "video_123"}}
-    with caplog.at_level(logging.WARNING, logger="strands_tools.chat_video"):
+    with patch.dict("os.environ", {}, clear=True), caplog.at_level(logging.WARNING, logger="strands_tools.chat_video"):
         chat_video.chat_video(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
