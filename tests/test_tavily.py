@@ -3,6 +3,7 @@ Tests for the Tavily tools.
 """
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, patch
 
@@ -346,3 +347,20 @@ def test_format_map_response():
     panel = tavily.format_map_response(data)
     assert panel.title == "[bold cyan]Tavily Map Results"
     assert "URLs Discovered: 2" in panel.renderable
+
+
+def test_tavily_logs_deprecation_warning(caplog):
+    """Invoking a tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level(logging.WARNING, logger="strands_tools.tavily"):
+        asyncio.run(tavily.tavily_search(query="test query"))
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "docs.tavily.com/documentation/mcp" in caplog.text
+
+
+def test_tavily_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    for fn in (tavily.tavily_search, tavily.tavily_extract, tavily.tavily_crawl, tavily.tavily_map):
+        assert getattr(fn, "__deprecated__", None) is not None
+        assert "docs.tavily.com/documentation/mcp" in fn.__deprecated__

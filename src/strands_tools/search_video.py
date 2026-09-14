@@ -47,12 +47,21 @@ results = agent.tool.search_video(
 See the search_video function docstring for more details on available parameters.
 """
 
+import logging
 import os
 from typing import Any, List
 
 from strands.types.tools import ToolResult, ToolUse
 from twelvelabs import TwelveLabs
 from twelvelabs.models.search import SearchData
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "search_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+)
 
 TOOL_SPEC = {
     "name": "search_video",
@@ -201,6 +210,15 @@ def format_search_results(results: List[SearchData], group_by: str, total_count:
     return "\n".join(formatted)
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "search_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+)
 def search_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Search video content using TwelveLabs semantic search.
@@ -252,6 +270,7 @@ def search_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Audio search finds spoken words and sounds
         - Results are sorted by relevance score
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 

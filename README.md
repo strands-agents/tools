@@ -110,12 +110,12 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | editor ⚠️ | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits <br> **Deprecated — see [Deprecations](#deprecations)** |
 | shell* ⚠️ | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts <br> **Deprecated — see [Deprecations](#deprecations)** |
 | http_request ⚠️ | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services <br> **Deprecated — see [Deprecations](#deprecations)** |
-| tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
-| tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
-| tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
-| tavily_map | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction |
-| exa_search | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) for optimal results, plus fast and deep search modes |
-| exa_get_contents | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback |
+| tavily_search ⚠️ | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters <br> **Deprecated — see [Deprecations](#deprecations)** |
+| tavily_extract ⚠️ | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal <br> **Deprecated — see [Deprecations](#deprecations)** |
+| tavily_crawl ⚠️ | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction <br> **Deprecated — see [Deprecations](#deprecations)** |
+| tavily_map ⚠️ | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction <br> **Deprecated — see [Deprecations](#deprecations)** |
+| exa_search ⚠️ | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) for optimal results, plus fast and deep search modes <br> **Deprecated — see [Deprecations](#deprecations)** |
+| exa_get_contents ⚠️ | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback <br> **Deprecated — see [Deprecations](#deprecations)** |
 | python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
 | calculator ⚠️ | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving <br> **Deprecated — see [Deprecations](#deprecations)** |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
@@ -152,8 +152,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | diagram ⚠️ | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | rss ⚠️ | `agent.tool.rss(action="subscribe", url="https://example.com/feed.xml", feed_id="tech_news")` | Manage RSS feeds: subscribe, fetch, read, search, and update content from various sources <br> **Deprecated — see [Deprecations](#deprecations)** |
 | use_computer | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture |
-| search_video | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model |
-| chat_video | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model |
+| search_video ⚠️ | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model <br> **Deprecated — see [Deprecations](#deprecations)** |
+| chat_video ⚠️ | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model <br> **Deprecated — see [Deprecations](#deprecations)** |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `MongoDBMemoryTool` or environment variables) |
 | elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) |
 
@@ -206,6 +206,10 @@ is why the log message exists as well.
 | `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
 | `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
+| `tavily` (`tavily_search`, `tavily_extract`, `tavily_crawl`, `tavily_map`) | [official Tavily MCP server](https://docs.tavily.com/documentation/mcp) | v0.8.9 | v0.9.0 |
+| `exa` (`exa_search`, `exa_get_contents`) | [official Exa MCP server](https://exa.ai/docs/reference/exa-mcp) | v0.8.9 | v0.9.0 |
+| `search_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
+| `chat_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
 
 ```python
 # Before
@@ -290,6 +294,14 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`rss`** — no direct replacement. Fetching and parsing a feed is a few lines of `feedparser`, and
   the subscription list was a JSON file. If you were using feed HTTP Basic auth or the stored
   subscriptions, those move into your code.
+- **`tavily` → Tavily MCP server** — Auth moves from `TAVILY_API_KEY` to OAuth, a key in the server URL, or a header. A handful of parameters have no MCP equivalent:
+  `auto_parameters`, `chunks_per_source`, `days`, `include_answer`, `categories`, `exclude_paths`,
+  and the `"markdown"/"text"` literals for `include_raw_content` (the MCP accepts a boolean only). If you need these parameters, call the [Tavily REST API](https://docs.tavily.com/documentation/api-reference/introduction) directly.
+- **`exa` → Exa MCP server** — the MCP renames the tools: `exa_search` becomes `web_search_exa` and
+  `exa_get_contents` becomes `web_fetch_exa`. For the full parameter surface of `exa_search`, opt in
+  to `web_search_advanced_exa` via the `tools` URL parameter. Auth moves from `EXA_API_KEY` to OAuth, a key in
+  the server URL, or a header.
+- **`search_video` / `chat_video` → TwelveLabs MCP servers** — Jockey adds cross-video reasoning: assemble a collection, search and ask questions across it with clip citations. Single-video search and analysis continue at `mcp-alpic.twelvelabs.io`.
 
 ## 💻 Usage Examples
 

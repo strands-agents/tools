@@ -51,10 +51,16 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import aiohttp
 from rich.panel import Panel
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+)
 
 # Exa API configuration
 EXA_API_BASE_URL = "https://api.exa.ai"
@@ -203,7 +209,16 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 # Exa Tools
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+)
 async def exa_search(
     query: str,
     type: Optional[Literal["auto", "instant", "fast", "deep"]] = "auto",
@@ -346,6 +361,7 @@ async def exa_search(
         max_age_hours=24,
     )
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
     try:
         # Validate parameters
         if not query or not query.strip():
@@ -472,6 +488,10 @@ async def exa_search(
 
 
 @tool
+@deprecated(
+    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+)
 async def exa_get_contents(
     urls: List[str],
     text: Optional[Union[bool, Dict[str, Any]]] = None,
@@ -568,6 +588,7 @@ async def exa_get_contents(
         }
     )
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
     try:
         # Validate parameters
         if not urls or len(urls) == 0:

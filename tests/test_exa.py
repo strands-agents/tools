@@ -3,6 +3,7 @@ Tests for the Exa tools.
 """
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, patch
 
@@ -483,3 +484,20 @@ def test_format_contents_response_with_errors():
     assert panel.title == "[bold blue]Exa Contents Results"
     assert "Failed retrievals: 1 URLs" in panel.renderable
     assert "CRAWL_NOT_FOUND" in panel.renderable
+
+
+def test_exa_logs_deprecation_warning(caplog):
+    """Invoking a tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level(logging.WARNING, logger="strands_tools.exa"):
+        asyncio.run(exa.exa_search(query="test query"))
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "exa.ai/docs/reference/exa-mcp" in caplog.text
+
+
+def test_exa_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    for fn in (exa.exa_search, exa.exa_get_contents):
+        assert getattr(fn, "__deprecated__", None) is not None
+        assert "exa.ai/docs/reference/exa-mcp" in fn.__deprecated__

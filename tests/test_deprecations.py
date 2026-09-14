@@ -22,19 +22,27 @@ DEPRECATED_TOOLS = [
     ("batch", "batch"),
     ("bright_data", "bright_data"),
     ("calculator", "calculator"),
+    ("chat_video", "chat_video"),
     ("cron", "cron"),
     ("current_time", "current_time"),
     ("diagram", "diagram"),
     ("editor", "editor"),
     ("environment", "environment"),
     ("http_request", "http_request"),
+    ("exa", "exa_get_contents"),
+    ("exa", "exa_search"),
     ("memory", "memory"),
     ("retrieve", "retrieve"),
     ("rss", "rss"),
+    ("search_video", "search_video"),
     ("shell", "shell"),
     ("slack", "slack"),
     ("slack", "slack_send_message"),
     ("sleep", "sleep"),
+    ("tavily", "tavily_crawl"),
+    ("tavily", "tavily_extract"),
+    ("tavily", "tavily_map"),
+    ("tavily", "tavily_search"),
     ("think", "think"),
 ]
 
@@ -158,7 +166,7 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     decorators = [
         decorator
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == attr
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == attr
         for decorator in node.decorator_list
         if isinstance(decorator, ast.Call) and getattr(decorator.func, "id", None) == "deprecated"
     ]
