@@ -268,9 +268,12 @@ The replacements are not drop-in equivalents. Check these before migrating:
   child shell cannot change the agent's own process environment, so variables need to be set where the
   agent is launched, or passed per call. If you were leaning on `PROTECTED_VARS` or secret masking,
   that guarding moves to your side.
-- **`http_request`** — prefer a service-specific SDK or trusted MCP server when one exists. For other
-  APIs, expose a narrowly scoped custom tool using an HTTP client library so authentication, allowed
-  endpoints, request validation, and user confirmation stay under application control.
+ - **`http_request` → `http_request` / `web_fetch`** — the tool splits by intent: raw API calls move to
+  the vended `http_request`, while fetching and reading a page moves to `web_fetch`. Authentication and
+  endpoint scoping now live in an `httpx.AsyncClient` you pass via `make_http_request(client=...)`.
+  `web_fetch` defaults to an agentic mode that summarizes a page before it enters the main context;
+  pass `mode="markdown"` to the `web_fetch` factory for the full page as markdown, replacing
+  `convert_to_markdown=True`.
 - **`slack` → Slack's official MCP server** — Slack maintains it, so it tracks their API directly, and
   it uses OAuth rather than long-lived tokens. It exposes a curated tool set rather than this tool's
   passthrough to any Web API method, and being request/response it does not cover Socket Mode or
