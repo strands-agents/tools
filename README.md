@@ -124,7 +124,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
 | mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) |
-| bright_data | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds|
+| bright_data ⚠️ | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds <br> **Deprecated — see [Deprecations](#deprecations)** |
 | memory ⚠️ | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
 | environment ⚠️ | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management <br> **Deprecated — see [Deprecations](#deprecations)** |
 | generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
@@ -174,9 +174,9 @@ More tools will follow as their capabilities land elsewhere, and this repository
 archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
 moving several at once later.
 
-Deprecated tools keep working. Each one logs a warning when invoked starting in **v0.8.6**,
-and that warning becomes an error log in **v0.9.0** — a louder signal for anyone who has not
-migrated, not a behavior change.
+Deprecated tools keep working. Each one logs a warning when invoked starting in the release
+shown below, and that warning becomes an error log in **v0.9.0** — a louder signal for anyone
+who has not migrated, not a behavior change.
 
 They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
 usage before you run anything. To list what you still need to migrate, run
@@ -201,6 +201,7 @@ is why the log message exists as well.
 | `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
 | `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
 | `environment` | `from strands.vended_tools import shell` (inspect only, see notes) | v0.8.6 | v0.9.0 |
+| `bright_data` | [Bright Data's official MCP server](https://docs.brightdata.com/ai/mcp-server/overview) | v0.8.9 | v0.9.0 |
 | `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
 | `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
@@ -267,6 +268,10 @@ The replacements are not drop-in equivalents. Check these before migrating:
   child shell cannot change the agent's own process environment, so variables need to be set where the
   agent is launched, or passed per call. If you were leaning on `PROTECTED_VARS` or secret masking,
   that guarding moves to your side.
+- **`bright_data` → Bright Data's official MCP server** — the vendor-maintained server covers search,
+  scraping, structured extraction, and browser automation. Its tool names and response shapes are not
+  drop-in equivalents, so follow Bright Data's
+  [setup and migration documentation](https://docs.brightdata.com/ai/mcp-server/overview).
 - **`slack` → Slack's official MCP server** — Slack maintains it, so it tracks their API directly, and
   it uses OAuth rather than long-lived tokens. It exposes a curated tool set rather than this tool's
   passthrough to any Web API method, and being request/response it does not cover Socket Mode or

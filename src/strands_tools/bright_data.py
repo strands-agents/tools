@@ -80,10 +80,16 @@ import requests
 from rich.panel import Panel
 from rich.text import Text
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "bright_data is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Bright Data's "
+    "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
+)
 
 console = console_util.create()
 
@@ -390,7 +396,16 @@ class BrightDataClient:
         raise TimeoutError(f"Timeout after {max_attempts} seconds waiting for {source_type} data")
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "bright_data is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Bright Data's "
+    "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
+)
 def bright_data(
     action: str,
     url: Optional[str] = None,
@@ -443,6 +458,8 @@ def bright_data(
     Returns:
         str: Response content from the requested operation
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         if not action:
             raise ValueError("action parameter is required")

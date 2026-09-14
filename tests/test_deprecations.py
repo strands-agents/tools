@@ -20,6 +20,7 @@ import strands_tools
 # (module, attribute) for every tool carrying @deprecated.
 DEPRECATED_TOOLS = [
     ("batch", "batch"),
+    ("bright_data", "bright_data"),
     ("calculator", "calculator"),
     ("cron", "cron"),
     ("current_time", "current_time"),

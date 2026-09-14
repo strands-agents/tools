@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .batch import batch as batch
+    from .bright_data import bright_data as bright_data
     from .calculator import calculator as calculator
     from .cron import cron as cron
     from .current_time import current_time as current_time
