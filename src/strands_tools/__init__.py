@@ -24,8 +24,6 @@ if TYPE_CHECKING:
     from .editor import editor as editor
     from .environment import environment as environment
     from .http_request import http_request as http_request
-    from .exa import exa_get_contents as exa_get_contents
-    from .exa import exa_search as exa_search
     from .journal import journal as journal
     from .memory import memory as memory
     from .retrieve import retrieve as retrieve
@@ -34,8 +32,4 @@ if TYPE_CHECKING:
     from .shell import shell as shell
     from .slack import slack as slack
     from .sleep import sleep as sleep
-    from .tavily import tavily_crawl as tavily_crawl
-    from .tavily import tavily_extract as tavily_extract
-    from .tavily import tavily_map as tavily_map
-    from .tavily import tavily_search as tavily_search
     from .think import think as think
