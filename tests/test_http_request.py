@@ -62,7 +62,7 @@ def test_http_request_logs_deprecation_warning(caplog):
     assert result["status"] == "success"
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an error log in v0.9.0" in caplog.text
-    assert "service-specific SDK or trusted MCP server" in caplog.text
+    assert "strands.vended_tools import http_request, web_fetch" in caplog.text
 
 
 def test_http_request_is_marked_deprecated_for_static_analysis():
@@ -70,7 +70,7 @@ def test_http_request_is_marked_deprecated_for_static_analysis():
     marker = getattr(http_request.http_request, "__deprecated__", None)
 
     assert marker is not None
-    assert "service-specific SDK or trusted MCP server" in marker
+    assert "strands.vended_tools import http_request, web_fetch" in marker
 
 
 @responses.activate
