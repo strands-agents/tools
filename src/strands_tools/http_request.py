@@ -48,6 +48,7 @@ from strands.types.tools import (
     ToolResult,
     ToolUse,
 )
+from typing_extensions import deprecated
 from urllib3 import Retry
 
 from strands_tools.utils import console_util
@@ -55,16 +56,23 @@ from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
 
-_SAFE_REDIRECT_HEADERS: frozenset = frozenset({
-    "accept",
-    "accept-encoding",
-    "connection",
-    "content-length",
-    "content-type",
-    "host",
-    "transfer-encoding",
-    "user-agent",
-})
+_DEPRECATION_MESSAGE = (
+    "http_request is deprecated. This warning becomes an error log in v0.9.0. Prefer a service-specific SDK or "
+    "trusted MCP server; otherwise expose a narrowly scoped custom tool using an HTTP client library."
+)
+
+_SAFE_REDIRECT_HEADERS: frozenset = frozenset(
+    {
+        "accept",
+        "accept-encoding",
+        "connection",
+        "content-length",
+        "content-type",
+        "host",
+        "transfer-encoding",
+        "user-agent",
+    }
+)
 
 
 class _SafeRedirectSession(requests.Session):
@@ -76,6 +84,7 @@ class _SafeRedirectSession(requests.Session):
             safe = {k: v for k, v in prepared_request.headers.items() if k.lower() in _SAFE_REDIRECT_HEADERS}
             prepared_request.headers.clear()
             prepared_request.headers.update(safe)
+
 
 TOOL_SPEC = {
     "name": "http_request",
@@ -601,6 +610,15 @@ def format_response_preview(
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "http_request is deprecated. This warning becomes an error log in v0.9.0. Prefer a service-specific SDK or "
+    "trusted MCP server; otherwise expose a narrowly scoped custom tool using an HTTP client library."
+)
 def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Execute HTTP request with comprehensive authentication and features.
@@ -696,6 +714,8 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Token Config:
     - Use HTTP_REQUEST_TOKEN_CONFIG to allow specific env vars as auth tokens for permitted domains
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:

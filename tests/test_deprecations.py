@@ -26,6 +26,7 @@ DEPRECATED_TOOLS = [
     ("diagram", "diagram"),
     ("editor", "editor"),
     ("environment", "environment"),
+    ("http_request", "http_request"),
     ("memory", "memory"),
     ("retrieve", "retrieve"),
     ("rss", "rss"),
