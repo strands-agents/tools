@@ -27,6 +27,7 @@ DEPRECATED_TOOLS = [
     ("diagram", "diagram"),
     ("editor", "editor"),
     ("environment", "environment"),
+    ("http_request", "http_request"),
     ("memory", "memory"),
     ("retrieve", "retrieve"),
     ("rss", "rss"),
@@ -43,8 +44,9 @@ REEXPORTED_TOOLS = [(module_name, attr) for module_name, attr in DEPRECATED_TOOL
 
 SRC = pathlib.Path(strands_tools.__file__).parent
 
-# ``from strands.vended_tools import shell`` inside a migration message.
-MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import (\w+)")
+# Imports such as ``from strands.vended_tools import shell`` or
+# ``from strands.vended_tools import http_request, web_fetch`` inside migration messages.
+MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import ([\w., ]+)")
 
 # shell pulls in termios/pty, which do not exist on Windows. Same stance as
 # test_shell.py: skipped there until issue #17 is resolved.
@@ -187,11 +189,12 @@ def test_migration_import_resolves(module_name, attr):
     """
     message = _import_tool_module(module_name)._DEPRECATION_MESSAGE
 
-    for module_path, symbol in MIGRATION_IMPORT.findall(message):
+    for module_path, symbols in MIGRATION_IMPORT.findall(message):
         module = importlib.import_module(module_path)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
-            assert hasattr(module, symbol)
+        for symbol in re.split(r"\s*,\s*", symbols):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", DeprecationWarning)
+                assert hasattr(module, symbol)
 
 
 def test_py_typed_marker_ships_with_the_package():
