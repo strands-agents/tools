@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .diagram import diagram as diagram
     from .editor import editor as editor
     from .environment import environment as environment
+    from .http_request import http_request as http_request
     from .memory import memory as memory
     from .retrieve import retrieve as retrieve
     from .rss import rss as rss

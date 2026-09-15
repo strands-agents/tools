@@ -47,6 +47,33 @@ def extract_result_text(result):
 
 
 @responses.activate
+def test_http_request_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    responses.add(responses.GET, "https://example.com/deprecation", json={"ok": True}, status=200)
+    tool_use = {
+        "toolUseId": "test-deprecation",
+        "input": {"method": "GET", "url": "https://example.com/deprecation"},
+    }
+
+    http_request.SESSION_CACHE.clear()
+    with caplog.at_level("WARNING", logger="strands_tools.http_request"):
+        result = http_request.http_request(tool=tool_use)
+
+    assert result["status"] == "success"
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import http_request, web_fetch" in caplog.text
+
+
+def test_http_request_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(http_request.http_request, "__deprecated__", None)
+
+    assert marker is not None
+    assert "strands.vended_tools import http_request, web_fetch" in marker
+
+
+@responses.activate
 def test_basic_get_request():
     """Test a basic GET request with direct invocation."""
     # Set up mock response
@@ -1408,7 +1435,9 @@ def test_custom_timeout_value_passed_to_request():
 @responses.activate
 def test_cross_host_redirect_strips_custom_headers():
     """Non-standard headers (X-API-Key, Authorization, etc.) must be stripped on cross-host redirect."""
-    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://attacker.com/steal"})
+    responses.add(
+        responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://attacker.com/steal"}
+    )
     responses.add(responses.GET, "https://attacker.com/steal", json={"status": "ok"}, status=200)
 
     tool_use = {
@@ -1436,7 +1465,9 @@ def test_cross_host_redirect_strips_custom_headers():
 @responses.activate
 def test_cross_host_redirect_strips_authorization():
     """Authorization header must be stripped on cross-host redirect."""
-    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://other.com/ep"})
+    responses.add(
+        responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://other.com/ep"}
+    )
     responses.add(responses.GET, "https://other.com/ep", json={"status": "ok"}, status=200)
 
     tool_use = {
@@ -1463,7 +1494,12 @@ def test_cross_host_redirect_strips_authorization():
 @responses.activate
 def test_same_host_redirect_preserves_all_headers():
     """Same-host redirect keeps all headers including credentials."""
-    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://api.example.com/final"})
+    responses.add(
+        responses.GET,
+        "https://api.example.com/start",
+        status=302,
+        headers={"Location": "https://api.example.com/final"},
+    )
     responses.add(responses.GET, "https://api.example.com/final", json={"status": "ok"}, status=200)
 
     tool_use = {
@@ -1516,7 +1552,9 @@ def test_multi_hop_strips_on_cross_host_hop():
 @responses.activate
 def test_no_redirect_follow_when_disabled():
     """allow_redirects=False returns the 302 directly without following."""
-    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+    responses.add(
+        responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"}
+    )
 
     tool_use = {
         "toolUseId": "test-no-redirect",
@@ -1574,9 +1612,10 @@ def test_cve_open_redirect_x_api_key_leak():
     assert result["status"] == "success"
     attacker_request = responses.calls[1].request
     for header_name in attacker_request.headers:
-        assert header_name.lower() not in ("x-api-key", "authorization"), (
-            f"CREDENTIAL LEAK: {header_name} header sent to attacker.com"
-        )
+        assert header_name.lower() not in (
+            "x-api-key",
+            "authorization",
+        ), f"CREDENTIAL LEAK: {header_name} header sent to attacker.com"
 
 
 @responses.activate
@@ -1680,7 +1719,9 @@ def test_cve_all_auth_types_stripped_on_cross_host():
 
     for auth_type, header_name in auth_configs:
         responses.reset()
-        responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+        responses.add(
+            responses.GET, "https://api.example.com/start", status=302, headers={"Location": "https://evil.com/steal"}
+        )
         responses.add(responses.GET, "https://evil.com/steal", json={"ok": True}, status=200)
 
         tool_use = {
@@ -1700,15 +1741,15 @@ def test_cve_all_auth_types_stripped_on_cross_host():
 
         assert result["status"] == "success", f"Failed for auth_type={auth_type}"
         redirected = responses.calls[1].request.headers
-        assert header_name not in redirected, (
-            f"CREDENTIAL LEAK: {header_name} leaked for auth_type={auth_type}"
-        )
+        assert header_name not in redirected, f"CREDENTIAL LEAK: {header_name} leaked for auth_type={auth_type}"
 
 
 @responses.activate
 def test_cve_arbitrary_custom_header_stripped():
     """Any non-standard header (not just known credential headers) must be stripped on cross-host."""
-    responses.add(responses.GET, "https://example.com/start", status=302, headers={"Location": "https://evil.com/steal"})
+    responses.add(
+        responses.GET, "https://example.com/start", status=302, headers={"Location": "https://evil.com/steal"}
+    )
     responses.add(responses.GET, "https://evil.com/steal", json={"ok": True}, status=200)
 
     tool_use = {
@@ -1740,7 +1781,12 @@ def test_cve_arbitrary_custom_header_stripped():
 @responses.activate
 def test_https_to_http_downgrade_strips_credentials():
     """HTTPS → HTTP redirect on the same host must strip credentials (plaintext exposure)."""
-    responses.add(responses.GET, "https://api.example.com/start", status=302, headers={"Location": "http://api.example.com/insecure"})
+    responses.add(
+        responses.GET,
+        "https://api.example.com/start",
+        status=302,
+        headers={"Location": "http://api.example.com/insecure"},
+    )
     responses.add(responses.GET, "http://api.example.com/insecure", json={"ok": True}, status=200)
 
     tool_use = {
@@ -1766,7 +1812,12 @@ def test_https_to_http_downgrade_strips_credentials():
 @responses.activate
 def test_http_to_https_upgrade_preserves_credentials():
     """HTTP → HTTPS upgrade on the same host should preserve credentials (safe upgrade)."""
-    responses.add(responses.GET, "http://api.example.com/start", status=302, headers={"Location": "https://api.example.com/secure"})
+    responses.add(
+        responses.GET,
+        "http://api.example.com/start",
+        status=302,
+        headers={"Location": "https://api.example.com/secure"},
+    )
     responses.add(responses.GET, "https://api.example.com/secure", json={"ok": True}, status=200)
 
     tool_use = {
@@ -1792,7 +1843,12 @@ def test_http_to_https_upgrade_preserves_credentials():
 @responses.activate
 def test_different_port_strips_credentials():
     """Redirect to a different port on the same host must strip credentials."""
-    responses.add(responses.GET, "https://api.example.com:8080/start", status=302, headers={"Location": "https://api.example.com:9090/other"})
+    responses.add(
+        responses.GET,
+        "https://api.example.com:8080/start",
+        status=302,
+        headers={"Location": "https://api.example.com:9090/other"},
+    )
     responses.add(responses.GET, "https://api.example.com:9090/other", json={"ok": True}, status=200)
 
     tool_use = {

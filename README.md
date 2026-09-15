@@ -109,7 +109,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor ⚠️ | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits <br> **Deprecated — see [Deprecations](#deprecations)** |
 | shell* ⚠️ | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts <br> **Deprecated — see [Deprecations](#deprecations)** |
-| http_request | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services |
+| http_request ⚠️ | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services <br> **Deprecated — see [Deprecations](#deprecations)** |
 | tavily_search | `agent.tool.tavily_search(query="What is artificial intelligence?", search_depth="advanced")` | Real-time web search optimized for AI agents with a variety of custom parameters |
 | tavily_extract | `agent.tool.tavily_extract(urls=["www.tavily.com"], extract_depth="advanced")` | Extract clean, structured content from web pages with advanced processing and noise removal |
 | tavily_crawl | `agent.tool.tavily_crawl(url="www.tavily.com", max_depth=2, instructions="Find API docs")` | Crawl websites intelligently starting from a base URL with filtering and extraction |
@@ -174,9 +174,9 @@ More tools will follow as their capabilities land elsewhere, and this repository
 archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
 moving several at once later.
 
-Deprecated tools keep working. Each one logs a warning when invoked starting in **v0.8.6**,
-and that warning becomes an error log in **v0.9.0** — a louder signal for anyone who has not
-migrated, not a behavior change.
+Deprecated tools keep working. Each one logs a warning when invoked starting in the release
+shown below, and that warning becomes an error log in **v0.9.0** — a louder signal for anyone
+who has not migrated, not a behavior change.
 
 They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
 usage before you run anything. To list what you still need to migrate, run
@@ -201,6 +201,7 @@ is why the log message exists as well.
 | `calculator` | `from strands.vended_tools import shell` (run `python3 -c` with sympy) | v0.8.6 | v0.9.0 |
 | `cron` | `from strands.vended_tools import shell` (manage `crontab`), or Amazon EventBridge Scheduler | v0.8.6 | v0.9.0 |
 | `environment` | `from strands.vended_tools import shell` (inspect only, see notes) | v0.8.6 | v0.9.0 |
+| `http_request` | `from strands.vended_tools import http_request, web_fetch` (http_request for APIs, web_fetch for web pages)| v0.8.9 | v0.9.0 |
 | `slack` | [official Slack MCP server](https://docs.slack.dev/ai/mcp-server/); `slack_bolt` for Socket Mode | v0.8.6 | v0.9.0 |
 | `diagram` | no replacement — have the model write graphviz/mermaid/`diagrams` code directly | v0.8.6 | v0.9.0 |
 | `rss` | no replacement — parse feeds directly with `feedparser` | v0.8.6 | v0.9.0 |
@@ -267,6 +268,12 @@ The replacements are not drop-in equivalents. Check these before migrating:
   child shell cannot change the agent's own process environment, so variables need to be set where the
   agent is launched, or passed per call. If you were leaning on `PROTECTED_VARS` or secret masking,
   that guarding moves to your side.
+ - **`http_request` → `http_request` / `web_fetch`** — the tool splits by intent: raw API calls move to
+  the vended `http_request`, while fetching and reading a page moves to `web_fetch`. Authentication and
+  endpoint scoping now live in an `httpx.AsyncClient` you pass via `make_http_request(client=...)`.
+  `web_fetch` defaults to an agentic mode that summarizes a page before it enters the main context;
+  pass `mode="markdown"` to the `web_fetch` factory for the full page as markdown, replacing
+  `convert_to_markdown=True`.
 - **`slack` → Slack's official MCP server** — Slack maintains it, so it tracks their API directly, and
   it uses OAuth rather than long-lived tokens. It exposes a curated tool set rather than this tool's
   passthrough to any Web API method, and being request/response it does not cover Socket Mode or
