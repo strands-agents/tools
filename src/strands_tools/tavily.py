@@ -54,10 +54,16 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import aiohttp
 from rich.panel import Panel
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "server, documented at https://docs.tavily.com/documentation/mcp."
+)
 
 # Tavily API configuration
 TAVILY_API_BASE_URL = "https://api.tavily.com"
@@ -253,7 +259,17 @@ def format_map_response(data: Dict[str, Any]) -> Panel:
 # Tavily Tools
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
+)
 async def tavily_search(
     query: str,
     search_depth: Optional[Literal["basic", "advanced"]] = None,
@@ -324,6 +340,7 @@ async def tavily_search(
     Returns:
         Dict containing search results and metadata with status and content fields.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Validate parameters
@@ -397,6 +414,11 @@ async def tavily_search(
 
 
 @tool
+@deprecated(
+    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
+)
 async def tavily_extract(
     urls: Union[str, List[str]],
     extract_depth: Optional[Literal["basic", "advanced"]] = None,
@@ -436,6 +458,7 @@ async def tavily_extract(
     Returns:
         Dict containing extraction results and metadata with status and content fields.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Validate parameters
@@ -489,6 +512,11 @@ async def tavily_extract(
 
 
 @tool
+@deprecated(
+    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
+)
 async def tavily_crawl(
     url: str,
     max_depth: Optional[int] = None,
@@ -556,6 +584,7 @@ async def tavily_crawl(
     Returns:
         Dict containing crawl results and metadata with status and content fields.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Validate parameters
@@ -631,6 +660,11 @@ async def tavily_crawl(
 
 
 @tool
+@deprecated(
+    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "server, documented at https://docs.tavily.com/documentation/mcp.",
+    category=None,
+)
 async def tavily_map(
     url: str,
     max_depth: Optional[int] = None,
@@ -687,6 +721,7 @@ async def tavily_map(
     Returns:
         Dict containing map results and metadata with status and content fields.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Validate parameters

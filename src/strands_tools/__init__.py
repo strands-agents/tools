@@ -17,15 +17,18 @@ if TYPE_CHECKING:
     from .batch import batch as batch
     from .bright_data import bright_data as bright_data
     from .calculator import calculator as calculator
+    from .chat_video import chat_video as chat_video
     from .cron import cron as cron
     from .current_time import current_time as current_time
     from .diagram import diagram as diagram
     from .editor import editor as editor
     from .environment import environment as environment
     from .http_request import http_request as http_request
+    from .journal import journal as journal
     from .memory import memory as memory
     from .retrieve import retrieve as retrieve
     from .rss import rss as rss
+    from .search_video import search_video as search_video
     from .shell import shell as shell
     from .slack import slack as slack
     from .sleep import sleep as sleep
