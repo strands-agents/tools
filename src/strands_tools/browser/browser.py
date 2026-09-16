@@ -946,6 +946,14 @@ class Browser(ABC):
             return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
 
     def _execute_async(self, action_coro) -> Any:
+        # Ensure the event loop is registered on the current thread.
+        # When stream_async() dispatches this method to a worker thread,
+        # the loop created in __init__ may not be set as the current
+        # thread's event loop, causing run_until_complete to fail with
+        # "RuntimeError: There is no current event loop in thread".
+        # See: strands-agents/tools#453
+        asyncio.set_event_loop(self._loop)
+
         # Apply nest_asyncio if not already applied
         if not self._nest_asyncio_applied:
             nest_asyncio.apply()
