@@ -130,9 +130,7 @@ WORKFLOW_DIR = Path(os.getenv("STRANDS_WORKFLOW_DIR", Path.home() / ".strands" /
 os.makedirs(WORKFLOW_DIR, exist_ok=True)
 
 # Default thread pool settings
-MIN_THREADS = int(os.getenv("STRANDS_WORKFLOW_MIN_THREADS", "2"))
 MAX_THREADS = int(os.getenv("STRANDS_WORKFLOW_MAX_THREADS", "8"))
-CPU_THRESHOLD = int(os.getenv("STRANDS_WORKFLOW_CPU_THRESHOLD", "80"))  # CPU usage threshold for scaling down
 
 # Rate limiting configuration
 _rate_limit_lock = RLock()
@@ -159,8 +157,7 @@ class WorkflowFileHandler(FileSystemEventHandler):
 class TaskExecutor:
     """Advanced task executor with dynamic scaling and resource monitoring."""
 
-    def __init__(self, min_workers=MIN_THREADS, max_workers=MAX_THREADS):
-        self.min_workers = min_workers
+    def __init__(self, max_workers=MAX_THREADS):
         self.max_workers = max_workers
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self.task_queue = Queue()
