@@ -179,3 +179,76 @@ def create_mock_socket_mode_request(event_type="message", text="Test message"):
         }
 
     return request
+
+
+class TestSystemPromptPreservation(unittest.TestCase):
+    """Test that the agent's system prompt is preserved in message processing."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.handler = SocketModeHandler()
+        self.handler.client = MagicMock()
+        self.mock_agent = MagicMock()
+        self.mock_agent.tool_registry = MagicMock()
+        self.mock_agent.tool_registry.registry = MagicMock()
+        self.mock_agent.tool_registry.registry.values.return_value = []
+        self.mock_agent.system_prompt = "You are a friendly assistant that barks Bow! first."
+        self.mock_agent.trace_attributes = {}
+        self.mock_agent.callback_handler = None
+        self.mock_agent.model = MagicMock()
+        self.handler.agent = self.mock_agent
+        self.handler.bot_info = {"user_id": "BOT_USER_ID", "bot_id": "BOT_ID"}
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.Agent")
+    def test_system_prompt_preserved_in_message_processing(self, mock_agent_class, mock_client):
+        """Test that the parent agent's system prompt is included in child agent. Fixes #302."""
+        event = {
+            "type": "message",
+            "text": "Hello test",
+            "user": "USER123",
+            "channel": "CHANNEL123",
+            "ts": "1234.5678",
+        }
+
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.return_value = "Bow! Hello!"
+        mock_agent_class.return_value = mock_agent_instance
+
+        with patch.dict("os.environ", {"STRANDS_SLACK_AUTO_REPLY": "true"}):
+            self.handler._process_message(event)
+
+            # Verify the Agent was created with the parent's system prompt
+            call_kwargs = mock_agent_class.call_args[1]
+            system_prompt_used = call_kwargs["system_prompt"]
+
+            # The parent agent's system prompt should be included
+            self.assertIn("You are a friendly assistant that barks Bow! first.", system_prompt_used)
+            # The Slack system prompt should also be included
+            self.assertIn("AI assistant integrated with a Slack workspace", system_prompt_used)
+
+    @patch("strands_tools.slack.client")
+    @patch("strands_tools.slack.Agent")
+    def test_system_prompt_preserved_in_interactive_processing(self, mock_agent_class, mock_client):
+        """Test that the parent agent's system prompt is included in interactive event processing."""
+        event = {
+            "type": "interactive",
+            "channel": "CHANNEL123",
+            "user": "USER123",
+            "ts": "1234.5678",
+            "actions": [{"action_id": "test_action"}],
+        }
+
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.return_value = "Interactive response"
+        mock_agent_class.return_value = mock_agent_instance
+
+        with patch.dict("os.environ", {"STRANDS_SLACK_AUTO_REPLY": "true"}):
+            self.handler._process_interactive(event)
+
+            # Verify the Agent was created with the parent's system prompt
+            call_kwargs = mock_agent_class.call_args[1]
+            system_prompt_used = call_kwargs["system_prompt"]
+
+            # The parent agent's system prompt should be included
+            self.assertIn("You are a friendly assistant that barks Bow! first.", system_prompt_used)
