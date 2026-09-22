@@ -2,6 +2,8 @@
 Unit tests for the Browser base class using MockBrowser.
 """
 
+import asyncio
+import concurrent.futures
 from unittest.mock import AsyncMock, Mock, patch
 
 from playwright.async_api import Browser as PlaywrightBrowser
@@ -81,3 +83,21 @@ def test_browser_tool_integration(mock_async_playwright):
     tool_func = browser.browser
     assert hasattr(tool_func, "__name__")
     assert tool_func.__name__ == "browser"
+
+
+def test_execute_async_works_from_foreign_thread():
+    """_execute_async must work when called from a thread other than the one that ran __init__.
+
+    The strands SDK dispatches sync tools via asyncio.to_thread, which runs the tool
+    on a worker thread. Without setting the event loop on that thread,
+    nest_asyncio.apply() fails with 'There is no current event loop in thread'.
+    """
+    browser = MockBrowser()
+
+    async def dummy():
+        return "ok"
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(browser._execute_async, dummy()).result(timeout=5)
+
+    assert result == "ok"
