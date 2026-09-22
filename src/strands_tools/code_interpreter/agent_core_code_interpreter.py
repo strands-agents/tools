@@ -21,8 +21,19 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level session cache - persists across object instances
-_session_mapping: Dict[str, str] = {}  # user_session_name -> aws_session_id
+# Module-level session cache - lets a new object instance in the same process reconnect to
+# an AWS code interpreter session a previous instance started, instead of paying to recreate
+# it. Keys are partitioned per caller (see partition_key / _scoped_key) so that a session name
+# supplied in one caller's partition can never address a session created in another's.
+#
+# The real isolation boundary is AWS-side, not this map: a session is reachable only by holding
+# its server-issued, unguessable sessionId, and every operation is authorized against the
+# interpreter's IAM execution role. This cache is a per-process reconnect convenience. The
+# partition_key is what keeps callers apart within one process; it is bound at construction
+# from operator-controlled input and is never taken from a tool action, so a model-supplied
+# session name cannot reach across partitions. Multi-tenant deployments should pass a distinct
+# partition_key per caller (e.g. the authenticated principal or agent session id).
+_session_mapping: Dict[str, str] = {}  # "partition_key\x00session_name" -> aws_session_id
 
 
 @dataclass
@@ -56,6 +67,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         persist_sessions: bool = True,
         session_timeout_seconds: int = 900,
         boto_session: Optional[boto3.Session] = None,
+        partition_key: Optional[str] = None,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter with session persistence support.
@@ -111,6 +123,18 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 If provided, this session is passed to the underlying Bedrock AgentCore client,
                 enabling cross-account access or custom credential configurations.
                 If None (default), the client uses the default credential chain.
+
+            partition_key (Optional[str]): Caller partition for the in-process reconnect cache.
+                Session names are namespaced under this key, so a session name used in one
+                partition can never address a session created in another. Bind it at construction
+                from operator-controlled input (it is never read from a tool action), passing a
+                distinct value per caller in multi-tenant deployments:
+                    - The authenticated principal / tenant id, or
+                    - The agent session id (e.g. context.session_id), when one identity may run
+                      several isolated sessions.
+                Defaults to a shared "default" partition when not provided, which preserves the
+                prior single-caller reconnect behavior. The cache key is no longer derived from
+                AWS credentials.
 
         Session Lifecycle:
             Invocation 1 (Instance #1):
@@ -173,9 +197,17 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         Notes:
             - Module-level cache persists in long-running Python processes (AgentCore)
             - Cache does NOT persist across container restarts (cold starts)
-            - Session names must be unique per user/conversation for isolation
+            - Cache keys are namespaced by partition_key, so a session name used in one
+              partition cannot address a session created in another. partition_key is bound at
+              construction and is never taken from a tool action
             - AWS session IDs are globally unique (ULID format)
             - Sessions can be manually stopped via AWS console/API if needed
+
+            The in-process cache is a reconnect convenience, NOT the isolation boundary. The
+            real boundary is AWS-side: a session is reachable only by holding its server-issued,
+            unguessable sessionId, and every operation is authorized against the interpreter's
+            IAM execution role. Within a single process, partition_key is what keeps callers
+            apart, so multi-tenant deployments must pass a distinct partition_key per caller.
 
         Raises:
             ValueError: If auto_create=False and session doesn't exist, or if
@@ -200,13 +232,24 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         else:
             self.default_session = session_name
 
+        # Partition for the in-process reconnect cache. Bound here from operator-controlled
+        # input and never read from a tool action, so a model-supplied session name cannot
+        # reach across partitions. Defaults to a shared "default" partition, preserving the
+        # prior single-caller reconnect behavior; multi-tenant callers must pass a distinct
+        # partition_key per principal to keep their sessions isolated.
+        self.partition_key = partition_key if partition_key is not None else "default"
+
         self._sessions: Dict[str, SessionInfo] = {}
 
         logger.info(
             f"Initialized CodeInterpreter with session='{self.default_session}', "
-            f"identifier='{self.identifier}', auto_create={auto_create}, "
-            f"persist_sessions={persist_sessions}"
+            f"partition='{self.partition_key}', identifier='{self.identifier}', "
+            f"auto_create={auto_create}, persist_sessions={persist_sessions}"
         )
+
+    def _scoped_key(self, session_name: str) -> str:
+        """Build the module-level cache key for a session name under this instance's partition."""
+        return f"{self.partition_key}\x00{session_name}"
 
     def start_platform(self) -> None:
         """Initialize the Bedrock AgentCoreplatform connection."""
@@ -262,8 +305,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         if session_name in self._sessions:
             return {"status": "error", "content": [{"text": f"Session '{session_name}' already exists"}]}
 
-        # Check if session name already in use (module-level cache)
-        if session_name in _session_mapping:
+        # Check if session name already in use (module-level cache, scoped to this partition)
+        if self._scoped_key(session_name) in _session_mapping:
             error_msg = (
                 f"Session '{session_name}' is already in use by another instance. "
                 f"Use a unique session name or reconnect to the existing session "
@@ -284,8 +327,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
             aws_session_id = client.session_id
 
-            # Store mapping in module-level cache
-            _session_mapping[session_name] = aws_session_id
+            # Store mapping in module-level cache (scoped to this partition)
+            _session_mapping[self._scoped_key(session_name)] = aws_session_id
 
             # Store session info locally
             self._sessions[session_name] = SessionInfo(
@@ -360,8 +403,9 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.debug(f"Using cached session: {target_session}")
             return target_session, None
 
-        # Check module-level cache for AWS session ID
-        aws_session_id = _session_mapping.get(target_session)
+        # Check module-level cache for AWS session ID (scoped to this partition)
+        scoped_key = self._scoped_key(target_session)
+        aws_session_id = _session_mapping.get(scoped_key)
 
         if aws_session_id:
             # Found in module cache - try to reconnect
@@ -387,13 +431,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 else:
                     # Session exists but not ready - remove from cache
                     logger.warning(f"Session {target_session} not READY, removing from cache")
-                    del _session_mapping[target_session]
+                    del _session_mapping[scoped_key]
 
             except Exception as e:
                 # Session doesn't exist or error - remove from cache
                 logger.debug(f"Session reconnection failed: {e}")
-                if target_session in _session_mapping:
-                    del _session_mapping[target_session]
+                if scoped_key in _session_mapping:
+                    del _session_mapping[scoped_key]
 
         # Session not found - create new if auto_create enabled
         if self.auto_create:
