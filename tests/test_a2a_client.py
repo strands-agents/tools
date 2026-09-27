@@ -1,5 +1,7 @@
+import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
+import httpx
 import pytest
 from a2a.types import Message
 
@@ -418,65 +420,55 @@ async def test_send_message_error(mock_ensure, mock_discover):
 
 
 @pytest.mark.asyncio
-@patch.object(A2AClientToolProvider, "_get_httpx_client")
-async def test_create_a2a_card_resolver(mock_get_client):
-    """Test _create_a2a_card_resolver creates resolver with correct parameters."""
+async def test_create_a2a_card_resolver():
+    """Test _create_a2a_card_resolver uses the operation's HTTP client."""
     provider = A2AClientToolProvider()
     mock_client = Mock()
-    mock_get_client.return_value = mock_client
 
     with patch("strands_tools.a2a_client.A2ACardResolver") as mock_resolver_class:
-        mock_resolver = Mock()
-        mock_resolver_class.return_value = mock_resolver
-
-        result = await provider._create_a2a_card_resolver("http://test.com")
+        result = await provider._create_a2a_card_resolver("http://test.com", mock_client)
 
         mock_resolver_class.assert_called_once_with(httpx_client=mock_client, base_url="http://test.com")
-        assert result == mock_resolver
+        assert result == mock_resolver_class.return_value
 
 
-@patch.object(A2AClientToolProvider, "_get_httpx_client")
-def test_get_client_factory(mock_get_client):
+def test_get_client_factory():
     """Test _get_client_factory creates ClientFactory with correct parameters."""
     provider = A2AClientToolProvider()
     mock_client = Mock()
-    mock_get_client.return_value = mock_client
 
-    with patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class:
-        with patch("strands_tools.a2a_client.ClientConfig") as mock_config_class:
-            mock_config = Mock()
-            mock_config_class.return_value = mock_config
-            mock_factory = Mock()
-            mock_factory_class.return_value = mock_factory
+    with (
+        patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class,
+        patch("strands_tools.a2a_client.ClientConfig") as mock_config_class,
+    ):
+        result = provider._get_client_factory(mock_client)
 
-            result = provider._get_client_factory()
-
-            mock_config_class.assert_called_once()
-            mock_factory_class.assert_called_once_with(mock_config)
-            assert result == mock_factory
+        mock_config_class.assert_called_once_with(
+            httpx_client=mock_client, streaming=False, push_notification_configs=[]
+        )
+        mock_factory_class.assert_called_once_with(mock_config_class.return_value)
+        assert result == mock_factory_class.return_value
 
 
 def test_get_client_factory_creates_fresh_each_time():
-    """Test _get_client_factory creates fresh factory each time to avoid event loop issues."""
+    """Each factory uses its operation's HTTP client instead of reusing a cached client."""
     provider = A2AClientToolProvider()
+    mock_client1 = Mock()
+    mock_client2 = Mock()
 
-    with patch.object(provider, "_get_httpx_client") as mock_get_client:
-        with patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class:
-            mock_client1 = Mock()
-            mock_client2 = Mock()
-            mock_get_client.side_effect = [mock_client1, mock_client2]
+    with patch("strands_tools.a2a_client.ClientFactory") as mock_factory_class:
+        mock_factory1 = Mock()
+        mock_factory2 = Mock()
+        mock_factory_class.side_effect = [mock_factory1, mock_factory2]
 
-            mock_factory1 = Mock()
-            mock_factory2 = Mock()
-            mock_factory_class.side_effect = [mock_factory1, mock_factory2]
+        result1 = provider._get_client_factory(mock_client1)
+        result2 = provider._get_client_factory(mock_client2)
 
-            result1 = provider._get_client_factory()
-            result2 = provider._get_client_factory()
-
-            # Should create a new factory each time
-            assert mock_factory_class.call_count == 2
-            assert result1 == mock_factory1
-            assert result2 == mock_factory2
+        assert mock_factory_class.call_count == 2
+        assert mock_factory_class.call_args_list[0].args[0].httpx_client is mock_client1
+        assert mock_factory_class.call_args_list[1].args[0].httpx_client is mock_client2
+        assert result1 == mock_factory1
+        assert result2 == mock_factory2
 
 
 @pytest.mark.asyncio
@@ -570,3 +562,66 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
         "target_agent_url": "http://test.com",
     }
     assert result == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_discover_agent_card_closes_http_client(fails):
+    provider = A2AClientToolProvider()
+    http_client = httpx.AsyncClient()
+    resolver = Mock()
+    resolver.get_agent_card = AsyncMock(
+        side_effect=RuntimeError("Discovery failed") if fails else None,
+        return_value=Mock(),
+    )
+    try:
+        with (
+            patch.object(provider, "_get_httpx_client", return_value=http_client),
+            patch("strands_tools.a2a_client.A2ACardResolver", return_value=resolver),
+        ):
+            if fails:
+                with pytest.raises(RuntimeError, match="Discovery failed"):
+                    await provider._discover_agent_card("http://test.com")
+                assert "http://test.com" not in provider._discovered_agents
+            else:
+                await provider._discover_agent_card("http://test.com")
+            assert http_client.is_closed
+    finally:
+        await http_client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["message", "error", "empty", "factory_error", "cancelled"])
+async def test_send_message_closes_http_client(outcome):
+    provider = A2AClientToolProvider()
+    http_client = httpx.AsyncClient()
+    factory = Mock()
+    response = Mock(spec=Message)
+    response.model_dump.return_value = {"text": "Reply"}
+
+    async def send_message(message):
+        if outcome == "error":
+            raise RuntimeError("Send failed")
+        if outcome == "cancelled":
+            raise asyncio.CancelledError
+        if outcome == "message":
+            yield response
+
+    factory.create.return_value.send_message = send_message
+    if outcome == "factory_error":
+        factory.create.side_effect = RuntimeError("Client creation failed")
+    try:
+        with (
+            patch.object(provider, "_get_httpx_client", return_value=http_client),
+            patch.object(provider, "_discover_agent_card", return_value=Mock()),
+            patch("strands_tools.a2a_client.ClientFactory", return_value=factory),
+        ):
+            if outcome == "cancelled":
+                with pytest.raises(asyncio.CancelledError):
+                    await provider._send_message("Hello", "http://test.com", "test_id")
+            else:
+                result = await provider._send_message("Hello", "http://test.com", "test_id")
+                assert result["status"] == ("success" if outcome == "message" else "error")
+            assert http_client.is_closed
+    finally:
+        await http_client.aclose()

@@ -120,17 +120,13 @@ class A2AClientToolProvider:
         """
         return httpx.AsyncClient(**self._httpx_client_args)
 
-    def _get_client_factory(self) -> ClientFactory:
+    def _get_client_factory(self, httpx_client: httpx.AsyncClient) -> ClientFactory:
         """
-        Get a ClientFactory for the current operation.
+        Get a ClientFactory using the HTTP client owned by the current operation.
 
-        Creates a fresh ClientFactory with a fresh httpx client for each call to avoid
-        event loop issues when the provider is used across multiple asyncio.run() calls.
-
-        Note: We don't cache the ClientFactory because it contains the httpx client,
-        which would cause "Event loop is closed" errors in multi-turn conversations.
+        The caller closes the client after the operation, including on failure.
+        Factories are not cached to avoid sharing clients across event loops.
         """
-        httpx_client = self._get_httpx_client()
         config = ClientConfig(
             httpx_client=httpx_client,
             streaming=False,  # Use non-streaming mode for simpler response handling
@@ -138,9 +134,8 @@ class A2AClientToolProvider:
         )
         return ClientFactory(config)
 
-    async def _create_a2a_card_resolver(self, url: str) -> A2ACardResolver:
-        """Create a new A2A card resolver for the given URL."""
-        httpx_client = self._get_httpx_client()
+    async def _create_a2a_card_resolver(self, url: str, httpx_client: httpx.AsyncClient) -> A2ACardResolver:
+        """Create a card resolver using the HTTP client owned by the current operation."""
         logger.info(f"A2ACardResolver created for {url}")
         return A2ACardResolver(httpx_client=httpx_client, base_url=url)
 
@@ -170,8 +165,9 @@ class A2AClientToolProvider:
         if url in self._discovered_agents:
             return self._discovered_agents[url]
 
-        resolver = await self._create_a2a_card_resolver(url)
-        agent_card = await resolver.get_agent_card()
+        async with self._get_httpx_client() as httpx_client:
+            resolver = await self._create_a2a_card_resolver(url, httpx_client)
+            agent_card = await resolver.get_agent_card()
         self._discovered_agents[url] = agent_card
         logger.info(f"Successfully discovered and cached agent card for {url}")
 
@@ -287,61 +283,62 @@ class A2AClientToolProvider:
 
             # Get the agent card and create client using factory
             agent_card = await self._discover_agent_card(target_agent_url)
-            client_factory = self._get_client_factory()
-            client = client_factory.create(agent_card)
+            async with self._get_httpx_client() as httpx_client:
+                client_factory = self._get_client_factory(httpx_client)
+                client = client_factory.create(agent_card)
 
-            if message_id is None:
-                message_id = uuid4().hex
+                if message_id is None:
+                    message_id = uuid4().hex
 
-            message = Message(
-                kind="message",
-                role=Role.user,
-                parts=[Part(TextPart(kind="text", text=message_text))],
-                message_id=message_id,
-            )
+                message = Message(
+                    kind="message",
+                    role=Role.user,
+                    parts=[Part(TextPart(kind="text", text=message_text))],
+                    message_id=message_id,
+                )
 
-            logger.info(f"Sending message to {target_agent_url}")
+                logger.info(f"Sending message to {target_agent_url}")
 
-            # With streaming=False, this will yield exactly one result
-            async for event in client.send_message(message):
-                if isinstance(event, Message):
-                    # Direct message response
-                    return {
-                        "status": "success",
-                        "response": event.model_dump(mode="python", exclude_none=True),
-                        "message_id": message_id,
-                        "target_agent_url": target_agent_url,
-                    }
-                elif isinstance(event, tuple) and len(event) == 2:
-                    # (Task, UpdateEvent) tuple - extract the task
-                    task, update_event = event
-                    return {
-                        "status": "success",
-                        "response": {
-                            "task": task.model_dump(mode="python", exclude_none=True),
-                            "update": (
-                                update_event.model_dump(mode="python", exclude_none=True) if update_event else None
-                            ),
-                        },
-                        "message_id": message_id,
-                        "target_agent_url": target_agent_url,
-                    }
-                else:
-                    # Fallback for unexpected response types
-                    return {
-                        "status": "success",
-                        "response": {"raw_response": str(event)},
-                        "message_id": message_id,
-                        "target_agent_url": target_agent_url,
-                    }
+                # With streaming=False, this will yield exactly one result
+                async for event in client.send_message(message):
+                    if isinstance(event, Message):
+                        # Direct message response
+                        return {
+                            "status": "success",
+                            "response": event.model_dump(mode="python", exclude_none=True),
+                            "message_id": message_id,
+                            "target_agent_url": target_agent_url,
+                        }
+                    elif isinstance(event, tuple) and len(event) == 2:
+                        # (Task, UpdateEvent) tuple - extract the task
+                        task, update_event = event
+                        return {
+                            "status": "success",
+                            "response": {
+                                "task": task.model_dump(mode="python", exclude_none=True),
+                                "update": (
+                                    update_event.model_dump(mode="python", exclude_none=True) if update_event else None
+                                ),
+                            },
+                            "message_id": message_id,
+                            "target_agent_url": target_agent_url,
+                        }
+                    else:
+                        # Fallback for unexpected response types
+                        return {
+                            "status": "success",
+                            "response": {"raw_response": str(event)},
+                            "message_id": message_id,
+                            "target_agent_url": target_agent_url,
+                        }
 
-            # This should never be reached with streaming=False
-            return {
-                "status": "error",
-                "error": "No response received from agent",
-                "message_id": message_id,
-                "target_agent_url": target_agent_url,
-            }
+                # This should never be reached with streaming=False
+                return {
+                    "status": "error",
+                    "error": "No response received from agent",
+                    "message_id": message_id,
+                    "target_agent_url": target_agent_url,
+                }
 
         except Exception as e:
             logger.exception(f"Error sending message to {target_agent_url}")
