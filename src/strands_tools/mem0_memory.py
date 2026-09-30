@@ -109,9 +109,6 @@ from strands_tools.utils import console_util
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Initialize Rich console
-console = console_util.create()
-
 TOOL_SPEC = {
     "name": "mem0_memory",
     "description": (
@@ -843,6 +840,8 @@ def _execute_mem0_memory(
         agent_id: Bound agent ID (may be None if user_id is set).
         config: Optional Mem0 backend configuration.
     """
+    console = console_util.create()
+
     try:
         # Extract input from tool use object
         tool_input = tool.get("input", {})
