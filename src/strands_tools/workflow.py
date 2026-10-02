@@ -326,17 +326,20 @@ class WorkflowManager:
 
             # Configure tools
             filtered_tools = []
-            if task_tools and self.parent_agent and hasattr(self.parent_agent, "tool_registry"):
+            tools_specified = "tools" in task
+            if tools_specified and self.parent_agent and hasattr(self.parent_agent, "tool_registry"):
                 # Filter parent agent tools to only include specified tool names
                 available_tools = self.parent_agent.tool_registry.registry
-                for tool_name in task_tools:
+                for tool_name in (task_tools or []):
                     if tool_name in available_tools:
                         filtered_tools.append(available_tools[tool_name])
                     else:
                         logger.warning(f"Tool '{tool_name}' not found in parent agent's tool registry")
             elif self.parent_agent and hasattr(self.parent_agent, "tool_registry"):
-                # Inherit all tools from parent if none specified
-                filtered_tools = list(self.parent_agent.tool_registry.registry.values())
+                # Inherit all tools from parent if none specified, but exclude workflow to avoid recursion.
+                filtered_tools = [
+                    tool for tool_name, tool in self.parent_agent.tool_registry.registry.items() if tool_name != "workflow"
+                ]
 
             # Configure model
             selected_model = None
