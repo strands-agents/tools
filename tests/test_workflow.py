@@ -349,6 +349,141 @@ class TestWorkflowDeletion:
         assert "workflow_id is required for delete action" in result["content"][0]["text"]
 
 
+class TestWorkflowIdValidation:
+    """Test that workflow_id stays confined to the workflow directory."""
+
+    BAD_IDS = [
+        "../../etc/passwd",
+        "../../../../tmp/pwned",
+        "..",
+        ".",
+        "foo/bar",
+        "/etc/passwd",
+        "with space",
+        "tab\tname",
+        "a" * 129,
+        "",
+    ]
+
+    @pytest.mark.parametrize("bad_id", BAD_IDS)
+    def test_is_valid_workflow_id_rejects(self, bad_id):
+        """The allowlist rejects traversal sequences, separators, and overlong ids."""
+        assert workflow_module.is_valid_workflow_id(bad_id) is False
+
+    @pytest.mark.parametrize("good_id", ["abc", "my_workflow", "data-pipeline", "v1.2.3", "A" * 128])
+    def test_is_valid_workflow_id_accepts(self, good_id):
+        """The allowlist accepts ordinary ids."""
+        assert workflow_module.is_valid_workflow_id(good_id) is True
+
+    def test_create_boundary_rejects_traversal(self, mock_parent_agent):
+        """create applies the strict allowlist and rejects a traversal id before any sink."""
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+
+            result = workflow_module.workflow(
+                action="create",
+                workflow_id="../../etc/passwd",
+                tasks=[{"task_id": "t1", "description": "d"}],
+                agent=mock_parent_agent,
+            )
+
+            assert result["status"] == "error"
+            assert "Invalid workflow_id" in result["content"][0]["text"]
+            mock_manager.create_workflow.assert_not_called()
+
+    @pytest.mark.parametrize("legacy_id", ["my workflow", "café", "a" * 200])
+    def test_non_create_actions_accept_legacy_ids(self, mock_parent_agent, legacy_id):
+        """read/start/status/delete do not apply the create-time charset allowlist.
+
+        Pre-existing ids with spaces, unicode, or over 128 characters are no longer
+        rejected at the boundary; they reach the sink, which confines them to
+        WORKFLOW_DIR rather than failing the invalid-id check.
+        """
+        with patch("strands_tools.workflow.WorkflowManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+
+            for action, sink in (
+                ("start", mock_manager.start_workflow),
+                ("status", mock_manager.get_workflow_status),
+                ("delete", mock_manager.delete_workflow),
+            ):
+                mock_manager.reset_mock()
+                result = workflow_module.workflow(action=action, workflow_id=legacy_id, agent=mock_parent_agent)
+                # The boundary did not reject with the invalid-id allowlist message.
+                assert not (
+                    isinstance(result, dict)
+                    and result.get("status") == "error"
+                    and "Invalid workflow_id" in result["content"][0]["text"]
+                )
+                sink.assert_called_once_with(legacy_id)
+
+    def test_resolve_workflow_path_rejects_traversal(self):
+        """The defense-in-depth resolver refuses paths that escape WORKFLOW_DIR."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                with pytest.raises(ValueError):
+                    workflow_module.resolve_workflow_path("../../etc/passwd")
+
+    def test_resolve_workflow_path_allows_valid_id(self):
+        """A valid id resolves to a file directly inside WORKFLOW_DIR."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                resolved = workflow_module.resolve_workflow_path("safe_id")
+                assert resolved == (Path(temp_dir).resolve() / "safe_id.json")
+
+    def test_sinks_confine_traversal_id(self):
+        """store/load/delete sinks all refuse a traversal id at runtime."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                outside = Path(temp_dir).parent / "pwned.json"
+                manager = object.__new__(workflow_module.WorkflowManager)
+                manager._workflows = {}
+
+                # store_workflow returns an error status and writes nothing outside the dir.
+                store_result = workflow_module.WorkflowManager.store_workflow(manager, "../pwned", {"data": "x"})
+                assert store_result["status"] == "error"
+                assert not outside.exists()
+
+                # load_workflow returns None rather than reading outside the dir.
+                assert workflow_module.WorkflowManager.load_workflow(manager, "../pwned") is None
+
+                # delete_workflow surfaces an error rather than unlinking outside the dir.
+                delete_result = workflow_module.WorkflowManager.delete_workflow(manager, "../pwned")
+                assert delete_result["status"] == "error"
+
+    @pytest.mark.parametrize("legacy_id", ["my workflow", "café"])
+    def test_sinks_accept_benign_legacy_id(self, legacy_id):
+        """A spaced/unicode id loads and deletes again and resolves inside WORKFLOW_DIR.
+
+        The create-time allowlist would reject these ids, but read/delete sinks only
+        require containment, so pre-existing workflows remain reachable.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(workflow_module, "WORKFLOW_DIR", Path(temp_dir)):
+                # The id resolves to a file directly inside WORKFLOW_DIR.
+                resolved = workflow_module.resolve_workflow_path(legacy_id)
+                assert resolved == (Path(temp_dir).resolve() / f"{legacy_id}.json")
+                assert resolved.is_relative_to(Path(temp_dir).resolve())
+
+                manager = object.__new__(workflow_module.WorkflowManager)
+                manager._workflows = {}
+
+                # Seed a pre-existing workflow file with this legacy id.
+                resolved.write_text(json.dumps({"workflow_id": legacy_id, "data": "x"}))
+
+                # load_workflow reads it back without raising the invalid-id error.
+                loaded = workflow_module.WorkflowManager.load_workflow(manager, legacy_id)
+                assert loaded is not None
+                assert loaded["workflow_id"] == legacy_id
+
+                # delete_workflow removes it and reports success rather than an id error.
+                delete_result = workflow_module.WorkflowManager.delete_workflow(manager, legacy_id)
+                assert delete_result["status"] == "success"
+                assert not resolved.exists()
+
+
 class TestWorkflowManager:
     """Test WorkflowManager class functionality."""
 
