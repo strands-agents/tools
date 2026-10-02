@@ -405,6 +405,11 @@ def find_files(console: Console, pattern: str, recursive: bool = True) -> List[s
 
         try:
             matching_files = glob.glob(pattern, recursive=recursive)
+            # Filter out hidden files and files under hidden directories
+            matching_files = [
+                f for f in matching_files
+                if not any(part.startswith(".") for part in f.split(os.sep) if part)
+            ]
             return sorted(matching_files)
         except Exception as e:
             console.print(
