@@ -2,6 +2,7 @@
 Tests for the use_aws tool using the Agent interface.
 """
 
+import json
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -116,6 +117,130 @@ def test_use_aws_without_parameters(mock_boto3_client, mock_available_services, 
 
     assert result["toolUseId"] == "test-tool-use-id"
     assert result["status"] == "success"
+
+
+def test_use_aws_parameters_as_json_string(mock_boto3_client, mock_available_services, mock_available_operations):
+    """Test use_aws when the model sends parameters as a JSON-encoded string."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "service_name": "ec2",
+            "operation_name": "describe_instances",
+            "parameters": json.dumps(
+                {"InstanceIds": ["i-1234567890abcdef0"], "Filters": [{"Name": "tag:Env", "Values": ["prod"]}]}
+            ),
+            "region": "us-west-2",
+            "label": "Describe EC2 Instances",
+        },
+    }
+
+    result = use_aws.use_aws(tool=tool_use)
+
+    assert result["status"] == "success"
+    mock_boto3_client.describe_instances.assert_called_once_with(
+        InstanceIds=["i-1234567890abcdef0"], Filters=[{"Name": "tag:Env", "Values": ["prod"]}]
+    )
+
+
+def test_use_aws_parameters_as_empty_string(mock_boto3_client, mock_available_services, mock_available_operations):
+    """Test use_aws when the model sends parameters as an empty string."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "service_name": "s3",
+            "operation_name": "list_buckets",
+            "parameters": "  ",
+            "region": "us-west-2",
+            "label": "List S3 Buckets",
+        },
+    }
+
+    result = use_aws.use_aws(tool=tool_use)
+
+    assert result["status"] == "success"
+    mock_boto3_client.list_buckets.assert_called_once_with()
+
+
+def test_use_aws_parameters_null(mock_boto3_client, mock_available_services, mock_available_operations):
+    """Test use_aws treats a null parameters value like an absent one."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "service_name": "s3",
+            "operation_name": "list_buckets",
+            "parameters": None,
+            "region": "us-west-2",
+            "label": "List S3 Buckets",
+        },
+    }
+
+    result = use_aws.use_aws(tool=tool_use)
+
+    assert result["status"] == "success"
+    mock_boto3_client.list_buckets.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "raw, expected, problem",
+    [
+        ({"Bucket": "b"}, {"Bucket": "b"}, ""),
+        ({}, {}, ""),
+        (None, {}, ""),
+        ("", {}, ""),
+        ("   ", {}, ""),
+        ("null", {}, ""),
+        ('{"Bucket": "b"}', {"Bucket": "b"}, ""),
+        ('{"A": {"B": [1, 2]}}', {"A": {"B": [1, 2]}}, ""),
+        ("{not json", None, "a string that is not valid JSON (Expecting property name enclosed in double quotes"),
+        ('{"A": {"B": 1}}}', None, "a string that is not valid JSON (Extra data: line 1 column 16)"),
+        ('["a"]', None, "a JSON-encoded list instead of an object"),
+        ('"text"', None, "a JSON-encoded str instead of an object"),
+        (["a"], None, "a value of type list"),
+        (5, None, "a value of type int"),
+    ],
+)
+def test_parse_parameters(raw, expected, problem):
+    """Test parse_parameters normalizes every input shape, and explains why when it is not an object."""
+    parameters, actual_problem = use_aws.parse_parameters(raw)
+    assert parameters == expected
+    assert actual_problem.startswith(problem)
+    assert (actual_problem == "") == (parameters is not None)
+
+
+@pytest.mark.parametrize(
+    "parameters, received",
+    [
+        ("{not json", "a string that is not valid JSON ("),
+        ('{"InstanceIds": ["i-1234567890abcdef0"]}}', "a string that is not valid JSON (Extra data: line 1 column 41)"),
+        ('["a", "b"]', "a JSON-encoded list instead of an object"),
+        ('"just a string"', "a JSON-encoded str instead of an object"),
+        (["a"], "a value of type list"),
+        (5, "a value of type int"),
+    ],
+)
+def test_use_aws_parameters_invalid(
+    parameters, received, mock_boto3_client, mock_available_services, mock_available_operations
+):
+    """Test use_aws returns an error (not an exception) when parameters cannot be read as an object."""
+    tool_use = {
+        "toolUseId": "test-tool-use-id",
+        "input": {
+            "service_name": "ec2",
+            "operation_name": "describe_instances",
+            "parameters": parameters,
+            "region": "us-west-2",
+            "label": "Describe EC2 Instances",
+        },
+    }
+
+    result = use_aws.use_aws(tool=tool_use)
+
+    assert result["toolUseId"] == "test-tool-use-id"
+    assert result["status"] == "error"
+    text = result["content"][0]["text"]
+    assert text.startswith("Invalid parameters: provide the operation parameters as an object")
+    assert f"received {received}" in text
+    mock_boto3_client.describe_instances.assert_not_called()
 
 
 def test_use_aws_invalid_service(mock_available_services, mock_available_operations):
