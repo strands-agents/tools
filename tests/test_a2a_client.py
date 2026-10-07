@@ -258,7 +258,12 @@ async def test_discover_agent_card_tool_error(mock_ensure, mock_discover):
 
     result = await provider._discover_agent_card_tool("http://test.com")
 
-    expected = {"status": "error", "error": "Network error", "url": "http://test.com"}
+    expected = {
+        "status": "error",
+        "content": [{"text": "Network error"}],
+        "error": "Network error",
+        "url": "http://test.com",
+    }
     assert result == expected
 
 
@@ -307,7 +312,12 @@ async def test_list_discovered_agents_error(mock_ensure):
 
     result = await provider._list_discovered_agents()
 
-    expected = {"status": "error", "error": "Serialization error", "total_count": 0}
+    expected = {
+        "status": "error",
+        "content": [{"text": "Serialization error"}],
+        "error": "Serialization error",
+        "total_count": 0,
+    }
     assert result == expected
 
 
@@ -410,6 +420,7 @@ async def test_send_message_error(mock_ensure, mock_discover):
 
     expected = {
         "status": "error",
+        "content": [{"text": "Connection failed"}],
         "error": "Connection failed",
         "message_id": "test_id",
         "target_agent_url": "http://test.com",
@@ -570,3 +581,69 @@ async def test_send_message_task_response_no_update(mock_ensure, mock_factory, m
         "target_agent_url": "http://test.com",
     }
     assert result == expected
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_send_message_error_follows_tool_spec(mock_ensure, mock_discover):
+    """Test that _send_message error returns conform to the @tool decorator's ToolResult shape.
+
+    The @tool decorator's _wrap_tool_result checks for both 'status' and 'content' keys
+    to recognize a pre-formatted ToolResult. Without 'content', the error dict gets wrapped
+    as status='success' text content, hiding the error from the model.
+    """
+    provider = A2AClientToolProvider()
+    mock_discover.side_effect = Exception("Connection refused")
+
+    result = await provider._send_message("Hello", "http://unreachable.com", "msg-123")
+
+    # Must have both 'status' and 'content' so @tool's _wrap_tool_result preserves error status
+    assert result["status"] == "error"
+    assert "content" in result, (
+        "Error return must include 'content' key for @tool decorator to recognize it as a "
+        "pre-formatted ToolResult and preserve status='error'"
+    )
+    assert isinstance(result["content"], list)
+    assert len(result["content"]) >= 1
+    assert "text" in result["content"][0]
+    assert "Connection refused" in result["content"][0]["text"]
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_discover_agent_card")
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_discover_agent_error_follows_tool_spec(mock_ensure, mock_discover):
+    """Test that _discover_agent_card_tool error returns conform to the @tool ToolResult shape."""
+    provider = A2AClientToolProvider()
+    mock_discover.side_effect = Exception("DNS resolution failed")
+
+    result = await provider._discover_agent_card_tool("http://bad-host.com")
+
+    assert result["status"] == "error"
+    assert "content" in result, (
+        "Error return must include 'content' key for @tool decorator to recognize it as a "
+        "pre-formatted ToolResult and preserve status='error'"
+    )
+    assert isinstance(result["content"], list)
+    assert "DNS resolution failed" in result["content"][0]["text"]
+
+
+@pytest.mark.asyncio
+@patch.object(A2AClientToolProvider, "_ensure_discovered_known_agents")
+async def test_list_agents_error_follows_tool_spec(mock_ensure):
+    """Test that _list_discovered_agents error returns conform to the @tool ToolResult shape."""
+    provider = A2AClientToolProvider()
+    mock_card = Mock()
+    mock_card.model_dump.side_effect = Exception("Unexpected model error")
+    provider._discovered_agents = {"http://test.com": mock_card}
+
+    result = await provider._list_discovered_agents()
+
+    assert result["status"] == "error"
+    assert "content" in result, (
+        "Error return must include 'content' key for @tool decorator to recognize it as a "
+        "pre-formatted ToolResult and preserve status='error'"
+    )
+    assert isinstance(result["content"], list)
+    assert "Unexpected model error" in result["content"][0]["text"]
