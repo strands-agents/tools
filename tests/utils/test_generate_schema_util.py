@@ -207,7 +207,7 @@ class TestCheckBoto3Validity:
         # Patch hasattr to return False for the operation
         with patch(
             "strands_tools.utils.generate_schema_util.hasattr",
-            side_effect=lambda obj, name: (False if name in ["invalid_operation", "InvalidOperation"] else True),
+            side_effect=lambda obj, name: False if name in ["invalid_operation", "InvalidOperation"] else True,
         ):
             # Mock the conversion functions
             with patch(

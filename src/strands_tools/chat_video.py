@@ -48,11 +48,20 @@ See the chat_video function docstring for more details on available parameters.
 """
 
 import hashlib
+import logging
 import os
 from typing import Any, Dict
 
 from strands.types.tools import ToolResult, ToolUse
 from twelvelabs import TwelveLabs
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "chat_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+)
 
 TOOL_SPEC = {
     "name": "chat_video",
@@ -219,6 +228,15 @@ def upload_and_index_video(video_path: str, index_id: str, api_key: str) -> str:
         return video_id
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "chat_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+)
 def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Chat with video content using TwelveLabs Pegasus model.
@@ -271,6 +289,7 @@ def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Audio mode analyzes speech and sounds
         - Using both modes provides the most comprehensive understanding
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 

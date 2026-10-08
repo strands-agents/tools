@@ -2,6 +2,7 @@
 Tests for the journal tool using the Agent interface.
 """
 
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -311,3 +312,20 @@ def test_create_rich_response():
         {"date": "2023-01-01", "task": "Test task", "timestamp": "12:00:00"},
     )
     mock_console.print.assert_called_once()
+
+
+def test_journal_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"action": "list"}}
+    with caplog.at_level(logging.WARNING, logger="strands_tools.journal"):
+        journal.journal(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools" in caplog.text
+
+
+def test_journal_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert getattr(journal.journal, "__deprecated__", None) is not None
+    assert "strands.vended_tools" in journal.journal.__deprecated__

@@ -2,6 +2,7 @@
 Tests for the search_video tool.
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -267,3 +268,23 @@ class TestSearchVideoTool:
         mock_client.search.query.assert_called_once()
         call_args = mock_client.search.query.call_args
         assert call_args[1]["options"] == ["audio"]
+
+
+def test_search_video_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"query": "people discussing AI"}}
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        caplog.at_level(logging.WARNING, logger="strands_tools.search_video"),
+    ):
+        search_video.search_video(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "docs.twelvelabs.io" in caplog.text
+
+
+def test_search_video_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert getattr(search_video.search_video, "__deprecated__", None) is not None
+    assert "docs.twelvelabs.io" in search_video.search_video.__deprecated__

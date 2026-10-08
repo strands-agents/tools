@@ -91,12 +91,20 @@ import boto3
 from botocore.config import Config as BotocoreConfig
 from rich.panel import Panel
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
+    "no store equivalent and need a MemoryStore subclass. See "
+    "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
+)
 
 
 class MemoryServiceClient:
@@ -633,7 +641,18 @@ def get_memory_formatter() -> MemoryFormatter:
     return MemoryFormatter()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
+    "no store equivalent and need a MemoryStore subclass. See "
+    "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
+)
 def memory(
     action: str,
     content: Optional[str] = None,
@@ -680,6 +699,8 @@ def memory(
         - Retrieve provides semantic search across all documents in the knowledge base
         - Knowledge base IDs must contain only alphanumeric characters (no hyphens or special characters)
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     # Initialize the client and formatter using factory functions

@@ -68,6 +68,7 @@ agent.tool.editor(command="undo_edit", path="/path/to/file.py")
 See the editor function docstring for more details on available commands and parameters.
 """
 
+import logging
 import os
 import re
 import shutil
@@ -80,10 +81,19 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
 from strands_tools.utils.user_input import get_user_input
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the file_editor tool vended by strands-agents "
+    "(from strands.vended_tools import file_editor)."
+)
 
 # Global content history cache
 CONTENT_HISTORY = {}
@@ -180,7 +190,17 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
     return panel
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the file_editor tool vended by strands-agents "
+    "(from strands.vended_tools import file_editor)."
+)
 def editor(
     command: str,
     path: str,
@@ -311,6 +331,8 @@ def editor(
         7. Undo recent change:
            editor(command="undo_edit", path="/path/to/file.py")
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:

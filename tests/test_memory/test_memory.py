@@ -368,3 +368,26 @@ def test_memory_formatter():
     empty_retrieve = {"retrievalResults": []}
     retrieve_content = formatter.format_retrieve_response(empty_retrieve, 0.4)
     assert "No results found" in retrieve_content[0]["text"]
+
+
+def test_memory_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import memory as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.memory"):
+        _mod.memory(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "MemoryManager" in caplog.text
+
+
+def test_memory_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import memory as _mod
+
+    marker = getattr(_mod.memory, "__deprecated__", None)
+    assert marker is not None
+    assert "MemoryManager" in marker

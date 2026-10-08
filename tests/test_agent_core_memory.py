@@ -20,8 +20,8 @@ def mock_boto3_client():
         mock_bedrock_agent_core = mock.MagicMock()
 
         # Configure boto3.client to return our mock
-        mock_client.side_effect = (
-            lambda service, **kwargs: mock_bedrock_agent_core if service == "bedrock-agentcore" else None
+        mock_client.side_effect = lambda service, **kwargs: (
+            mock_bedrock_agent_core if service == "bedrock-agentcore" else None
         )
 
         yield {

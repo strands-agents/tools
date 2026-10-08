@@ -67,12 +67,20 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
+    "boundary, in the tightening direction: shell routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
+)
 
 
 def read_output(fd: int) -> str:
@@ -185,6 +193,12 @@ class CommandExecutor:
                 return exit_code, "".join(output), ""
 
         finally:
+            # Close the PTY file descriptor
+            if "fd" in locals() and pid > 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             # Restore terminal settings only if they were saved and changed.
             if not non_interactive_mode and old_tty:
                 termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, old_tty)
@@ -403,14 +417,24 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "shell is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use the "
+    "shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
+    "boundary, in the tightening direction: shell routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work."
+)
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],
     parallel: bool = False,
     ignore_errors: bool = False,
     timeout: int = None,
     work_dir: str = None,
-    non_interactive: bool = False,
 ) -> Dict[str, Any]:
     """Interactive shell with PTY support for real-time command execution and interaction. Features:
 
@@ -476,16 +500,15 @@ def shell(
         ignore_errors: Continue execution even if some commands fail (default: False)
         timeout: Timeout in seconds for each command (default: controlled by SHELL_DEFAULT_TIMEOUT environment variable)
         work_dir: Working directory for command execution (default: current)
-        non_interactive: Run in non-interactive mode without user prompts (default: False)
 
     Returns:
         Dict containing status and response content
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
-    is_strands_non_interactive = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
-    # Here we keep both doors open, but we only prompt env STRANDS_NON_INTERACTIVE in our doc.
-    non_interactive_mode = is_strands_non_interactive or non_interactive
+    non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
 
     # Validate command parameter
     if command is None:

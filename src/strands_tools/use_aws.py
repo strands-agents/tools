@@ -15,6 +15,8 @@ Key Features:
 
 2. Safety Features:
    • Confirmation prompts for mutative operations (create, update, delete)
+   • Confirmation prompts for credential-returning operations (STS, Secrets Manager, ECR)
+   • Response redaction of known sensitive keys (SecretAccessKey, SessionToken, etc.)
    • Parameter validation with helpful error messages
    • Automatic schema generation for invalid requests
    • Error handling with detailed feedback
@@ -41,6 +43,23 @@ Key Features:
        label="List all S3 buckets"
    )
    ```
+
+Security Recommendations:
+
+   The IAM role attached to the agent's execution environment should follow
+   least-privilege principles. Grant only the services and operations the
+   agent needs to fulfill its purpose.
+
+   • Scope the role policy to specific resources and actions rather than
+     using wildcards.
+   • Add explicit Deny statements for operations the agent should never
+     call (e.g., credential-returning or destructive APIs).
+   • Use IAM condition keys (e.g., aws:SourceIp, aws:RequestedRegion) to
+     further constrain what the role can do and from where.
+
+   The tool provides response redaction and consent prompts as defense-in-depth,
+   but IAM policy scoping remains the primary mechanism for controlling what
+   an agent can access.
 
 See the use_aws function docstring for more details on parameters and usage.
 """
@@ -92,7 +111,119 @@ MUTATIVE_OPERATIONS = [
     "cancel",
     "reboot",
     "accept",
+    "send",
+    "invoke",
+    "run",
+    "execute",
+    "publish",
 ]
+
+# Operations that return credentials or secrets and require user consent
+# even though they are not mutative. These operations disclose sensitive
+# material that should not be exposed to the LLM context without explicit
+# human approval.
+SENSITIVE_OPERATIONS = {
+    ("sts", "get_session_token"),
+    ("sts", "assume_role"),
+    ("sts", "assume_role_with_saml"),
+    ("sts", "assume_role_with_web_identity"),
+    ("sts", "get_federation_token"),
+    ("secretsmanager", "get_secret_value"),
+    ("secretsmanager", "batch_get_secret_value"),
+    ("ecr", "get_authorization_token"),
+    ("ecr-public", "get_authorization_token"),
+    ("redshift", "get_cluster_credentials"),
+    ("redshift", "get_cluster_credentials_with_iam"),
+    ("codeartifact", "get_authorization_token"),
+    ("cognito-identity", "get_credentials_for_identity"),
+    ("cognito-identity", "get_open_id_token"),
+    ("cognito-identity", "get_open_id_token_for_developer_identity"),
+    ("cognito-idp", "initiate_auth"),
+    ("cognito-idp", "admin_initiate_auth"),
+    ("ssm", "get_parameter"),
+    ("ssm", "get_parameters"),
+    ("ssm", "get_parameters_by_path"),
+    ("kms", "decrypt"),
+    ("kms", "generate_data_key"),
+    ("kms", "generate_data_key_pair"),
+}
+
+# Response keys whose values must be redacted before returning to LLM context.
+# These are exact key names (compared case-insensitively) known to carry secrets.
+# Avoid overly generic names like "token" which collide with pagination tokens.
+SENSITIVE_RESPONSE_KEYS = {
+    "secretaccesskey",
+    "sessiontoken",
+    "secretstring",
+    "secretbinary",
+    "authorizationtoken",
+    "password",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "apikey",
+    "clientsecret",
+    "keymaterial",
+    "privatekey",
+    "sharedsecret",
+    "dbpassword",
+    "masteruserpassword",
+    "plaintext",
+    "privatekeyplaintext",
+}
+
+
+def redact_sensitive_values(obj: Any) -> Any:
+    """Recursively redact values of known sensitive keys from an AWS response.
+
+    Args:
+        obj: The object (dict, list, or scalar) to scrub.
+
+    Returns:
+        A copy of the object with sensitive values replaced by a placeholder.
+    """
+    if isinstance(obj, dict):
+        redacted = {}
+        for key, value in obj.items():
+            if key.lower() in SENSITIVE_RESPONSE_KEYS:
+                redacted[key] = "**REDACTED**"
+            else:
+                redacted[key] = redact_sensitive_values(value)
+        return redacted
+    elif isinstance(obj, list):
+        return [redact_sensitive_values(item) for item in obj]
+    return obj
+
+
+def redact_ssm_parameter_values(service_name: str, response: Any) -> Any:
+    """Redact SSM parameter values returned by Parameter Store reads.
+
+    SSM SecureString parameters carry their decrypted contents under a generic
+    "Value" key, which is too broad to add to SENSITIVE_RESPONSE_KEYS without
+    redacting unrelated fields. This narrowly targets the SSM response shapes:
+    a single "Parameter" object (get_parameter) and a "Parameters" list
+    (get_parameters / get_parameters_by_path).
+
+    Args:
+        service_name: The AWS service name for the call.
+        response: The AWS response, after key-name based redaction.
+
+    Returns:
+        The response with SSM parameter values redacted.
+    """
+    if service_name.lower() != "ssm" or not isinstance(response, dict):
+        return response
+
+    def _redact_param(param: Any) -> Any:
+        if isinstance(param, dict) and "Value" in param:
+            param = {**param, "Value": "**REDACTED**"}
+        return param
+
+    if isinstance(response.get("Parameter"), dict):
+        response = {**response, "Parameter": _redact_param(response["Parameter"])}
+    if isinstance(response.get("Parameters"), list):
+        response = {**response, "Parameters": [_redact_param(p) for p in response["Parameters"]]}
+    return response
 
 
 def get_boto3_client(
@@ -213,7 +344,6 @@ TOOL_SPEC = {
                 "region",
                 "service_name",
                 "operation_name",
-                "parameters",
                 "label",
             ],
         }
@@ -280,7 +410,7 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     service_name = tool_input["service_name"]
     operation_name = tool_input["operation_name"]
-    parameters = tool_input["parameters"]
+    parameters = tool_input.get("parameters", {})
     region = tool_input.get("region", aws_region)
     label = tool_input.get("label", "AWS Operation Details")
 
@@ -311,12 +441,22 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     # Check if the operation is potentially mutative
     is_mutative = any(op in operation_name.lower() for op in MUTATIVE_OPERATIONS)
 
-    if is_mutative and not STRANDS_BYPASS_TOOL_CONSENT:
-        # Prompt for confirmation before executing the operation
-        confirm = get_user_input(
-            f"<yellow><bold>The operation '{operation_name}' is potentially mutative. "
-            f"Do you want to proceed?</bold> [y/*]</yellow>"
-        )
+    # Check if the operation returns credentials or secrets
+    is_sensitive = (service_name.lower(), operation_name.lower()) in SENSITIVE_OPERATIONS
+
+    if (is_mutative or is_sensitive) and not STRANDS_BYPASS_TOOL_CONSENT:
+        if is_sensitive:
+            prompt_message = (
+                f"<yellow><bold>The operation '{service_name}.{operation_name}' may return "
+                f"sensitive credentials or secrets. Do you want to proceed?</bold> [y/*]</yellow>"
+            )
+        else:
+            prompt_message = (
+                f"<yellow><bold>The operation '{operation_name}' is potentially mutative. "
+                f"Do you want to proceed?</bold> [y/*]</yellow>"
+            )
+
+        confirm = get_user_input(prompt_message)
         if confirm.lower() != "y":
             return {
                 "toolUseId": tool_use_id,
@@ -357,6 +497,12 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
         response = operation_method(**parameters)
         response = handle_streaming_body(response)
         response = convert_datetime_to_str(response)
+        # Always redact sensitive values from the response. Redaction protects
+        # what is returned into the model's context and is independent of the
+        # consent prompt: BYPASS_TOOL_CONSENT only skips the human confirmation,
+        # it does not authorize returning secrets to the model.
+        response = redact_sensitive_values(response)
+        response = redact_ssm_parameter_values(service_name, response)
 
         return {
             "toolUseId": tool_use_id,

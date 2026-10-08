@@ -2,6 +2,7 @@
 Tests for the chat_video tool.
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -321,3 +322,20 @@ class TestChatVideoTool:
         assert mock_client.task.create.call_count == 1
         # But analyze was called twice
         assert mock_client.analyze.call_count == 2
+
+
+def test_chat_video_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"prompt": "Describe this", "video_id": "video_123"}}
+    with patch.dict("os.environ", {}, clear=True), caplog.at_level(logging.WARNING, logger="strands_tools.chat_video"):
+        chat_video.chat_video(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "docs.twelvelabs.io" in caplog.text
+
+
+def test_chat_video_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert getattr(chat_video.chat_video, "__deprecated__", None) is not None
+    assert "docs.twelvelabs.io" in chat_video.chat_video.__deprecated__

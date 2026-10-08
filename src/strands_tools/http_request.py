@@ -48,6 +48,7 @@ from strands.types.tools import (
     ToolResult,
     ToolUse,
 )
+from typing_extensions import deprecated
 from urllib3 import Retry
 
 from strands_tools.utils import console_util
@@ -55,13 +56,44 @@ from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "http_request is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "http_request and web_fetch tools vended by strands-agents (from strands.vended_tools import http_request, "
+    "web_fetch). http_request handles API calls; web_fetch retrieves and reads web pages."
+)
+
+_SAFE_REDIRECT_HEADERS: frozenset = frozenset(
+    {
+        "accept",
+        "accept-encoding",
+        "connection",
+        "content-length",
+        "content-type",
+        "host",
+        "transfer-encoding",
+        "user-agent",
+    }
+)
+
+
+class _SafeRedirectSession(requests.Session):
+    """Session that strips non-standard headers on cross-origin redirects."""
+
+    def rebuild_auth(self, prepared_request, response):
+        super().rebuild_auth(prepared_request, response)
+        if self.should_strip_auth(response.request.url, prepared_request.url):
+            safe = {k: v for k, v in prepared_request.headers.items() if k.lower() in _SAFE_REDIRECT_HEADERS}
+            prepared_request.headers.clear()
+            prepared_request.headers.update(safe)
+
+
 TOOL_SPEC = {
     "name": "http_request",
     "description": (
         "Make HTTP requests to any API with comprehensive authentication including Bearer tokens, Basic auth, "
         "JWT, AWS SigV4, Digest auth, and enterprise authentication patterns. "
         "Includes session management, metrics, "
-        "streaming support, cookie handling, redirect control, proxy support, and optional HTML to markdown conversion."
+        "streaming support, cookie handling, redirect control, and optional HTML to markdown conversion."
     ),
     "inputSchema": {
         "json": {
@@ -148,6 +180,10 @@ TOOL_SPEC = {
                     "type": "integer",
                     "description": "Maximum number of redirects to follow (default: 30)",
                 },
+                "timeout": {
+                    "type": "number",
+                    "description": "Request timeout in seconds (default: 30). Use a large value for no timeout.",
+                },
                 "convert_to_markdown": {
                     "type": "boolean",
                     "description": "Convert HTML responses to markdown format (default: False).",
@@ -191,15 +227,6 @@ TOOL_SPEC = {
                         "expiry": {"type": "integer"},
                     },
                 },
-                "proxies": {
-                    "type": "object",
-                    "description": "Dictionary mapping protocol or protocol and hostname to the URL of the proxy.",
-                    "properties": {
-                        "http": {"type": "string"},
-                        "https": {"type": "string"},
-                        "ftp": {"type": "string"},
-                    },
-                },
             },
             "required": ["method", "url"],
         }
@@ -241,7 +268,7 @@ def extract_content_from_html(html: str) -> str:
 
 def create_session(config: Dict[str, Any]) -> requests.Session:
     """Create and configure a requests Session object."""
-    session = requests.Session()
+    session = _SafeRedirectSession()
 
     if config.get("keep_alive", True):
         adapter = HTTPAdapter(
@@ -584,6 +611,16 @@ def format_response_preview(
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "http_request is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "http_request and web_fetch tools vended by strands-agents (from strands.vended_tools import http_request, "
+    "web_fetch). http_request handles API calls; web_fetch retrieves and reads web pages."
+)
 def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Execute HTTP request with comprehensive authentication and features.
@@ -669,21 +706,18 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
         )
         ```
 
-    7. Using proxy:
-        ```python
-        http_request(
-            method="GET",
-            url="https://example.com/api",
-            proxies={"https": "https://proxy.example.com:8080"},
-        )
-        ```
-
     Environment Variables:
     - AWS credentials are automatically loaded from environment variables or credentials file
+    - Proxies are configured by the operator at process level via the standard
+      HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars (honored by `requests`), or by
+      setting `session.proxies` in code. Proxies are intentionally not part of the
+      LLM-controllable tool input.
 
     Token Config:
     - Use HTTP_REQUEST_TOKEN_CONFIG to allow specific env vars as auth tokens for permitted domains
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:
@@ -828,7 +862,11 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
             "verify": verify,
             "auth": auth,
             "allow_redirects": tool_input.get("allow_redirects", True),
-            "proxies": tool_input.get("proxies", None),
+            # Proxies, if any, are configured by the operator at process level
+            # (HTTP_PROXY / HTTPS_PROXY env vars, or session.proxies set in code).
+            # Proxies are intentionally NOT LLM-controllable: an attacker-influenced
+            # LLM could otherwise route credentialed requests through an actor proxy,
+            # bypassing the HTTP_REQUEST_TOKEN_CONFIG hostname allowlist.
         }
 
         # Set max_redirects if specified
@@ -878,6 +916,9 @@ def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
         if body:
             request_kwargs["data"] = body
+
+        # Set default timeout (30s) to prevent indefinite blocking
+        request_kwargs.setdefault("timeout", tool_input.get("timeout", 30))
 
         # Execute request with metrics
         start_time = time.time()

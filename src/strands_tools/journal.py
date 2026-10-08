@@ -44,6 +44,7 @@ specific_entry = agent.tool.journal(
 See the journal function docstring for more details on available actions and parameters.
 """
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -55,8 +56,16 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "journal is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
+)
 
 TOOL_SPEC = {
     "name": "journal",
@@ -199,6 +208,15 @@ def create_rich_response(console: Console, action: str, result: Dict[str, Any]) 
         console.print(panel)
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "journal is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
+)
 def journal(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Create and manage daily journal entries with tasks and notes.
@@ -255,6 +273,7 @@ def journal(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Task completion status is maintained between sessions
     """
     console = console_util.create()
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]

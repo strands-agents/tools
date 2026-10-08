@@ -8,7 +8,7 @@ with discriminated unions, ensuring required fields are present for each action 
 from enum import Enum
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LanguageType(str, Enum):
@@ -24,7 +24,22 @@ class FileContent(BaseModel):
     updating files during code execution sessions."""
 
     path: str = Field(description="The file path where content should be written")
-    text: str = Field(description="Text content for the file")
+    text: Optional[str] = Field(
+        default=None,
+        description="Text content for the file",
+    )
+    blob: Optional[bytes] = Field(
+        default=None,
+        description="Base64-encoded binary content for the file",
+    )
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "FileContent":
+        if self.text is None and self.blob is None:
+            raise ValueError("Either text or blob must be provided")
+        if self.text is not None and self.blob is not None:
+            raise ValueError("Only one of text or blob may be provided")
+        return self
 
 
 # Action-specific Pydantic models using discriminated unions

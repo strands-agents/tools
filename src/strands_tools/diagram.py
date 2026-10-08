@@ -14,8 +14,17 @@ import networkx as nx
 from diagrams import Diagram as CloudDiagram
 from diagrams import aws
 from strands import tool
+from typing_extensions import deprecated
 
 matplotlib.use("Agg")  # Set the backend after importing matplotlib
+
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "diagram is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; have the model "
+    "write and run diagram code directly with graphviz, mermaid, or the diagrams package."
+)
 
 
 class AWSComponentRegistry:
@@ -1093,7 +1102,16 @@ def open_diagram(file_path: str) -> None:
         logging.error(f"Unexpected error opening diagram {file_path}: {e}")
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "diagram is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; have the model "
+    "write and run diagram code directly with graphviz, mermaid, or the diagrams package."
+)
 def diagram(
     diagram_type: str,
     nodes: List[Dict[str, str]] = None,
@@ -1142,6 +1160,8 @@ def diagram(
     Returns:
         Path to the created diagram file
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         # UML diagram types
         uml_types = [

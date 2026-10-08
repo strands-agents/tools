@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any, Dict
 
-from mcp.server import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import TextContent
 
 # Configure logging
@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 # Create FastMCP server
-app = FastMCP("MockMCPServer")
+app = MCPServer("MockMCPServer")
 
 
 @app.tool()
