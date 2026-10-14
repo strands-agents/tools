@@ -5,6 +5,7 @@ Unit tests for the AgentCoreBrowser implementation.
 from unittest.mock import Mock
 
 import pytest
+
 from strands_tools.browser import AgentCoreBrowser
 
 
@@ -21,6 +22,31 @@ def test_bedrock_browser_with_custom_params():
     browser = AgentCoreBrowser(region="us-east-1", session_timeout=7200)
     assert browser.region == "us-east-1"
     assert browser.session_timeout == 7200
+
+
+def test_bedrock_browser_with_custom_identifier():
+    """Test AgentCoreBrowser initialization with custom identifier."""
+    custom_identifier = "my-custom-browser-abc123"
+    browser = AgentCoreBrowser(identifier=custom_identifier)
+    assert browser.identifier == custom_identifier
+
+
+def test_bedrock_browser_default_identifier():
+    """Test AgentCoreBrowser uses default identifier when none provided."""
+    browser = AgentCoreBrowser()
+    assert browser.identifier == "aws.browser.v1"
+
+
+def test_bedrock_browser_none_identifier():
+    """Test AgentCoreBrowser uses default identifier when None provided."""
+    browser = AgentCoreBrowser(identifier=None)
+    assert browser.identifier == "aws.browser.v1"
+
+
+def test_bedrock_browser_empty_string_identifier():
+    """Test AgentCoreBrowser uses default identifier when empty string provided."""
+    browser = AgentCoreBrowser(identifier="")
+    assert browser.identifier == "aws.browser.v1"
 
 
 @pytest.mark.asyncio

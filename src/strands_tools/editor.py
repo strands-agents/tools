@@ -68,6 +68,7 @@ agent.tool.editor(command="undo_edit", path="/path/to/file.py")
 See the editor function docstring for more details on available commands and parameters.
 """
 
+import logging
 import os
 import re
 import shutil
@@ -80,10 +81,19 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
 from strands_tools.utils.user_input import get_user_input
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the file_editor tool vended by strands-agents "
+    "(from strands.vended_tools import file_editor)."
+)
 
 # Global content history cache
 CONTENT_HISTORY = {}
@@ -180,7 +190,17 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
     return panel
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the file_editor tool vended by strands-agents "
+    "(from strands.vended_tools import file_editor)."
+)
 def editor(
     command: str,
     path: str,
@@ -311,6 +331,8 @@ def editor(
         7. Undo recent change:
            editor(command="undo_edit", path="/path/to/file.py")
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:
@@ -358,7 +380,7 @@ def editor(
             elif command in {"str_replace", "pattern_replace"}:
                 old = old_str if command == "str_replace" else pattern
                 new = new_str
-                if not old or not new:
+                if not old or new is None:
                     param_name = "old_str" if command == "str_replace" else "pattern"
                     raise ValueError(f"Both {param_name} and new_str are required for {command} command")
                 language = detect_language(path)
@@ -515,7 +537,7 @@ def editor(
             result = f"File {path} created successfully"
 
         elif command == "str_replace":
-            if not old_str or not new_str:
+            if not old_str or new_str is None:
                 raise ValueError("Both old_str and new_str are required for str_replace command")
 
             # Check content history first
@@ -536,8 +558,10 @@ def editor(
 
             # Make replacements and backup
             new_content = content.replace(old_str, new_str)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -551,7 +575,7 @@ def editor(
             )
 
         elif command == "pattern_replace":
-            if not pattern or not new_str:
+            if not pattern or new_str is None:
                 raise ValueError("Both pattern and new_str are required for pattern_replace command")
 
             # Validate pattern
@@ -606,8 +630,12 @@ def editor(
 
             # Make replacements and backup
             new_content = regex.sub(new_str, content)
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
+            else:
+                backup_path = "Disabled"
 
             # Write new content and update cache
             with open(path, "w") as f:
@@ -678,8 +706,10 @@ def editor(
                 raise ValueError(f"insert_line {insert_line} is out of range")
 
             # Make backup
-            backup_path = f"{path}.bak"
-            shutil.copy2(path, backup_path)
+            disable_backup = os.environ.get("EDITOR_DISABLE_BACKUP", "").lower() == "true"
+            if not disable_backup:
+                backup_path = f"{path}.bak"
+                shutil.copy2(path, backup_path)
 
             # Insert and write
             lines.insert(insert_line, new_str)

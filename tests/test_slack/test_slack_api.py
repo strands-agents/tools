@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from slack_sdk.errors import SlackApiError
+
 from strands_tools.slack import slack
 
 

@@ -463,15 +463,20 @@ class TestErrorHandlingAndReliability:
         assert result["status"] == "error"
         assert "Connection 'nonexistent_connection' not found" in result["content"][0]["text"]
 
-    def test_load_tools_without_agent(self, agent):
-        """Test load_tools action without providing agent instance."""
+    def test_load_tools_nonexistent_connection(self, agent):
+        """Test load_tools action with nonexistent connection.
+        
+        Note: When using agent.tool.mcp_client(...), the SDK automatically 
+        injects the agent parameter via invocation_state. So we test connection
+        validation instead, which is the actual error path when using the
+        direct tool calling convention.
+        """
         result = agent.tool.mcp_client(
             action="load_tools",
-            connection_id="test_connection"
-            # Note: agent parameter is not provided
+            connection_id="nonexistent_connection"
         )
         assert result["status"] == "error"
-        assert "agent instance is required" in result["content"][0]["text"]
+        assert "Connection 'nonexistent_connection' not found" in result["content"][0]["text"]
 
 
 class TestConfigurationAndParameterHandling:

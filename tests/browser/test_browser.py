@@ -5,6 +5,7 @@ Unit tests for the Browser base class using MockBrowser.
 from unittest.mock import AsyncMock, Mock, patch
 
 from playwright.async_api import Browser as PlaywrightBrowser
+
 from strands_tools.browser import Browser
 
 

@@ -324,8 +324,8 @@ class UseComputerMethods:
                 raw_size = os.path.getsize(image_path)
                 estimated_encoded_size = int(raw_size * 1.37)  # Base64 size + buffer
                 logger.info(
-                    f"Raw image size: {raw_size/1024/1024:.2f}MB, \
-                    estimated encoded size: {estimated_encoded_size/1024/1024:.2f}MB"
+                    f"Raw image size: {raw_size / 1024 / 1024:.2f}MB, \
+                    estimated encoded size: {estimated_encoded_size / 1024 / 1024:.2f}MB"
                 )
 
                 if estimated_encoded_size > 5 * 1024 * 1024:
@@ -345,7 +345,7 @@ class UseComputerMethods:
                         and "bytes" in image_content["image"]["source"]
                     ):
                         actual_bytes_length = len(image_content["image"]["source"]["bytes"])
-                        logger.info(f"Actual image bytes size: {actual_bytes_length/1024/1024:.2f}MB")
+                        logger.info(f"Actual image bytes size: {actual_bytes_length / 1024 / 1024:.2f}MB")
                         if actual_bytes_length > 5 * 1024 * 1024:
                             logger.info(
                                 f"Image bytes exceed 5MB limit ({actual_bytes_length} bytes), disabling screenshot"
@@ -558,9 +558,7 @@ def extract_text_from_image(image_path: str, min_confidence: float = 0.5) -> Lis
 
     # Try multiple OCR configurations for better text detection
     # Include character whitelist for common characters to reduce noise
-    char_whitelist = (
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" ".,!?;:()[]{}\"'-_@#$%^&*+=<>/|\\~`"
-    )
+    char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\"'-_@#$%^&*+=<>/|\\~`"
 
     configs = [
         f"--oem 3 --psm 11 -c tessedit_char_whitelist={char_whitelist}",  # Sparse text with whitelist

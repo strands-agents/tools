@@ -34,6 +34,12 @@ agent = Agent(tools=[retrieve])
 # Basic search with default knowledge base and region
 results = agent.tool.retrieve(text="What is the STRANDS SDK?")
 
+# Search with metadata enabled for source information
+results = agent.tool.retrieve(
+    text="What is the STRANDS SDK?",
+    enableMetadata=True
+)
+
 # Advanced search with custom parameters
 results = agent.tool.retrieve(
     text="deployment steps for production",
@@ -41,6 +47,7 @@ results = agent.tool.retrieve(
     score=0.7,
     knowledgeBaseId="custom-kb-id",
     region="us-east-1",
+    enableMetadata=True,
     retrieveFilter={
         "andAll": [
             {"equals": {"key": "category", "value": "security"}},
@@ -53,12 +60,23 @@ results = agent.tool.retrieve(
 See the retrieve function docstring for more details on available parameters and options.
 """
 
+import logging
 import os
 from typing import Any, Dict, List
 
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "retrieve is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+)
+
 
 TOOL_SPEC = {
     "name": "retrieve",
@@ -151,6 +169,28 @@ Usage Examples:
                         "specified."
                     ),
                 },
+                "enableMetadata": {
+                    "type": "boolean",
+                    "description": (
+                        "Whether to include metadata in the response. When enabled, shows source URI, chunk ID, "
+                        "data source ID, and other document metadata. Default is false."
+                    ),
+                    "default": False,
+                },
+                "retrieveFilter": {
+                    "type": "object",
+                    "description": (
+                        "Optional filter to apply to retrieval results based on metadata attributes in the "
+                        "knowledge base. This is a UNION type - only one operator can be specified at the top level. "
+                        "Available operators: "
+                        "equals (exact match), notEquals, greaterThan, greaterThanOrEquals, lessThan, "
+                        "lessThanOrEquals, in (value in list), notIn, listContains (list contains value), "
+                        "stringContains (substring match), startsWith (OpenSearch Serverless only), "
+                        "andAll (all conditions must match, min 2 items), orAll (at least one condition must match, "
+                        'min 2 items). Example: {"andAll": [{"equals": {"key": "category", '
+                        '"value": "security"}}, {"greaterThan": {"key": "year", "value": "2022"}}]}'
+                    ),
+                },
             },
             "required": ["text"],
         }
@@ -176,25 +216,48 @@ def filter_results_by_score(results: List[Dict[str, Any]], min_score: float) -> 
     return [result for result in results if result.get("score", 0.0) >= min_score]
 
 
-def format_results_for_display(results: List[Dict[str, Any]]) -> str:
+# Mapping of RetrievalResultLocation types to their document identifier fields.
+# See: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalResultLocation.html
+_LOCATION_FIELD_MAP = {
+    "customDocumentLocation": "id",
+    "s3Location": "uri",
+    "webLocation": "url",
+    "confluenceLocation": "url",
+    "salesforceLocation": "url",
+    "sharePointLocation": "url",
+    "kendraDocumentLocation": "uri",
+    "sqlLocation": "query",
+}
+
+
+def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: bool = False) -> str:
     """
     Format retrieval results for readable display.
 
     This function takes the raw results from a knowledge base query and formats
     them into a human-readable string with scores, document IDs, and content.
+    Optionally includes metadata when enabled.
 
     Args:
         results: List of retrieval results from Bedrock Knowledge Base
+        enable_metadata: Whether to include metadata in the formatted output (default: False)
 
     Returns:
-        Formatted string containing the results in a readable format
+        Formatted string containing the results in a readable format, including score,
+        document ID, optional metadata, and content.
     """
     if not results:
         return "No results found above score threshold."
 
     formatted = []
     for result in results:
-        doc_id = result.get("location", {}).get("customDocumentLocation", {}).get("id", "Unknown")
+        # Extract document location - handle all RetrievalResultLocation types
+        location = result.get("location", {})
+        doc_id = "Unknown"
+        for loc_key, field in _LOCATION_FIELD_MAP.items():
+            if loc_key in location:
+                doc_id = location[loc_key].get(field, "Unknown")
+                break
         score = result.get("score", 0.0)
         formatted.append(f"\nScore: {score:.4f}")
         formatted.append(f"Document ID: {doc_id}")
@@ -204,9 +267,25 @@ def format_results_for_display(results: List[Dict[str, Any]]) -> str:
             text = content["text"]
             formatted.append(f"Content: {text}\n")
 
+        # Add metadata if enabled and present
+        if enable_metadata:
+            metadata = result.get("metadata")
+            if metadata:
+                formatted.append(f"Metadata: {metadata}")
+
     return "\n".join(formatted)
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "retrieve is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+)
 def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Retrieve relevant knowledge from Amazon Bedrock Knowledge Base.
@@ -259,9 +338,12 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Results are automatically filtered based on the minimum score threshold
         - AWS credentials must be configured properly for this tool to work
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     default_knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
     default_aws_region = os.getenv("AWS_REGION", "us-west-2")
     default_min_score = float(os.getenv("MIN_SCORE", "0.4"))
+    default_enable_metadata = os.getenv("RETRIEVE_ENABLE_METADATA_DEFAULT", "false").lower() == "true"
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
@@ -272,6 +354,7 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         kb_id = tool_input.get("knowledgeBaseId", default_knowledge_base_id)
         region_name = tool_input.get("region", default_aws_region)
         min_score = tool_input.get("score", default_min_score)
+        enable_metadata = tool_input.get("enableMetadata", default_enable_metadata)
         retrieve_filter = tool_input.get("retrieveFilter")
 
         # Initialize Bedrock client with optional profile name
@@ -308,8 +391,8 @@ def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
         all_results = response.get("retrievalResults", [])
         filtered_results = filter_results_by_score(all_results, min_score)
 
-        # Format results for display
-        formatted_results = format_results_for_display(filtered_results)
+        # Format results for display with optional metadata
+        formatted_results = format_results_for_display(filtered_results, enable_metadata)
 
         # Return success with formatted results
         return {

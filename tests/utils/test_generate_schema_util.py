@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import UnknownServiceError
 from botocore.model import Shape
+
 from strands_tools.utils.generate_schema_util import (
     check_boto3_validity,
     clean_and_trim_description,
@@ -206,7 +207,7 @@ class TestCheckBoto3Validity:
         # Patch hasattr to return False for the operation
         with patch(
             "strands_tools.utils.generate_schema_util.hasattr",
-            side_effect=lambda obj, name: (False if name in ["invalid_operation", "InvalidOperation"] else True),
+            side_effect=lambda obj, name: False if name in ["invalid_operation", "InvalidOperation"] else True,
         ):
             # Mock the conversion functions
             with patch(

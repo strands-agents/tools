@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from strands import Agent
+
 from strands_tools import handoff_to_user
 
 
@@ -63,7 +64,9 @@ def test_handoff_with_breakout_false_direct(mock_get_user_input, mock_request_st
     result = handoff_to_user.handoff_to_user(tool=tool_use, request_state=mock_request_state)
 
     # Verify get_user_input was called
-    mock_get_user_input.assert_called_once_with("<bold>Your response:</bold> ")
+    mock_get_user_input.assert_called_once_with(
+        "<bold>Agent requested user input:</bold> Please confirm the action.\n<bold>Your response:</bold> "
+    )
 
     # Verify the result has the expected structure
     assert result["toolUseId"] == "test-tool-use-id"

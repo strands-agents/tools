@@ -1,15 +1,35 @@
+import logging
 import os
 import time
 from datetime import datetime
 from typing import Union
 
 from strands import tool
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
 
 # Default maximum sleep time (5 minutes)
 max_sleep_seconds = int(os.environ.get("MAX_SLEEP_SECONDS", "300"))
 
+_DEPRECATION_MESSAGE = (
+    "sleep is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the sleep tool vended by strands-agents "
+    "(from strands.vended_tools import sleep)."
+)
 
+
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "sleep is deprecated. This warning becomes an error log in v0.9.0. "
+    "Migration path: use the sleep tool vended by strands-agents "
+    "(from strands.vended_tools import sleep)."
+)
 def sleep(seconds: Union[int, float]) -> str:
     """
     Pause execution for the specified number of seconds.
@@ -37,6 +57,8 @@ def sleep(seconds: Union[int, float]) -> str:
         >>> sleep(0.5)  # Sleeps for half a second
         'Started sleep at 2025-05-30 11:30:00, slept for 0.5 seconds'
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     # Validate input
     if not isinstance(seconds, (int, float)):
         raise ValueError("Sleep duration must be a number")

@@ -1,6 +1,7 @@
 """Comprehensive tests for RSS feed tool with improved organization."""
 
 import json
+import os
 from unittest.mock import MagicMock, call, mock_open, patch
 
 import pytest
@@ -130,6 +131,28 @@ class TestRSSManager:
             entry_no_content = {"title": "Test Entry"}
             result = manager.format_entry(entry_no_content, include_content=True)
             assert result["content"] == "No content available"
+
+    @pytest.mark.parametrize(
+        "feed_id",
+        [
+            "../outside",
+            "../../etc/config",
+            "subdir/../../../escape",
+            "/absolute/path",
+        ],
+    )
+    def test_get_feed_file_path_rejects_traversal(self, feed_id):
+        """Test that path traversal sequences in feed_id are rejected."""
+        manager = RSSManager()
+        with pytest.raises(ValueError, match="path traversal detected"):
+            manager.get_feed_file_path(feed_id)
+
+    def test_get_feed_file_path_allows_valid_ids(self):
+        """Test that valid feed_ids are accepted."""
+        manager = RSSManager()
+        path = manager.get_feed_file_path("my_valid_feed")
+        assert path.endswith("my_valid_feed.json")
+        assert os.path.realpath(manager.storage_path) in path
 
     @pytest.mark.parametrize(
         "url,expected_id",
@@ -515,3 +538,26 @@ class TestRSSTool:
             result = rss(action="fetch", url="https://example.com/feed")
             assert result["status"] == "error"
             assert "Test exception" in result["content"][0]["text"]
+
+
+def test_rss_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import rss as _mod
+
+    with caplog.at_level(_logging.WARNING, logger="strands_tools.rss"):
+        _mod.rss(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "feedparser" in caplog.text
+
+
+def test_rss_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import rss as _mod
+
+    marker = getattr(_mod.rss, "__deprecated__", None)
+    assert marker is not None
+    assert "feedparser" in marker

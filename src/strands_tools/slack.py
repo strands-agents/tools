@@ -132,9 +132,17 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web.client import WebClient
 from strands import Agent, tool
+from typing_extensions import deprecated
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
+)
+
 
 # System prompt for Slack communications
 SLACK_SYSTEM_PROMPT = """
@@ -354,10 +362,11 @@ class SocketModeHandler:
         trace_attributes = self.agent.trace_attributes
 
         agent = Agent(
+            model=self.agent.model,
             messages=[],
             system_prompt=f"{self.agent.system_prompt}\n{SLACK_SYSTEM_PROMPT}",
             tools=tools,
-            callback_handler=None,
+            callback_handler=self.agent.callback_handler,
             trace_attributes=trace_attributes,
         )
 
@@ -386,11 +395,13 @@ class SocketModeHandler:
                 logger.info(f"Skipping message - does not contain tag: {listen_only_tag}")
                 return
 
-            # Process with agent
-            response = agent(
-                f"[Channel: {channel_id}] User {user} says: {text}",
-                system_prompt=f"{SLACK_SYSTEM_PROMPT}\n\nEvent Context:\nCurrent: {json.dumps(event)}{event_context}",
+            # Refresh the system prompt with latest context handled from Slack events
+            agent.system_prompt = (
+                f"{SLACK_SYSTEM_PROMPT}\n\nEvent Context:\nCurrent: {json.dumps(event)}{event_context}"
             )
+
+            # Process with agent
+            response = agent(f"[Channel: {channel_id}] User {user} says: {text}")
 
             # If we have a valid response, send it back to Slack
             if response and str(response).strip():
@@ -437,7 +448,13 @@ class SocketModeHandler:
         if client and self.agent:
             tools = list(self.agent.tool_registry.registry.values())
 
-            agent = Agent(messages=[], system_prompt=SLACK_SYSTEM_PROMPT, tools=tools, callback_handler=None)
+            agent = Agent(
+                model=self.agent.model,
+                messages=[],
+                system_prompt=SLACK_SYSTEM_PROMPT,
+                tools=tools,
+                callback_handler=self.agent.callback_handler,
+            )
 
             channel_id = event.get("channel")
             actions = event.get("actions", [])
@@ -447,10 +464,8 @@ class SocketModeHandler:
             interaction_text = f"Interactive event from user {event.get('user')}. Actions: {actions}"
 
             try:
-                response = agent(
-                    interaction_text,
-                    system_prompt=f"{SLACK_SYSTEM_PROMPT}\n\nInteractive Context:\n{json.dumps(event, indent=2)}",
-                )
+                agent.system_prompt = f"{SLACK_SYSTEM_PROMPT}\n\nInteractive Context:\n{json.dumps(event, indent=2)}"
+                response = agent(interaction_text)
 
                 # Only send a response if auto-reply is enabled
                 if os.getenv("STRANDS_SLACK_AUTO_REPLY", "false").lower() == "true":
@@ -529,10 +544,19 @@ class SocketModeHandler:
 socket_handler = SocketModeHandler()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
+)
 def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
-    """
-    Comprehensive Slack integration for messaging, events, and interactions.
+    """Slack integration for messaging, events, and interactions.
 
     This tool provides complete access to Slack's API methods and real-time
     event handling through a unified interface. It enables Strands agents to
@@ -604,6 +628,8 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
     - Events are stored locally at ./slack_events/events.jsonl
     - See Slack API documentation for all available methods and parameters
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     # Initialize Slack clients if needed
     if action != "get_recent_events" and client is None:
         success, error_message = initialize_slack_clients()
@@ -667,9 +693,13 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
 
 
 @tool
+@deprecated(
+    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
+    "which MCP does not cover, use slack_bolt directly."
+)
 def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
-    """
-    Send a message to a Slack channel.
+    """Send a message to a Slack channel.
 
     This is a simplified interface for the most common Slack operation: sending messages.
     It wraps the Slack API's chat_postMessage method with a more direct interface,
@@ -721,6 +751,8 @@ def slack_send_message(channel: str, text: str, thread_ts: str = None) -> str:
     - This function automatically ensures the Slack clients are initialized.
     - Channel IDs typically start with 'C', direct message IDs with 'D'.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     if client is None:
         success, error_message = initialize_slack_clients()
         if not success:

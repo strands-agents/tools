@@ -30,6 +30,13 @@ agent.tool.python_repl(code="input('Enter your name: ')", interactive=True)
 # Reset the REPL state if needed
 agent.tool.python_repl(code="print('Fresh start')", reset_state=True)
 ```
+
+Configuration:
+- STRANDS_NON_INTERACTIVE (environment variable): Set to "true" to run the tool
+  in a non-interactive mode, suppressing the user confirmation prompt before code
+  execution.
+- BYPASS_TOOL_CONSENT (environment variable): Set to "true" to bypass only the
+  user confirmation prompt, even in an otherwise interactive session.
 """
 
 import fcntl
@@ -70,9 +77,10 @@ TOOL_SPEC = {
     "IMPORTANT SAFETY FEATURES:\n"
     "1. User Confirmation: Requires explicit approval before executing code\n"
     "2. Code Preview: Shows syntax-highlighted code before execution\n"
-    "3. State Management: Maintains variables between executions\n"
+    "3. State Management: Maintains variables between executions, default controlled by PYTHON_REPL_RESET_STATE\n"
     "4. Error Handling: Captures and formats errors with suggestions\n"
-    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n\n"
+    "5. Development Mode: Can bypass confirmation in BYPASS_TOOL_CONSENT environments\n"
+    "6. Interactive Control: Can enable/disable interactive PTY mode in PYTHON_REPL_INTERACTIVE environments\n\n"
     "Key Features:\n"
     "- Persistent state between executions\n"
     "- Interactive PTY support for real-time feedback\n"
@@ -151,9 +159,39 @@ class ReplState:
         self._namespace = {
             "__name__": "__main__",
         }
-        # Setup state persistence
-        self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
-        os.makedirs(self.persistence_dir, exist_ok=True)
+        # Check if persistence directory path is defined in env variable
+        if "PYTHON_REPL_PERSISTENCE_DIR" in os.environ:
+            dir_path = os.environ.get("PYTHON_REPL_PERSISTENCE_DIR")
+            # Test directory for validation and security
+            try:
+                path = Path(dir_path).resolve()
+
+                # Check if path exists
+                if not path.exists():
+                    raise ValueError(f"Directory does not exist: {path}")
+
+                # Check if directory or file
+                if not path.is_dir():
+                    raise ValueError(f"Path exists but is not a directory: {path}")
+
+                # Check if directory is writable
+                if not os.access(path, os.W_OK):
+                    raise PermissionError(f"Directory is not writable: {path}")
+
+                # If all validations pass, set path
+                self.persistence_dir = os.path.join(path, "repl_state")
+                logger.debug(f"Using validated persistence directory: {self.persistence_dir}")
+
+            except Exception as e:
+                # If validation fails, use original default path
+                logger.warning(f"Invalid path set : {e}. Using default path")
+                self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
+        else:
+            self.persistence_dir = os.path.join(Path.cwd(), "repl_state")
+        os.makedirs(self.persistence_dir, mode=0o700, exist_ok=True)
+        # makedirs honors the mode only when it creates the directory, so set
+        # restrictive permissions explicitly in case the directory already existed.
+        os.chmod(self.persistence_dir, 0o700)
         self.state_file = os.path.join(self.persistence_dir, "repl_state.pkl")
         self.load_state()
 
@@ -195,8 +233,16 @@ class ReplState:
                     except BaseException:
                         continue
 
-            # Save state
-            with open(self.state_file, "wb") as f:
+            # Save state with owner-only permissions (0o600) so the persisted
+            # namespace, which may contain sensitive values, is not readable by
+            # other users on a shared host. O_CREAT only applies the mode when
+            # the file is newly created, so fchmod the descriptor to also tighten
+            # a pre-existing file; using the fd avoids a TOCTOU race.
+            fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "wb") as f:
                 dill.dump(save_dict, f)
             logger.debug("Successfully saved REPL state")
 
@@ -246,8 +292,31 @@ class ReplState:
         return objects
 
 
-# Create global state instance
-repl_state = ReplState()
+# Lazily-created global state instance. The instance is created on first use
+# rather than at import time to avoid side effects (directory creation and
+# state file loading) when the module is merely imported.
+_repl_state: Optional[ReplState] = None
+_repl_state_lock = threading.Lock()
+
+
+def get_repl_state() -> ReplState:
+    """Return the global ReplState, creating it on first use."""
+    global _repl_state
+    if _repl_state is None:
+        # Guard the check-then-set so concurrent first-use does not create
+        # two instances. Double-checked to avoid locking after initialization.
+        with _repl_state_lock:
+            if _repl_state is None:
+                _repl_state = ReplState()
+    return _repl_state
+
+
+def __getattr__(name: str) -> Any:
+    # Preserve access to ``python_repl.repl_state`` as a module attribute while
+    # keeping initialization lazy.
+    if name == "repl_state":
+        return get_repl_state()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def clean_ansi(text: str) -> str:
@@ -289,7 +358,7 @@ class PtyManager:
                 os.dup2(self.worker_fd, 2)
 
                 # Execute in REPL namespace
-                namespace = repl_state.get_namespace()
+                namespace = get_repl_state().get_namespace()
                 exec(code, namespace)
 
                 os._exit(0)
@@ -543,22 +612,15 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_input = tool["input"]
 
     code = tool_input["code"]
-    interactive = tool_input.get("interactive", True)
-    reset_state = tool_input.get("reset_state", False)
+    interactive = os.environ.get("PYTHON_REPL_INTERACTIVE", str(tool_input.get("interactive", True))).lower() == "true"
+    reset_state = os.environ.get("PYTHON_REPL_RESET_STATE", str(tool_input.get("reset_state", False))).lower() == "true"
 
     # Check for development mode
     strands_dev = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
-    # Check for non_interactive_mode parameter
-    non_interactive_mode = kwargs.get("non_interactive_mode", False)
+    non_interactive_mode = os.environ.get("STRANDS_NON_INTERACTIVE", "").lower() == "true"
 
     try:
-        # Handle state reset if requested
-        if reset_state:
-            console.print("[yellow]Resetting REPL state...[/]")
-            repl_state.clear_state()
-            console.print("[green]REPL state reset complete[/]")
-
         # Show code preview
         console.print(
             Panel(
@@ -613,6 +675,17 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
                     "status": "error",
                     "content": [{"text": error_message}],
                 }
+
+        # Acquire the REPL state only after the consent gate. get_repl_state()
+        # loads the persisted state file on first use, so deferring it to here
+        # keeps that load from happening before the user has approved execution.
+        repl_state = get_repl_state()
+
+        # Handle state reset if requested (also deferred until after consent).
+        if reset_state:
+            console.print("[yellow]Resetting REPL state...[/]")
+            repl_state.clear_state()
+            console.print("[green]REPL state reset complete[/]")
 
         # Track execution time and capture output
         start_time = datetime.now()
@@ -687,14 +760,22 @@ def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
         )
 
-        # Log error with details
+        # Log error with details. The error log echoes the executed code, so it
+        # is created with owner-only permissions on a private directory.
         errors_dir = os.path.join(Path.cwd(), "errors")
-        os.makedirs(errors_dir, exist_ok=True)
+        os.makedirs(errors_dir, mode=0o700, exist_ok=True)
+        os.chmod(errors_dir, 0o700)
         error_file = os.path.join(errors_dir, "errors.txt")
 
         error_msg = f"\n[{error_time.isoformat()}] Python REPL Error:\nCode:\n{code}\nError:\n{error_tb}\n"
 
-        with open(error_file, "a") as f:
+        # O_CREAT only applies the mode on creation, so fchmod the descriptor to
+        # also tighten a pre-existing log file; using the fd avoids a TOCTOU race.
+        fd = os.open(error_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        # fchmod is POSIX-only; on Windows the O_CREAT mode above applies.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "a") as f:
             f.write(error_msg)
         logger.debug(error_msg)
 
