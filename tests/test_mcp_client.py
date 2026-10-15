@@ -371,6 +371,25 @@ class TestMCPClientDisconnect:
         assert "tool1" in disconnect_data["loaded_tools_info"]
 
 
+def test_mcp_client_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.mcp_client"):
+        result = mcp_client(action="list_connections")
+
+    assert result["status"] == "success"
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_mcp_router" in caplog.text
+
+
+def test_mcp_client_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(mcp_client, "__deprecated__", None)
+
+    assert marker is not None
+    assert "strands.vended_tools import make_mcp_router" in marker
+
+
 class TestMCPClientListConnections:
     """Test listing connections functionality."""
 

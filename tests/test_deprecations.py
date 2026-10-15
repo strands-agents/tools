@@ -19,6 +19,7 @@ import strands_tools
 
 # (module, attribute) for every tool carrying @deprecated.
 DEPRECATED_TOOLS = [
+    ("a2a_client", "A2AClientToolProvider"),
     ("batch", "batch"),
     ("bright_data", "bright_data"),
     ("calculator", "calculator"),
@@ -32,7 +33,11 @@ DEPRECATED_TOOLS = [
     ("exa", "exa_get_contents"),
     ("exa", "exa_search"),
     ("journal", "journal"),
+    ("mcp_client", "mcp_client"),
+    ("mem0_memory", "Mem0MemoryTool"),
+    ("mem0_memory", "mem0_memory"),
     ("memory", "memory"),
+    ("python_repl", "python_repl"),
     ("retrieve", "retrieve"),
     ("rss", "rss"),
     ("search_video", "search_video"),
@@ -57,9 +62,9 @@ SRC = pathlib.Path(strands_tools.__file__).parent
 # ``from strands.vended_tools import http_request, web_fetch`` inside migration messages.
 MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import ([\w., ]+)")
 
-# shell pulls in termios/pty, which do not exist on Windows. Same stance as
-# test_shell.py: skipped there until issue #17 is resolved.
-WINDOWS_UNSUPPORTED = {"shell"}
+# shell and python_repl pull in termios/pty, which do not exist on Windows. Same stance
+# as test_shell.py: skipped there until issue #17 is resolved.
+WINDOWS_UNSUPPORTED = {"python_repl", "shell"}
 
 
 def _import_tool_module(module_name):
@@ -167,7 +172,7 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     decorators = [
         decorator
         for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == attr
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == attr
         for decorator in node.decorator_list
         if isinstance(decorator, ast.Call) and getattr(decorator.func, "id", None) == "deprecated"
     ]
