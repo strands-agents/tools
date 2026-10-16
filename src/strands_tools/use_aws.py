@@ -366,6 +366,11 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     service_name = tool_input["service_name"]
     operation_name = tool_input["operation_name"]
     parameters = tool_input.get("parameters", {})
+    if isinstance(parameters, str):
+        try:
+            parameters = json.loads(parameters) if parameters.strip() else {}
+        except json.JSONDecodeError:
+            parameters = None
     region = tool_input.get("region", aws_region)
     label = tool_input.get("label", "AWS Operation Details")
 
