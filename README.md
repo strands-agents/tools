@@ -177,14 +177,14 @@ More tools will follow as their capabilities land elsewhere, and this repository
 archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
 moving several at once later.
 
-Deprecated tools keep working. Each one logs a warning when invoked starting in the release
-shown below, and that warning becomes an error log in **v0.9.0** — a louder signal for anyone
-who has not migrated, not a behavior change.
+Deprecated tools keep working. Each one logs a warning when invoked (or, for class-based tools, when constructed)
+starting in the release shown below, and that warning becomes
+an error log in **v0.9.0** — a louder signal for anyone who has not migrated, not a behavior change.
 
 They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
 usage before you run anything. To list what you still need to migrate, run
-`mypy --enable-error-code deprecated` over your project: it reports the
-`from strands_tools import ...` line for each deprecated tool, without invoking any of them.
+`mypy --enable-error-code deprecated` over your project: it reports the import line for each
+deprecated tool, without invoking any of them.
 Prefer mypy here: pyright, with `reportDeprecated` enabled, reports direct calls such as
 `calculator(expression=...)` but not `agent.tool.calculator(...)`, and it reaches the import
 line for only the tools whose marker is not wrapped by `@tool`. Note that Python
@@ -315,10 +315,10 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`journal` → `notebook`** — `notebook` keeps notes in `agent.state` instead of `./journal/<date>.md`, so persistence follows your session
   manager. There is no `add_task` equivalent and no per-day entry, so tasks and dated entries become plain note text. If you need the entries as
   files on disk, use `file_editor`.
-- **`python_repl` → `python_repl`** — the SDK tool routes code through the agent's sandbox and runs each
-  call in a fresh interpreter, so in-memory state does not persist; save intermediate results to files
-  instead. There is no PTY, stdin, `reset_state`, or confirmation prompt, and the `PYTHON_REPL_*`
-  environment variables no longer apply.
+- **`python_repl` → `python_repl`** — the SDK tool runs each call in a fresh interpreter, so in-memory state does not
+  persist; save intermediate results to files instead. By default it executes on the host with no isolation and no
+  confirmation prompt — pass a `sandbox=` to `Agent` (for example `DockerSandbox`) if you relied on the consent gate.
+  There is no PTY, stdin, or `reset_state`, and the `PYTHON_REPL_*` environment variables no longer apply.
 - **`a2a_client` → `make_a2a_client`** — the three `a2a_*` tools become one tool with `discover` and
   `send_message` operations, limited to the endpoints you pass in `allowed_endpoints`. Authentication,
   timeouts, and push notifications move from `httpx_client_args` and the webhook arguments into a
@@ -326,11 +326,10 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`mcp_client` → `make_mcp_router`** — the model connects by name to servers you allowlist in `servers`
   rather than supplying its own command or URL. There is no `load_tools`, so remote tools are invoked
   through `call_tool`.
-- **`mem0_memory` → `Mem0MemoryStore`** — Mem0 maintains the store in its `mem0-strands` package, and it plugs into
-  `MemoryManager`, so memories are recalled automatically instead of waiting to be called; pass `extraction=True`
-  to have Mem0 extract new ones server-side. `retrieve` becomes the manager's `search_memory` tool, and `store`
-  becomes `add_memory` once you enable it with `add_tool_config=True`. `get`, `list`, `delete`, and `history` have
-  no store equivalent, so call `mem0`'s `MemoryClient` directly if you need them. See the
+- **`mem0_memory` → `Mem0MemoryStore`** — plugs into `MemoryManager`, so memories are recalled automatically.
+  `retrieve` becomes `search_memory` and `store` becomes `add_memory` (with `add_tool_config=True`); for `get`, `list`,
+  `delete`, and `history`, use `mem0`'s `MemoryClient`. `mem0-strands` needs `mem0ai` 2.x, so drop the `mem0-memory`
+  extra first. Backend env vars don't carry over: without `MEM0_API_KEY`, pass a Mem0 OSS `config=`. See the
   [Mem0 integration docs](https://docs.mem0.ai/integrations/strands).
 
 ## 💻 Usage Examples

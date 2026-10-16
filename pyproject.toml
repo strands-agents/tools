@@ -98,7 +98,7 @@ agent-core-browser = [
 agent-core-code-interpreter = [
     "bedrock-agentcore>=1.1.0,<1.24.0"
 ]
-a2a-client = ["a2a-sdk[sql]>=0.3.0,<0.4.0", "strands-agents[a2a]>=1.0.0"]
+a2a-client = ["a2a-sdk[sql]>=0.3.0,<0.4.0"]
 diagram = [
     "matplotlib>=3.5.0,<4.0.0",
     "graphviz>=0.20.0,<1.0.0",
@@ -150,6 +150,7 @@ extra-dependencies = [
     "pytest-xdist>=3.0.0,<4.0.0",
     "responses>=0.6.1,<1.0.0",
     "pytest_asyncio>=0.25.0,<2.0.0",
+    "strands-agents[a2a]>=1.61.0",
 ]
 extra-args = ["-n", "auto", '-vv']
 
