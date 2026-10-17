@@ -134,6 +134,75 @@ def test_format_results_for_display():
     assert "Content: S3 content" in s3_formatted
 
 
+@pytest.mark.parametrize(
+    "location_key,location_data,location_type,expected_doc_id",
+    [
+        ("webLocation", {"url": "https://example.com/docs/page.html"}, "WEB", "https://example.com/docs/page.html"),
+        (
+            "confluenceLocation",
+            {"url": "https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123"},
+            "CONFLUENCE",
+            "https://mycompany.atlassian.net/wiki/spaces/DOC/pages/123",
+        ),
+        (
+            "salesforceLocation",
+            {"url": "https://mycompany.salesforce.com/articles/KB001"},
+            "SALESFORCE",
+            "https://mycompany.salesforce.com/articles/KB001",
+        ),
+        (
+            "sharePointLocation",
+            {"url": "https://mycompany.sharepoint.com/sites/docs/page.aspx"},
+            "SHAREPOINT",
+            "https://mycompany.sharepoint.com/sites/docs/page.aspx",
+        ),
+        (
+            "kendraDocumentLocation",
+            {"uri": "https://kendra.aws/documents/doc-12345"},
+            "KENDRA",
+            "https://kendra.aws/documents/doc-12345",
+        ),
+        (
+            "sqlLocation",
+            {"query": "SELECT * FROM documents WHERE id = 1"},
+            "SQL",
+            "SELECT * FROM documents WHERE id = 1",
+        ),
+    ],
+)
+def test_format_results_for_display_location_types(location_key, location_data, location_type, expected_doc_id):
+    """Test format_results_for_display with all supported RetrievalResultLocation types."""
+    test_results = [
+        {
+            "content": {"text": "Test content", "type": "TEXT"},
+            "location": {location_key: location_data, "type": location_type},
+            "score": 0.80,
+        }
+    ]
+    formatted = retrieve.format_results_for_display(test_results)
+    assert f"Document ID: {expected_doc_id}" in formatted
+    assert "Content: Test content" in formatted
+
+
+def test_format_results_for_display_unknown_location():
+    """Test format_results_for_display with an unrecognized location type."""
+    test_results = [
+        {
+            "content": {"text": "Unknown source content", "type": "TEXT"},
+            "location": {
+                "futureLocation": {"url": "https://future.example.com"},
+                "type": "FUTURE",
+            },
+            "score": 0.70,
+        }
+    ]
+
+    formatted = retrieve.format_results_for_display(test_results)
+    assert "Score: 0.7000" in formatted
+    assert "Document ID: Unknown" in formatted
+    assert "Content: Unknown source content" in formatted
+
+
 def test_format_results_with_metadata():
     """Test the format_results_for_display function with metadata enabled."""
     test_results = [
@@ -677,3 +746,31 @@ def test_retrieve_via_agent_with_enable_metadata(agent, mock_boto3_client):
     assert "results with score >=" in result_text
     assert "Metadata:" not in result_text
     assert "test-source" not in result_text
+
+
+def test_retrieve_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    import logging as _logging
+
+    from strands_tools import retrieve as _mod
+
+    # boto3 is patched so the test stays offline even when a developer has
+    # STRANDS_KNOWLEDGE_BASE_ID set in their environment.
+    with (
+        mock.patch("strands_tools.retrieve.boto3.client"),
+        caplog.at_level(_logging.WARNING, logger="strands_tools.retrieve"),
+    ):
+        _mod.retrieve({"toolUseId": "t", "input": {"text": "q"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "MemoryManager" in caplog.text
+
+
+def test_retrieve_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    from strands_tools import retrieve as _mod
+
+    marker = getattr(_mod.retrieve, "__deprecated__", None)
+    assert marker is not None
+    assert "BedrockKnowledgeBaseStore" in marker

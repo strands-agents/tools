@@ -60,6 +60,12 @@ class Browser(ABC):
         asyncio.set_event_loop(self._loop)
         self._nest_asyncio_applied = False
         self._sessions: Dict[str, BrowserSession] = {}
+        # Subclasses may populate this (e.g. LocalChromiumBrowser does
+        # from its context_options constructor arg). It is unpacked into
+        # every new browser context created by _setup_session_from_browser
+        # so things like viewport, user_agent, storage_state, locale etc.
+        # round-trip through the public API. See strands-agents/tools#414.
+        self._default_context_options: Dict[str, Any] = {}
 
     @tool
     def browser(self, browser_input: BrowserInput) -> Dict[str, Any]:
@@ -236,9 +242,13 @@ class Browser(ABC):
             Tuple of (browser, context, page)
         """
         if isinstance(browser_or_context, PlaywrightBrowser):
-            # Normal non-persistent case
+            # Normal non-persistent case. Pass through the configured
+            # context options (viewport, user_agent, storage_state,
+            # locale, timezone, permissions, ...) so values supplied
+            # to the browser subclass's constructor actually take
+            # effect. See strands-agents/tools#414.
             session_browser = browser_or_context
-            session_context = await session_browser.new_context()
+            session_context = await session_browser.new_context(**self._default_context_options)
             session_page = await session_context.new_page()
         else:
             # Persistent context case

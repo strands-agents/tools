@@ -280,6 +280,45 @@ def test_find_files_function():
         assert len(files) == 2  # Should not find test3.txt in subdir
 
 
+def test_find_files_skips_hidden_directories():
+    """Test that find_files skips hidden directories during traversal."""
+    mock_console = unittest.mock.Mock()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create normal files
+        normal_file = os.path.join(temp_dir, "main.py")
+        with open(normal_file, "w") as f:
+            f.write("normal")
+
+        # Create hidden directory with files (simulates .venv, .git, etc.)
+        hidden_dir = os.path.join(temp_dir, ".hidden_dir")
+        os.makedirs(hidden_dir)
+        hidden_file = os.path.join(hidden_dir, "should_not_appear.py")
+        with open(hidden_file, "w") as f:
+            f.write("hidden")
+
+        # Create nested hidden directory
+        nested_hidden = os.path.join(temp_dir, "subdir", ".cache")
+        os.makedirs(nested_hidden)
+        nested_hidden_file = os.path.join(nested_hidden, "cached.pyc")
+        with open(nested_hidden_file, "w") as f:
+            f.write("cached")
+
+        # Create normal subdirectory
+        normal_sub = os.path.join(temp_dir, "subdir")
+        normal_sub_file = os.path.join(normal_sub, "utils.py")
+        with open(normal_sub_file, "w") as f:
+            f.write("utils")
+
+        files = file_read.find_files(mock_console, temp_dir, recursive=True)
+
+        filenames = [os.path.basename(f) for f in files]
+        assert "main.py" in filenames
+        assert "utils.py" in filenames
+        assert "should_not_appear.py" not in filenames
+        assert "cached.pyc" not in filenames
+
+
 def test_split_path_list_function():
     """Test the split_path_list utility function."""
     paths = "path1.txt,path2.md, path3.py"

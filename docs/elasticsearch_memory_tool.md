@@ -32,31 +32,54 @@ This will install:
    - AWS credentials configured
    - Access to `amazon.titan-embed-text-v2:0` model (or custom embedding model)
 
+## Security Model
+
+Connection credentials (`cloud_id`/`es_url`/`api_key`), the target `index_name`, and the tenant `namespace` are **never** exposed as agent-facing tool parameters. The agent only chooses the `action` and its `content`/`query`/`memory_id`. This prevents a model (or prompt-injected content) from redirecting the memory layer at another cluster or index, authenticating with its own `api_key`, or reading, writing, or deleting another tenant's memories by supplying a different `namespace`.
+
+There are two supported patterns:
+
+- **Class-based (recommended, required for multi-tenant):** construct one `ElasticsearchMemoryTool` per authenticated principal, binding the connection, index, and `namespace` at construction time.
+- **Standalone function (single-tenant):** the module-level `elasticsearch_memory` tool reads all connection, index, namespace, and embedding configuration from environment variables only.
+
 ## Quick Start
 
-### Basic Setup
+### Class-Based Usage (Recommended)
+
+Bind the connection, index, and tenant `namespace` per authenticated principal. They are kept out of the agent-facing tool, so the model cannot change them.
+
+```python
+from strands import Agent
+from strands_tools.elasticsearch_memory import ElasticsearchMemoryTool
+
+# Operator code, per authenticated request:
+memory_tool = ElasticsearchMemoryTool(
+    cloud_id="your-elasticsearch-cloud-id",  # or es_url="https://...:443" for Serverless
+    api_key="your-elasticsearch-api-key",
+    index_name="my_memories",
+    namespace=f"user_{authenticated_user_id}",  # bound, not LLM-controllable
+)
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
+
+# The agent only chooses the action and its content/query/memory_id:
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
+result = agent.tool.elasticsearch_memory(action="retrieve", query="food preferences", max_results=5)
+```
+
+### Standalone Function Usage
+
+Single-tenant convenience. All connection, index, namespace, and embedding configuration comes from environment variables; there are no connection or namespace parameters for the agent to supply.
 
 ```python
 from strands import Agent
 from strands_tools.elasticsearch_memory import elasticsearch_memory
 
-# Create an agent with the direct tool
 agent = Agent(tools=[elasticsearch_memory])
-
-# Use the tool with configuration parameters
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza with extra cheese",
-    cloud_id="your-elasticsearch-cloud-id",
-    api_key="your-elasticsearch-api-key",
-    index_name="my_memories",
-    namespace="user_123"
-)
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 ### Environment Variables
 
-You can also use environment variables for configuration:
+Configure the standalone function (and the fallbacks for the class) with environment variables:
 
 ```bash
 export ELASTICSEARCH_CLOUD_ID="your-cloud-id"
@@ -67,17 +90,16 @@ export ELASTICSEARCH_EMBEDDING_MODEL="amazon.titan-embed-text-v2:0"
 export AWS_REGION="us-west-2"
 ```
 
-Then use the tool with minimal parameters (environment variables will be used):
+The standalone `elasticsearch_memory` function is single-tenant: it always uses `ELASTICSEARCH_NAMESPACE` (defaulting to `default`). To serve multiple principals, use the class-based approach and construct one `ElasticsearchMemoryTool` per principal with an explicit `namespace`.
 
 ```python
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza"
-    # cloud_id, api_key, etc. will be read from environment variables
-)
+agent = Agent(tools=[elasticsearch_memory])
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 ## Usage Examples
+
+The examples below use a per-principal `ElasticsearchMemoryTool` (see Quick Start) and assume `agent = Agent(tools=[memory_tool.elasticsearch_memory])`.
 
 ### 1. Store Memories
 
@@ -86,10 +108,6 @@ result = agent.tool.elasticsearch_memory(
 result = agent.tool.elasticsearch_memory(
     action="record",
     content="User prefers vegetarian pizza with extra cheese and no onions",
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 
 # Store a memory with metadata
@@ -102,10 +120,6 @@ result = agent.tool.elasticsearch_memory(
         "participants": ["dev_team"],
         "date": "2024-01-16"
     },
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 ```
 
@@ -117,10 +131,6 @@ result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="food preferences and dietary restrictions",
     max_results=5,
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 
 # Search for meeting information
@@ -128,10 +138,6 @@ result = agent.tool.elasticsearch_memory(
     action="retrieve",
     query="upcoming meetings and appointments",
     max_results=10,
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 ```
 
@@ -142,10 +148,6 @@ result = agent.tool.elasticsearch_memory(
 result = agent.tool.elasticsearch_memory(
     action="list",
     max_results=20,
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 
 # List with pagination
@@ -153,10 +155,6 @@ result = agent.tool.elasticsearch_memory(
     action="list",
     max_results=10,
     next_token="10",  # Start from the 11th result
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 ```
 
@@ -167,10 +165,6 @@ result = agent.tool.elasticsearch_memory(
 result = agent.tool.elasticsearch_memory(
     action="get",
     memory_id="mem_1704567890123_abc12345",
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 ```
 
@@ -181,90 +175,84 @@ result = agent.tool.elasticsearch_memory(
 result = agent.tool.elasticsearch_memory(
     action="delete",
     memory_id="mem_1704567890123_abc12345",
-    cloud_id="your-cloud-id",
-    api_key="your-api-key",
-    index_name="memories",
-    namespace="user_123"
 )
 ```
 
 ## Advanced Configuration
 
-### Using Configuration Dictionary
+### Reusing a Connection Configuration
 
-For cleaner code, you can use a configuration dictionary:
+For cleaner code, collect the connection settings once and bind them to a per-principal tool at construction time:
 
 ```python
 config = {
     "cloud_id": "your-cloud-id",
     "api_key": "your-api-key",
     "index_name": "memories",
-    "namespace": "user_123",
-    "region": "us-east-1"
+    "region": "us-east-1",
 }
 
+# Bind the connection plus the authenticated principal's namespace.
+memory_tool = ElasticsearchMemoryTool(namespace=f"user_{authenticated_user_id}", **config)
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
+
 # Store memory
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza",
-    **config
-)
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 
 # Search memories
-result = agent.tool.elasticsearch_memory(
-    action="retrieve",
-    query="food preferences",
-    max_results=5,
-    **config
-)
+result = agent.tool.elasticsearch_memory(action="retrieve", query="food preferences", max_results=5)
 ```
 
 ### Custom Embedding Model
 
+The embedding model and region are bound at construction (or via `ELASTICSEARCH_EMBEDDING_MODEL` / `AWS_REGION` for the standalone function):
+
 ```python
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza",
+memory_tool = ElasticsearchMemoryTool(
     cloud_id="your-cloud-id",
     api_key="your-api-key",
+    namespace="user_123",
     embedding_model="amazon.titan-embed-text-v1:0",  # Different model
-    region="us-east-1"
+    region="us-east-1",
 )
 ```
 
 ### Elasticsearch Serverless (URL-based connection)
 
+Use `es_url` instead of `cloud_id` for Serverless deployments:
+
 ```python
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="User prefers vegetarian pizza",
+memory_tool = ElasticsearchMemoryTool(
     es_url="https://your-serverless-cluster.es.region.aws.elastic.cloud:443",
     api_key="your-api-key",
     index_name="memories",
-    namespace="user_123"
+    namespace="user_123",
 )
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
+result = agent.tool.elasticsearch_memory(action="record", content="User prefers vegetarian pizza")
 ```
 
 ### Multiple Namespaces
 
+The `namespace` is bound per tool instance. To serve multiple principals (or logical groupings), construct one `ElasticsearchMemoryTool` per namespace — never let the agent choose the namespace on a call.
+
 ```python
-# User-specific memories
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="Alice likes Italian food",
+# One tool per user, each bound to that user's namespace
+alice_tool = ElasticsearchMemoryTool(
     cloud_id="your-cloud-id",
     api_key="your-api-key",
-    namespace="user_alice"
+    namespace="user_alice",
 )
 
-# System-wide memories
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="System maintenance scheduled",
+# A separate tool for system-wide memories
+system_tool = ElasticsearchMemoryTool(
     cloud_id="your-cloud-id",
     api_key="your-api-key",
-    namespace="system_global"
+    namespace="system_global",
 )
+
+# Wire the tool that matches the authenticated principal into that principal's agent.
+alice_agent = Agent(tools=[alice_tool.elasticsearch_memory])
 ```
 
 ## Response Format
@@ -351,13 +339,14 @@ The tool provides comprehensive error handling:
 ### Connection Errors
 
 ```python
-# Invalid credentials
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="test",
+# Invalid credentials (configured at construction)
+memory_tool = ElasticsearchMemoryTool(
     cloud_id="invalid-cloud-id",
-    api_key="invalid-api-key"
+    api_key="invalid-api-key",
+    namespace="user_123",
 )
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
+result = agent.tool.elasticsearch_memory(action="record", content="test")
 # Returns: {"status": "error", "content": [{"text": "Unable to connect to Elasticsearch cluster"}]}
 ```
 
@@ -365,29 +354,21 @@ result = agent.tool.elasticsearch_memory(
 
 ```python
 # Missing required content for record action
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    cloud_id="your-cloud-id",
-    api_key="your-api-key"
-)
+result = agent.tool.elasticsearch_memory(action="record")
 # Returns: {"status": "error", "content": [{"text": "The following parameters are required for record action: content"}]}
 
-# Missing connection parameters
-result = agent.tool.elasticsearch_memory(action="record", content="test")
-# Returns: {"status": "error", "content": [{"text": "Either cloud_id or es_url is required"}]}
+# Missing connection configuration (no api_key at construction and no
+# ELASTICSEARCH_API_KEY environment variable) raises at construction time:
+ElasticsearchMemoryTool(cloud_id="your-cloud-id", namespace="user_123")
+# Raises: ElasticsearchValidationError("api_key is required for Elasticsearch Memory Tool initialization")
 ```
 
 ### Memory Not Found
 
 ```python
 # Non-existent memory ID
-result = agent.tool.elasticsearch_memory(
-    action="get",
-    memory_id="nonexistent",
-    cloud_id="your-cloud-id",
-    api_key="your-api-key"
-)
-# Returns: {"status": "error", "content": [{"text": "API error: Memory nonexistent not found"}]}
+result = agent.tool.elasticsearch_memory(action="get", memory_id="nonexistent")
+# Returns: {"status": "error", "content": [{"text": "Memory nonexistent not found in namespace user_123"}]}
 ```
 
 ## Performance Considerations
@@ -414,36 +395,30 @@ result = agent.tool.elasticsearch_memory(
 
 ### 1. Configuration Management
 
-Create reusable configuration objects:
+Build a per-principal tool from reusable connection settings, binding the authenticated user's namespace at construction:
 
 ```python
-# Create a base configuration
+# Create a base connection configuration
 base_config = {
     "cloud_id": "your-cloud-id",
     "api_key": "your-api-key",
-    "region": "us-east-1"
+    "index_name": "user_memories",
+    "region": "us-east-1",
 }
 
-# User-specific configuration
-def get_user_config(user_id):
-    return {
-        **base_config,
-        "index_name": "user_memories",
-        "namespace": f"user_{user_id}"
-    }
+# Build one tool per authenticated principal
+def build_user_agent(user_id):
+    memory_tool = ElasticsearchMemoryTool(namespace=f"user_{user_id}", **base_config)
+    return Agent(tools=[memory_tool.elasticsearch_memory])
 
 # Usage
-user_config = get_user_config("alice")
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="Alice likes Italian food",
-    **user_config
-)
+alice_agent = build_user_agent("alice")
+result = alice_agent.tool.elasticsearch_memory(action="record", content="Alice likes Italian food")
 ```
 
 ### 2. Namespace Organization
 
-The namespace parameter is crucial for data isolation and multi-tenant memory management:
+The `namespace` is crucial for data isolation and multi-tenant memory management. It is bound per tool instance and is not agent-controllable:
 
 ```python
 # User-based namespaces
@@ -458,6 +433,13 @@ org_user_namespace = f"org_{org_id}_user_{user_id}"
 # Feature-based namespaces
 chat_namespace = "feature_chat"
 task_namespace = "feature_tasks"
+
+# Bind the chosen namespace when constructing the tool
+memory_tool = ElasticsearchMemoryTool(
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    namespace=user_namespace,
+)
 ```
 
 ### 3. Metadata Usage
@@ -474,7 +456,6 @@ result = agent.tool.elasticsearch_memory(
         "due_date": "2024-02-01",
         "assigned_to": ["alice", "bob"]
     },
-    **config
 )
 ```
 
@@ -496,26 +477,26 @@ def safe_memory_operation(agent, action, **kwargs):
 ### 5. Batch Operations
 
 ```python
-# Store multiple related memories
+# Store multiple related memories with a single per-principal tool
 memories = [
     "User likes Italian food",
     "User is allergic to nuts", 
     "User prefers evening meetings"
 ]
 
-config = {
-    "cloud_id": "your-cloud-id",
-    "api_key": "your-api-key",
-    "index_name": "memories",
-    "namespace": "user_123"
-}
+memory_tool = ElasticsearchMemoryTool(
+    cloud_id="your-cloud-id",
+    api_key="your-api-key",
+    index_name="memories",
+    namespace="user_123",
+)
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
 
 for content in memories:
     agent.tool.elasticsearch_memory(
         action="record",
         content=content,
         metadata={"batch": "user_preferences", "timestamp": datetime.now().isoformat()},
-        **config
     )
 ```
 
@@ -552,12 +533,13 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # This will show detailed Elasticsearch and Bedrock API calls
-result = agent.tool.elasticsearch_memory(
-    action="record",
-    content="test",
+memory_tool = ElasticsearchMemoryTool(
     cloud_id="your-cloud-id",
-    api_key="your-api-key"
+    api_key="your-api-key",
+    namespace="user_123",
 )
+agent = Agent(tools=[memory_tool.elasticsearch_memory])
+result = agent.tool.elasticsearch_memory(action="record", content="test")
 ```
 
 ## Security Considerations
@@ -571,7 +553,7 @@ result = agent.tool.elasticsearch_memory(
 
 ### Data Privacy
 
-- Use appropriate namespaces for data isolation
+- Bind the `namespace` per authenticated principal at construction; never expose it as an agent-controllable parameter (see Security Model)
 - Consider encryption at rest (Elasticsearch feature)
 - Implement proper access controls
 - Regular security audits

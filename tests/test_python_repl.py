@@ -1,6 +1,7 @@
 """Tests for the python_repl tool using the Agent interface."""
 
 import os
+import stat
 import sys
 import tempfile
 import threading
@@ -348,14 +349,15 @@ class TestPythonRepl:
             assert python_repl.repl_state.get_namespace()["dev_mode_test"] == 42
 
     def test_non_interactive_mode_bypass_confirmation(self, mock_console):
-        """Test that non_interactive_mode bypasses the confirmation dialog."""
+        """Test that STRANDS_NON_INTERACTIVE bypasses the confirmation dialog."""
         tool_use = {
             "toolUseId": "test-id",
             "input": {"code": "non_interactive_test = 'passed'", "interactive": False},
         }
 
-        # Pass non_interactive_mode as True
-        result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+        # Set STRANDS_NON_INTERACTIVE to bypass the confirmation prompt.
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            result = python_repl.python_repl(tool=tool_use)
 
         assert result["status"] == "success"
         assert python_repl.repl_state.get_namespace()["non_interactive_test"] == "passed"
@@ -380,6 +382,30 @@ class TestPythonRepl:
             assert result["status"] == "error"
             assert "cancelled by the user" in result["content"][0]["text"]
             assert "should_not_execute" not in python_repl.repl_state.get_namespace()
+
+    def test_state_not_loaded_before_consent(self, mock_console):
+        """Declining consent must not load the persisted REPL state.
+
+        get_repl_state() loads the state file on first use, so it must only be
+        called after the user approves execution, never before the prompt.
+        """
+        tool_use = {
+            "toolUseId": "test-id",
+            "input": {"code": "should_not_execute = True", "interactive": False},
+        }
+
+        with (
+            patch("strands_tools.python_repl.get_repl_state") as mock_get_state,
+            patch("strands_tools.python_repl.get_user_input", side_effect=["n", "Testing rejection"]),
+            patch.dict("os.environ", {"BYPASS_TOOL_CONSENT": "false"}, clear=False),
+        ):
+            result = python_repl.python_repl(tool=tool_use)
+
+            assert result["status"] == "error"
+            assert "cancelled by the user" in result["content"][0]["text"]
+            # State access is deferred until after consent, so a declined run
+            # never triggers the state load.
+            mock_get_state.assert_not_called()
 
     def test_custom_rejection_message(self, mock_console):
         """Test that custom rejection message is included."""
@@ -411,27 +437,27 @@ class TestPythonRepl:
             },
         }
 
-        # First define the recursive function
-        # Pass non_interactive_mode=True to bypass confirmation
-        python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+        # Set STRANDS_NON_INTERACTIVE to bypass the confirmation prompt.
+        with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+            # First define the recursive function
+            python_repl.python_repl(tool=tool_use)
 
-        # Now trigger the recursion error
-        error_tool = {
-            "toolUseId": "error-id",
-            "input": {
-                "code": "recurse()",  # This will cause a recursion error
-                "interactive": False,
-            },
-        }
+            # Now trigger the recursion error
+            error_tool = {
+                "toolUseId": "error-id",
+                "input": {
+                    "code": "recurse()",  # This will cause a recursion error
+                    "interactive": False,
+                },
+            }
 
-        # Mock the clear_state method to verify it gets called
-        with patch.object(
-            python_repl.repl_state,
-            "clear_state",
-            wraps=python_repl.repl_state.clear_state,
-        ) as mock_clear:
-            # Pass non_interactive_mode=True to bypass confirmation
-            result = python_repl.python_repl(tool=error_tool, non_interactive_mode=True)
+            # Mock the clear_state method to verify it gets called
+            with patch.object(
+                python_repl.repl_state,
+                "clear_state",
+                wraps=python_repl.repl_state.clear_state,
+            ) as mock_clear:
+                result = python_repl.python_repl(tool=error_tool)
 
             # Verify clear_state was called
             mock_clear.assert_called_once()
@@ -452,7 +478,10 @@ class TestPythonRepl:
         }
 
         # Mock PtyManager to avoid actual PTY operations
-        with patch("strands_tools.python_repl.PtyManager") as mock_pty:
+        with (
+            patch("strands_tools.python_repl.PtyManager") as mock_pty,
+            patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+        ):
             # Configure mocks
             mock_pty_instance = mock_pty.return_value
             mock_pty_instance.pid = 12345
@@ -462,8 +491,7 @@ class TestPythonRepl:
             with patch("os.waitpid") as mock_waitpid:
                 mock_waitpid.side_effect = [(12345, 0)]  # Return pid and exit status 0
 
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was used
                 mock_pty.assert_called_once()
@@ -486,7 +514,10 @@ class TestPythonRepl:
         }
 
         # Mock PtyManager to avoid actual PTY operations
-        with patch("strands_tools.python_repl.PtyManager") as mock_pty:
+        with (
+            patch("strands_tools.python_repl.PtyManager") as mock_pty,
+            patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+        ):
             # Configure mocks
             mock_pty_instance = mock_pty.return_value
             mock_pty_instance.pid = 12345
@@ -496,8 +527,7 @@ class TestPythonRepl:
             with patch("os.waitpid") as mock_waitpid:
                 mock_waitpid.side_effect = [(12345, 1)]  # Return pid and non-zero exit status
 
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was used and stopped
                 mock_pty_instance.stop.assert_called_once()
@@ -517,15 +547,17 @@ class TestPythonRepl:
         }
 
         # Mock PtyManager
-        with patch("strands_tools.python_repl.PtyManager") as mock_pty:
+        with (
+            patch("strands_tools.python_repl.PtyManager") as mock_pty,
+            patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}),
+        ):
             mock_pty_instance = mock_pty.return_value
             mock_pty_instance.pid = 12345
             mock_pty_instance.get_output.return_value = "test output"
 
             # Mock os.waitpid to raise OSError
             with patch("os.waitpid", side_effect=OSError("No such process")):
-                # Pass non_interactive_mode=True to bypass confirmation
-                result = python_repl.python_repl(tool=tool_use, non_interactive_mode=True)
+                result = python_repl.python_repl(tool=tool_use)
 
                 # Verify PtyManager was stopped and cleaned up
                 mock_pty_instance.stop.assert_called_once()
@@ -545,8 +577,9 @@ class TestPythonRepl:
 )
 def test_agent_interface(agent, code, expected):
     """Test calling python_repl through the Agent interface."""
-    # Use non_interactive_mode to bypass confirmation
-    result = agent.tool.python_repl(code=code, interactive=False, non_interactive_mode=True)
+    # Set STRANDS_NON_INTERACTIVE to bypass the confirmation prompt.
+    with patch.dict(os.environ, {"STRANDS_NON_INTERACTIVE": "true"}):
+        result = agent.tool.python_repl(code=code, interactive=False)
 
     # Extract the response text
     if isinstance(result, dict) and "content" in result and isinstance(result["content"], list):
@@ -699,3 +732,94 @@ class TestPtyManager:
         # Verify truncation occurred
         assert "[binary content truncated]" in output
         assert len(output) < len(binary_content)
+
+
+class TestLazyState:
+    """Test that the global ReplState is created lazily, not at import time."""
+
+    def test_import_does_not_create_state(self):
+        """Importing the module should not instantiate ReplState."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        try:
+            # Right after import the global instance must not exist yet.
+            assert module._repl_state is None
+        finally:
+            # Restore a usable state for subsequent tests in this session.
+            module.get_repl_state()
+
+    def test_get_repl_state_is_lazy_singleton(self):
+        """get_repl_state creates the instance on first use and reuses it."""
+        import importlib
+
+        module = importlib.reload(python_repl)
+        assert module._repl_state is None
+        first = module.get_repl_state()
+        assert module._repl_state is first
+        assert module.get_repl_state() is first
+
+
+class TestStatePermissions:
+    """Test that persisted state is written with restrictive permissions."""
+
+    def test_persistence_dir_is_owner_only(self):
+        """The persistence directory should be created mode 0o700."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                mode = stat.S_IMODE(os.stat(repl.persistence_dir).st_mode)
+                # No group or other access bits should be set.
+                assert mode & 0o077 == 0, oct(mode)
+
+    def test_state_file_is_owner_only(self):
+        """The persisted state file should be written mode 0o600."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                repl.clear_state()
+                repl.save_state("perm_test = 1")
+                assert os.path.exists(repl.state_file)
+                mode = stat.S_IMODE(os.stat(repl.state_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
+
+    def test_existing_state_file_permissions_are_tightened(self):
+        """A pre-existing, group/other-readable state file is tightened on save.
+
+        os.open with O_CREAT only applies the mode on creation, so a file left
+        behind with looser permissions must still be restricted on the next save.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"PYTHON_REPL_PERSISTENCE_DIR": tmpdir}):
+                repl = python_repl.ReplState()
+                repl.clear_state()
+                # Pre-create the state file world-readable.
+                with open(repl.state_file, "wb") as f:
+                    f.write(b"stale")
+                os.chmod(repl.state_file, 0o644)
+                assert stat.S_IMODE(os.stat(repl.state_file).st_mode) & 0o077 != 0
+
+                repl.save_state("perm_test = 1")
+
+                mode = stat.S_IMODE(os.stat(repl.state_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
+
+    def test_error_log_is_owner_only(self):
+        """The error log echoes executed code, so it must be written mode 0o600."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                tool_use = {
+                    "toolUseId": "test-id",
+                    "input": {"code": "this is not valid python", "interactive": False},
+                }
+                with patch("strands_tools.python_repl.get_user_input", return_value="y"):
+                    python_repl.python_repl(tool=tool_use)
+
+                error_file = os.path.join(tmpdir, "errors", "errors.txt")
+                assert os.path.exists(error_file)
+                mode = stat.S_IMODE(os.stat(error_file).st_mode)
+                assert mode & 0o077 == 0, oct(mode)
+            finally:
+                os.chdir(original_cwd)

@@ -61,9 +61,9 @@ def mock_sse_client():
 
 
 @pytest.fixture
-def mock_streamablehttp_client():
-    """Mock streamablehttp_client for testing."""
-    with patch("strands_tools.mcp_client.streamablehttp_client") as mock_streamable:
+def mock_streamable_http_client():
+    """Mock streamable_http_client for testing."""
+    with patch("strands_tools.mcp_client.streamable_http_client") as mock_streamable:
         mock_streamable.return_value = MagicMock()
         yield mock_streamable
 
@@ -103,7 +103,7 @@ class TestMCPClientConnect:
         mock_client_class.assert_called_once()
         mock_instance.list_tools_sync.assert_called_once()
 
-    def test_connect_streamable_http_transport(self, mock_mcp_client, mock_streamablehttp_client):
+    def test_connect_streamable_http_transport(self, mock_mcp_client, mock_streamable_http_client):
         """Test connecting to an MCP server via streamable HTTP transport."""
         result = mcp_client(
             action="connect",
@@ -132,7 +132,7 @@ class TestMCPClientConnect:
         mock_client_class.assert_called_once()
         mock_instance.list_tools_sync.assert_called_once()
 
-    def test_connect_streamable_http_minimal_params(self, mock_mcp_client, mock_streamablehttp_client):
+    def test_connect_streamable_http_minimal_params(self, mock_mcp_client, mock_streamable_http_client):
         """Test connecting to streamable HTTP server with minimal parameters."""
         result = mcp_client(
             action="connect",
@@ -152,7 +152,7 @@ class TestMCPClientConnect:
         assert result["status"] == "error"
         assert "server_url is required for streamable HTTP transport" in result["content"][0]["text"]
 
-    def test_connect_streamable_http_with_auth(self, mock_mcp_client, mock_streamablehttp_client):
+    def test_connect_streamable_http_with_auth(self, mock_mcp_client, mock_streamable_http_client):
         """Test connecting to streamable HTTP server with authentication."""
         # Mock httpx auth object
         mock_auth = MagicMock()
@@ -171,7 +171,7 @@ class TestMCPClientConnect:
         connection_data = result["content"][1]["json"]
         assert connection_data["connection_id"] == "auth_http_server"
 
-    def test_connect_streamable_http_server_config(self, mock_mcp_client, mock_streamablehttp_client):
+    def test_connect_streamable_http_server_config(self, mock_mcp_client, mock_streamable_http_client):
         """Test connecting using server_config with streamable HTTP parameters."""
         result = mcp_client(
             action="connect",
@@ -388,7 +388,7 @@ class TestMCPClientListConnections:
         assert connections_data["connections"] == []
 
     def test_list_multiple_connections(
-        self, mock_mcp_client, mock_stdio_client, mock_sse_client, mock_streamablehttp_client
+        self, mock_mcp_client, mock_stdio_client, mock_sse_client, mock_streamable_http_client
     ):
         """Test listing multiple connections."""
         # Create multiple connections

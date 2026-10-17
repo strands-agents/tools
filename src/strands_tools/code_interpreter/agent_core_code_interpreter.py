@@ -3,6 +3,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import boto3
 from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter as BedrockAgentCoreCodeInterpreterClient
 
 from ..utils.aws_util import resolve_region
@@ -53,6 +54,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         session_name: Optional[str] = None,
         auto_create: bool = True,
         persist_sessions: bool = True,
+        session_timeout_seconds: int = 900,
+        boto_session: Optional[boto3.Session] = None,
     ) -> None:
         """
         Initialize the Bedrock AgentCore code interpreter with session persistence support.
@@ -99,6 +102,15 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
                 invocation but the Python process persists. Setting this to True allows
                 sessions to survive across invocations and be reconnected by subsequent
                 instances via module-level cache.
+
+            session_timeout_seconds (int): Timeout in seconds for sessions created
+                by this instance. Sessions automatically terminate after the timeout period.
+                Default: 900 (15 minutes).
+
+            boto_session (Optional[boto3.Session]): Custom boto3 session for AWS authentication.
+                If provided, this session is passed to the underlying Bedrock AgentCore client,
+                enabling cross-account access or custom credential configurations.
+                If None (default), the client uses the default credential chain.
 
         Session Lifecycle:
             Invocation 1 (Instance #1):
@@ -180,6 +192,8 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
         self.identifier = identifier or "aws.codeinterpreter.v1"
         self.auto_create = auto_create
         self.persist_sessions = persist_sessions
+        self.session_timeout_seconds = session_timeout_seconds
+        self.boto_session = boto_session
 
         if session_name is None:
             self.default_session = f"session-{uuid.uuid4().hex[:12]}"
@@ -260,10 +274,13 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         try:
             # Create new sandbox client
-            client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
+            client = BedrockAgentCoreCodeInterpreterClient(region=self.region, session=self.boto_session)
 
-            # Start session with identifier and name
-            client.start(identifier=self.identifier, name=session_name)
+            client.start(
+                identifier=self.identifier,
+                name=session_name,
+                session_timeout_seconds=self.session_timeout_seconds,
+            )
 
             aws_session_id = client.session_id
 
@@ -351,7 +368,7 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
             logger.debug(f"Found session in module cache: {target_session} -> {aws_session_id}")
 
             try:
-                client = BedrockAgentCoreCodeInterpreterClient(region=self.region)
+                client = BedrockAgentCoreCodeInterpreterClient(region=self.region, session=self.boto_session)
 
                 # Verify session still exists and is ready
                 session_info = client.get_session(interpreter_id=self.identifier, session_id=aws_session_id)
@@ -470,7 +487,12 @@ class AgentCoreCodeInterpreter(CodeInterpreter):
 
         logger.debug(f"Writing {len(action.content)} files to session '{session_name}'")
 
-        content_dicts = [{"path": fc.path, "text": fc.text} for fc in action.content]
+        content_dicts = []
+        for fc in action.content:
+            if fc.blob is not None:
+                content_dicts.append({"path": fc.path, "blob": fc.blob})
+            else:
+                content_dicts.append({"path": fc.path, "text": fc.text})
         params = {"content": content_dicts}
         response = self._sessions[session_name].client.invoke("writeFiles", params)
 
