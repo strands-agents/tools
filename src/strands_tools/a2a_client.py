@@ -36,12 +36,27 @@ from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.types import AgentCard, Message, Part, PushNotificationConfig, Role, TextPart
 from strands import tool
 from strands.types.tools import AgentTool
+from typing_extensions import deprecated
 
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "A2AClientToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "a2a_client tool vended by strands-agents (from strands.vended_tools import make_a2a_client)."
+)
 
+
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in __init__ is what
+# users actually see, since Python's default warning filter hides the DeprecationWarning
+# it raises on construction outside __main__. The message is spelled out here rather
+# than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "A2AClientToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "a2a_client tool vended by strands-agents (from strands.vended_tools import make_a2a_client)."
+)
 class A2AClientToolProvider:
     """A2A Client tool provider that manages multiple A2A agents and exposes synchronous tools."""
 
@@ -70,6 +85,8 @@ class A2AClientToolProvider:
                 This prevents "Event loop is closed" errors when the provider is used
                 across multiple asyncio.run() calls.
         """
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         self.timeout = timeout
         self._known_agent_urls: list[str] = known_agent_urls or []
         self._discovered_agents: dict[str, AgentCard] = {}

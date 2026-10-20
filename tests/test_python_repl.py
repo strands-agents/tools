@@ -253,6 +253,28 @@ class TestReplState:
 class TestPythonRepl:
     """Test the main python_repl function."""
 
+    def test_logs_deprecation_warning(self, mock_console, caplog):
+        """Invoking the tool logs a deprecation warning naming its migration path."""
+        tool_use = {"toolUseId": "test-id", "input": {"code": "x = 1", "interactive": False}}
+
+        with (
+            patch("strands_tools.python_repl.get_user_input", return_value="y"),
+            caplog.at_level("WARNING", logger="strands_tools.python_repl"),
+        ):
+            result = python_repl.python_repl(tool=tool_use)
+
+        assert result["status"] == "success"
+        assert "DEPRECATION WARNING" in caplog.text
+        assert "becomes an error log in v0.9.0" in caplog.text
+        assert "strands.vended_tools import python_repl" in caplog.text
+
+    def test_is_marked_deprecated_for_static_analysis(self):
+        """The @deprecated marker lets type checkers and IDEs flag callers."""
+        marker = getattr(python_repl.python_repl, "__deprecated__", None)
+
+        assert marker is not None
+        assert "strands.vended_tools import python_repl" in marker
+
     def test_successful_execution(self, mock_console):
         """Test successful code execution."""
         tool_use = {

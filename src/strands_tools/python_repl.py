@@ -63,12 +63,18 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "python_repl is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl)."
+)
 
 # Tool specification
 TOOL_SPEC = {
@@ -604,8 +610,19 @@ class PtyManager:
 output_buffer: List[str] = []
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "python_repl is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl)."
+)
 def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """Execute Python code with persistent state and output streaming."""
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     tool_use_id = tool["toolUseId"]

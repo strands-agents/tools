@@ -107,7 +107,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
-| a2a_client | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents |
+| a2a_client ⚠️ | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents <br> **Deprecated — see [Deprecations](#deprecations)** |
 | file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
 | file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
 | editor ⚠️ | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -119,14 +119,14 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | tavily_map ⚠️ | `agent.tool.tavily_map(url="www.tavily.com", max_depth=2, instructions="Find all pages")` | Map website structure and discover URLs starting from a base URL without content extraction <br> **Deprecated — see [Deprecations](#deprecations)** |
 | exa_search ⚠️ | `agent.tool.exa_search(query="Best project management tools", text=True)` | Intelligent web search with auto mode (default) for optimal results, plus fast and deep search modes <br> **Deprecated — see [Deprecations](#deprecations)** |
 | exa_get_contents ⚠️ | `agent.tool.exa_get_contents(urls=["https://example.com/article"], text=True, summary={"query": "key points"})` | Extract full content and summaries from specific URLs with live crawling fallback <br> **Deprecated — see [Deprecations](#deprecations)** |
-| python_repl* | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security |
+| python_repl* ⚠️ | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security <br> **Deprecated — see [Deprecations](#deprecations)** |
 | calculator ⚠️ | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving <br> **Deprecated — see [Deprecations](#deprecations)** |
 | code_interpreter | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve ⚠️ | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata <br> **Deprecated — see [Deprecations](#deprecations)** |
 | nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
 | agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
-| mem0_memory | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) |
+| mem0_memory ⚠️ | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | bright_data ⚠️ | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds <br> **Deprecated — see [Deprecations](#deprecations)** |
 | memory ⚠️ | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
 | environment ⚠️ | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -149,7 +149,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
 | use_agent | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
-| mcp_client | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. |
+| mcp_client ⚠️ | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | batch ⚠️ | `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools from one request. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | browser | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks |
 | diagram ⚠️ | `agent.tool.diagram(diagram_type="cloud", nodes=[{"id": "s3", "type": "S3"}], edges=[])` | Create AWS cloud architecture diagrams, network diagrams, graphs, and UML diagrams (all 14 types) <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -177,14 +177,14 @@ More tools will follow as their capabilities land elsewhere, and this repository
 archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
 moving several at once later.
 
-Deprecated tools keep working. Each one logs a warning when invoked starting in the release
-shown below, and that warning becomes an error log in **v0.9.0** — a louder signal for anyone
-who has not migrated, not a behavior change.
+Deprecated tools keep working. Each one logs a warning when invoked (or, for class-based tools, when constructed)
+starting in the release shown below, and that warning becomes
+an error log in **v0.9.0** — a louder signal for anyone who has not migrated, not a behavior change.
 
 They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
 usage before you run anything. To list what you still need to migrate, run
-`mypy --enable-error-code deprecated` over your project: it reports the
-`from strands_tools import ...` line for each deprecated tool, without invoking any of them.
+`mypy --enable-error-code deprecated` over your project: it reports the import line for each
+deprecated tool, without invoking any of them.
 Prefer mypy here: pyright, with `reportDeprecated` enabled, reports direct calls such as
 `calculator(expression=...)` but not `agent.tool.calculator(...)`, and it reaches the import
 line for only the tools whose marker is not wrapped by `@tool`. Note that Python
@@ -214,6 +214,10 @@ is why the log message exists as well.
 | `search_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
 | `chat_video` | [official TwelveLabs MCP servers](https://docs.twelvelabs.io/docs/advanced/model-context-protocol) | v0.8.9 | v0.9.0 |
 | `journal` | `from strands.vended_tools import notebook` | v0.8.9 | v0.9.0 |
+| `python_repl` | `from strands.vended_tools import python_repl` | v0.8.10 | v0.9.0 |
+| `a2a_client` | `from strands.vended_tools import make_a2a_client` | v0.8.10 | v0.9.0 |
+| `mcp_client` | `from strands.vended_tools import make_mcp_router` | v0.8.10 | v0.9.0 |
+| `mem0_memory` (`mem0_memory`, `Mem0MemoryTool`) | `MemoryManager` + `Mem0MemoryStore` from [mem0-strands](https://docs.mem0.ai/integrations/strands) | v0.8.10 | v0.9.0 |
 
 ```python
 # Before
@@ -311,6 +315,22 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`journal` → `notebook`** — `notebook` keeps notes in `agent.state` instead of `./journal/<date>.md`, so persistence follows your session
   manager. There is no `add_task` equivalent and no per-day entry, so tasks and dated entries become plain note text. If you need the entries as
   files on disk, use `file_editor`.
+- **`python_repl` → `python_repl`** — the SDK tool runs each call in a fresh interpreter, so in-memory state does not
+  persist; save intermediate results to files instead. By default it executes on the host with no isolation and no
+  confirmation prompt — pass a `sandbox=` to `Agent` (for example `DockerSandbox`) if you relied on the consent gate.
+  There is no PTY, stdin, or `reset_state`, and the `PYTHON_REPL_*` environment variables no longer apply.
+- **`a2a_client` → `make_a2a_client`** — the three `a2a_*` tools become one tool with `discover` and
+  `send_message` operations, limited to the endpoints you pass in `allowed_endpoints`. Authentication,
+  timeouts, and push notifications move from `httpx_client_args` and the webhook arguments into a
+  per-endpoint `ClientConfig`.
+- **`mcp_client` → `make_mcp_router`** — the model connects by name to servers you allowlist in `servers`
+  rather than supplying its own command or URL. There is no `load_tools`, so remote tools are invoked
+  through `call_tool`.
+- **`mem0_memory` → `Mem0MemoryStore`** — plugs into `MemoryManager`, so memories are recalled automatically.
+  `retrieve` becomes `search_memory` and `store` becomes `add_memory` (with `add_tool_config=True`); for `get`, `list`,
+  `delete`, and `history`, use `mem0`'s `MemoryClient`. `mem0-strands` needs `mem0ai` 2.x, so drop the `mem0-memory`
+  extra first. Backend env vars don't carry over: without `MEM0_API_KEY`, pass a Mem0 OSS `config=`. See the
+  [Mem0 integration docs](https://docs.mem0.ai/integrations/strands).
 
 ## 💻 Usage Examples
 

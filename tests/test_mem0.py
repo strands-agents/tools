@@ -41,6 +41,33 @@ def mock_mem0_service_client():
     return client
 
 
+def test_standalone_logs_deprecation_warning(mock_tool, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with patch.dict(os.environ, {}, clear=True), caplog.at_level("WARNING", logger="strands_tools.mem0_memory"):
+        mem0_memory.mem0_memory(tool=mock_tool)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
+
+
+def test_class_logs_deprecation_warning(caplog):
+    """Constructing the class logs the same deprecation warning."""
+    with caplog.at_level("WARNING", logger="strands_tools.mem0_memory"):
+        Mem0MemoryTool(user_id="user_1")
+
+    assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
+
+
+@pytest.mark.parametrize("target", [mem0_memory.mem0_memory, Mem0MemoryTool])
+def test_is_marked_deprecated_for_static_analysis(target):
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(target, "__deprecated__", None)
+
+    assert marker is not None
+    assert "Mem0MemoryStore from the mem0-strands package" in marker
+
+
 # --- Security Tests (IDOR guards) ---
 
 
@@ -593,9 +620,7 @@ def test_store_strips_identity_keys_from_metadata(
 ):
     """store must strip identity keys from LLM-supplied metadata."""
     mock_mem0_client.return_value = mock_mem0_service_client
-    mock_mem0_service_client.store_memory.return_value = [
-        {"event": "store", "id": "mem1", "memory": "some content"}
-    ]
+    mock_mem0_service_client.store_memory.return_value = [{"event": "store", "id": "mem1", "memory": "some content"}]
 
     mock_tool.get.side_effect = lambda key, default=None: {
         "toolUseId": "test-id",
