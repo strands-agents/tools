@@ -67,7 +67,7 @@ See the use_aws function docstring for more details on parameters and usage.
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -299,6 +299,40 @@ def get_available_operations(service_name: str) -> List[str]:
         return []
 
 
+def parse_parameters(raw: Any) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Normalize the `parameters` tool input into a dict of operation parameters.
+
+    Models do not always follow the declared object schema, so this accepts:
+    - an object (dict): returned as-is
+    - absent or null: treated as no parameters ({})
+    - a JSON-encoded object string: parsed (an empty or blank string, or "null", means no parameters)
+
+    Args:
+        raw: The raw `parameters` value from the tool input
+
+    Returns:
+        A tuple of (parameters, problem). On success, parameters is a dict and problem is "".
+        If the value cannot be read as an object (e.g. a list, a number, malformed JSON, or a
+        JSON string that is not an object), parameters is None and problem describes what was received.
+    """
+    if raw is None:
+        return {}, ""
+    if isinstance(raw, str):
+        if not raw.strip():
+            return {}, ""
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError as e:
+            return None, f"a string that is not valid JSON ({e.msg}: line {e.lineno} column {e.colno})"
+        if raw is None:
+            return {}, ""
+        if not isinstance(raw, dict):
+            return None, f"a JSON-encoded {type(raw).__name__} instead of an object"
+    if not isinstance(raw, dict):
+        return None, f"a value of type {type(raw).__name__}"
+    return raw, ""
+
+
 TOOL_SPEC = {
     "name": "use_aws",
     "description": (
@@ -410,9 +444,26 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     service_name = tool_input["service_name"]
     operation_name = tool_input["operation_name"]
-    parameters = tool_input.get("parameters", {})
+    # Some models send `parameters` as a JSON-encoded string, null, or another non-object value.
+    # Normalize once so the rest of the function always works on a dict.
+    parameters, parameters_problem = parse_parameters(tool_input.get("parameters"))
     region = tool_input.get("region", aws_region)
     label = tool_input.get("label", "AWS Operation Details")
+
+    if parameters is None:
+        logger.debug("Invalid parameters for %s.%s: %s", service_name, operation_name, parameters_problem)
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [
+                {
+                    "text": (
+                        "Invalid parameters: provide the operation parameters as an object "
+                        f"(a JSON-encoded object string is also accepted); received {parameters_problem}."
+                    )
+                }
+            ],
+        }
 
     STRANDS_BYPASS_TOOL_CONSENT = os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"
 
