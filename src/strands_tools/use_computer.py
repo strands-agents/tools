@@ -24,6 +24,7 @@ import inspect
 import logging
 import os
 import platform
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -642,6 +643,19 @@ def extract_text_from_image(image_path: str, min_confidence: float = 0.5) -> Lis
     return results
 
 
+# The application name is passed to launch/focus mechanisms as a separate
+# argument (never interpolated into a shell command or script body), so normal
+# printable names cannot be parsed as code. As light defense-in-depth we still
+# reject control characters and newlines, which have no place in an app name and
+# could otherwise confuse logging or downstream tools.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _is_valid_app_name(app_name: str) -> bool:
+    """Return True if app_name is non-empty and contains no control characters."""
+    return bool(app_name) and _CONTROL_CHARS.search(app_name) is None
+
+
 def open_application(app_name: str) -> str:
     """
     Launch an application cross-platform.
@@ -658,7 +672,8 @@ def open_application(app_name: str) -> str:
         str: Success or error message detailing the result of the operation.
 
     Platform Support:
-        - Windows: Uses the 'start' command
+        - Windows: Uses os.startfile, which launches via the shell association
+          without going through cmd.exe
         - macOS: Uses the 'open -a' command
         - Linux: Attempts to run app_name directly as a command
     """
@@ -682,10 +697,24 @@ def open_application(app_name: str) -> str:
     # Use mapped name if available, otherwise use original
     actual_app_name = app_mappings.get(app_name.lower(), app_name)
 
+    # Names not covered by the known mapping must be plain, printable names.
+    if app_name.lower() not in app_mappings and not _is_valid_app_name(app_name):
+        return f"Invalid application name: '{app_name}'"
+
     try:
         if system == "windows":
-            result = subprocess.run(f"start {actual_app_name}", shell=True, capture_output=True, text=True)
-        elif system == "darwin":  # macOS
+            # Use os.startfile rather than 'cmd /c start'. Even with shell=False,
+            # subprocess joins the argv into a command line via list2cmdline, which
+            # only quotes items containing whitespace. A spaceless payload such as
+            # "notepad&whoami" would therefore be handed to cmd.exe unquoted and the
+            # '&' re-parsed as a command separator, allowing command injection.
+            # os.startfile launches the app/document through the shell association
+            # API directly and never invokes cmd.exe, so metacharacters like
+            # & | < > ^ ( ) % stay inert.
+            os.startfile(actual_app_name)
+            return f"Launched {actual_app_name}"
+
+        if system == "darwin":  # macOS
             result = subprocess.run(["open", "-a", actual_app_name], capture_output=True, text=True)
         elif system == "linux":
             result = subprocess.run([actual_app_name.lower()], capture_output=True, text=True)
@@ -741,14 +770,22 @@ def focus_application(app_name: str, timeout: float = 2.0) -> bool:
     system = platform.system().lower()
     start_time = time.time()
 
+    if not _is_valid_app_name(app_name):
+        logger.warning(f"Invalid application name for focus: {app_name}")
+        return False
+
     try:
         if system == "darwin":  # macOS
-            # Use AppleScript to bring app to front with timeout
-            script = f'tell application "{app_name}" to activate'
+            # Pass the application name as a script argument (available via 'argv')
+            # instead of interpolating it into the AppleScript source, so the name
+            # is treated as data rather than code.
+            script = "on run argv\n  tell application (item 1 of argv) to activate\nend run"
 
             # Set up a process with timeout
             try:
-                result = subprocess.run(["osascript", "-e", script], check=True, capture_output=True, timeout=timeout)
+                result = subprocess.run(
+                    ["osascript", "-e", script, app_name], check=True, capture_output=True, timeout=timeout
+                )
                 if result.returncode != 0:
                     logger.warning(f"Focus application returned non-zero exit code: {result.returncode}")
                     return False
@@ -763,14 +800,16 @@ def focus_application(app_name: str, timeout: float = 2.0) -> bool:
                 return False
 
         elif system == "windows":
-            # Use PowerShell to focus window
+            # Pass the application name as a script argument (available via 'args')
+            # instead of interpolating it into the PowerShell source, so the name
+            # is treated as data rather than code.
             script = (
-                f"Add-Type -AssemblyName Microsoft.VisualBasic; "
-                f"[Microsoft.VisualBasic.Interaction]::AppActivate('{app_name}')"
+                "Add-Type -AssemblyName Microsoft.VisualBasic; "
+                "[Microsoft.VisualBasic.Interaction]::AppActivate($args[0])"
             )
             try:
                 result = subprocess.run(
-                    ["powershell", "-Command", script], check=True, capture_output=True, timeout=timeout
+                    ["powershell", "-Command", script, app_name], check=True, capture_output=True, timeout=timeout
                 )
                 if result.returncode != 0:
                     return False
