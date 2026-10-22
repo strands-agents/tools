@@ -82,6 +82,12 @@ TOOL_SPEC = {
                     "type": "string",
                     "description": "The content to write to the file",
                 },
+                "mode": {
+                    "type": "string",
+                    "description": "Write mode: 'w' (default) to overwrite, 'a' to append to existing content",
+                    "enum": ["w", "a"],
+                    "default": "w",
+                },
             },
             "required": ["path", "content"],
         }
@@ -168,6 +174,7 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
             - path: The path to the file to write. User paths with tilde (~)
                     are automatically expanded.
             - content: The content to write to the file.
+            - mode: Write mode - 'w' (default) to overwrite, 'a' to append.
         **kwargs: Additional keyword arguments (not used currently)
 
     Returns:
@@ -257,10 +264,12 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
             )
 
         # Write the file
-        with open(path, "w") as file:
+        mode = tool.get("input", {}).get("mode", "w")
+        with open(path, mode) as file:
             file.write(content)
 
-        success_message = f"File written successfully to {path}"
+        action = "appended to" if mode == "a" else "written successfully to"
+        success_message = f"Content {action} {path}"
         success_panel = Panel(
             Text(success_message, style="bold green"),
             title="[bold green]Write Successful",
