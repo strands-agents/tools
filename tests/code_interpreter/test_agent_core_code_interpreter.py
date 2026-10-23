@@ -2,23 +2,17 @@
 Tests for the AgentCoreCodeInterpreter class.
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-mock_bedrock_agentcore = MagicMock()
-sys.modules["bedrock_agentcore"] = mock_bedrock_agentcore
-sys.modules["bedrock_agentcore.tools"] = MagicMock()
-sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
-
-from strands_tools.code_interpreter.agent_core_code_interpreter import (  # noqa: E402
+from strands_tools.code_interpreter.agent_core_code_interpreter import (
     AgentCoreCodeInterpreter,
     SessionInfo,
     _session_mapping,
 )
-from strands_tools.code_interpreter.code_interpreter import CodeInterpreter  # noqa: E402
-from strands_tools.code_interpreter.models import (  # noqa: E402
+from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
+from strands_tools.code_interpreter.models import (
     ExecuteCodeAction,
     ExecuteCommandAction,
     FileContent,
