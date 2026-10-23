@@ -25,7 +25,10 @@ if TYPE_CHECKING:
     from .environment import environment as environment
     from .http_request import http_request as http_request
     from .journal import journal as journal
+    from .mcp_client import mcp_client as mcp_client
+    from .mem0_memory import mem0_memory as mem0_memory
     from .memory import memory as memory
+    from .python_repl import python_repl as python_repl
     from .retrieve import retrieve as retrieve
     from .rss import rss as rss
     from .search_video import search_video as search_video

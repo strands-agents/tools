@@ -34,8 +34,14 @@ from mcp.client.streamable_http import streamable_http_client
 from strands import tool
 from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool, ToolGenerator, ToolSpec, ToolUse
+from typing_extensions import deprecated
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "mcp_client is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
+)
 
 # Default timeout for MCP operations - can be overridden via environment variable
 DEFAULT_MCP_TIMEOUT = float(os.environ.get("STRANDS_MCP_TIMEOUT", "30.0"))
@@ -237,7 +243,16 @@ def _create_transport_callable(transport: str, **params):
         raise ValueError(f"Unsupported transport: {transport}. Supported: stdio, sse, streamable_http")
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "mcp_client is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
+)
 def mcp_client(
     action: str,
     server_config: Optional[Dict[str, Any]] = None,
@@ -333,6 +348,7 @@ def mcp_client(
             tool_args={"x": 10, "y": 20}
         )
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Prepare parameters for action handlers

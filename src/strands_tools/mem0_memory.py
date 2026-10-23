@@ -103,11 +103,18 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolResultContent, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
+    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
+)
 
 # Initialize Rich console
 console = console_util.create()
@@ -707,6 +714,16 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
 # ---------------------------------------------------------------------------
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in __init__ is what
+# users actually see, since Python's default warning filter hides the DeprecationWarning
+# it raises on construction outside __main__. The message is spelled out here rather
+# than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
+    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
+)
 class Mem0MemoryTool:
     """Multi-tenant memory tool that binds user_id/agent_id at construction time.
 
@@ -741,6 +758,8 @@ class Mem0MemoryTool:
         agent_id: Optional[str] = None,
         config: Optional[Dict] = None,
     ):
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         if not user_id and not agent_id:
             raise ValueError("Either user_id or agent_id must be provided to Mem0MemoryTool")
 
@@ -776,6 +795,16 @@ class Mem0MemoryTool:
 # ---------------------------------------------------------------------------
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
+    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
+)
 def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """Standalone agent-facing tool (single-tenant).
 
@@ -785,6 +814,8 @@ def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     At least one must be set. These are never exposed to the LLM.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     user_id = os.environ.get("MEM0_USER_ID")
     agent_id = os.environ.get("MEM0_AGENT_ID")
 
@@ -921,9 +952,7 @@ def _execute_mem0_memory(
             metadata = tool_input.get("metadata")
             if metadata and isinstance(metadata, dict):
                 metadata = {
-                    k: v
-                    for k, v in metadata.items()
-                    if k not in ("user_id", "agent_id", "run_id", "app_id", "org_id")
+                    k: v for k, v in metadata.items() if k not in ("user_id", "agent_id", "run_id", "app_id", "org_id")
                 }
 
             results = client.store_memory(

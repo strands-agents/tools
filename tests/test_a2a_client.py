@@ -6,6 +6,24 @@ from a2a.types import Message
 from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider
 
 
+def test_init_logs_deprecation_warning(caplog):
+    """Constructing the provider logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.a2a_client"):
+        A2AClientToolProvider()
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_a2a_client" in caplog.text
+
+
+def test_provider_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(A2AClientToolProvider, "__deprecated__", None)
+
+    assert marker is not None
+    assert "strands.vended_tools import make_a2a_client" in marker
+
+
 def test_init_default_parameters():
     """Test initialization with default parameters."""
     provider = A2AClientToolProvider()
