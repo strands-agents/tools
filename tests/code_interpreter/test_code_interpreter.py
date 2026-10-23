@@ -2,7 +2,9 @@
 Tests for the base CodeInterpreter class.
 """
 
+import logging
 import sys
+import warnings
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
@@ -289,3 +291,22 @@ def test_dynamic_tool_spec(mock_interpreter):
         "The tool supports the following programming languages: PYTHON, JAVASCRIPT, TYPESCRIPT"
         in mock_interpreter.code_interpreter.tool_spec["description"]
     )
+
+
+def test_code_interpreter_logs_deprecation_warning(mock_interpreter, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    action_input = CodeInterpreterInput(action=ListLocalSessionsAction(type="listLocalSessions"))
+    with caplog.at_level(logging.WARNING, logger="strands_tools.code_interpreter.code_interpreter"):
+        mock_interpreter.code_interpreter(action_input)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "strands.vended_tools import python_repl" in caplog.text
+
+
+def test_code_interpreter_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers, without warning at runtime."""
+    assert "strands.vended_tools import python_repl" in CodeInterpreter.__deprecated__
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        MockCodeInterpreter()

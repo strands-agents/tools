@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter as BedrockAgentCoreCodeInterpreterClient
+from typing_extensions import deprecated
 
 from ..utils.aws_util import resolve_region
 from .code_interpreter import CodeInterpreter
@@ -46,6 +47,13 @@ class SessionInfo:
     client: BedrockAgentCoreCodeInterpreterClient
 
 
+# See CodeInterpreter for why the marker is static-only and the message is a literal.
+@deprecated(
+    "code_interpreter is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "`from strands.vended_tools import python_repl` for general-purpose programming in Python, or "
+    "`from strands.vended_tools import shell` to run code in other languages.",
+    category=None,
+)
 class AgentCoreCodeInterpreter(CodeInterpreter):
     def __init__(
         self,
