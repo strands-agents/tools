@@ -192,9 +192,9 @@ usage before you run anything. To list what you still need to migrate, run
 deprecated tool, without invoking any of them.
 Prefer mypy here: pyright, with `reportDeprecated` enabled, reports direct calls such as
 `calculator(expression=...)` but not `agent.tool.calculator(...)`, and it reaches the import
-line for only the tools whose marker is not wrapped by `@tool`. Note that Python
-suppresses the resulting `DeprecationWarning` at runtime when the agent invokes a tool, which
-is why the log message exists as well.
+line for only the tools whose marker is not wrapped by `@tool`. At runtime, Python suppresses the
+`DeprecationWarning` that function tools raise when the agent invokes them, and the markers on
+class-based tools are static-only, which is why the log message exists as well.
 
 | Tool | Suggested alternative | Warning | Error log |
 |------|-----------------------|---------|-----------|
@@ -227,7 +227,7 @@ is why the log message exists as well.
 | `handoff_to_user` | `from strands.vended_tools import handoff_to_user` | v0.8.11 | v0.9.0 |
 | `speak` | no replacement — call Amazon Polly's `synthesize_speech` directly | v0.8.11 | v0.9.0 |
 | `load_tool` | no replacement — pass tools to the `Agent` directly, or use `Agent(load_tools_from_directory=True)` | v0.8.11 | v0.9.0 |
-| `use_computer` | no replacement — drive `pyautogui` directly | v0.8.11 | v0.9.0 |
+| `use_computer` | no replacement — drive `pyautogui` and `pytesseract` directly | v0.8.11 | v0.9.0 |
 | `browser` (`LocalChromiumBrowser`, `AgentCoreBrowser`) | no replacement — drive Playwright directly, with `bedrock-agentcore`'s `BrowserClient` for AgentCore sessions | v0.8.11 | v0.9.0 |
 
 ```python
@@ -342,9 +342,11 @@ The replacements are not drop-in equivalents. Check these before migrating:
   `delete`, and `history`, use `mem0`'s `MemoryClient`. `mem0-strands` needs `mem0ai` 2.x, so drop the `mem0-memory`
   extra first. Backend env vars don't carry over: without `MEM0_API_KEY`, pass a Mem0 OSS `config=`. See the
   [Mem0 integration docs](https://docs.mem0.ai/integrations/strands).
-- **`code_interpreter` → `python_repl` / `shell`** — both run in the agent's configured sandbox instead of
-  an AgentCore session, and each call starts a fresh process, so in-memory state does not persist. There
-  are no named sessions or file actions; use `file_editor` or `shell` for file operations.
+- **`code_interpreter` → `python_repl` / `shell`** — both run in the agent's sandbox instead of an AgentCore
+  session. An `Agent` with no `sandbox=` falls back to `NotASandboxLocalEnvironment`, which runs on the host
+  with no isolation, so pass a sandbox (e.g. `strands.sandbox.docker.DockerSandbox`) if you were relying on
+  AgentCore's. Each call starts a fresh process, so in-memory state does not persist. There are no named
+  sessions or file actions; use `file_editor` or `shell` for file operations.
 - **`handoff_to_user` → `handoff_to_user`** — the SDK tool raises an interrupt instead of prompting on the
   console, so the agent stops with `stop_reason == "interrupt"` and your code resumes it with the user's
   reply. There is no `breakout_of_loop`: every call pauses the agent.

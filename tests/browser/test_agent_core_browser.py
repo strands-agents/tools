@@ -102,4 +102,4 @@ def test_bedrock_browser_close_platform_with_errors():
 
 def test_agent_core_browser_deprecation_matches_base():
     """The subclass carries its own @deprecated literal, which must not drift from the base's."""
-    assert AgentCoreBrowser.__deprecated__ == Browser.__deprecated__
+    assert AgentCoreBrowser.__dict__["__deprecated__"] == Browser.__deprecated__

@@ -975,4 +975,4 @@ def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
 
 def test_agent_core_code_interpreter_deprecation_matches_base():
     """The subclass carries its own @deprecated literal, which must not drift from the base's."""
-    assert AgentCoreCodeInterpreter.__deprecated__ == CodeInterpreter.__deprecated__
+    assert AgentCoreCodeInterpreter.__dict__["__deprecated__"] == CodeInterpreter.__deprecated__

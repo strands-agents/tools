@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "use_computer is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
-    "drive pyautogui directly from a custom tool."
+    "drive pyautogui and pytesseract directly from a custom tool."
 )
 
 
@@ -917,7 +917,7 @@ def handle_analyze_screenshot_pytesseract(
 @tool
 @deprecated(
     "use_computer is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
-    "drive pyautogui directly from a custom tool."
+    "drive pyautogui and pytesseract directly from a custom tool."
 )
 def use_computer(
     action: str,

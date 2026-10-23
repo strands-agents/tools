@@ -73,7 +73,7 @@ MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import ([\w., ]+)")
 # as test_shell.py: skipped there until issue #17 is resolved.
 WINDOWS_UNSUPPORTED = {"python_repl", "shell"}
 
-# use_computer imports pyautogui, which needs a display on Linux.
+# use_computer imports cv2 and pyautogui, which need a display on Linux.
 DISPLAY_REQUIRED = {"use_computer"}
 
 

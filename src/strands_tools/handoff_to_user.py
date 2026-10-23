@@ -48,8 +48,9 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "handoff_to_user is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
-    "`from strands.vended_tools import handoff_to_user`, which pauses the agent with an interrupt."
+    "handoff_to_user is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "handoff_to_user tool vended by strands-agents (from strands.vended_tools import handoff_to_user), which "
+    "pauses the agent with an interrupt."
 )
 
 TOOL_SPEC = {
@@ -81,8 +82,9 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "handoff_to_user is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
-    "`from strands.vended_tools import handoff_to_user`, which pauses the agent with an interrupt."
+    "handoff_to_user is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "handoff_to_user tool vended by strands-agents (from strands.vended_tools import handoff_to_user), which "
+    "pauses the agent with an interrupt."
 )
 def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

@@ -138,4 +138,4 @@ def test_local_chromium_browser_close_platform():
 
 def test_local_chromium_browser_deprecation_matches_base():
     """The subclass carries its own @deprecated literal, which must not drift from the base's."""
-    assert LocalChromiumBrowser.__deprecated__ == Browser.__deprecated__
+    assert LocalChromiumBrowser.__dict__["__deprecated__"] == Browser.__deprecated__
