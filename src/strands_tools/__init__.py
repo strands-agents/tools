@@ -23,8 +23,10 @@ if TYPE_CHECKING:
     from .diagram import diagram as diagram
     from .editor import editor as editor
     from .environment import environment as environment
+    from .handoff_to_user import handoff_to_user as handoff_to_user
     from .http_request import http_request as http_request
     from .journal import journal as journal
+    from .load_tool import load_tool as load_tool
     from .mcp_client import mcp_client as mcp_client
     from .mem0_memory import mem0_memory as mem0_memory
     from .memory import memory as memory
@@ -35,4 +37,6 @@ if TYPE_CHECKING:
     from .shell import shell as shell
     from .slack import slack as slack
     from .sleep import sleep as sleep
+    from .speak import speak as speak
     from .think import think as think
+    from .use_computer import use_computer as use_computer

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from strands_tools.browser import AgentCoreBrowser
+from strands_tools.browser import AgentCoreBrowser, Browser
 
 
 def test_bedrock_browser_initialization():
@@ -98,3 +98,8 @@ def test_bedrock_browser_close_platform_with_errors():
     # Verify all clients were attempted to be stopped
     mock_client1.stop.assert_called_once()
     mock_client2.stop.assert_called_once()
+
+
+def test_agent_core_browser_deprecation_matches_base():
+    """The subclass carries its own @deprecated literal, which must not drift from the base's."""
+    assert AgentCoreBrowser.__dict__["__deprecated__"] == Browser.__deprecated__

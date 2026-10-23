@@ -10,6 +10,7 @@ import importlib
 import os
 import pathlib
 import re
+import sys
 import types
 import warnings
 
@@ -22,17 +23,21 @@ DEPRECATED_TOOLS = [
     ("a2a_client", "A2AClientToolProvider"),
     ("batch", "batch"),
     ("bright_data", "bright_data"),
+    ("browser.browser", "Browser"),
     ("calculator", "calculator"),
     ("chat_video", "chat_video"),
+    ("code_interpreter.code_interpreter", "CodeInterpreter"),
     ("cron", "cron"),
     ("current_time", "current_time"),
     ("diagram", "diagram"),
     ("editor", "editor"),
     ("environment", "environment"),
+    ("handoff_to_user", "handoff_to_user"),
     ("http_request", "http_request"),
     ("exa", "exa_get_contents"),
     ("exa", "exa_search"),
     ("journal", "journal"),
+    ("load_tool", "load_tool"),
     ("mcp_client", "mcp_client"),
     ("mem0_memory", "Mem0MemoryTool"),
     ("mem0_memory", "mem0_memory"),
@@ -45,11 +50,13 @@ DEPRECATED_TOOLS = [
     ("slack", "slack"),
     ("slack", "slack_send_message"),
     ("sleep", "sleep"),
+    ("speak", "speak"),
     ("tavily", "tavily_crawl"),
     ("tavily", "tavily_extract"),
     ("tavily", "tavily_map"),
     ("tavily", "tavily_search"),
     ("think", "think"),
+    ("use_computer", "use_computer"),
 ]
 
 # Only tools whose name matches their module can be re-exported: the re-export has to
@@ -66,11 +73,23 @@ MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import ([\w., ]+)")
 # as test_shell.py: skipped there until issue #17 is resolved.
 WINDOWS_UNSUPPORTED = {"python_repl", "shell"}
 
+# use_computer imports cv2 and pyautogui, which need a display on Linux.
+DISPLAY_REQUIRED = {"use_computer"}
+
+
+def _unimportable_reason(module_name):
+    """Why a tool module cannot import on this platform, or None if it can."""
+    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
+        return f"{module_name} does not import on windows (issue #17)"
+    if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and module_name in DISPLAY_REQUIRED:
+        return f"{module_name} does not import without a display"
+    return None
+
 
 def _import_tool_module(module_name):
     """Import a tool module, skipping the names that cannot import on this platform."""
-    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
-        pytest.skip(f"{module_name} does not import on windows (issue #17)")
+    if reason := _unimportable_reason(module_name):
+        pytest.skip(reason)
     return importlib.import_module(f"strands_tools.{module_name}")
 
 
@@ -136,7 +155,7 @@ def test_reexports_resolve_at_runtime():
     slack_send_message`` typecheck and then raise ImportError.
     """
     for _, attr in _reexports():
-        if os.name == "nt" and attr in WINDOWS_UNSUPPORTED:
+        if _unimportable_reason(attr):
             continue
         _from_import(attr)
 
@@ -152,8 +171,8 @@ def test_importing_the_package_does_not_import_tool_modules():
 @pytest.mark.parametrize("module_name, attr", REEXPORTED_TOOLS)
 def test_reexport_leaves_runtime_binding_untouched(module_name, attr):
     """The documented import still yields the module, so existing callers keep working."""
-    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
-        pytest.skip(f"{module_name} does not import on windows (issue #17)")
+    if reason := _unimportable_reason(module_name):
+        pytest.skip(reason)
     imported = _from_import(module_name)
 
     assert isinstance(imported, types.ModuleType)
@@ -167,7 +186,7 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     Passing the shared _DEPRECATION_MESSAGE constant instead silently disables the
     check, so pin the literal in place.
     """
-    tree = ast.parse((SRC / f"{module_name}.py").read_text(encoding="utf-8"))
+    tree = ast.parse((SRC / f"{module_name.replace('.', '/')}.py").read_text(encoding="utf-8"))
 
     decorators = [
         decorator
