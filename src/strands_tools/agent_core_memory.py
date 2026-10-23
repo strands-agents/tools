@@ -56,6 +56,7 @@ from boto3.session import Session as Boto3Session
 from botocore.config import Config as BotocoreConfig
 from strands import tool
 from strands.types.tools import AgentTool
+from typing_extensions import deprecated
 
 
 # Define memory actions as an Enum
@@ -82,10 +83,27 @@ REQUIRED_PARAMS = {
 # Set up logging
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
+    "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore)."
+)
+
 # Default region if not specified
 DEFAULT_REGION = "us-west-2"
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in agent_core_memory is
+# what users actually see. category=None keeps the marker static-only so instantiating or
+# subclassing does not start raising DeprecationWarning. The message is spelled out here
+# rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
+    "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore).",
+    category=None,
+)
 class AgentCoreMemoryToolProvider:
     """Provider for AgentCore Memory Service tools."""
 
@@ -234,6 +252,8 @@ class AgentCoreMemoryToolProvider:
         Returns:
             Dict: Response containing the requested memory information or operation status
         """
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         try:
             # Use values from initialization
             memory_id = self.memory_id

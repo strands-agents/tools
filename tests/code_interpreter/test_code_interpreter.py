@@ -3,20 +3,14 @@ Tests for the base CodeInterpreter class.
 """
 
 import logging
-import sys
 import warnings
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-mock_bedrock_agentcore = MagicMock()
-sys.modules["bedrock_agentcore"] = mock_bedrock_agentcore
-sys.modules["bedrock_agentcore.tools"] = MagicMock()
-sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
-
-from strands_tools.code_interpreter.code_interpreter import CodeInterpreter  # noqa: E402
-from strands_tools.code_interpreter.models import (  # noqa: E402
+from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
+from strands_tools.code_interpreter.models import (
     CodeInterpreterInput,
     ExecuteCodeAction,
     ExecuteCommandAction,
