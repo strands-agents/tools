@@ -102,7 +102,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "elasticsearch_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: implement a "
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
     "custom MemoryStore over elasticsearch-py "
     "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
     "(from strands.memory import MemoryManager). See "
@@ -753,7 +753,7 @@ def _run_memory_operation(
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "elasticsearch_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: implement a "
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
     "custom MemoryStore over elasticsearch-py "
     "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
     "(from strands.memory import MemoryManager). See "
@@ -883,7 +883,7 @@ def elasticsearch_memory(
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "elasticsearch_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: implement a "
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
     "custom MemoryStore over elasticsearch-py "
     "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
     "(from strands.memory import MemoryManager). See "

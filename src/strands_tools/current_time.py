@@ -11,8 +11,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "current_time is deprecated. This warning becomes an error log in v0.9.0. Migration path: inject the current time "
-    "as context with ContextInjector instead of calling a tool. See "
+    "current_time is deprecated. This warning becomes an import error in v0.9.0. Migration path: inject the current "
+    "time as context with ContextInjector instead of calling a tool. See "
     "https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
 )
 
@@ -24,8 +24,8 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "current_time is deprecated. This warning becomes an error log in v0.9.0. Migration path: inject the current time "
-    "as context with ContextInjector instead of calling a tool. See "
+    "current_time is deprecated. This warning becomes an import error in v0.9.0. Migration path: inject the current "
+    "time as context with ContextInjector instead of calling a tool. See "
     "https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
 )
 def current_time(timezone: str = None) -> str:

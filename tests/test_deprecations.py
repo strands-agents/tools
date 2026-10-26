@@ -107,7 +107,7 @@ def test_tool_carries_deprecation_marker(module_name, attr):
 
     marker = getattr(tool, "__deprecated__", None)
     assert marker is not None
-    assert "becomes an error log in v0.9.0" in marker
+    assert "becomes an import error in v0.9.0" in marker
 
 
 def _reexports():

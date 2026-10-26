@@ -65,7 +65,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "generate_image_stability is deprecated. This warning becomes an error log in v0.9.0. There is no replacement "
+    "generate_image_stability is deprecated. This warning becomes an import error in v0.9.0. There is no replacement "
     "tool; call the Stability AI REST API (https://api.stability.ai/v2beta/stable-image) directly from a custom tool."
 )
 
@@ -328,7 +328,7 @@ def call_stability_api(
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "generate_image_stability is deprecated. This warning becomes an error log in v0.9.0. There is no replacement "
+    "generate_image_stability is deprecated. This warning becomes an import error in v0.9.0. There is no replacement "
     "tool; call the Stability AI REST API (https://api.stability.ai/v2beta/stable-image) directly from a custom tool."
 )
 def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:

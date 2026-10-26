@@ -22,8 +22,8 @@ matplotlib.use("Agg")  # Set the backend after importing matplotlib
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "diagram is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; have the model "
-    "write and run diagram code directly with graphviz, mermaid, or the diagrams package."
+    "diagram is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; have the "
+    "model write and run diagram code directly with graphviz, mermaid, or the diagrams package."
 )
 
 
@@ -1109,8 +1109,8 @@ def open_diagram(file_path: str) -> None:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "diagram is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; have the model "
-    "write and run diagram code directly with graphviz, mermaid, or the diagrams package."
+    "diagram is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; have the "
+    "model write and run diagram code directly with graphviz, mermaid, or the diagrams package."
 )
 def diagram(
     diagram_type: str,

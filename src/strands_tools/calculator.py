@@ -106,7 +106,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "calculator is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use "
     "the shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
     "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while shell executes "
     "arbitrary commands, so review it against your threat model before switching."
@@ -796,7 +796,7 @@ def calculate_series(expr: Any, var: str, point: str, order: int) -> Any:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "calculator is deprecated. This warning becomes an error log in v0.9.0. To achieve similar functionality, use "
+    "calculator is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use "
     "the shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
     "boundary: calculator only ever evaluated an expression checked against an AST allowlist, while shell executes "
     "arbitrary commands, so review it against your threat model before switching."

@@ -294,7 +294,7 @@ def test_code_interpreter_logs_deprecation_warning(mock_interpreter, caplog):
         mock_interpreter.code_interpreter(action_input)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "strands.vended_tools import python_repl" in caplog.text
 
 

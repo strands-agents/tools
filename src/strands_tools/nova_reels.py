@@ -82,7 +82,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "nova_reels is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
 )
 
@@ -96,7 +96,7 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "nova_reels is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
 )
 def nova_reels(

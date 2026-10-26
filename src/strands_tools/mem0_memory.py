@@ -111,7 +111,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
     "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
     "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
 )
@@ -720,7 +720,7 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
     "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
     "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands",
     category=None,
@@ -802,7 +802,7 @@ class Mem0MemoryTool:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "mem0_memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Mem0MemoryStore "
+    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
     "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
     "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
 )

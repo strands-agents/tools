@@ -49,7 +49,7 @@ class SessionInfo:
 
 # See CodeInterpreter for why the marker is static-only and the message is a literal.
 @deprecated(
-    "code_interpreter is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "code_interpreter is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl) for general-purpose "
     "programming in Python, or the shell tool (from strands.vended_tools import shell) for other languages. This "
     "does change the security boundary: code_interpreter ran code in an isolated AgentCore session, while both "

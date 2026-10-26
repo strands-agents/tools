@@ -63,7 +63,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "journal is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "journal is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
     "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
 )
 
@@ -214,7 +214,7 @@ def create_rich_response(console: Console, action: str, result: Dict[str, Any]) 
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "journal is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "journal is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
     "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
 )
 def journal(tool: ToolUse, **kwargs: Any) -> ToolResult:

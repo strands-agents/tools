@@ -138,7 +138,7 @@ def test_image_reader_logs_deprecation_warning(caplog):
         image_reader.image_reader(tool={"toolUseId": "deprecation", "input": {}})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "image content block" in caplog.text
 
 

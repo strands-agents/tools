@@ -84,7 +84,7 @@ REQUIRED_PARAMS = {
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
     "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
     "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record has "
     "no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
@@ -102,7 +102,7 @@ DEFAULT_REGION = "us-west-2"
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an error log in v0.9.0. Migration path: use "
+    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
     "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
     "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record has "
     "no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
