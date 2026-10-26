@@ -231,7 +231,7 @@ class-based tools are static-only, which is why the log message exists as well.
 | `browser` (`LocalChromiumBrowser`, `AgentCoreBrowser`) | no replacement — drive Playwright directly, with `bedrock-agentcore`'s `BrowserClient` for AgentCore sessions | v0.8.11 | v0.9.0 |
 | `nova_reels` | no replacement — Amazon Nova Reel reached end-of-life on Bedrock ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)) | v0.8.11 | v0.9.0 |
 | `agent_core_memory` (`AgentCoreMemoryToolProvider`) | `MemoryManager` + `AgentCoreMemoryStore` from `bedrock-agentcore` ([docs](https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/)) | v0.8.11 | v0.9.0 |
-| `generate_image_stability` | no replacement — call the Stability AI REST API directly ([docs](https://platform.stability.ai/docs/api-reference)) | v0.8.11 | v0.9.0 |
+| `generate_image_stability` | no replacement — call the Stability AI REST API directly ([docs](https://docs.stability.ai/api-reference)) | v0.8.11 | v0.9.0 |
 | `generate_image` | no replacement — call Bedrock's `invoke_model` with a Stability AI model directly ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-stability-ai-stable-image-core-1-0.html)) | v0.8.11 | v0.9.0 |
 | `image_reader` | image content blocks in the agent prompt ([docs](https://strandsagents.com/docs/user-guide/sdk/agents/prompts/)) | v0.8.11 | v0.9.0 |
 | `elasticsearch_memory` (`elasticsearch_memory`, `ElasticsearchMemoryTool`) | no replacement — implement a `MemoryStore` over [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.11 | v0.9.0 |
@@ -376,7 +376,7 @@ The replacements are not drop-in equivalents. Check these before migrating:
   extraction=True` and AgentCore extracts memories from the conversation. For `list`, `get`, and `delete`, use
   `bedrock-agentcore`'s `MemorySessionManager`.
 - **`generate_image_stability`** — no direct replacement. This tool was a wrapper over Stability AI's
-  [`v2beta/stable-image` REST API](https://platform.stability.ai/docs/api-reference), so a custom tool covers it in a
+  [`v2beta/stable-image` REST API](https://docs.stability.ai/api-reference), so a custom tool covers it in a
   few lines.
 - **`generate_image`** — no direct replacement. This tool was a wrapper over Bedrock's `invoke_model` for Stability AI
   models, so a custom tool covers it in a few lines.
@@ -386,8 +386,8 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`elasticsearch_memory` → custom `MemoryStore`** — no store ships for Elasticsearch, but one only needs `search`
   (a k-NN query) and `add` (index a document) over
   [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python). `retrieve` then becomes
-  `search_memory` and `record` becomes `add_memory`; bind the namespace in the store, not the tool call, to keep
-  tenants isolated. For `list`, `get`, and `delete`, call `elasticsearch-py` directly.
+  `search_memory` and `record` becomes `add_memory` (with `writable=True` on the store and `add_tool_config=True` on
+  `MemoryManager`); bind the namespace in the store, not the tool call, to keep tenants isolated. For `list`, `get`, and `delete`, call `elasticsearch-py` directly.
 
 ## 💻 Usage Examples
 
