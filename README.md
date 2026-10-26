@@ -129,15 +129,15 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | code_interpreter ⚠️ | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations <br> **Deprecated — see [Deprecations](#deprecations)** |
 | use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
 | retrieve ⚠️ | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata <br> **Deprecated — see [Deprecations](#deprecations)** |
-| nova_reels | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables |
-| agent_core_memory | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service |
+| nova_reels ⚠️ | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
+| agent_core_memory ⚠️ | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service <br> **Deprecated — see [Deprecations](#deprecations)** |
 | mem0_memory ⚠️ | `agent.tool.mem0_memory(action="store", content="Remember I like to play tennis")` | Store user and agent memories across agent runs to provide personalized experience (tenant identity configured via `Mem0MemoryTool` or environment variables) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | bright_data ⚠️ | `agent.tool.bright_data(action="scrape_as_markdown", url="https://example.com")` | Web scraping, search queries, screenshot capture, and structured data extraction from websites and different data feeds <br> **Deprecated — see [Deprecations](#deprecations)** |
 | memory ⚠️ | `agent.tool.memory(action="retrieve", query="product features")` | Store, retrieve, list, and manage documents in Amazon Bedrock Knowledge Bases with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
 | environment ⚠️ | `agent.tool.environment(action="list", prefix="AWS_")` | Managing environment variables, configuration management <br> **Deprecated — see [Deprecations](#deprecations)** |
-| generate_image_stability | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models |
-| generate_image | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications |
-| image_reader | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis |
+| generate_image_stability ⚠️ | `agent.tool.generate_image_stability(prompt="A tranquil pool")` | Creating images using Stability AI models <br> **Deprecated — see [Deprecations](#deprecations)** |
+| generate_image ⚠️ | `agent.tool.generate_image(prompt="A sunset over mountains")` | Creating AI-generated images for various applications <br> **Deprecated — see [Deprecations](#deprecations)** |
+| image_reader ⚠️ | `agent.tool.image_reader(image_path="path/to/image.jpg")` | Processing and reading image files for AI analysis <br> **Deprecated — see [Deprecations](#deprecations)** |
 | journal ⚠️ | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation <br> **Deprecated — see [Deprecations](#deprecations)** |
 | think ⚠️ | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes <br> **Deprecated — see [Deprecations](#deprecations)** |
 | load_tool ⚠️ | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -163,7 +163,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | search_video ⚠️ | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model <br> **Deprecated — see [Deprecations](#deprecations)** |
 | chat_video ⚠️ | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model <br> **Deprecated — see [Deprecations](#deprecations)** |
 | mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `MongoDBMemoryTool` or environment variables) |
-| elasticsearch_memory | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) |
+| elasticsearch_memory ⚠️ | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) <br> **Deprecated — see [Deprecations](#deprecations)** |
 
 \* *These tools do not work on Windows*
 
@@ -229,6 +229,12 @@ class-based tools are static-only, which is why the log message exists as well.
 | `load_tool` | no replacement — pass tools to the `Agent` directly, or use `Agent(load_tools_from_directory=True)` | v0.8.11 | v0.9.0 |
 | `use_computer` | no replacement — drive `pyautogui` and `pytesseract` directly | v0.8.11 | v0.9.0 |
 | `browser` (`LocalChromiumBrowser`, `AgentCoreBrowser`) | no replacement — drive Playwright directly, with `bedrock-agentcore`'s `BrowserClient` for AgentCore sessions | v0.8.11 | v0.9.0 |
+| `nova_reels` | no replacement — Amazon Nova Reel reached end-of-life on Bedrock ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)) | v0.8.11 | v0.9.0 |
+| `agent_core_memory` (`AgentCoreMemoryToolProvider`) | `MemoryManager` + `AgentCoreMemoryStore` from `bedrock-agentcore` ([docs](https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/)) | v0.8.11 | v0.9.0 |
+| `generate_image_stability` | no replacement — call the Stability AI REST API directly ([docs](https://docs.stability.ai/api-reference)) | v0.8.11 | v0.9.0 |
+| `generate_image` | no replacement — call Bedrock's `invoke_model` with a Stability AI model directly ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html)) | v0.8.11 | v0.9.0 |
+| `image_reader` | image content blocks in the agent prompt ([docs](https://strandsagents.com/docs/user-guide/sdk/agents/prompts/)) | v0.8.11 | v0.9.0 |
+| `elasticsearch_memory` (`elasticsearch_memory`, `ElasticsearchMemoryTool`) | no replacement — implement a `MemoryStore` over [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.11 | v0.9.0 |
 
 ```python
 # Before
@@ -363,6 +369,25 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`browser`** — no direct replacement. This tool was a wrapper over Playwright, and `bedrock-agentcore`
   ships only the session layer (`BrowserClient`), not a Strands tool. Write a custom tool that drives
   Playwright directly; for AgentCore, start a session with `BrowserClient` and connect Playwright to it.
+- **`nova_reels`** — no direct replacement. Amazon Nova Reel reached end-of-life on Bedrock on September 30, 2026,
+  so this tool no longer works.
+- **`agent_core_memory` → `AgentCoreMemoryStore`** — plugs into `MemoryManager`, so memories are recalled
+  automatically. `retrieve` becomes `search_memory`; there is no `record` tool, so set `writable=True,
+  extraction=True` and AgentCore extracts memories from the conversation. For `list`, `get`, and `delete`, use
+  `bedrock-agentcore`'s `MemorySessionManager`.
+- **`generate_image_stability`** — no direct replacement. This tool was a wrapper over Stability AI's
+  [`v2beta/stable-image` REST API](https://docs.stability.ai/api-reference), so a custom tool covers it in a
+  few lines.
+- **`generate_image`** — no direct replacement. This tool was a wrapper over Bedrock's `invoke_model` for
+  [Stability AI models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html), so a custom tool covers it in a few lines.
+- **`image_reader` → image content blocks** — pass the image in the prompt, e.g.
+  `agent([{"text": "..."}, {"image": {"format": "png", "source": {"bytes": data}}}])`. The model can no longer load
+  images by path mid-run; if it needs to, return that same image block from a custom tool.
+- **`elasticsearch_memory` → custom `MemoryStore`** — no store ships for Elasticsearch, but one only needs `search`
+  (a k-NN query) and `add` (index a document) over
+  [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python). `retrieve` then becomes
+  `search_memory` and `record` becomes `add_memory` (with `writable=True` on the store and `add_tool_config=True` on
+  `MemoryManager`); bind the namespace in the store, not the tool call, to keep tenants isolated. For `list`, `get`, and `delete`, call `elasticsearch-py` directly.
 
 ## 💻 Usage Examples
 
