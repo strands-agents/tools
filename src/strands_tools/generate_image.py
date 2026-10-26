@@ -77,7 +77,8 @@ logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "generate_image is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
-    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool."
+    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool. See "
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
 )
 
 STABLE_DIFFUSION_MODEL_ID = [
@@ -150,7 +151,8 @@ def create_filename(prompt: str) -> str:
 # reports @deprecated when the argument is a string literal.
 @deprecated(
     "generate_image is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
-    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool."
+    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool. See "
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
 )
 def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

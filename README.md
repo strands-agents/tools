@@ -232,7 +232,7 @@ class-based tools are static-only, which is why the log message exists as well.
 | `nova_reels` | no replacement — Amazon Nova Reel reached end-of-life on Bedrock ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)) | v0.8.11 | v0.9.0 |
 | `agent_core_memory` (`AgentCoreMemoryToolProvider`) | `MemoryManager` + `AgentCoreMemoryStore` from `bedrock-agentcore` ([docs](https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/)) | v0.8.11 | v0.9.0 |
 | `generate_image_stability` | no replacement — call the Stability AI REST API directly ([docs](https://docs.stability.ai/api-reference)) | v0.8.11 | v0.9.0 |
-| `generate_image` | no replacement — call Bedrock's `invoke_model` with a Stability AI model directly ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-stability-ai-stable-image-core-1-0.html)) | v0.8.11 | v0.9.0 |
+| `generate_image` | no replacement — call Bedrock's `invoke_model` with a Stability AI model directly ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html)) | v0.8.11 | v0.9.0 |
 | `image_reader` | image content blocks in the agent prompt ([docs](https://strandsagents.com/docs/user-guide/sdk/agents/prompts/)) | v0.8.11 | v0.9.0 |
 | `elasticsearch_memory` (`elasticsearch_memory`, `ElasticsearchMemoryTool`) | no replacement — implement a `MemoryStore` over [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.11 | v0.9.0 |
 
@@ -378,8 +378,8 @@ The replacements are not drop-in equivalents. Check these before migrating:
 - **`generate_image_stability`** — no direct replacement. This tool was a wrapper over Stability AI's
   [`v2beta/stable-image` REST API](https://docs.stability.ai/api-reference), so a custom tool covers it in a
   few lines.
-- **`generate_image`** — no direct replacement. This tool was a wrapper over Bedrock's `invoke_model` for Stability AI
-  models, so a custom tool covers it in a few lines.
+- **`generate_image`** — no direct replacement. This tool was a wrapper over Bedrock's `invoke_model` for
+  [Stability AI models](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html), so a custom tool covers it in a few lines.
 - **`image_reader` → image content blocks** — pass the image in the prompt, e.g.
   `agent([{"text": "..."}, {"image": {"format": "png", "source": {"bytes": data}}}])`. The model can no longer load
   images by path mid-run; if it needs to, return that same image block from a custom tool.
