@@ -48,7 +48,7 @@ def test_standalone_logs_deprecation_warning(mock_tool, caplog):
         mem0_memory.mem0_memory(tool=mock_tool)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
 
 

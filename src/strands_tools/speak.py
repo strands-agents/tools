@@ -17,7 +17,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "speak is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "call Amazon Polly's synthesize_speech directly from a custom tool."
 )
 
@@ -103,7 +103,7 @@ def display_speech_status(console: Console, status: str, message: str, style: st
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "speak is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "call Amazon Polly's synthesize_speech directly from a custom tool."
 )
 def speak(tool: ToolUse, **kwargs: Any) -> ToolResult:

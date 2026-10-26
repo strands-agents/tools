@@ -113,7 +113,7 @@ from strands_tools.utils.models.model import create_model
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "think is deprecated. This warning becomes an error log in v0.9.0. Migration path: enable native "
+    "think is deprecated. This warning becomes an import error in v0.9.0. Migration path: enable native "
     "extended thinking through your model provider's reasoning config instead of a tool. See "
     "https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/"
 )
@@ -287,7 +287,7 @@ Please provide your analysis directly:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "think is deprecated. This warning becomes an error log in v0.9.0. Migration path: enable native "
+    "think is deprecated. This warning becomes an import error in v0.9.0. Migration path: enable native "
     "extended thinking through your model provider's reasoning config instead of a tool. See "
     "https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/"
 )

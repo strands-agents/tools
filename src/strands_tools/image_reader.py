@@ -50,7 +50,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "image_reader is deprecated. This warning becomes an error log in v0.9.0. Migration path: pass the image to "
+    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
     "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
 )
 
@@ -78,7 +78,7 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "image_reader is deprecated. This warning becomes an error log in v0.9.0. Migration path: pass the image to "
+    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
     "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
 )
 def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:

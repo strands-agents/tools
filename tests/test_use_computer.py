@@ -1229,7 +1229,7 @@ def test_use_computer_logs_deprecation_warning(monkeypatch, caplog):
         use_computer(action="invalid_unknown_action")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "pyautogui" in caplog.text
 
 

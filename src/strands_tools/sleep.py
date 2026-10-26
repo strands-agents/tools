@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 max_sleep_seconds = int(os.environ.get("MAX_SLEEP_SECONDS", "300"))
 
 _DEPRECATION_MESSAGE = (
-    "sleep is deprecated. This warning becomes an error log in v0.9.0. "
+    "sleep is deprecated. This warning becomes an import error in v0.9.0. "
     "Migration path: use the sleep tool vended by strands-agents "
     "(from strands.vended_tools import sleep)."
 )
@@ -26,7 +26,7 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "sleep is deprecated. This warning becomes an error log in v0.9.0. "
+    "sleep is deprecated. This warning becomes an import error in v0.9.0. "
     "Migration path: use the sleep tool vended by strands-agents "
     "(from strands.vended_tools import sleep)."
 )

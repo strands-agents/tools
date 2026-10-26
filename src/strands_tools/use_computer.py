@@ -56,7 +56,7 @@ if platform.system().lower() == "darwin":
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "use_computer is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "drive pyautogui and pytesseract directly from a custom tool."
 )
 
@@ -916,7 +916,7 @@ def handle_analyze_screenshot_pytesseract(
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "use_computer is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "drive pyautogui and pytesseract directly from a custom tool."
 )
 def use_computer(

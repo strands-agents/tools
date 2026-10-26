@@ -100,7 +100,7 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
     "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
     "no store equivalent and need a MemoryStore subclass. See "
     "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
@@ -648,7 +648,7 @@ def get_memory_formatter() -> MemoryFormatter:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "memory is deprecated. This warning becomes an error log in v0.9.0. Migration path: use MemoryManager with "
+    "memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
     "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
     "no store equivalent and need a MemoryStore subclass. See "
     "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"

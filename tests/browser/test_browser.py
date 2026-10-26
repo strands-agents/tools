@@ -94,7 +94,7 @@ def test_browser_logs_deprecation_warning(mock_async_playwright, caplog):
         browser.browser({"action": {"type": "list_local_sessions"}})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "drive Playwright directly" in caplog.text
 
 

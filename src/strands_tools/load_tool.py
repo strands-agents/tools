@@ -63,7 +63,7 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "load_tool is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
 )
 
@@ -75,7 +75,7 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "load_tool is deprecated. This warning becomes an error log in v0.9.0. There is no replacement tool; "
+    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
     "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
 )
 def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:

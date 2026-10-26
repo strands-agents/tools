@@ -385,7 +385,7 @@ def test_slack_logs_deprecation_warning(caplog):
         _mod.slack(action="auth_test", parameters={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "docs.slack.dev" in caplog.text
 
 
@@ -408,7 +408,7 @@ def test_slack_send_message_logs_deprecation_warning(caplog):
         _mod.slack_send_message(channel="C1", text="hi")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "docs.slack.dev" in caplog.text
 
 

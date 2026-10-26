@@ -490,7 +490,7 @@ def test_editor_logs_deprecation_warning(caplog, temp_dir):
         editor.editor(command="create", path=test_file, file_text="content")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "strands.vended_tools import file_editor" in caplog.text
 
 

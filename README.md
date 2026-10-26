@@ -182,9 +182,8 @@ More tools will follow as their capabilities land elsewhere, and this repository
 archived. Nothing breaks suddenly — but migrating when a tool is first deprecated is easier than
 moving several at once later.
 
-Deprecated tools keep working. Each one logs a warning when invoked, starting in the
-release shown below, and that warning becomes an error log in **v0.9.0** — a louder signal for anyone
-who has not migrated, not a behavior change.
+Deprecated tools keep working until v0.9.0. Each one logs a warning when invoked, starting in the
+release shown below, and in **v0.9.0** that warning becomes an import error, so the tool can no longer be imported.
 
 They are also marked with `@typing_extensions.deprecated`, so type checkers and IDEs flag
 usage before you run anything. To list what you still need to migrate, run
@@ -196,8 +195,8 @@ line for only the tools whose marker is not wrapped by `@tool`. At runtime, Pyth
 `DeprecationWarning` that function tools raise when the agent invokes them, and the markers on
 class-based tools are static-only, which is why the log message exists as well.
 
-| Tool | Suggested alternative | Warning | Error log |
-|------|-----------------------|---------|-----------|
+| Tool | Suggested alternative | Warning | Error |
+|------|-----------------------|---------|-------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
 | `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
 | `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |

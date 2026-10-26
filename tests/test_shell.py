@@ -987,7 +987,7 @@ def test_shell_logs_deprecation_warning(caplog):
         shell.shell("echo test")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "strands.vended_tools import shell" in caplog.text
 
 

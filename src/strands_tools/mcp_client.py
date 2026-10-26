@@ -39,7 +39,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "mcp_client is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "mcp_client is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
 )
 
@@ -250,7 +250,7 @@ def _create_transport_callable(transport: str, **params):
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "mcp_client is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "mcp_client is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
 )
 def mcp_client(

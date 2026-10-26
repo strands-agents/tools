@@ -28,7 +28,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "code_interpreter is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "code_interpreter is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl) for general-purpose "
     "programming in Python, or the shell tool (from strands.vended_tools import shell) for other languages. This "
     "does change the security boundary: code_interpreter ran code in an isolated AgentCore session, while both "
@@ -44,7 +44,7 @@ _DEPRECATION_MESSAGE = (
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "code_interpreter is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "code_interpreter is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl) for general-purpose "
     "programming in Python, or the shell tool (from strands.vended_tools import shell) for other languages. This "
     "does change the security boundary: code_interpreter ran code in an isolated AgentCore session, while both "

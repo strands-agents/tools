@@ -200,7 +200,7 @@ def test_handoff_logs_deprecation_warning(caplog):
         handoff_to_user.handoff_to_user(tool=tool_use, request_state={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "strands.vended_tools import handoff_to_user" in caplog.text
 
 

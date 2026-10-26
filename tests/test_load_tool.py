@@ -207,7 +207,7 @@ def test_load_tool_logs_deprecation_warning(caplog):
         load_tool.load_tool(path="/nonexistent/tool.py", name="missing", agent=MagicMock())
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "load_tools_from_directory" in caplog.text
 
 

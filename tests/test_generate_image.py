@@ -239,7 +239,7 @@ def test_generate_image_logs_deprecation_warning(
         generate_image.generate_image(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "invoke_model" in caplog.text
 
 

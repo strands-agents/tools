@@ -138,7 +138,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "slack is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Slack MCP "
     "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
     "which MCP does not cover, use slack_bolt directly."
 )
@@ -551,7 +551,7 @@ socket_handler = SocketModeHandler()
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "slack is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Slack MCP "
     "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
     "which MCP does not cover, use slack_bolt directly."
 )
@@ -694,7 +694,7 @@ def slack(action: str, parameters: Dict[str, Any] = None, agent=None) -> str:
 
 @tool
 @deprecated(
-    "slack is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Slack MCP "
+    "slack is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Slack MCP "
     "server, documented at https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, "
     "which MCP does not cover, use slack_bolt directly."
 )

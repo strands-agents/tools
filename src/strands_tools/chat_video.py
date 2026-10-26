@@ -59,7 +59,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "chat_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "chat_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
     "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 
@@ -234,7 +234,7 @@ def upload_and_index_video(video_path: str, index_id: str, api_key: str) -> str:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "chat_video is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official "
+    "chat_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
     "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
