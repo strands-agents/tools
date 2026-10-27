@@ -58,7 +58,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
     "server, documented at https://exa.ai/docs/reference/exa-mcp."
 )
 
@@ -216,7 +216,7 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
     "server, documented at https://exa.ai/docs/reference/exa-mcp.",
     category=None,
 )
@@ -490,7 +490,7 @@ async def exa_search(
 
 @tool
 @deprecated(
-    "exa is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Exa MCP "
+    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
     "server, documented at https://exa.ai/docs/reference/exa-mcp.",
     category=None,
 )

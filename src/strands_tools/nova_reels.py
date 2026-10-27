@@ -67,6 +67,7 @@ Results are stored in the specified S3 bucket and can be accessed once the job c
 
 import base64
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -74,13 +75,30 @@ from typing import Any, Dict, Optional
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
+)
 
 # Environment variables for configurable default parameters
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
+)
 def nova_reels(
     action: str,
     text: Optional[str] = None,
@@ -192,6 +210,8 @@ def nova_reels(
         - Set AWS_REGION environment variable to change the default region
     """
     console = console_util.create()
+
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     seed = int(os.getenv("NOVA_REEL_DEFAULT_SEED", "0")) if seed is None else seed
     fps = int(os.getenv("NOVA_REEL_DEFAULT_FPS", "24")) if fps is None else fps

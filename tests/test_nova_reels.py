@@ -1,5 +1,6 @@
 """Tests for the nova_reels tool."""
 
+import logging
 import os
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -308,3 +309,21 @@ def test_nova_reels_via_agent(agent, mock_bedrock_client):
         assert "status" in result
         assert result["status"] == "success"
         assert "Video generation job started successfully" in result["content"][0]["text"]
+
+
+def test_nova_reels_logs_deprecation_warning(mock_bedrock_client, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with (
+        patch("boto3.client", return_value=mock_bedrock_client),
+        caplog.at_level(logging.WARNING, logger="strands_tools.nova_reels"),
+    ):
+        nova_reels.nova_reels(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "end-of-life" in caplog.text
+
+
+def test_nova_reels_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "end-of-life" in nova_reels.nova_reels.__deprecated__

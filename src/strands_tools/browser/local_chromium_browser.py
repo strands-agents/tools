@@ -10,12 +10,19 @@ import os
 from typing import Any, Dict, Optional
 
 from playwright.async_api import Browser as PlaywrightBrowser
+from typing_extensions import deprecated
 
 from .browser import Browser
 
 logger = logging.getLogger(__name__)
 
 
+# See Browser for why the marker is static-only and the message is a literal.
+@deprecated(
+    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+    category=None,
+)
 class LocalChromiumBrowser(Browser):
     """Local Chromium browser implementation using Playwright."""
 

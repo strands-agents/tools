@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -47,14 +48,20 @@ def test_standalone_logs_deprecation_warning(mock_tool, caplog):
         mem0_memory.mem0_memory(tool=mock_tool)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
 
 
-def test_class_logs_deprecation_warning(caplog):
-    """Constructing the class logs the same deprecation warning."""
-    with caplog.at_level("WARNING", logger="strands_tools.mem0_memory"):
-        Mem0MemoryTool(user_id="user_1")
+def test_class_logs_deprecation_warning(mock_tool, caplog):
+    """Invoking the class-based tool logs the same deprecation warning, without warning on construction."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        tool = Mem0MemoryTool(user_id="user_1")
+    with (
+        patch("strands_tools.mem0_memory._execute_mem0_memory"),
+        caplog.at_level("WARNING", logger="strands_tools.mem0_memory"),
+    ):
+        tool.mem0_memory(tool=mock_tool)
 
     assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
 

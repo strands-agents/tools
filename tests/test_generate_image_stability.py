@@ -3,6 +3,7 @@ Tests for the generate_image_stability tool.
 """
 
 import base64
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
@@ -525,3 +526,19 @@ def test_tool_spec_exists():
     properties = generate_image_stability.TOOL_SPEC["inputSchema"]["properties"]
     assert "model_id" not in properties
     assert "prompt" in properties
+
+
+def test_generate_image_stability_logs_deprecation_warning(mock_env_api_key, mock_requests, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"prompt": "A tranquil pool"}}
+    with caplog.at_level(logging.WARNING, logger="strands_tools.generate_image_stability"):
+        generate_image_stability.generate_image_stability(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "api.stability.ai" in caplog.text
+
+
+def test_generate_image_stability_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "api.stability.ai" in generate_image_stability.generate_image_stability.__deprecated__

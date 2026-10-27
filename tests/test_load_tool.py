@@ -2,6 +2,7 @@
 Tests for the load_tool tool using the Agent interface.
 """
 
+import logging
 import os
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -198,3 +199,18 @@ def test_load_tool_consent_non_interactive(mock_get_user_input, temp_tool_file):
     mock_agent.tool_registry.load_tool_from_filepath.assert_called_once()
     # No prompt should be shown in non-interactive mode.
     mock_get_user_input.assert_not_called()
+
+
+def test_load_tool_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level(logging.WARNING, logger="strands_tools.load_tool"):
+        load_tool.load_tool(path="/nonexistent/tool.py", name="missing", agent=MagicMock())
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "load_tools_from_directory" in caplog.text
+
+
+def test_load_tool_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "load_tools_from_directory" in load_tool.load_tool.__deprecated__

@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 from bedrock_agentcore.tools.browser_client import BrowserClient as AgentCoreBrowserClient
 from playwright.async_api import Browser as PlaywrightBrowser
-from typing_extensions import override
+from typing_extensions import deprecated, override
 
 from ..utils.aws_util import resolve_region
 from .browser import Browser
@@ -18,6 +18,12 @@ from .browser import Browser
 logger = logging.getLogger(__name__)
 
 
+# See Browser for why the marker is static-only and the message is a literal.
+@deprecated(
+    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+    category=None,
+)
 class AgentCoreBrowser(Browser):
     """Bedrock AgentCore browser implementation."""
 

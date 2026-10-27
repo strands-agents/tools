@@ -42,7 +42,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "batch is deprecated. This warning becomes an import error in v0.9.0. Concurrent tool execution is now the default "
     "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
     "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
 )
@@ -80,7 +80,7 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "batch is deprecated. This warning becomes an error log in v0.9.0. Concurrent tool execution is now the default "
+    "batch is deprecated. This warning becomes an import error in v0.9.0. Concurrent tool execution is now the default "
     "in the SDK via ConcurrentToolExecutor, so no replacement tool is needed - remove batch and call tools normally. "
     "See https://strandsagents.com/docs/user-guide/concepts/tools/executors/"
 )

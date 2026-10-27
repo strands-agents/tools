@@ -62,6 +62,7 @@ See the generate_image function docstring for more details on parameters and opt
 
 import base64
 import json
+import logging
 import os
 import random
 import re
@@ -70,6 +71,15 @@ from typing import Any
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "generate_image is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool. See "
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+)
 
 STABLE_DIFFUSION_MODEL_ID = [
     "stability.sd3-5-large-v1:0",
@@ -134,6 +144,16 @@ def create_filename(prompt: str) -> str:
     return filename[:100]  # Limit filename length
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "generate_image is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "call bedrock-runtime's invoke_model with a Stability AI model directly from a custom tool. See "
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+)
 def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Generate images from text prompts using Stable Diffusion models via Amazon Bedrock.
@@ -192,6 +212,8 @@ def generate_image(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - The function requires AWS credentials with Bedrock permissions
         - For best results, provide detailed, descriptive prompts
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         tool_use_id = tool["toolUseId"]
         tool_input = tool["input"]

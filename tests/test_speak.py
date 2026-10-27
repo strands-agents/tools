@@ -2,6 +2,7 @@
 Tests for the speak tool using the Agent interface.
 """
 
+import logging
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -234,3 +235,19 @@ def test_via_agent(agent):
         result_text = extract_result_text(result)
         assert "Text spoken using macOS say command" in result_text
         mock_run.assert_called_once_with(["say", "Hello via agent"], check=True)
+
+
+def test_speak_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"text": "Hello", "play_audio": False}}
+    with patch("subprocess.run"), caplog.at_level(logging.WARNING, logger="strands_tools.speak"):
+        speak.speak(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "synthesize_speech" in caplog.text
+
+
+def test_speak_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "synthesize_speech" in speak.speak.__deprecated__

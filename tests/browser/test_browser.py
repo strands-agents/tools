@@ -2,6 +2,8 @@
 Unit tests for the Browser base class using MockBrowser.
 """
 
+import logging
+import warnings
 from unittest.mock import AsyncMock, Mock, patch
 
 from playwright.async_api import Browser as PlaywrightBrowser
@@ -81,3 +83,24 @@ def test_browser_tool_integration(mock_async_playwright):
     tool_func = browser.browser
     assert hasattr(tool_func, "__name__")
     assert tool_func.__name__ == "browser"
+
+
+@patch("strands_tools.browser.browser.async_playwright")
+def test_browser_logs_deprecation_warning(mock_async_playwright, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    mock_async_playwright.return_value.start = AsyncMock(return_value=Mock())
+    browser = MockBrowser()
+    with caplog.at_level(logging.WARNING, logger="strands_tools.browser.browser"):
+        browser.browser({"action": {"type": "list_local_sessions"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "drive Playwright directly" in caplog.text
+
+
+def test_browser_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers, without warning at runtime."""
+    assert "drive Playwright directly" in Browser.__deprecated__
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        MockBrowser()

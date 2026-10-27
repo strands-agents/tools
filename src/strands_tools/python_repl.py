@@ -72,7 +72,7 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "python_repl is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "python_repl is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl)."
 )
 
@@ -616,7 +616,7 @@ output_buffer: List[str] = []
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "python_repl is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the "
+    "python_repl is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
     "python_repl tool vended by strands-agents (from strands.vended_tools import python_repl)."
 )
 def python_repl(tool: ToolUse, **kwargs: Any) -> ToolResult:

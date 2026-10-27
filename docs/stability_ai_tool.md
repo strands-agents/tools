@@ -1,5 +1,7 @@
 # Stability AI
 
+> **Deprecated** — see [Deprecations](../README.md#deprecations).
+
 [Stability AI](https://platform.stability.ai/) builds image, video, 3D, and audio generation models. The Strands Agents SDK implements a Stability AI [tool](https://strandsagents.com/latest/user-guide/concepts/tools/tools_overview/) that can be used by agents to generate images.
 
 ## Installation

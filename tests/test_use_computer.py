@@ -8,12 +8,14 @@ sys.modules["pyautogui"] = mock.MagicMock()
 sys.modules["mouseinfo"] = mock.MagicMock()
 sys.modules["cv2"] = mock.MagicMock()
 
+import logging
 import platform
 import unittest
 
 import numpy as np
 import pytest
 
+from src.strands_tools import use_computer as use_computer_module
 from src.strands_tools.use_computer import (
     UseComputerMethods,
     close_application,
@@ -1218,3 +1220,19 @@ class TestNativeMacDoubleClick:
             ]
 
             assert call_order == expected_sequence
+
+
+def test_use_computer_logs_deprecation_warning(monkeypatch, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    monkeypatch.setenv("BYPASS_TOOL_CONSENT", "true")
+    with caplog.at_level(logging.WARNING, logger=use_computer_module.__name__):
+        use_computer(action="invalid_unknown_action")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "pyautogui" in caplog.text
+
+
+def test_use_computer_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "pyautogui" in use_computer.__deprecated__

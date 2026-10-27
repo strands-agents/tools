@@ -5,6 +5,7 @@ Tests for the elasticsearch_memory tool.
 import inspect
 import json
 import os
+import warnings
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -58,6 +59,36 @@ def mock_elasticsearch_client():
             "elasticsearch_class": mock_es,
             "client": mock_client,
         }
+
+
+def test_standalone_logs_deprecation_warning(mock_elasticsearch_client, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING"):
+        elasticsearch_memory(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "custom MemoryStore" in caplog.text
+
+
+def test_class_logs_deprecation_warning(mock_elasticsearch_client, caplog):
+    """Invoking the class-based tool logs the same deprecation warning, without warning on construction."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        tool = ElasticsearchMemoryTool(cloud_id="test-cloud-id", api_key="test-api-key")
+    with caplog.at_level("WARNING"):
+        tool.elasticsearch_memory(action="list")
+
+    assert "custom MemoryStore" in caplog.text
+
+
+@pytest.mark.parametrize("target", [elasticsearch_memory, ElasticsearchMemoryTool])
+def test_is_marked_deprecated_for_static_analysis(target):
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(target, "__deprecated__", None)
+
+    assert marker is not None
+    assert "custom MemoryStore" in marker
 
 
 @pytest.fixture

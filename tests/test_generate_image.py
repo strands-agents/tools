@@ -4,6 +4,7 @@ Tests for the generate_image tool.
 
 import base64
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -227,3 +228,21 @@ def test_generate_image_via_agent(agent, mock_boto3_client, mock_os_path_exists,
 
     result_text = extract_result_text(result)
     assert "The generated image has been saved locally" in result_text
+
+
+def test_generate_image_logs_deprecation_warning(
+    mock_boto3_client, mock_os_path_exists, mock_os_makedirs, mock_file_open, caplog
+):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"prompt": "A cute robot"}}
+    with caplog.at_level(logging.WARNING, logger="strands_tools.generate_image"):
+        generate_image.generate_image(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "invoke_model" in caplog.text
+
+
+def test_generate_image_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "invoke_model" in generate_image.generate_image.__deprecated__

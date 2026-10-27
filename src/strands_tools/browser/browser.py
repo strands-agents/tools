@@ -19,6 +19,7 @@ from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from strands import tool
+from typing_extensions import deprecated
 
 from .models import (
     BackAction,
@@ -49,7 +50,22 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions."
+)
 
+
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in browser is
+# what users actually see. category=None keeps the marker static-only so instantiating or
+# subclassing does not start raising DeprecationWarning. The message is spelled out here
+# rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+    category=None,
+)
 class Browser(ABC):
     """Browser tool implementation using Playwright."""
 
@@ -124,6 +140,8 @@ class Browser(ABC):
         Returns:
             Dict containing execution results.
         """
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         # Auto-start platform on first use
         if not self._started:
             self._start()

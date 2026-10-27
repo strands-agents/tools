@@ -1,5 +1,7 @@
 # Elasticsearch Memory Tool
 
+> **Deprecated** — see [Deprecations](../README.md#deprecations).
+
 The Elasticsearch Memory Tool provides comprehensive memory management capabilities using Elasticsearch as the backend with vector embeddings for semantic search. It uses the direct tool pattern where tools are imported and used directly with agents.
 
 ## Features

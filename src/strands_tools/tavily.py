@@ -61,7 +61,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "tavily is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Tavily MCP "
     "server, documented at https://docs.tavily.com/documentation/mcp."
 )
 
@@ -266,7 +266,7 @@ def format_map_response(data: Dict[str, Any]) -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "tavily is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Tavily MCP "
     "server, documented at https://docs.tavily.com/documentation/mcp.",
     category=None,
 )
@@ -415,7 +415,7 @@ async def tavily_search(
 
 @tool
 @deprecated(
-    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "tavily is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Tavily MCP "
     "server, documented at https://docs.tavily.com/documentation/mcp.",
     category=None,
 )
@@ -513,7 +513,7 @@ async def tavily_extract(
 
 @tool
 @deprecated(
-    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "tavily is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Tavily MCP "
     "server, documented at https://docs.tavily.com/documentation/mcp.",
     category=None,
 )
@@ -661,7 +661,7 @@ async def tavily_crawl(
 
 @tool
 @deprecated(
-    "tavily is deprecated. This warning becomes an error log in v0.9.0. Migration path: use the official Tavily MCP "
+    "tavily is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Tavily MCP "
     "server, documented at https://docs.tavily.com/documentation/mcp.",
     category=None,
 )

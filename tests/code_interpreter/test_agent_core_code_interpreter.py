@@ -2,22 +2,17 @@
 Tests for the AgentCoreCodeInterpreter class.
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-mock_bedrock_agentcore = MagicMock()
-sys.modules["bedrock_agentcore"] = mock_bedrock_agentcore
-sys.modules["bedrock_agentcore.tools"] = MagicMock()
-sys.modules["bedrock_agentcore.tools.code_interpreter_client"] = MagicMock()
-
-from strands_tools.code_interpreter.agent_core_code_interpreter import (  # noqa: E402
+from strands_tools.code_interpreter.agent_core_code_interpreter import (
     AgentCoreCodeInterpreter,
     SessionInfo,
     _session_mapping,
 )
-from strands_tools.code_interpreter.models import (  # noqa: E402
+from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
+from strands_tools.code_interpreter.models import (
     ExecuteCodeAction,
     ExecuteCommandAction,
     FileContent,
@@ -970,3 +965,8 @@ def test_ensure_session_passes_boto_session_on_reconnect(mock_client_class):
         assert session_name == "cached-session"
         assert error is None
         mock_client_class.assert_called_once_with(region="us-west-2", session=mock_session)
+
+
+def test_agent_core_code_interpreter_deprecation_matches_base():
+    """The subclass carries its own @deprecated literal, which must not drift from the base's."""
+    assert AgentCoreCodeInterpreter.__dict__["__deprecated__"] == CodeInterpreter.__deprecated__

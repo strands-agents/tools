@@ -96,9 +96,18 @@ from typing import Any, Dict, List, Optional
 import boto3
 from elasticsearch import Elasticsearch
 from strands import tool
+from typing_extensions import deprecated
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
+    "custom MemoryStore over elasticsearch-py "
+    "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
+)
 
 
 # Custom exceptions for better error handling
@@ -737,7 +746,19 @@ def _run_memory_operation(
         return {"status": "error", "content": [{"text": error_msg}]}
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
+    "custom MemoryStore over elasticsearch-py "
+    "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
+)
 def elasticsearch_memory(
     action: str,
     content: Optional[str] = None,
@@ -805,6 +826,8 @@ def elasticsearch_memory(
     Returns:
         Dict: Response containing the requested memory information or operation status
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     # All connection, index, namespace, and embedding configuration is sourced from the environment
     # only. These are deliberately not tool parameters: exposing them would let the LLM point the
     # tool at an arbitrary cluster/index, supply its own api_key, or forge another tenant's namespace.
@@ -854,6 +877,19 @@ def elasticsearch_memory(
         return {"status": "error", "content": [{"text": str(e)}]}
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in elasticsearch_memory is
+# what users actually see. category=None keeps the marker static-only so instantiating or
+# subclassing does not start raising DeprecationWarning. The message is spelled out here
+# rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "elasticsearch_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: implement a "
+    "custom MemoryStore over elasticsearch-py "
+    "(https://www.elastic.co/docs/reference/elasticsearch/clients/python) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores",
+    category=None,
+)
 class ElasticsearchMemoryTool:
     """
     Elasticsearch Memory Tool with secure credential and tenant management.
@@ -968,6 +1004,8 @@ class ElasticsearchMemoryTool:
         Returns:
             Dict: Response containing the requested memory information or operation status
         """
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         try:
             # Namespace and connection config are bound at construction; the agent cannot supply a
             # different tenant key, index, or cluster. Namespace was already validated in __init__.

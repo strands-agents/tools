@@ -3,6 +3,7 @@ Simplified tests for the agent_core_memory tool.
 """
 
 import os
+import warnings
 from unittest import mock
 
 import pytest
@@ -46,6 +47,29 @@ def provider(mock_boto3_client):
 def agent(provider):
     """Create an agent with the provider's tools."""
     return Agent(tools=provider.tools)
+
+
+def test_tool_logs_deprecation_warning(mock_boto3_client, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path, without warning on construction."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        provider = AgentCoreMemoryToolProvider(
+            memory_id="test-memory-id", actor_id="test-actor-id", session_id="test-session-id", namespace="ns"
+        )
+    with caplog.at_level("WARNING"):
+        provider.agent_core_memory(action="list")
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "import AgentCoreMemoryStore" in caplog.text
+
+
+def test_provider_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    marker = getattr(AgentCoreMemoryToolProvider, "__deprecated__", None)
+
+    assert marker is not None
+    assert "import AgentCoreMemoryStore" in marker
 
 
 def test_initialization(mock_boto3_client):

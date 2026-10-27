@@ -90,7 +90,7 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "editor is deprecated. This warning becomes an import error in v0.9.0. "
     "Migration path: use the file_editor tool vended by strands-agents "
     "(from strands.vended_tools import file_editor)."
 )
@@ -197,7 +197,7 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "editor is deprecated. This warning becomes an error log in v0.9.0. "
+    "editor is deprecated. This warning becomes an import error in v0.9.0. "
     "Migration path: use the file_editor tool vended by strands-agents "
     "(from strands.vended_tools import file_editor)."
 )

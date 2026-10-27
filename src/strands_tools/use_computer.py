@@ -36,6 +36,7 @@ import pyautogui
 import pytesseract
 from PIL import Image
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils.user_input import get_user_input
 
@@ -53,6 +54,11 @@ if platform.system().lower() == "darwin":
     )
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive pyautogui and pytesseract directly from a custom tool."
+)
 
 
 class UseComputerMethods:
@@ -903,7 +909,16 @@ def handle_analyze_screenshot_pytesseract(
         raise RuntimeError(f"Error analyzing screenshot: {str(e)}") from e
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "drive pyautogui and pytesseract directly from a custom tool."
+)
 def use_computer(
     action: str,
     x: Optional[int] = None,
@@ -986,6 +1001,8 @@ def use_computer(
               For analyze_screen, returns both text analysis results and the image content
               in a format that can be processed by the model.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     all_params = locals()
     params = [
         f"{k}: {v}"

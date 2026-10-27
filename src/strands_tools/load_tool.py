@@ -55,14 +55,29 @@ from os.path import expanduser
 from typing import Any, Dict
 
 from strands import tool
+from typing_extensions import deprecated
 
 from strands_tools.utils.user_input import get_user_input
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
+)
 
+
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
+)
 def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
     """
     Dynamically load a Python tool file and register it with the Strands Agent.
@@ -187,6 +202,8 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
         - For security reasons, tool loading might be restricted in production environments
         - The @tool decorator approach is recommended for new tools as it's more concise and type-safe
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     # Get the current agent instance from the Strands context
     current_agent = agent
 

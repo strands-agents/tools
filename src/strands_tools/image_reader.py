@@ -38,12 +38,21 @@ result = agent.tool.image_reader(image_path="~/Documents/images/photo.png")
 See the image_reader function docstring for more details on parameters and return format.
 """
 
+import logging
 import os
 from os.path import expanduser
 from typing import Any
 
 from PIL import Image
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
+    "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
+)
 
 TOOL_SPEC = {
     "name": "image_reader",
@@ -63,6 +72,15 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
+    "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
+)
 def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Read an image file from disk and prepare it for use with Converse API.
@@ -115,6 +133,8 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - The function validates file existence before attempting to read
         - User paths with tilde (~) are automatically expanded
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         tool_use_id = tool["toolUseId"]
         tool_input = tool["input"]

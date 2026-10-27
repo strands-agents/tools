@@ -1,5 +1,6 @@
 """Tests for the handoff_to_user tool."""
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -190,3 +191,19 @@ def test_tool_spec_structure():
 
     required = spec["inputSchema"]["json"]["required"]
     assert "message" in required
+
+
+def test_handoff_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"message": "Done", "breakout_of_loop": True}}
+    with caplog.at_level(logging.WARNING, logger="strands_tools.handoff_to_user"):
+        handoff_to_user.handoff_to_user(tool=tool_use, request_state={})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import handoff_to_user" in caplog.text
+
+
+def test_handoff_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import handoff_to_user" in handoff_to_user.handoff_to_user.__deprecated__

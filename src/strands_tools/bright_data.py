@@ -87,7 +87,7 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "bright_data is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Bright Data's "
+    "bright_data is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Bright Data's "
     "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
 )
 
@@ -403,7 +403,7 @@ class BrightDataClient:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "bright_data is deprecated. This warning becomes an error log in v0.9.0. Migration path: use Bright Data's "
+    "bright_data is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Bright Data's "
     "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
 )
 def bright_data(

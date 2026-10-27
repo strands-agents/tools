@@ -54,11 +54,20 @@ agent.tool.generate_image_stability(
 """
 
 import base64
+import logging
 import os
 from typing import Any, Optional, Tuple, Union
 
 import requests
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "generate_image_stability is deprecated. This warning becomes an import error in v0.9.0. There is no replacement "
+    "tool; call the Stability AI REST API (https://api.stability.ai/v2beta/stable-image) directly from a custom tool."
+)
 
 TOOL_SPEC = {
     "name": "generate_image_stability",
@@ -313,6 +322,15 @@ def call_stability_api(
         return image_data, finish_reason
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "generate_image_stability is deprecated. This warning becomes an import error in v0.9.0. There is no replacement "
+    "tool; call the Stability AI REST API (https://api.stability.ai/v2beta/stable-image) directly from a custom tool."
+)
 def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Generate images from text prompts using Stability Platform API.
@@ -336,6 +354,8 @@ def generate_image_stability(tool: ToolUse, **kwargs: Any) -> ToolResult:
     Raises:
         ValueError: If STABILITY_API_KEY environment variable is not set.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         tool_input = tool.get("input", tool)
         tool_use_id = tool.get("toolUseId", "default_id")

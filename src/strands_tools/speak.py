@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from typing import Any
@@ -9,8 +10,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "call Amazon Polly's synthesize_speech directly from a custom tool."
+)
 
 TOOL_SPEC = {
     "name": "speak",
@@ -88,6 +97,15 @@ def display_speech_status(console: Console, status: str, message: str, style: st
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
+    "call Amazon Polly's synthesize_speech directly from a custom tool."
+)
 def speak(tool: ToolUse, **kwargs: Any) -> ToolResult:
     speak_default_style = os.getenv("SPEAK_DEFAULT_STYLE", "green")
     speak_default_mode = os.getenv("SPEAK_DEFAULT_MODE", "fast")
@@ -95,6 +113,8 @@ def speak(tool: ToolUse, **kwargs: Any) -> ToolResult:
     speak_default_output_path = os.getenv("SPEAK_DEFAULT_OUTPUT_PATH", "speech_output.mp3")
     speak_default_play_audio = os.getenv("SPEAK_DEFAULT_PLAY_AUDIO", "True").lower() == "true"
     console = console_util.create()
+
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]

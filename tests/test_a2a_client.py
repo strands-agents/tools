@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -6,13 +7,28 @@ from a2a.types import Message
 from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider
 
 
-def test_init_logs_deprecation_warning(caplog):
-    """Constructing the provider logs a deprecation warning naming its migration path."""
-    with caplog.at_level("WARNING", logger="strands_tools.a2a_client"):
-        A2AClientToolProvider()
+@pytest.mark.parametrize(
+    "tool_name, kwargs, internal",
+    [
+        ("a2a_discover_agent", {"url": "http://test.com"}, "_discover_agent_card_tool"),
+        ("a2a_list_discovered_agents", {}, "_list_discovered_agents"),
+        ("a2a_send_message", {"message_text": "hi", "target_agent_url": "http://test.com"}, "_send_message"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_tools_log_deprecation_warning(tool_name, kwargs, internal, caplog):
+    """Invoking any tool logs a deprecation warning naming its migration path, without warning on construction."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        provider = A2AClientToolProvider()
+    with (
+        patch.object(provider, internal, new_callable=AsyncMock),
+        caplog.at_level("WARNING", logger="strands_tools.a2a_client"),
+    ):
+        await getattr(provider, tool_name)(**kwargs)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an error log in v0.9.0" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_a2a_client" in caplog.text
 
 

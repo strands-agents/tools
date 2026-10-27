@@ -22,12 +22,19 @@ if TYPE_CHECKING:
     from .current_time import current_time as current_time
     from .diagram import diagram as diagram
     from .editor import editor as editor
+    from .elasticsearch_memory import elasticsearch_memory as elasticsearch_memory
     from .environment import environment as environment
+    from .generate_image import generate_image as generate_image
+    from .generate_image_stability import generate_image_stability as generate_image_stability
+    from .handoff_to_user import handoff_to_user as handoff_to_user
     from .http_request import http_request as http_request
+    from .image_reader import image_reader as image_reader
     from .journal import journal as journal
+    from .load_tool import load_tool as load_tool
     from .mcp_client import mcp_client as mcp_client
     from .mem0_memory import mem0_memory as mem0_memory
     from .memory import memory as memory
+    from .nova_reels import nova_reels as nova_reels
     from .python_repl import python_repl as python_repl
     from .retrieve import retrieve as retrieve
     from .rss import rss as rss
@@ -35,4 +42,6 @@ if TYPE_CHECKING:
     from .shell import shell as shell
     from .slack import slack as slack
     from .sleep import sleep as sleep
+    from .speak import speak as speak
     from .think import think as think
+    from .use_computer import use_computer as use_computer

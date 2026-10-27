@@ -2,6 +2,7 @@
 Tests for the image_reader tool.
 """
 
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
@@ -129,3 +130,18 @@ def test_image_reader_via_agent(agent, test_image_path):
     # In a real test, you would mock the file operations and verify the result
     # But for illustration purposes, we're just checking the method existence
     pass
+
+
+def test_image_reader_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level(logging.WARNING, logger="strands_tools.image_reader"):
+        image_reader.image_reader(tool={"toolUseId": "deprecation", "input": {}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "image content block" in caplog.text
+
+
+def test_image_reader_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "image content block" in image_reader.image_reader.__deprecated__
