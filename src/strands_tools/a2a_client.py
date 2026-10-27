@@ -229,6 +229,7 @@ class A2AClientToolProvider:
             logger.exception(f"Error discovering agent card for {url}")
             return {
                 "status": "error",
+                "content": [{"text": str(e)}],
                 "error": str(e),
                 "url": url,
             }
@@ -264,6 +265,7 @@ class A2AClientToolProvider:
             logger.exception("Error listing discovered agents")
             return {
                 "status": "error",
+                "content": [{"text": str(e)}],
                 "error": str(e),
                 "total_count": 0,
             }
@@ -357,6 +359,7 @@ class A2AClientToolProvider:
             # This should never be reached with streaming=False
             return {
                 "status": "error",
+                "content": [{"text": "No response received from agent"}],
                 "error": "No response received from agent",
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
@@ -366,6 +369,7 @@ class A2AClientToolProvider:
             logger.exception(f"Error sending message to {target_agent_url}")
             return {
                 "status": "error",
+                "content": [{"text": str(e)}],
                 "error": str(e),
                 "message_id": message_id,
                 "target_agent_url": target_agent_url,
