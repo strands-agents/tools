@@ -62,13 +62,28 @@ from typing import Any, Dict, List, Optional
 
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
+from typing_extensions import deprecated
 
 from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
 
+_DEPRECATION_MESSAGE = (
+    "use_agent is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "subagent tool vended by strands-agents (from strands.vended_tools import make_subagent, subagent)."
+)
 
+
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "use_agent is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "subagent tool vended by strands-agents (from strands.vended_tools import make_subagent, subagent)."
+)
 def use_agent(
     prompt: str,
     system_prompt: str,
@@ -181,6 +196,8 @@ def use_agent(
         - Performance metrics include token usage for the specific model used
         - Model information is included in the response for transparency
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         # Get tools and trace attributes from parent agent
         filtered_tools = []

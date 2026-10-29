@@ -556,3 +556,21 @@ def test_use_agent_metrics_processing(mock_parent_agent, mock_agent_result):
 
         # Verify the nested agent was called with the prompt (like other tests)
         mock_nested_agent.assert_called_once_with("Test metrics processing")
+
+
+def test_use_agent_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with (
+        patch("strands_tools.use_agent.Agent", side_effect=Exception("Agent creation failed")),
+        caplog.at_level("WARNING", logger="strands_tools.use_agent"),
+    ):
+        use_agent_module.use_agent(prompt="Test", system_prompt="You are a test assistant.", agent=None)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_subagent, subagent" in caplog.text
+
+
+def test_use_agent_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import make_subagent, subagent" in use_agent_module.use_agent.__deprecated__

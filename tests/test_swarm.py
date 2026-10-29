@@ -659,3 +659,18 @@ class TestIntegration:
             # Verify the specific objects we expect are present
             assert tools_passed[0] == mock_calculator_tool
             assert tools_passed[1] == mock_file_read_tool
+
+
+def test_swarm_logs_deprecation_warning(mock_parent_agent, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level(logging.WARNING, logger="strands_tools.swarm"):
+        swarm_module.swarm(task="Test task", agents=[], agent=mock_parent_agent)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_swarm, swarm" in caplog.text
+
+
+def test_swarm_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import make_swarm, swarm" in swarm_module.swarm.__deprecated__
