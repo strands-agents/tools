@@ -398,6 +398,7 @@ The replacements are not drop-in equivalents. Check these before migrating:
   model passes a `task` with optional `instructions` (without them, a built-in general-purpose prompt is used). In place
   of `use_agent`'s free-form `model_provider` and `model_settings`, offer models with `make_subagent(model=Choice([...]))`
   or pin one with `Fixed(...)`. The result is the child's final message, without the metrics block.
+  `Choice`, `Fixed`, and the other axis modes come from `strands.multiagent.spec`.
 
 ## 💻 Usage Examples
 
