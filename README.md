@@ -141,7 +141,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | journal ⚠️ | `agent.tool.journal(action="write", content="Today's progress notes")` | Creating structured logs, maintaining documentation <br> **Deprecated — see [Deprecations](#deprecations)** |
 | think ⚠️ | `agent.tool.think(thought="Complex problem to analyze", cycle_count=3)` | Advanced reasoning, multi-step thinking processes <br> **Deprecated — see [Deprecations](#deprecations)** |
 | load_tool ⚠️ | `agent.tool.load_tool(path="path/to/custom_tool.py", name="custom_tool")` | Dynamically loading custom tools and extensions <br> **Deprecated — see [Deprecations](#deprecations)** |
-| swarm | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence |
+| swarm ⚠️ | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence <br> **Deprecated — see [Deprecations](#deprecations)** |
 | current_time ⚠️ | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone <br> **Deprecated — see [Deprecations](#deprecations)** |
 | sleep ⚠️ | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
@@ -151,8 +151,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | speak ⚠️ | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech <br> **Deprecated — see [Deprecations](#deprecations)** |
 | stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
 | handoff_to_user ⚠️ | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff <br> **Deprecated — see [Deprecations](#deprecations)** |
-| use_llm | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks |
-| use_agent | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks |
+| use_llm ⚠️ | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks <br> **Deprecated — see [Deprecations](#deprecations)** |
+| use_agent ⚠️ | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks <br> **Deprecated — see [Deprecations](#deprecations)** |
 | workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
 | mcp_client ⚠️ | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | batch ⚠️ | `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools from one request. <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -234,6 +234,9 @@ class-based tools are static-only, which is why the log message exists as well.
 | `generate_image` | no replacement — call Bedrock's `invoke_model` with a Stability AI model directly ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html)) | v0.8.11 | v0.9.0 |
 | `image_reader` | image content blocks in the agent prompt ([docs](https://strandsagents.com/docs/user-guide/sdk/agents/prompts/)) | v0.8.11 | v0.9.0 |
 | `elasticsearch_memory` (`elasticsearch_memory`, `ElasticsearchMemoryTool`) | no replacement — implement a `MemoryStore` over [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.11 | v0.9.0 |
+| `swarm` | `from strands.vended_tools import swarm` | v0.8.11 | v0.9.0 |
+| `use_agent` | `from strands.vended_tools import subagent` | v0.8.11 | v0.9.0 |
+| `use_llm` | `from strands.vended_tools import subagent` | v0.8.11 | v0.9.0 |
 
 ```python
 # Before
@@ -387,6 +390,15 @@ The replacements are not drop-in equivalents. Check these before migrating:
   [`elasticsearch-py`](https://www.elastic.co/docs/reference/elasticsearch/clients/python). `retrieve` then becomes
   `search_memory` and `record` becomes `add_memory` (with `writable=True` on the store and `add_tool_config=True` on
   `MemoryManager`); bind the namespace in the store, not the tool call, to keep tenants isolated. For `list`, `get`, and `delete`, call `elasticsearch-py` directly.
+- **`swarm` → `swarm`** — by default every agent inherits the
+  parent's model and all of its tools, and the model writes only `instructions` (formerly `system_prompt`). To let
+  it pick tools or models per agent again, offer a set with `make_swarm(tools=Choice([...], multiple=True),
+  model=Choice([...]))`. The handoff, iteration, and timeout limits also move from tool arguments to `make_swarm(...)`.
+- **`use_agent` / `use_llm` → `subagent`** — by default the child inherits the parent's model and tools, and the
+  model passes a `task` with optional `instructions` (without them, a built-in general-purpose prompt is used). In place
+  of `use_agent`'s free-form `model_provider` and `model_settings`, offer models with `make_subagent(model=Choice([...]))`
+  or pin one with `Fixed(...)`. The result is the child's final message, without the metrics block.
+  `Choice`, `Fixed`, and the other axis modes come from `strands.multiagent.spec`.
 
 ## 💻 Usage Examples
 

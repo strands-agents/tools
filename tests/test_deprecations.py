@@ -58,12 +58,15 @@ DEPRECATED_TOOLS = [
     ("slack", "slack_send_message"),
     ("sleep", "sleep"),
     ("speak", "speak"),
+    ("swarm", "swarm"),
     ("tavily", "tavily_crawl"),
     ("tavily", "tavily_extract"),
     ("tavily", "tavily_map"),
     ("tavily", "tavily_search"),
     ("think", "think"),
+    ("use_agent", "use_agent"),
     ("use_computer", "use_computer"),
+    ("use_llm", "use_llm"),
 ]
 
 # Only tools whose name matches their module can be re-exported: the re-export has to

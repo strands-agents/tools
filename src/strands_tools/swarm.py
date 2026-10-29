@@ -88,10 +88,16 @@ from rich.console import Console
 from rich.panel import Panel
 from strands import Agent, tool
 from strands.multiagent import Swarm
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "swarm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "swarm tool vended by strands-agents (from strands.vended_tools import make_swarm, swarm)."
+)
 
 
 def create_rich_status_panel(console: Console, result: Any) -> str:
@@ -229,7 +235,16 @@ def _create_custom_agents(
     return agents
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "swarm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "swarm tool vended by strands-agents (from strands.vended_tools import make_swarm, swarm)."
+)
 def swarm(
     task: str,
     agents: List[Dict[str, Any]],
@@ -393,6 +408,8 @@ def swarm(
         - Supports complex multi-modal tasks and diverse expertise areas
         - Tool filtering ensures agents only get tools that exist in parent registry
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:

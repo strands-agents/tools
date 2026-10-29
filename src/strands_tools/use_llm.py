@@ -48,8 +48,14 @@ from typing import Any
 from strands import Agent
 from strands.telemetry.metrics import metrics_to_string
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "use_llm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "subagent tool vended by strands-agents (from strands.vended_tools import subagent)."
+)
 
 TOOL_SPEC = {
     "name": "use_llm",
@@ -80,6 +86,15 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "use_llm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "subagent tool vended by strands-agents (from strands.vended_tools import subagent)."
+)
 def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Create a new LLM instance using the Agent interface.
@@ -139,10 +154,7 @@ def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
 
-    logger.warning(
-        "DEPRECATION WARNING: use_llm will be removed in the next major release. "
-        "Migration path: replace use_llm calls with use_agent for equivalent functionality."
-    )
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     prompt = tool_input["prompt"]
     tool_system_prompt = tool_input.get("system_prompt")

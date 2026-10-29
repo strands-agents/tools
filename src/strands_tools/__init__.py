@@ -43,5 +43,8 @@ if TYPE_CHECKING:
     from .slack import slack as slack
     from .sleep import sleep as sleep
     from .speak import speak as speak
+    from .swarm import swarm as swarm
     from .think import think as think
+    from .use_agent import use_agent as use_agent
     from .use_computer import use_computer as use_computer
+    from .use_llm import use_llm as use_llm

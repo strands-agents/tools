@@ -463,3 +463,23 @@ def test_use_llm_without_tool_filtering_inherits_all():
 
         # Verify the result
         assert result["status"] == "success"
+
+
+def test_use_llm_logs_deprecation_warning(mock_agent_response, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    tool_use = {"toolUseId": "deprecation", "input": {"prompt": "Test", "system_prompt": "Test system prompt"}}
+    with (
+        patch("strands_tools.use_llm.Agent") as MockAgent,
+        caplog.at_level("WARNING", logger="strands_tools.use_llm"),
+    ):
+        MockAgent.return_value.return_value = mock_agent_response
+        use_llm.use_llm(tool=tool_use)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import subagent" in caplog.text
+
+
+def test_use_llm_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import subagent" in use_llm.use_llm.__deprecated__
