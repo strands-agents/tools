@@ -113,8 +113,8 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | Tool | Agent Usage | Use Case |
 |------|-------------|----------|
 | a2a_client ⚠️ | `provider = A2AClientToolProvider(known_agent_urls=["http://localhost:9000"]); agent = Agent(tools=provider.tools)` | Discover and communicate with A2A-compliant agents, send messages between agents <br> **Deprecated — see [Deprecations](#deprecations)** |
-| file_read | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets |
-| file_write | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data |
+| file_read ⚠️ | `agent.tool.file_read(path="path/to/file.txt")` | Reading configuration files, parsing code files, loading datasets <br> **Deprecated — see [Deprecations](#deprecations)** |
+| file_write ⚠️ | `agent.tool.file_write(path="path/to/file.txt", content="file content")` | Writing results to files, creating new files, saving output data <br> **Deprecated — see [Deprecations](#deprecations)** |
 | editor ⚠️ | `agent.tool.editor(command="view", path="path/to/file.py")` | Advanced file operations like syntax highlighting, pattern replacement, and multi-file edits <br> **Deprecated — see [Deprecations](#deprecations)** |
 | shell* ⚠️ | `agent.tool.shell(command="ls -la")` | Executing shell commands, interacting with the operating system, running scripts <br> **Deprecated — see [Deprecations](#deprecations)** |
 | http_request ⚠️ | `agent.tool.http_request(method="GET", url="https://api.example.com/data")` | Making API calls, fetching web data, sending data to external services <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -127,7 +127,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | python_repl* ⚠️ | `agent.tool.python_repl(code="import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df.head())")` | Running Python code snippets, data analysis, executing complex logic with user confirmation for security <br> **Deprecated — see [Deprecations](#deprecations)** |
 | calculator ⚠️ | `agent.tool.calculator(expression="2 * sin(pi/4) + log(e**2)")` | Performing mathematical operations, symbolic math, equation solving <br> **Deprecated — see [Deprecations](#deprecations)** |
 | code_interpreter ⚠️ | `code_interpreter = AgentCoreCodeInterpreter(region="us-west-2"); agent = Agent(tools=[code_interpreter.code_interpreter])` | Execute code in isolated sandbox environments with multi-language support (Python, JavaScript, TypeScript), persistent sessions, and file operations <br> **Deprecated — see [Deprecations](#deprecations)** |
-| use_aws | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management |
+| use_aws ⚠️ | `agent.tool.use_aws(service_name="s3", operation_name="list_buckets", parameters={}, region="us-west-2")` | Interacting with AWS services, cloud resource management <br> **Deprecated — see [Deprecations](#deprecations)** |
 | retrieve ⚠️ | `agent.tool.retrieve(text="What is STRANDS?")` | Retrieving information from Amazon Bedrock Knowledge Bases with optional metadata <br> **Deprecated — see [Deprecations](#deprecations)** |
 | nova_reels ⚠️ | `agent.tool.nova_reels(action="create", text="A cinematic shot of mountains", s3_bucket="my-bucket")` | Create high-quality videos using Amazon Bedrock Nova Reel with configurable parameters via environment variables <br> **Deprecated — see [Deprecations](#deprecations)** |
 | agent_core_memory ⚠️ | `agent.tool.agent_core_memory(action="record", content="Hello, I like vegetarian food")` | Store and retrieve memories with Amazon Bedrock Agent Core Memory service <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -144,16 +144,16 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | swarm ⚠️ | `agent.tool.swarm(task="Analyze this problem", swarm_size=3, coordination_pattern="collaborative")` | Coordinating multiple AI agents to solve complex problems through collective intelligence <br> **Deprecated — see [Deprecations](#deprecations)** |
 | current_time ⚠️ | `agent.tool.current_time(timezone="US/Pacific")` | Get the current time in ISO 8601 format for a specified timezone <br> **Deprecated — see [Deprecations](#deprecations)** |
 | sleep ⚠️ | `agent.tool.sleep(seconds=5)` | Pause execution for the specified number of seconds, interruptible with SIGINT (Ctrl+C) <br> **Deprecated — see [Deprecations](#deprecations)** |
-| agent_graph | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems |
-| graph | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration |
+| agent_graph ⚠️ | `agent.tool.agent_graph(agents=["agent1", "agent2"], connections=[{"from": "agent1", "to": "agent2"}])` | Create and visualize agent relationship graphs for complex multi-agent systems <br> **Deprecated — see [Deprecations](#deprecations)** |
+| graph ⚠️ | `agent.tool.graph(action="create", graph_id="pipeline", topology={"nodes": [...], "edges": [...]})` | Create and manage deterministic DAG-based multi-agent graphs using Strands SDK Graph implementation with per-node model configuration <br> **Deprecated — see [Deprecations](#deprecations)** |
 | cron* ⚠️ | `agent.tool.cron(action="schedule", name="task", schedule="0 * * * *", command="backup.sh")` | Schedule and manage recurring tasks with cron job syntax <br> **Does not work on Windows** <br> **Deprecated — see [Deprecations](#deprecations)** |
 | slack ⚠️ | `agent.tool.slack(action="post_message", channel="general", text="Hello team!")` | Interact with Slack workspace for messaging and monitoring <br> **Deprecated — see [Deprecations](#deprecations)** |
 | speak ⚠️ | `agent.tool.speak(text="Operation completed successfully", style="green", mode="polly")` | Output status messages with rich formatting and optional text-to-speech <br> **Deprecated — see [Deprecations](#deprecations)** |
-| stop | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message |
+| stop ⚠️ | `agent.tool.stop(message="Process terminated by user request")` | Gracefully terminate agent execution with custom message <br> **Deprecated — see [Deprecations](#deprecations)** |
 | handoff_to_user ⚠️ | `agent.tool.handoff_to_user(message="Please confirm action", breakout_of_loop=False)` | Hand off control to user for confirmation, input, or complete task handoff <br> **Deprecated — see [Deprecations](#deprecations)** |
 | use_llm ⚠️ | `agent.tool.use_llm(prompt="Analyze this data", system_prompt="You are a data analyst")` | Create nested AI loops with customized system prompts for specialized tasks <br> **Deprecated — see [Deprecations](#deprecations)** |
 | use_agent ⚠️ | `agent.tool.use_agent(prompt="Analyze this code", system_prompt="You are a code analyst.", model_provider="bedrock")` | Create nested agent instances with model switching, multi-model workflows, cost optimization, and specialized sub-tasks <br> **Deprecated — see [Deprecations](#deprecations)** |
-| workflow | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows |
+| workflow ⚠️ | `agent.tool.workflow(action="create", name="data_pipeline", steps=[{"tool": "file_read"}, {"tool": "python_repl"}])` | Define, execute, and manage multi-step automated workflows <br> **Deprecated — see [Deprecations](#deprecations)** |
 | mcp_client ⚠️ | `agent.tool.mcp_client(action="connect", connection_id="my_server", transport="stdio", command="python", args=["server.py"])` | ⚠️ **SECURITY WARNING**: Dynamically connect to external MCP servers via stdio, sse, or streamable_http, list tools, and call remote tools. This can pose security risks as agents may connect to malicious servers. Use with caution in production. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | batch ⚠️ | `agent.tool.batch(invocations=[{"name": "current_time", "arguments": {"timezone": "Europe/London"}}, {"name": "stop", "arguments": {}}])` | Call multiple other tools from one request. <br> **Deprecated — see [Deprecations](#deprecations)** |
 | browser ⚠️ | `browser = LocalChromiumBrowser(); agent = Agent(tools=[browser.browser])` | Web scraping, automated testing, form filling, web automation tasks <br> **Deprecated — see [Deprecations](#deprecations)** |
@@ -162,7 +162,7 @@ Below is a comprehensive table of all available tools, how to use them with an a
 | use_computer ⚠️ | `agent.tool.use_computer(action="click", x=100, y=200, app_name="Chrome") ` | Desktop automation, GUI interaction, screen capture <br> **Deprecated — see [Deprecations](#deprecations)** |
 | search_video ⚠️ | `agent.tool.search_video(query="people discussing AI")` | Semantic video search using TwelveLabs' Marengo model <br> **Deprecated — see [Deprecations](#deprecations)** |
 | chat_video ⚠️ | `agent.tool.chat_video(prompt="What are the main topics?", video_id="video_123")` | Interactive video analysis using TwelveLabs' Pegasus model <br> **Deprecated — see [Deprecations](#deprecations)** |
-| mongodb_memory | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `MongoDBMemoryTool` or environment variables) |
+| mongodb_memory ⚠️ | `agent.tool.mongodb_memory(action="record", content="User prefers vegetarian pizza")` | Store and retrieve memories using MongoDB Atlas with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `MongoDBMemoryTool` or environment variables) <br> **Deprecated — see [Deprecations](#deprecations)** |
 | elasticsearch_memory ⚠️ | `agent.tool.elasticsearch_memory(action="record", content="User prefers dark mode")` | Store and retrieve memories using Elasticsearch with semantic search via AWS Bedrock Titan embeddings (connection and namespace configured via `ElasticsearchMemoryTool` or environment variables) <br> **Deprecated — see [Deprecations](#deprecations)** |
 
 \* *These tools do not work on Windows*
@@ -198,7 +198,7 @@ class-based tools are static-only, which is why the log message exists as well.
 | Tool | Suggested alternative | Warning | Error |
 |------|-----------------------|---------|-------|
 | `sleep` | `from strands.vended_tools import sleep` | v0.8.6 | v0.9.0 |
-| `editor` | `from strands.vended_tools import file_editor` | v0.8.6 | v0.9.0 |
+| `editor` | `from strands.vended_tools import edit, read, write` | v0.8.6 | v0.9.0 |
 | `shell` | `from strands.vended_tools import shell` | v0.8.6 | v0.9.0 |
 | `batch` | none needed — concurrent tool execution is the SDK default ([docs](https://strandsagents.com/docs/user-guide/concepts/tools/executors/)) | v0.8.6 | v0.9.0 |
 | `think` | native extended thinking via model reasoning config ([docs](https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/)) | v0.8.6 | v0.9.0 |
@@ -237,6 +237,14 @@ class-based tools are static-only, which is why the log message exists as well.
 | `swarm` | `from strands.vended_tools import swarm` | v0.8.11 | v0.9.0 |
 | `use_agent` | `from strands.vended_tools import subagent` | v0.8.11 | v0.9.0 |
 | `use_llm` | `from strands.vended_tools import subagent` | v0.8.11 | v0.9.0 |
+| `file_read` | `from strands.vended_tools import read` | v0.8.12 | v0.9.0 |
+| `file_write` | `from strands.vended_tools import write` | v0.8.12 | v0.9.0 |
+| `graph` | `from strands.vended_tools import graph` | v0.8.12 | v0.9.0 |
+| `workflow` | `from strands.vended_tools import graph` | v0.8.12 | v0.9.0 |
+| `agent_graph` | `from strands.vended_tools import graph` | v0.8.12 | v0.9.0 |
+| `stop` | `from strands.vended_tools import stop` | v0.8.12 | v0.9.0 |
+| `use_aws` | [AWS API MCP server](https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server) | v0.8.12 | v0.9.0 |
+| `mongodb_memory` (`mongodb_memory`, `MongoDBMemoryTool`) | no replacement — implement a `MemoryStore` over [`pymongo`](https://pymongo.readthedocs.io/) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.12 | v0.9.0 |
 
 ```python
 # Before
@@ -247,9 +255,9 @@ agent = Agent(tools=[editor, shell, sleep])
 
 # After
 from strands import Agent
-from strands.vended_tools import file_editor, shell, sleep
+from strands.vended_tools import edit, read, shell, sleep, write
 
-agent = Agent(tools=[file_editor, shell, sleep])
+agent = Agent(tools=[edit, read, shell, sleep, write])
 ```
 
 #### Behavior differences
@@ -260,8 +268,9 @@ The replacements are not drop-in equivalents. Check these before migrating:
   sandbox and is stateless — each call runs in a fresh shell, so variables and the working
   directory do not persist between calls. It does not provide PTY support or batched
   parallel/sequential command execution.
-- **`editor` → `file_editor`**: supports `view`, `create`, `str_replace`, and `insert`. The
-  `pattern_replace`, `find_line`, and `undo_edit` commands have no SDK equivalent.
+- **`editor` → `read` / `write` / `edit`**: `view` maps to `read`, `create` to `write`, and `str_replace` to
+  `edit`, which requires the old string to be unique in the file. The `insert`, `pattern_replace`, `find_line`, and
+  `undo_edit` commands have no SDK equivalent.
 - **`sleep` → `sleep`**: the maximum duration is set with
   `make_sleep(max_duration=...)` and defaults to 60 seconds, replacing the
   `MAX_SLEEP_SECONDS` environment variable which defaulted to 300 seconds.
@@ -333,7 +342,7 @@ The replacements are not drop-in equivalents. Check these before migrating:
   `search_video`'s `group_by`, `threshold`, and `search_options` parameters.
 - **`journal` → `notebook`** — `notebook` keeps notes in `agent.state` instead of `./journal/<date>.md`, so persistence follows your session
   manager. There is no `add_task` equivalent and no per-day entry, so tasks and dated entries become plain note text. If you need the entries as
-  files on disk, use `file_editor`.
+  files on disk, use `write`.
 - **`python_repl` → `python_repl`** — the SDK tool runs each call in a fresh interpreter, so in-memory state does not
   persist; save intermediate results to files instead. By default it executes on the host with no isolation and no
   confirmation prompt — pass a `sandbox=` to `Agent` (for example `DockerSandbox`) if you relied on the consent gate.
@@ -354,7 +363,7 @@ The replacements are not drop-in equivalents. Check these before migrating:
   session. An `Agent` with no `sandbox=` falls back to `NotASandboxLocalEnvironment`, which runs on the host
   with no isolation, so pass a sandbox (e.g. `strands.sandbox.docker.DockerSandbox`) if you were relying on
   AgentCore's. Each call starts a fresh process, so in-memory state does not persist. There are no named
-  sessions or file actions; use `file_editor` or `shell` for file operations.
+  sessions or file actions; use `read`, `write`, `edit`, and/or `shell` for file operations.
 - **`handoff_to_user` → `handoff_to_user`** — the SDK tool raises an interrupt instead of prompting on the
   console, so the agent stops with `stop_reason == "interrupt"` and your code resumes it with the user's
   reply. There is no `breakout_of_loop`: every call pauses the agent.
@@ -399,6 +408,40 @@ The replacements are not drop-in equivalents. Check these before migrating:
   of `use_agent`'s free-form `model_provider` and `model_settings`, offer models with `make_subagent(model=Choice([...]))`
   or pin one with `Fixed(...)`. The result is the child's final message, without the metrics block.
   `Choice`, `Fixed`, and the other axis modes come from `strands.multiagent.spec`.
+- **`file_read` → `read`** — the SDK tool reads one file by absolute path through the agent's sandbox, returning
+  numbered lines you page with `offset` and `limit`. Images and documents come back as content blocks the model can
+  view directly. The `find`, `search`, `stats`, `preview`, `chunk`, `diff`, and `time_machine` modes have no
+  equivalent, and neither do comma-separated or wildcard paths; `shell` covers those with `find`, `grep`, and `diff`.
+- **`file_write` → `write`** — the SDK tool writes through the agent's sandbox and takes absolute paths only. It does
+  not ask for confirmation or show a preview, so `BYPASS_TOOL_CONSENT` no longer applies. If you relied on the consent
+  prompt, raise an interrupt from a `BeforeToolCallEvent` hook to approve each write.
+- **`graph` → `graph`** — the SDK tool builds and runs the graph in a single call: the model passes a `task`, its
+  `nodes`, and the `edges` between them, and gets each node's output back. There is no create/execute/status/list/delete
+  lifecycle, and `entry_points` go away, since nodes with no incoming edges are the entry points. As with `swarm`, every
+  node inherits the parent's model and tools by default; in place of per-node `model_provider` and `model_settings`,
+  offer choices with `make_graph(tools=Choice([...], multiple=True), model=Choice([...]))`, which also sets the node,
+  edge, and timeout limits.
+- **`workflow` → `graph`** — each task becomes a node and its `dependencies` become edges, and the whole graph runs in
+  a single call. Workflows are no longer saved under `~/.strands/workflows`, so there is no status, pause, or resume
+  across calls, and task `priority` has no equivalent; nodes that become ready together run in parallel. Per-task
+  models and tools move to `make_graph(tools=Choice([...], multiple=True), model=Choice([...]))`.
+- **`agent_graph` → `graph`** — the execution model changes: `agent_graph` kept a network of agents running and passed
+  messages between them, while the SDK tool runs each node once and propagates its output downstream. There are no
+  `message`, `status`, or `stop` actions. `star` and `hierarchical` topologies map onto edges; cycles are not allowed,
+  so `mesh` topologies fit `swarm` better.
+- **`stop` → `stop`** — the SDK tool cancels the agent after the current tools finish, so sibling tool calls in the
+  same batch still run and the agent returns with `stop_reason == "cancelled"`. `reason` becomes an optional `message`,
+  capped at 4096 characters by default; raise it with `make_stop(max_message_length=...)`.
+- **`use_aws` → AWS API MCP server** — AWS maintains it, and its `call_aws` tool runs AWS CLI commands rather than
+  boto3 service and operation names, with `suggest_aws_commands` to help the model find the right one. This tool's
+  confirmation prompt for mutating operations does not carry over: set `READ_OPERATIONS_ONLY=true` to block them, or
+  `REQUIRE_MUTATION_CONSENT=true` with a client that supports MCP elicitation. Either way, IAM permissions remain the
+  primary control. See the [server docs](https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server).
+- **`mongodb_memory` → custom `MemoryStore`** — no store ships for MongoDB, but one only needs `search` (a
+  `$vectorSearch` aggregation) and `add` (insert a document) over [`pymongo`](https://pymongo.readthedocs.io/).
+  `retrieve` then becomes `search_memory` and `record` becomes `add_memory` (with `writable=True` on the store and
+  `add_tool_config=True` on `MemoryManager`); bind the namespace in the store, not the tool call, to keep tenants
+  isolated. For `list`, `get`, and `delete`, call `pymongo` directly.
 
 ## 💻 Usage Examples
 

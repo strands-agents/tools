@@ -363,3 +363,18 @@ def test_file_read_error_message_brackets():
     result = file_read.file_read(tool=tool_use)
 
     assert result["status"] == "error"
+
+
+def test_file_read_logs_deprecation_warning(temp_test_file, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.file_read"):
+        file_read.file_read(tool={"toolUseId": "deprecation", "input": {"path": temp_test_file, "mode": "view"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_read, read" in caplog.text
+
+
+def test_file_read_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import make_read, read" in file_read.file_read.__deprecated__

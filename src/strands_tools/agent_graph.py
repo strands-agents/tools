@@ -13,11 +13,17 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.use_llm import use_llm
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "agent_graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 
 
 # Constants for resource management
@@ -500,6 +506,15 @@ def get_manager(tool_context: Dict[str, Any]) -> AgentGraphManager:
         return _MANAGER
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "agent_graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Create and manage graphs of AI agents.
@@ -514,10 +529,7 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     messages = kwargs.get("messages")
     tool_config = kwargs.get("tool_config")
 
-    logger.warning(
-        "DEPRECATION WARNING: agent_graph will be removed in the next major release. "
-        "Migration path: replace agent_graph calls with graph for equivalent functionality."
-    )
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Create tool context

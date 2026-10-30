@@ -703,3 +703,18 @@ def test_graph_with_mixed_model_configurations(mock_parent_agent, mock_graph_bui
 
         # Verify default agent was created for node without custom model
         assert mock_agent_class.call_count >= 1  # default_node
+
+
+def test_graph_logs_deprecation_warning(mock_parent_agent, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.graph"):
+        graph_module.graph(action="list", agent=mock_parent_agent)
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import graph, make_graph" in caplog.text
+
+
+def test_graph_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import graph, make_graph" in graph_module.graph.__deprecated__

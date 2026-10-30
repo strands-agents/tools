@@ -98,6 +98,7 @@ See the file_read function docstring for more details on modes and parameters.
 
 import glob
 import json
+import logging
 import os
 import time as time_module
 import uuid
@@ -118,9 +119,17 @@ from strands.types.tools import (
     ToolResultContent,
     ToolUse,
 )
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "file_read is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "read tool vended by strands-agents (from strands.vended_tools import make_read, read)."
+)
 
 # Document format mapping
 FORMAT_EXTENSIONS = {
@@ -934,6 +943,15 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
         raise Exception(f"Error in time machine view: {str(e)}") from e
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "file_read is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "read tool vended by strands-agents (from strands.vended_tools import make_read, read)."
+)
 def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Advanced file reading tool with multiple specialized reading modes.
@@ -998,6 +1016,8 @@ def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Document format is auto-detected from file extension or can be specified
         - For diff mode, both paths must be either files or directories
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     tool_use_id = tool.get("toolUseId", "default-id")

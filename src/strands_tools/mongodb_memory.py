@@ -97,9 +97,17 @@ from pymongo.cursor import Cursor
 from pymongo.driver_info import DriverInfo
 from pymongo.errors import ConnectionFailure
 from strands import tool
+from typing_extensions import deprecated
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
+    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
+)
 
 try:
     from importlib.metadata import version as _get_version
@@ -736,6 +744,18 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
         raise MongoDBMemoryError(f"Failed to delete memory {memory_id}: {str(e)}") from e
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning in mongodb_memory is
+# what users actually see. category=None keeps the marker static-only so instantiating or
+# subclassing does not start raising DeprecationWarning. The message is spelled out here
+# rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
+# argument is a string literal.
+@deprecated(
+    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
+    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores",
+    category=None,
+)
 class MongoDBMemoryTool:
     """
     MongoDB Atlas Memory Tool with secure credential management.
@@ -840,6 +860,8 @@ class MongoDBMemoryTool:
         Returns:
             Dict: Response containing the requested memory information or operation status
         """
+        logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
         try:
             # Namespace is bound at construction (self._namespace); the agent cannot supply a
             # different tenant key. It was already validated in __init__.
@@ -980,7 +1002,18 @@ class MongoDBMemoryTool:
             return {"status": "error", "content": [{"text": str(e)}]}
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
+    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
+    "(from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
+)
 def mongodb_memory(
     action: str,
     content: Optional[str] = None,
@@ -1038,6 +1071,8 @@ def mongodb_memory(
     Returns:
         Dict: Response containing the requested memory information or operation status
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     try:
         # All connection, location, namespace, and embedding configuration is sourced from the
         # environment only. These are deliberately not tool parameters: exposing them would let

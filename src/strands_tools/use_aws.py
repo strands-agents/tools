@@ -77,6 +77,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.data_util import convert_datetime_to_str
@@ -84,6 +85,11 @@ from strands_tools.utils.generate_schema_util import generate_input_schema
 from strands_tools.utils.user_input import get_user_input
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "AWS API MCP server (https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server)."
+)
 
 MUTATIVE_OPERATIONS = [
     "create",
@@ -351,6 +357,15 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "AWS API MCP server (https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server)."
+)
 def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Execute AWS service operations using boto3 with comprehensive error handling and validation.
@@ -402,6 +417,8 @@ def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - For validation errors, the tool attempts to generate the correct input schema
         - All datetime objects are automatically converted to strings for proper JSON serialization
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     aws_region = os.environ.get("AWS_REGION", "us-west-2")
     console = console_util.create()
 
