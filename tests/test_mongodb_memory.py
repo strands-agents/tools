@@ -892,4 +892,7 @@ def test_class_logs_deprecation_warning(mock_mongodb_client, mock_bedrock_client
 @pytest.mark.parametrize("target", [mongodb_memory, MongoDBMemoryTool])
 def test_is_marked_deprecated_for_static_analysis(target):
     """The @deprecated marker lets type checkers and IDEs flag callers."""
-    assert "custom MemoryStore" in target.__deprecated__
+    marker = getattr(target, "__deprecated__", None)
+
+    assert marker is not None
+    assert "custom MemoryStore" in marker

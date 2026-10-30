@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "AWS API MCP server (https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server)."
+    "AWS MCP Server (https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
 )
 
 MUTATIVE_OPERATIONS = [
@@ -364,7 +364,7 @@ TOOL_SPEC = {
 # reports @deprecated when the argument is a string literal.
 @deprecated(
     "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "AWS API MCP server (https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server)."
+    "AWS MCP Server (https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
 )
 def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

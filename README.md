@@ -243,7 +243,7 @@ class-based tools are static-only, which is why the log message exists as well.
 | `workflow` | `from strands.vended_tools import graph` | v0.8.12 | v0.9.0 |
 | `agent_graph` | `from strands.vended_tools import graph` | v0.8.12 | v0.9.0 |
 | `stop` | `from strands.vended_tools import stop` | v0.8.12 | v0.9.0 |
-| `use_aws` | [AWS API MCP server](https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server) | v0.8.12 | v0.9.0 |
+| `use_aws` | [AWS MCP Server](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html) | v0.8.12 | v0.9.0 |
 | `mongodb_memory` (`mongodb_memory`, `MongoDBMemoryTool`) | no replacement — implement a `MemoryStore` over [`pymongo`](https://pymongo.readthedocs.io/) for `MemoryManager` ([docs](https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores)) | v0.8.12 | v0.9.0 |
 
 ```python
@@ -269,8 +269,9 @@ The replacements are not drop-in equivalents. Check these before migrating:
   directory do not persist between calls. It does not provide PTY support or batched
   parallel/sequential command execution.
 - **`editor` → `read` / `write` / `edit`**: `view` maps to `read`, `create` to `write`, and `str_replace` to
-  `edit`, which requires the old string to be unique in the file. The `insert`, `pattern_replace`, `find_line`, and
-  `undo_edit` commands have no SDK equivalent.
+  `edit`. `edit` requires the old string to be unique in the file, whereas `str_replace` replaced every occurrence.
+  `write` and `edit` write immediately, with no confirmation prompt and no `.bak` backup. The `insert`,
+  `pattern_replace`, `find_line`, and `undo_edit` commands have no SDK equivalent. Directory views move to `shell`.
 - **`sleep` → `sleep`**: the maximum duration is set with
   `make_sleep(max_duration=...)` and defaults to 60 seconds, replacing the
   `MAX_SLEEP_SECONDS` environment variable which defaulted to 300 seconds.
@@ -408,35 +409,36 @@ The replacements are not drop-in equivalents. Check these before migrating:
   of `use_agent`'s free-form `model_provider` and `model_settings`, offer models with `make_subagent(model=Choice([...]))`
   or pin one with `Fixed(...)`. The result is the child's final message, without the metrics block.
   `Choice`, `Fixed`, and the other axis modes come from `strands.multiagent.spec`.
-- **`file_read` → `read`** — the SDK tool reads one file by absolute path through the agent's sandbox, returning
-  numbered lines you page with `offset` and `limit`. Images and documents come back as content blocks the model can
-  view directly. The `find`, `search`, `stats`, `preview`, `chunk`, `diff`, and `time_machine` modes have no
-  equivalent, and neither do comma-separated or wildcard paths; `shell` covers those with `find`, `grep`, and `diff`.
+- **`file_read` → `read`** — the SDK tool reads one file per call by absolute path, returning numbered lines paged
+  with `offset` and `limit`; images and binary documents come back as content blocks, while the csv, html, txt, and md
+  files that `document` mode returned as document blocks now come back as numbered text. The `find`, `search`, `stats`,
+  `preview`, `chunk`, `diff`, and `time_machine` modes have no equivalent, so run those through `shell`.
 - **`file_write` → `write`** — the SDK tool writes through the agent's sandbox and takes absolute paths only. It does
   not ask for confirmation or show a preview, so `BYPASS_TOOL_CONSENT` no longer applies. If you relied on the consent
-  prompt, raise an interrupt from a `BeforeToolCallEvent` hook to approve each write.
-- **`graph` → `graph`** — the SDK tool builds and runs the graph in a single call: the model passes a `task`, its
-  `nodes`, and the `edges` between them, and gets each node's output back. There is no create/execute/status/list/delete
-  lifecycle, and `entry_points` go away, since nodes with no incoming edges are the entry points. As with `swarm`, every
-  node inherits the parent's model and tools by default; in place of per-node `model_provider` and `model_settings`,
-  offer choices with `make_graph(tools=Choice([...], multiple=True), model=Choice([...]))`, which also sets the node,
-  edge, and timeout limits.
-- **`workflow` → `graph`** — each task becomes a node and its `dependencies` become edges, and the whole graph runs in
-  a single call. Workflows are no longer saved under `~/.strands/workflows`, so there is no status, pause, or resume
-  across calls, and task `priority` has no equivalent; nodes that become ready together run in parallel. Per-task
-  models and tools move to `make_graph(tools=Choice([...], multiple=True), model=Choice([...]))`.
+  prompt, raise an interrupt from a `BeforeToolCallEvent` hook to approve each write. See
+  [Interrupts](https://strandsagents.com/docs/user-guide/sdk/interrupts/#hooks).
+- **`graph` → `graph`** — the model passes `task`, `nodes`, and `edges` in one call and gets each node's output back,
+  with no create/execute/status/list/delete lifecycle. Edges use `from_node`/`to_node` instead of `from`/`to`, and
+  nodes with no incoming edges are always the entry points. Nodes inherit the parent's model and tools by default;
+  in place of per-node `model_provider` and `model_settings`, use `make_graph(tools=Choice([...], multiple=True),
+  model=Choice([...]))`, which also sets node, edge, and timeout limits.
+- **`workflow` → `graph`** — tasks become nodes and `dependencies` become edges, run in one call. Nothing is saved
+  under `~/.strands/workflows`. `status`, partial workflow resumption (by re-running `start`), and `priority`
+  have no equivalent. Ready nodes run in parallel. Per-task models and tools move to `make_graph` as above.
 - **`agent_graph` → `graph`** — the execution model changes: `agent_graph` kept a network of agents running and passed
   messages between them, while the SDK tool runs each node once and propagates its output downstream. There are no
   `message`, `status`, or `stop` actions. `star` and `hierarchical` topologies map onto edges; cycles are not allowed,
-  so `mesh` topologies fit `swarm` better.
-- **`stop` → `stop`** — the SDK tool cancels the agent after the current tools finish, so sibling tool calls in the
-  same batch still run and the agent returns with `stop_reason == "cancelled"`. `reason` becomes an optional `message`,
-  capped at 4096 characters by default; raise it with `make_stop(max_message_length=...)`.
-- **`use_aws` → AWS API MCP server** — AWS maintains it, and its `call_aws` tool runs AWS CLI commands rather than
-  boto3 service and operation names, with `suggest_aws_commands` to help the model find the right one. This tool's
-  confirmation prompt for mutating operations does not carry over: set `READ_OPERATIONS_ONLY=true` to block them, or
-  `REQUIRE_MUTATION_CONSENT=true` with a client that supports MCP elicitation. Either way, IAM permissions remain the
-  primary control. See the [server docs](https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server).
+  so `mesh` topologies fit the SDK `swarm` tool better.
+- **`stop` → `stop`** — the run now ends with `stop_reason == "cancelled"` rather than the model's own `"tool_use"`,
+  and `reason` becomes an optional `message` that is also the final assistant message, so `str(result)` returns it
+  where it used to be empty. If you branch on `stop_reason` or read `request_state["stop_event_loop"]`, update those
+  checks. The message is capped at 4096 characters by default.
+- **`use_aws` → AWS MCP Server** — AWS maintains it as a managed remote server, reached through the
+  `mcp-proxy-for-aws` proxy, and its `aws___call_aws` tool covers the same API surface as this tool. Write access is
+  controlled by IAM, or the proxy's `--read-only` flag, rather than this tool's confirmation prompt. The self-hosted
+  [AWS API MCP server](https://github.com/awslabs/mcp/tree/main/src/aws-api-mcp-server) still works but is superseded;
+  see its [migration guide](https://github.com/awslabs/mcp/blob/main/src/aws-api-mcp-server/MIGRATION.md) and the
+  [AWS MCP Server docs](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html).
 - **`mongodb_memory` → custom `MemoryStore`** — no store ships for MongoDB, but one only needs `search` (a
   `$vectorSearch` aggregation) and `add` (insert a document) over [`pymongo`](https://pymongo.readthedocs.io/).
   `retrieve` then becomes `search_memory` and `record` becomes `add_memory` (with `writable=True` on the store and

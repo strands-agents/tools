@@ -976,9 +976,9 @@ def test_use_aws_logs_deprecation_warning(mock_available_services, mock_availabl
 
     assert "DEPRECATION WARNING" in caplog.text
     assert "becomes an import error in v0.9.0" in caplog.text
-    assert "https://github.com/awslabs/mcp" in caplog.text
+    assert "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html" in caplog.text
 
 
 def test_use_aws_is_marked_deprecated_for_static_analysis():
     """The @deprecated marker lets type checkers and IDEs flag callers."""
-    assert "AWS API MCP server" in use_aws.use_aws.__deprecated__
+    assert "AWS MCP Server" in use_aws.use_aws.__deprecated__

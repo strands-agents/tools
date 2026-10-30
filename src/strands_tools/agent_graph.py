@@ -519,6 +519,8 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Create and manage graphs of AI agents.
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     tool_use_id = tool.get("toolUseId", str(uuid.uuid4()))
@@ -528,8 +530,6 @@ def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     inference_config = kwargs.get("inference_config")
     messages = kwargs.get("messages")
     tool_config = kwargs.get("tool_config")
-
-    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
 
     try:
         # Create tool context
