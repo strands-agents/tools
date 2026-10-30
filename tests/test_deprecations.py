@@ -22,6 +22,7 @@ import strands_tools
 DEPRECATED_TOOLS = [
     ("a2a_client", "A2AClientToolProvider"),
     ("agent_core_memory", "AgentCoreMemoryToolProvider"),
+    ("agent_graph", "agent_graph"),
     ("batch", "batch"),
     ("bright_data", "bright_data"),
     ("browser.browser", "Browser"),
@@ -35,8 +36,11 @@ DEPRECATED_TOOLS = [
     ("elasticsearch_memory", "ElasticsearchMemoryTool"),
     ("elasticsearch_memory", "elasticsearch_memory"),
     ("environment", "environment"),
+    ("file_read", "file_read"),
+    ("file_write", "file_write"),
     ("generate_image", "generate_image"),
     ("generate_image_stability", "generate_image_stability"),
+    ("graph", "graph"),
     ("handoff_to_user", "handoff_to_user"),
     ("http_request", "http_request"),
     ("image_reader", "image_reader"),
@@ -48,6 +52,8 @@ DEPRECATED_TOOLS = [
     ("mem0_memory", "Mem0MemoryTool"),
     ("mem0_memory", "mem0_memory"),
     ("memory", "memory"),
+    ("mongodb_memory", "MongoDBMemoryTool"),
+    ("mongodb_memory", "mongodb_memory"),
     ("nova_reels", "nova_reels"),
     ("python_repl", "python_repl"),
     ("retrieve", "retrieve"),
@@ -58,6 +64,7 @@ DEPRECATED_TOOLS = [
     ("slack", "slack_send_message"),
     ("sleep", "sleep"),
     ("speak", "speak"),
+    ("stop", "stop"),
     ("swarm", "swarm"),
     ("tavily", "tavily_crawl"),
     ("tavily", "tavily_extract"),
@@ -65,8 +72,10 @@ DEPRECATED_TOOLS = [
     ("tavily", "tavily_search"),
     ("think", "think"),
     ("use_agent", "use_agent"),
+    ("use_aws", "use_aws"),
     ("use_computer", "use_computer"),
     ("use_llm", "use_llm"),
+    ("workflow", "workflow"),
 ]
 
 # Only tools whose name matches their module can be re-exported: the re-export has to

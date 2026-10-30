@@ -85,3 +85,18 @@ def test_stop_flag_effect(mock_request_state):
 
     # Verify the flag was set
     assert mock_request_state.get("stop_event_loop") is True
+
+
+def test_stop_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.stop"):
+        stop.stop(tool={"toolUseId": "deprecation", "input": {}}, request_state={})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_stop, stop" in caplog.text
+
+
+def test_stop_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import make_stop, stop" in stop.stop.__deprecated__

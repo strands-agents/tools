@@ -117,6 +117,7 @@ from rich.table import Table
 from strands import Agent, tool
 from strands.telemetry.metrics import metrics_to_string
 from tenacity import retry, stop_after_attempt, wait_exponential
+from typing_extensions import deprecated
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -124,6 +125,11 @@ from strands_tools.utils import console_util
 from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "workflow is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 
 # Constants
 WORKFLOW_DIR = Path(os.getenv("STRANDS_WORKFLOW_DIR", Path.home() / ".strands" / "workflows"))
@@ -914,7 +920,16 @@ class WorkflowManager:
 _manager = None
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "workflow is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 def workflow(
     action: str,
     workflow_id: Optional[str] = None,
@@ -1109,6 +1124,8 @@ def workflow(
         • Each task runs with specialized agent configuration
         • Context passing between dependent tasks for continuity
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     global _manager
 
     try:
