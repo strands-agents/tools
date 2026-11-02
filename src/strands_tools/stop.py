@@ -32,9 +32,15 @@ import logging
 from typing import Any
 
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "stop is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "stop tool vended by strands-agents (from strands.vended_tools import make_stop, stop)."
+)
 
 TOOL_SPEC = {
     "name": "stop",
@@ -53,6 +59,15 @@ TOOL_SPEC = {
 }
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "stop is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "stop tool vended by strands-agents (from strands.vended_tools import make_stop, stop)."
+)
 def stop(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Stops the current event loop cycle by setting the stop_event_loop flag.
@@ -96,6 +111,8 @@ def stop(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - Always provide a meaningful reason for debugging and user feedback
         - The stop flag is only effective within the current request context
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     tool_use_id = tool["toolUseId"]
     tool_input = tool["input"]
     request_state = kwargs.get("request_state", {})

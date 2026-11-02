@@ -550,3 +550,18 @@ class TestAgentGraphTool:
 
             result = agent_graph(tool=tool_use)
             assert result["toolUseId"] == "generated-uuid"
+
+
+def test_agent_graph_logs_deprecation_warning(caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.agent_graph"):
+        agent_graph(tool={"toolUseId": "deprecation", "input": {"action": "unknown_action"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import graph, make_graph" in caplog.text
+
+
+def test_agent_graph_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import graph, make_graph" in agent_graph.__deprecated__

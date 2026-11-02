@@ -242,3 +242,19 @@ def test_file_write_alternative_rejection(mock_user_input, temp_file):
 
     # Verify file was not created
     assert not os.path.exists(temp_file)
+
+
+@patch("strands_tools.file_write.get_user_input", return_value="y")
+def test_file_write_logs_deprecation_warning(mock_user_input, temp_file, caplog):
+    """Invoking the tool logs a deprecation warning naming its migration path."""
+    with caplog.at_level("WARNING", logger="strands_tools.file_write"):
+        file_write.file_write(tool={"toolUseId": "deprecation", "input": {"path": temp_file, "content": "x"}})
+
+    assert "DEPRECATION WARNING" in caplog.text
+    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "strands.vended_tools import make_write, write" in caplog.text
+
+
+def test_file_write_is_marked_deprecated_for_static_analysis():
+    """The @deprecated marker lets type checkers and IDEs flag callers."""
+    assert "strands.vended_tools import make_write, write" in file_write.file_write.__deprecated__

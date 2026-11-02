@@ -68,11 +68,17 @@ from rich.panel import Panel
 from rich.table import Table
 from strands import Agent, tool
 from strands.multiagent.graph import GraphBuilder
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.models.model import create_model
 
 logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 
 
 def create_rich_table(console: Console, title: str, headers: List[str], rows: List[List[str]]) -> str:
@@ -401,7 +407,16 @@ class GraphManager:
 _manager = GraphManager()
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
 @tool
+@deprecated(
+    "graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+)
 def graph(
     action: str,
     graph_id: Optional[str] = None,
@@ -530,6 +545,8 @@ def graph(
         - Execution is task-based rather than persistent like the old agent_graph
         - Uses the new Strands SDK Graph implementation for reliability and performance
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     try:

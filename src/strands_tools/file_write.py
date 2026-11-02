@@ -54,6 +54,7 @@ agent.tool.file_write(
 See the file_write function docstring for more details on usage options and parameters.
 """
 
+import logging
 import os
 from os.path import expanduser
 from typing import Any, Optional, Union
@@ -63,9 +64,17 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 from strands.types.tools import ToolResult, ToolUse
+from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
+
+logger = logging.getLogger(__name__)
+
+_DEPRECATION_MESSAGE = (
+    "file_write is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "write tool vended by strands-agents (from strands.vended_tools import make_write, write)."
+)
 
 TOOL_SPEC = {
     "name": "file_write",
@@ -137,6 +146,15 @@ def create_rich_panel(content: str, title: Optional[str] = None, syntax_language
     )
 
 
+# @deprecated surfaces in IDEs and type checkers; the logger.warning below is what
+# users actually see, since DeprecationWarning raised from inside the SDK's tool
+# invocation path is suppressed by Python's default warning filter. The message is
+# spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
+# reports @deprecated when the argument is a string literal.
+@deprecated(
+    "file_write is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
+    "write tool vended by strands-agents (from strands.vended_tools import make_write, write)."
+)
 def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """
     Write content to a file with interactive confirmation and rich feedback.
@@ -185,6 +203,8 @@ def file_write(tool: ToolUse, **kwargs: Any) -> ToolResult:
         - User can cancel the write operation and provide a reason for cancellation
         - All operations use rich formatting for clear visual feedback
     """
+    logger.warning("DEPRECATION WARNING: %s", _DEPRECATION_MESSAGE)
+
     console = console_util.create()
 
     tool_use_id = tool["toolUseId"]
