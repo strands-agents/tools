@@ -48,6 +48,14 @@ from .models import (
     TypeAction,
 )
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "browser was removed in v0.9.0. There is no replacement tool; drive Playwright directly from a custom"
+    " tool, using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

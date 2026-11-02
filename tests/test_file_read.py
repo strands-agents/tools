@@ -2,12 +2,15 @@
 Tests for the file_read tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.file_read", reason="file_read was removed in v0.9.0", exc_type=ImportError)
+
 import io
 import os
 import tempfile
 import unittest.mock
 
-import pytest
 from rich.console import Console
 from strands import Agent
 

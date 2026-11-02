@@ -2,9 +2,12 @@
 Tests for the use_llm tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.use_llm", reason="use_llm was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands.agent import AgentResult
 
 from strands_tools import use_llm

@@ -2,12 +2,15 @@
 Tests for the current_time tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.current_time", reason="current_time was removed in v0.9.0", exc_type=ImportError)
+
 import re
 from datetime import datetime
 from datetime import timezone as tz
 from zoneinfo import ZoneInfo
 
-import pytest
 from strands import Agent
 
 from strands_tools import current_time

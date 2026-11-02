@@ -2,10 +2,13 @@
 Tests for the memory tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import memory

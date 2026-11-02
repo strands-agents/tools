@@ -2,12 +2,15 @@
 Tests for the http_request tool using the Agent interface and direct invocation.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.http_request", reason="http_request was removed in v0.9.0", exc_type=ImportError)
+
 import json
 import os
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
-import pytest
 import responses
 from strands import Agent
 

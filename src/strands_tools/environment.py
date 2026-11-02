@@ -82,6 +82,18 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util, user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "environment was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by "
+    "strands-agents (from strands.vended_tools import shell). This does change the security boundary: "
+    "environment masked sensitive values and guarded PROTECTED_VARS as an operator-controlled policy, "
+    "while shell executes arbitrary commands, so review it against your threat model before switching. "
+    "Note also that a child shell cannot mutate the agent's own environment, so set variables in the "
+    "process that launches the agent.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

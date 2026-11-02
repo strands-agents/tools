@@ -2,6 +2,12 @@
 Tests for the elasticsearch_memory tool.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.elasticsearch_memory", reason="elasticsearch_memory was removed in v0.9.0", exc_type=ImportError
+)
+
 import inspect
 import json
 import os
@@ -9,7 +15,6 @@ import warnings
 from unittest import mock
 from unittest.mock import MagicMock
 
-import pytest
 from strands import Agent
 
 from src.strands_tools.elasticsearch_memory import ElasticsearchMemoryTool, elasticsearch_memory

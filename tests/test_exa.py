@@ -2,12 +2,14 @@
 Tests for the Exa tools.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.exa", reason="exa was removed in v0.9.0", exc_type=ImportError)
+
 import asyncio
 import logging
 import os
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from strands_tools import exa
 

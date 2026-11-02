@@ -16,6 +16,14 @@ from diagrams import aws
 from strands import tool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "diagram was removed in v0.9.0. There is no replacement tool; have the model write and run diagram "
+    "code directly with graphviz, mermaid, or the diagrams package.",
+    name=__name__,
+)
+
+
 matplotlib.use("Agg")  # Set the backend after importing matplotlib
 
 

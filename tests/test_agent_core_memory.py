@@ -2,11 +2,16 @@
 Simplified tests for the agent_core_memory tool.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.agent_core_memory", reason="agent_core_memory was removed in v0.9.0", exc_type=ImportError
+)
+
 import os
 import warnings
 from unittest import mock
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

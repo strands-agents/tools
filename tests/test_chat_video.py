@@ -2,10 +2,13 @@
 Tests for the chat_video tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.chat_video", reason="chat_video was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import chat_video

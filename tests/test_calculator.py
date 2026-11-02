@@ -2,9 +2,12 @@
 Tests for the calculator tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.calculator", reason="calculator was removed in v0.9.0", exc_type=ImportError)
+
 import unittest.mock as mock
 
-import pytest
 import sympy as sp
 from strands import Agent
 from sympy import Integer, Symbol, exp, log

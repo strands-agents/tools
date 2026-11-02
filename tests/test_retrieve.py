@@ -2,11 +2,14 @@
 Tests for the retrieve tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.retrieve", reason="retrieve was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest import mock
 
 import boto3
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

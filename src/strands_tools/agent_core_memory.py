@@ -58,6 +58,17 @@ from strands import tool
 from strands.types.tools import AgentTool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "AgentCoreMemoryToolProvider was removed in v0.9.0. Migration path: use MemoryManager with the "
+    "AgentCoreMemoryStore vended by bedrock-agentcore (from "
+    "bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record "
+    "has no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
+    "MemorySessionManager. See https://strandsagents.com/docs/integrations/memory-stores/agentcore-"
+    "memory-store/",
+    name=__name__,
+)
+
 
 # Define memory actions as an Enum
 class MemoryAction(str, Enum):

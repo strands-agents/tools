@@ -34,6 +34,14 @@ from typing import Any
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "stop was removed in v0.9.0. Migration path: use the stop tool vended by strands-agents (from "
+    "strands.vended_tools import make_stop, stop).",
+    name=__name__,
+)
+
+
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
 

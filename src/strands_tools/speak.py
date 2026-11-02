@@ -14,6 +14,14 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "speak was removed in v0.9.0. There is no replacement tool; call Amazon Polly's synthesize_speech "
+    "directly from a custom tool.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

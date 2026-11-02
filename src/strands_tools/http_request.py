@@ -54,6 +54,15 @@ from urllib3 import Retry
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "http_request was removed in v0.9.0. Migration path: use the http_request and web_fetch tools vended "
+    "by strands-agents (from strands.vended_tools import http_request, web_fetch). http_request handles "
+    "API calls; web_fetch retrieves and reads web pages.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

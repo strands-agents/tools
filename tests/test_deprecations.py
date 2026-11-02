@@ -1,8 +1,7 @@
-"""Tests for the deprecation markers shared by every deprecated tool.
+"""Tests for the tools removed in v0.9.0.
 
-The per-tool test modules cover the runtime warning each tool logs. These tests cover
-the packaging contract that makes the marker reachable for type checkers and IDEs,
-which the per-tool tests cannot see because they import the tool directly.
+Each tool module now raises ImportError on import, while its @deprecated marker and the
+TYPE_CHECKING re-export in __init__ stay in place so type checkers and IDEs keep flagging it.
 """
 
 import ast
@@ -11,7 +10,6 @@ import os
 import pathlib
 import re
 import sys
-import types
 import warnings
 
 import pytest
@@ -78,11 +76,15 @@ DEPRECATED_TOOLS = [
     ("workflow", "workflow"),
 ]
 
+TOOL_MODULES = sorted({module_name for module_name, _ in DEPRECATED_TOOLS})
+
 # Only tools whose name matches their module can be re-exported: the re-export has to
 # resolve at runtime too, and ``from strands_tools import slack_send_message`` does not.
 REEXPORTED_TOOLS = [(module_name, attr) for module_name, attr in DEPRECATED_TOOLS if module_name == attr]
 
 SRC = pathlib.Path(strands_tools.__file__).parent
+
+REMOVED_MESSAGE = re.compile(r"^\w+ was removed in v0\.9\.0\. ")
 
 # Imports such as ``from strands.vended_tools import shell`` or
 # ``from strands.vended_tools import http_request, web_fetch`` inside migration messages.
@@ -97,7 +99,7 @@ DISPLAY_REQUIRED = {"use_computer"}
 
 
 def _unimportable_reason(module_name):
-    """Why a tool module cannot import on this platform, or None if it can."""
+    """Why a tool module fails to import for a reason other than its removal, or None."""
     if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
         return f"{module_name} does not import on windows (issue #17)"
     if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and module_name in DISPLAY_REQUIRED:
@@ -105,21 +107,19 @@ def _unimportable_reason(module_name):
     return None
 
 
-def _import_tool_module(module_name):
-    """Import a tool module, skipping the names that cannot import on this platform."""
+def _removal_error(module_name):
+    """The ImportError a removed tool raises, skipping names that cannot import on this platform."""
     if reason := _unimportable_reason(module_name):
         pytest.skip(reason)
-    return importlib.import_module(f"strands_tools.{module_name}")
+    with pytest.raises(ImportError, match=REMOVED_MESSAGE) as exc_info:
+        importlib.import_module(f"strands_tools.{module_name}")
+    return exc_info.value
 
 
-@pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
-def test_tool_carries_deprecation_marker(module_name, attr):
-    """Each deprecated tool exposes __deprecated__ naming the error-log release."""
-    tool = getattr(_import_tool_module(module_name), attr)
-
-    marker = getattr(tool, "__deprecated__", None)
-    assert marker is not None
-    assert "becomes an import error in v0.9.0" in marker
+@pytest.mark.parametrize("module_name", TOOL_MODULES)
+def test_tool_module_raises_import_error(module_name):
+    """Importing a removed tool raises ImportError naming the module and the removal release."""
+    assert _removal_error(module_name).name == f"strands_tools.{module_name}"
 
 
 def _reexports():
@@ -146,56 +146,31 @@ def _reexports():
 def test_deprecated_tool_is_reexported_for_type_checkers(module_name, attr):
     """``from strands_tools import <tool>`` must resolve to the tool for type checkers.
 
-    At runtime that import binds the module, which carries no marker, so the
-    TYPE_CHECKING re-export in __init__ is the only thing that lets a checker reach
-    the @deprecated tool.
+    The TYPE_CHECKING re-export in __init__ is the only thing that lets a checker reach
+    the @deprecated tool and flag the import before it fails at runtime.
     """
     assert (module_name, attr) in _reexports()
 
 
-def _from_import(name):
-    """Emulate ``from strands_tools import <name>``: attribute first, then submodule.
+def test_reexports_raise_the_removal_error_at_runtime():
+    """``from strands_tools import <tool>`` must fail with the removal message.
 
-    A plain getattr is order-dependent: it only succeeds if something else already
-    imported the submodule under its canonical name, which xdist workers do not
-    guarantee.
-    """
-    try:
-        return getattr(strands_tools, name)
-    except AttributeError:
-        return importlib.import_module(f"strands_tools.{name}")
-
-
-def test_reexports_resolve_at_runtime():
-    """A re-export a checker accepts but the runtime rejects would be worse than none.
-
-    ``slack_send_message`` is the case to watch: it carries @deprecated but is not a
-    submodule, so re-exporting it would make ``from strands_tools import
-    slack_send_message`` typecheck and then raise ImportError.
+    ``slack_send_message`` is the case to watch: it is not a submodule, so re-exporting it
+    would fail with a bare "cannot import name" instead of the migration path.
     """
     for _, attr in _reexports():
         if _unimportable_reason(attr):
             continue
-        _from_import(attr)
+        with pytest.raises(ImportError, match=REMOVED_MESSAGE):
+            exec(f"from strands_tools import {attr}", {})
 
 
 def test_importing_the_package_does_not_import_tool_modules():
-    """The re-export is typing-only, so it must not pull in tool modules or their extras."""
+    """The re-export is typing-only, so importing the package must not raise."""
     tree = ast.parse((SRC / "__init__.py").read_text(encoding="utf-8"))
 
     module_level_imports = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     assert [alias.name for node in module_level_imports for alias in node.names] == ["TYPE_CHECKING"]
-
-
-@pytest.mark.parametrize("module_name, attr", REEXPORTED_TOOLS)
-def test_reexport_leaves_runtime_binding_untouched(module_name, attr):
-    """The documented import still yields the module, so existing callers keep working."""
-    if reason := _unimportable_reason(module_name):
-        pytest.skip(reason)
-    imported = _from_import(module_name)
-
-    assert isinstance(imported, types.ModuleType)
-    assert hasattr(imported, attr)
 
 
 @pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
@@ -219,27 +194,15 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     assert isinstance(decorators[0].args[0], ast.Constant)
 
 
-@pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
-def test_decorator_literal_matches_the_logged_message(module_name, attr):
-    """The literal and _DEPRECATION_MESSAGE must not drift apart.
-
-    Inlining the literal means each message exists twice: once for type checkers and
-    once for the logger.warning users see at runtime.
-    """
-    module = _import_tool_module(module_name)
-
-    assert getattr(module, attr).__deprecated__ == module._DEPRECATION_MESSAGE
-
-
-@pytest.mark.parametrize("module_name, attr", DEPRECATED_TOOLS)
-def test_migration_import_resolves(module_name, attr):
-    """Every migration import must resolve without another deprecation warning.
+@pytest.mark.parametrize("module_name", TOOL_MODULES)
+def test_migration_import_resolves(module_name):
+    """Every migration import in the removal message must resolve without a deprecation warning.
 
     Compatibility aliases can still exist while warning users to migrate again.
     Check attribute access separately from module import so unrelated dependency
     warnings are not mistaken for a deprecated replacement.
     """
-    message = _import_tool_module(module_name)._DEPRECATION_MESSAGE
+    message = str(_removal_error(module_name))
 
     for module_path, symbols in MIGRATION_IMPORT.findall(message):
         module = importlib.import_module(module_path)

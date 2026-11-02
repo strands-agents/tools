@@ -1,7 +1,10 @@
+import pytest
+
+pytest.importorskip("strands_tools.a2a_client", reason="a2a_client was removed in v0.9.0", exc_type=ImportError)
+
 import warnings
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 from a2a.types import Message
 
 from strands_tools.a2a_client import DEFAULT_TIMEOUT, A2AClientToolProvider

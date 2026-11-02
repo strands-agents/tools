@@ -1,9 +1,14 @@
 """Tests for the handoff_to_user tool."""
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.handoff_to_user", reason="handoff_to_user was removed in v0.9.0", exc_type=ImportError
+)
+
 import logging
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import handoff_to_user

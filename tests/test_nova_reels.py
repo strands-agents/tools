@@ -1,10 +1,13 @@
 """Tests for the nova_reels tool."""
 
+import pytest
+
+pytest.importorskip("strands_tools.nova_reels", reason="nova_reels was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import os
 from unittest.mock import MagicMock, mock_open, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

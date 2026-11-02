@@ -96,6 +96,16 @@ from typing_extensions import deprecated
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "memory was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore "
+    "(Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have no store "
+    "equivalent and need a MemoryStore subclass. See https://strandsagents.com/docs/user-"
+    "guide/concepts/memory/bedrock-knowledge-base/",
+    name=__name__,
+)
+
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

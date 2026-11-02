@@ -2,12 +2,18 @@
 Tests for the base CodeInterpreter class.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.code_interpreter.code_interpreter",
+    reason="code_interpreter was removed in v0.9.0",
+    exc_type=ImportError,
+)
+
 import logging
 import warnings
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
 from strands_tools.code_interpreter.models import (

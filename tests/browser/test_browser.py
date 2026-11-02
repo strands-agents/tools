@@ -2,6 +2,10 @@
 Unit tests for the Browser base class using MockBrowser.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.browser", reason="browser was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import warnings
 from unittest.mock import AsyncMock, Mock, patch

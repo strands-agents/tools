@@ -84,6 +84,14 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "bright_data was removed in v0.9.0. Migration path: use Bright Data's official MCP server, documented"
+    " at https://docs.brightdata.com/ai/mcp-server/overview.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

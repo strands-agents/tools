@@ -1,10 +1,13 @@
 """Tests for the MemoryServiceClient class in memory.py."""
 
+import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
 import json
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 
 from strands_tools.memory import MemoryServiceClient

@@ -5,9 +5,11 @@ These tests directly call the mcp_client function rather than going through
 the Agent interface for simpler and more focused testing.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
+
+pytest.importorskip("strands_tools.mcp_client", reason="mcp_client was removed in v0.9.0", exc_type=ImportError)
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from strands_tools.mcp_client import ConnectionInfo, MCPTool, _connections, mcp_client
 

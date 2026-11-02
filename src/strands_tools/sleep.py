@@ -7,6 +7,14 @@ from typing import Union
 from strands import tool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "sleep was removed in v0.9.0. Migration path: use the sleep tool vended by strands-agents (from "
+    "strands.vended_tools import sleep).",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 # Default maximum sleep time (5 minutes)

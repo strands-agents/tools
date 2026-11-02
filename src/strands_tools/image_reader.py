@@ -47,6 +47,14 @@ from PIL import Image
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "image_reader was removed in v0.9.0. Migration path: pass the image to the agent as an image content "
+    "block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

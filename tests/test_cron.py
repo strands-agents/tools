@@ -2,9 +2,12 @@
 Tests for the cron tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.cron", reason="cron was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import cron

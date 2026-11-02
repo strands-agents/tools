@@ -68,6 +68,14 @@ from typing_extensions import deprecated
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "python_repl was removed in v0.9.0. Migration path: use the python_repl tool vended by strands-agents"
+    " (from strands.vended_tools import python_repl).",
+    name=__name__,
+)
+
+
 # Initialize logging and set paths
 logger = logging.getLogger(__name__)
 

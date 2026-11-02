@@ -69,6 +69,15 @@ from botocore.config import Config as BotocoreConfig
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "retrieve was removed in v0.9.0. Migration path: use MemoryManager with "
+    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so "
+    "filter results yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

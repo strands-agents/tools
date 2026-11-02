@@ -1,9 +1,11 @@
+import pytest
+
+pytest.importorskip("strands_tools.slack", reason="slack was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # Import the slack tool module
 from strands_tools.slack import (

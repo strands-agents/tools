@@ -2,10 +2,13 @@
 Tests for the speak tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.speak", reason="speak was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

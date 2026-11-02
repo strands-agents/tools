@@ -2,12 +2,15 @@
 Tests for the generate_image tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.generate_image", reason="generate_image was removed in v0.9.0", exc_type=ImportError)
+
 import base64
 import json
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

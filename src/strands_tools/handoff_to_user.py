@@ -44,6 +44,15 @@ from typing_extensions import deprecated
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "handoff_to_user was removed in v0.9.0. Migration path: use the handoff_to_user tool vended by "
+    "strands-agents (from strands.vended_tools import handoff_to_user), which pauses the agent with an "
+    "interrupt.",
+    name=__name__,
+)
+
+
 # Initialize logging and console
 logger = logging.getLogger(__name__)
 

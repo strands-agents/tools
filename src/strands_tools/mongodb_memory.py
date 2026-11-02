@@ -116,6 +116,15 @@ try:
 except Exception:
     _VERSION = None
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "mongodb_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over pymongo "
+    "(https://pymongo.readthedocs.io/) for MemoryManager (from strands.memory import MemoryManager). See "
+    "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores",
+    name=__name__,
+)
+
+
 _DRIVER_INFO = DriverInfo(name="Strands", version=_VERSION)
 
 

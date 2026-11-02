@@ -1,10 +1,12 @@
 """Comprehensive tests for RSS feed tool with improved organization."""
 
+import pytest
+
+pytest.importorskip("strands_tools.rss", reason="rss was removed in v0.9.0", exc_type=ImportError)
+
 import json
 import os
 from unittest.mock import MagicMock, call, mock_open, patch
-
-import pytest
 
 from src.strands_tools.rss import RSSManager, rss
 

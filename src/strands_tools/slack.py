@@ -134,6 +134,15 @@ from slack_sdk.web.client import WebClient
 from strands import Agent, tool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "slack was removed in v0.9.0. Migration path: use the official Slack MCP server, documented at "
+    "https://docs.slack.dev/ai/mcp-server/. For Socket Mode and real-time events, which MCP does not "
+    "cover, use slack_bolt directly.",
+    name=__name__,
+)
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 

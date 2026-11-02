@@ -2,12 +2,19 @@
 Tests for the generate_image_stability tool.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.generate_image_stability",
+    reason="generate_image_stability was removed in v0.9.0",
+    exc_type=ImportError,
+)
+
 import base64
 import logging
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import generate_image_stability

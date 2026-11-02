@@ -107,6 +107,15 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package"
+    " with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete "
+    "and history have no store equivalent. See https://docs.mem0.ai/integrations/strands",
+    name=__name__,
+)
+
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

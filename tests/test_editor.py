@@ -2,11 +2,14 @@
 Tests for the editor tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.editor", reason="editor was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import shutil
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import editor

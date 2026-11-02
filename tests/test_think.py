@@ -2,6 +2,10 @@
 Tests for the think tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.think", reason="think was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, patch
 
 from strands.agent import AgentResult

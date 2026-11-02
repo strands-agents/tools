@@ -2,6 +2,10 @@
 Tests for the mongodb_memory tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.mongodb_memory", reason="mongodb_memory was removed in v0.9.0", exc_type=ImportError)
+
 import inspect
 import json
 import os
@@ -9,7 +13,6 @@ import warnings
 from unittest import mock
 from unittest.mock import MagicMock
 
-import pytest
 from strands import Agent
 
 from src.strands_tools.mongodb_memory import MongoDBMemoryTool, mongodb_memory

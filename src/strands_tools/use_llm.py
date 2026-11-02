@@ -50,6 +50,14 @@ from strands.telemetry.metrics import metrics_to_string
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "use_llm was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+    "strands.vended_tools import subagent).",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

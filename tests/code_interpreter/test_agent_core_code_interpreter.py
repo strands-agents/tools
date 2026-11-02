@@ -2,9 +2,15 @@
 Tests for the AgentCoreCodeInterpreter class.
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
+
+pytest.importorskip(
+    "strands_tools.code_interpreter.agent_core_code_interpreter",
+    reason="code_interpreter was removed in v0.9.0",
+    exc_type=ImportError,
+)
+
+from unittest.mock import MagicMock, patch
 
 from strands_tools.code_interpreter.agent_core_code_interpreter import (
     AgentCoreCodeInterpreter,

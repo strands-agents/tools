@@ -38,6 +38,14 @@ from strands import tool
 from strands.types.tools import AgentTool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "A2AClientToolProvider was removed in v0.9.0. Migration path: use the a2a_client tool vended by "
+    "strands-agents (from strands.vended_tools import make_a2a_client).",
+    name=__name__,
+)
+
+
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)

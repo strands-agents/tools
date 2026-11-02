@@ -2,9 +2,12 @@
 Tests for the graph tool using the Strands SDK Graph implementation.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.graph", reason="graph was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import graph as graph_module

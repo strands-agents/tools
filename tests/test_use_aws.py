@@ -2,10 +2,13 @@
 Tests for the use_aws tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.use_aws", reason="use_aws was removed in v0.9.0", exc_type=ImportError)
+
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 

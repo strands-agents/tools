@@ -72,6 +72,16 @@ from typing_extensions import deprecated
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "shell was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-"
+    "agents (from strands.vended_tools import shell). This does change the security boundary, in the "
+    "tightening direction: shell routes through the agent's configured sandbox rather than running "
+    "directly on the host, so commands that reached the host directly may no longer work.",
+    name=__name__,
+)
+
+
 # Initialize logging
 logger = logging.getLogger(__name__)
 

@@ -2,11 +2,14 @@
 Tests for the image_reader tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.image_reader", reason="image_reader was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import image_reader

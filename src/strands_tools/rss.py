@@ -13,6 +13,13 @@ import requests
 from strands import tool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "rss was removed in v0.9.0. There is no replacement tool; fetch and parse feeds directly with feedparser.",
+    name=__name__,
+)
+
+
 # Configure logging and defaults
 logger = logging.getLogger(__name__)
 

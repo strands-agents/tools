@@ -2,9 +2,11 @@
 Unit tests for the AgentCoreBrowser implementation.
 """
 
-from unittest.mock import Mock
-
 import pytest
+
+pytest.importorskip("strands_tools.browser", reason="browser was removed in v0.9.0", exc_type=ImportError)
+
+from unittest.mock import Mock
 
 from strands_tools.browser import AgentCoreBrowser, Browser
 

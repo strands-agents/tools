@@ -2,10 +2,13 @@
 Tests for the sleep tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.sleep", reason="sleep was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest import mock
 
-import pytest
 from strands import Agent
 
 from strands_tools import sleep

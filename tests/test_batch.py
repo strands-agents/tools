@@ -1,6 +1,8 @@
-from unittest.mock import MagicMock
-
 import pytest
+
+pytest.importorskip("strands_tools.batch", reason="batch was removed in v0.9.0", exc_type=ImportError)
+
+from unittest.mock import MagicMock
 
 from strands_tools import batch
 

@@ -79,6 +79,14 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "nova_reels was removed in v0.9.0. There is no replacement tool; Amazon Nova Reel reached end-of-life"
+    " on Amazon Bedrock on September 30, 2026, so this tool no longer works.",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

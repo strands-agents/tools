@@ -2,11 +2,14 @@
 Tests for the Bright Data tool using the tool decorator interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.bright_data", reason="bright_data was removed in v0.9.0", exc_type=ImportError)
+
 import json
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import bright_data

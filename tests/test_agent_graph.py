@@ -3,11 +3,14 @@ Tests for the agent_graph tool.
 """
 
 # isort: skip_file
+import pytest
+
+pytest.importorskip("strands_tools.agent_graph", reason="agent_graph was removed in v0.9.0", exc_type=ImportError)
+
 import time  # noqa: F401 - used in patches
 import uuid  # noqa: F401 - used in patches
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools.agent_graph import (

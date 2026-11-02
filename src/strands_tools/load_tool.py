@@ -59,6 +59,14 @@ from typing_extensions import deprecated
 
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "load_tool was removed in v0.9.0. There is no replacement tool; pass tools to the Agent directly, or "
+    "use Agent(load_tools_from_directory=True) to load them from ./tools/.",
+    name=__name__,
+)
+
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

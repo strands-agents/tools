@@ -84,6 +84,14 @@ from strands_tools.utils.data_util import convert_datetime_to_str
 from strands_tools.utils.generate_schema_util import generate_input_schema
 from strands_tools.utils.user_input import get_user_input
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "use_aws was removed in v0.9.0. Migration path: use the AWS MCP Server "
+    "(https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html).",
+    name=__name__,
+)
+
+
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (

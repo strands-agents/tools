@@ -98,6 +98,16 @@ from elasticsearch import Elasticsearch
 from strands import tool
 from typing_extensions import deprecated
 
+# Removed in v0.9.0; the implementation below is kept but no longer importable.
+raise ImportError(
+    "elasticsearch_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over "
+    "elasticsearch-py (https://www.elastic.co/docs/reference/elasticsearch/clients/python) for "
+    "MemoryManager (from strands.memory import MemoryManager). See https://strandsagents.com/docs/user-"
+    "guide/sdk/memory/managing-memory/#custom-stores",
+    name=__name__,
+)
+
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

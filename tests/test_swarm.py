@@ -2,10 +2,13 @@
 Tests for the swarm tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.swarm", reason="swarm was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import swarm as swarm_module
