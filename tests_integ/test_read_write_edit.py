@@ -1,8 +1,13 @@
+# flake8: noqa: E402
+
+import pytest
+
+pytest.importorskip("strands_tools.editor", reason="editor was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import re
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 from strands_tools import editor, file_read, file_write
 

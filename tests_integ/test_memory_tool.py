@@ -1,3 +1,4 @@
+# flake8: noqa: E402
 """
 Integration test for the Bedrock Knowledge Base (memory) tool.
 
@@ -5,12 +6,15 @@ This test creates real AWS resources (IAM Role, OpenSearch Collection, Bedrock K
 to validate the end-to-end functionality of the memory tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import time
 import uuid
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 from strands_tools import memory
 from .utils.knowledge_base_util import KnowledgeBaseHelper

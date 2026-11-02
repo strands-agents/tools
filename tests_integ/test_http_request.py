@@ -1,9 +1,14 @@
+# flake8: noqa: E402
 """Integration tests for HTTP request functionality using Strands Agent.
 
 This module contains integration tests that verify the HTTP request tool's ability
 to handle various HTTP methods (GET, POST, PUT) and operations like downloading
 files and interacting with AWS S3 services.
 """
+
+import pytest
+
+pytest.importorskip("strands_tools.http_request", reason="http_request was removed in v0.9.0", exc_type=ImportError)
 
 import json
 import os
@@ -12,7 +17,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import pytest
 from strands import Agent
 from strands_tools import http_request
 

@@ -1,15 +1,19 @@
+# flake8: noqa: E402
 """
 End-to-end test:
   • create / re-use a Bedrock KB
   • let Agent decide to call retrieve and bring it back
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import time
 from typing import Any, Generator
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 from strands_tools import memory, retrieve
 from .utils.knowledge_base_util import KnowledgeBaseHelper

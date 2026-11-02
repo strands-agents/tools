@@ -1,6 +1,11 @@
+# flake8: noqa: E402
 """
 Integration tests for browser implementations.
 """
+
+import pytest
+
+pytest.importorskip("strands_tools.browser", reason="browser was removed in v0.9.0", exc_type=ImportError)
 
 from strands_tools.browser import LocalChromiumBrowser, AgentCoreBrowser
 from strands import Agent

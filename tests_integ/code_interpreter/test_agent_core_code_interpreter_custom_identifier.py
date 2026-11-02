@@ -1,3 +1,4 @@
+# flake8: noqa: E402
 """
 Integration tests for the AgentCoreCodeInterpreter custom identifier functionality.
 
@@ -7,11 +8,14 @@ These tests verify end-to-end functionality with custom identifiers, including:
 - Error scenarios with meaningful error messages
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.code_interpreter", reason="code_interpreter was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, patch
 import time
 
-import pytest
 from strands import Agent
 from strands.agent import AgentResult
 from strands_tools.code_interpreter import AgentCoreCodeInterpreter

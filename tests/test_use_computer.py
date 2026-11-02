@@ -1,16 +1,17 @@
 # flake8: noqa: E402
 
-import pytest
-
-pytest.importorskip("strands_tools.use_computer", reason="use_computer was removed in v0.9.0", exc_type=ImportError)
-
 import sys
 from unittest import mock
 from unittest.mock import MagicMock, mock_open, patch
 
+# Mock before importorskip: on headless Linux the real pyautogui raises KeyError: 'DISPLAY'.
 sys.modules["pyautogui"] = mock.MagicMock()
 sys.modules["mouseinfo"] = mock.MagicMock()
 sys.modules["cv2"] = mock.MagicMock()
+
+import pytest
+
+pytest.importorskip("strands_tools.use_computer", reason="use_computer was removed in v0.9.0", exc_type=ImportError)
 
 import logging
 import platform

@@ -1,10 +1,15 @@
+# flake8: noqa: E402
+
+import pytest
+
+pytest.importorskip("strands_tools.generate_image_stability", reason="generate_image_stability was removed in v0.9.0", exc_type=ImportError)
+
 import base64
 import os
 import re
 import shutil
 from unittest import mock
 
-import pytest
 from strands import Agent
 from strands_tools import generate_image_stability
 
