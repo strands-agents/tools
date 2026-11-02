@@ -1,3 +1,13 @@
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "current_time was removed in v0.9.0. Migration path: inject the current time as context with ContextInjector "
+        "instead of calling a tool. See https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/",
+        name=__name__,
+    )
+
 import logging
 import os
 from datetime import datetime
@@ -8,21 +18,11 @@ from zoneinfo import ZoneInfo
 from strands import tool
 from typing_extensions import deprecated
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "current_time was removed in v0.9.0. Migration path: inject the current time as context with "
-    "ContextInjector instead of calling a tool. See https://strandsagents.com/docs/user-"
-    "guide/concepts/plugins/context-injector/",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "current_time is deprecated. This warning becomes an import error in v0.9.0. Migration path: inject the current "
-    "time as context with ContextInjector instead of calling a tool. See "
-    "https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
+    "current_time was removed in v0.9.0. Migration path: inject the current time as context with ContextInjector "
+    "instead of calling a tool. See https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
 )
 
 
@@ -33,9 +33,8 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "current_time is deprecated. This warning becomes an import error in v0.9.0. Migration path: inject the current "
-    "time as context with ContextInjector instead of calling a tool. See "
-    "https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
+    "current_time was removed in v0.9.0. Migration path: inject the current time as context with ContextInjector "
+    "instead of calling a tool. See https://strandsagents.com/docs/user-guide/concepts/plugins/context-injector/"
 )
 def current_time(timezone: str = None) -> str:
     """

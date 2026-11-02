@@ -65,7 +65,7 @@ def test_tool_logs_deprecation_warning(mock_boto3_client, caplog):
         provider.agent_core_memory(action="list")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "import AgentCoreMemoryStore" in caplog.text
 
 

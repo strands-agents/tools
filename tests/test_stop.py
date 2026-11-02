@@ -96,7 +96,7 @@ def test_stop_logs_deprecation_warning(caplog):
         stop.stop(tool={"toolUseId": "deprecation", "input": {}}, request_state={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_stop, stop" in caplog.text
 
 

@@ -38,6 +38,16 @@ result = agent.tool.image_reader(image_path="~/Documents/images/photo.png")
 See the image_reader function docstring for more details on parameters and return format.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "image_reader was removed in v0.9.0. Migration path: pass the image to the agent as an image content block. "
+        "See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/",
+        name=__name__,
+    )
+
 import logging
 import os
 from os.path import expanduser
@@ -47,19 +57,11 @@ from PIL import Image
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "image_reader was removed in v0.9.0. Migration path: pass the image to the agent as an image content "
-    "block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
-    "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
+    "image_reader was removed in v0.9.0. Migration path: pass the image to the agent as an image content block. See "
+    "https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
 )
 
 TOOL_SPEC = {
@@ -86,8 +88,8 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "image_reader is deprecated. This warning becomes an import error in v0.9.0. Migration path: pass the image to "
-    "the agent as an image content block. See https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
+    "image_reader was removed in v0.9.0. Migration path: pass the image to the agent as an image content block. See "
+    "https://strandsagents.com/docs/user-guide/sdk/agents/prompts/"
 )
 def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

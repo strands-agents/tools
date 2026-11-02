@@ -561,7 +561,7 @@ def test_agent_graph_logs_deprecation_warning(caplog):
         agent_graph(tool={"toolUseId": "deprecation", "input": {"action": "unknown_action"}})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import graph, make_graph" in caplog.text
 
 

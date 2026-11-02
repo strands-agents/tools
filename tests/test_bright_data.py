@@ -36,7 +36,7 @@ def test_bright_data_logs_deprecation_warning(caplog):
             bright_data.bright_data(action="")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "Bright Data's official MCP server" in caplog.text
 
 

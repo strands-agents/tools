@@ -45,6 +45,19 @@ agent.tool.agent_core_memory(
 ```
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "AgentCoreMemoryToolProvider was removed in v0.9.0. Migration path: use MemoryManager with the "
+        "AgentCoreMemoryStore vended by bedrock-agentcore (from "
+        "bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record has no "
+        "store equivalent (set writable=True, extraction=True instead); list, get and delete need "
+        "MemorySessionManager. See https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/",
+        name=__name__,
+    )
+
 import json
 import logging
 from datetime import datetime, timezone
@@ -57,17 +70,6 @@ from botocore.config import Config as BotocoreConfig
 from strands import tool
 from strands.types.tools import AgentTool
 from typing_extensions import deprecated
-
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "AgentCoreMemoryToolProvider was removed in v0.9.0. Migration path: use MemoryManager with the "
-    "AgentCoreMemoryStore vended by bedrock-agentcore (from "
-    "bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record "
-    "has no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
-    "MemorySessionManager. See https://strandsagents.com/docs/integrations/memory-stores/agentcore-"
-    "memory-store/",
-    name=__name__,
-)
 
 
 # Define memory actions as an Enum
@@ -95,11 +97,10 @@ REQUIRED_PARAMS = {
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
-    "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
-    "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record has "
-    "no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
-    "MemorySessionManager. See "
+    "AgentCoreMemoryToolProvider was removed in v0.9.0. Migration path: use MemoryManager with the "
+    "AgentCoreMemoryStore vended by bedrock-agentcore (from bedrock_agentcore.memory.integrations.strands.memorystore "
+    "import AgentCoreMemoryStore). Note record has no store equivalent (set writable=True, extraction=True instead); "
+    "list, get and delete need MemorySessionManager. See "
     "https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/"
 )
 
@@ -113,11 +114,10 @@ DEFAULT_REGION = "us-west-2"
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "AgentCoreMemoryToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
-    "MemoryManager with the AgentCoreMemoryStore vended by bedrock-agentcore "
-    "(from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore). Note record has "
-    "no store equivalent (set writable=True, extraction=True instead); list, get and delete need "
-    "MemorySessionManager. See "
+    "AgentCoreMemoryToolProvider was removed in v0.9.0. Migration path: use MemoryManager with the "
+    "AgentCoreMemoryStore vended by bedrock-agentcore (from bedrock_agentcore.memory.integrations.strands.memorystore "
+    "import AgentCoreMemoryStore). Note record has no store equivalent (set writable=True, extraction=True instead); "
+    "list, get and delete need MemorySessionManager. See "
     "https://strandsagents.com/docs/integrations/memory-stores/agentcore-memory-store/",
     category=None,
 )

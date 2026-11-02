@@ -48,6 +48,16 @@ def my_custom_tool(param1: str) -> str:
 See the load_tool function docstring for more details on the tool file structure requirements.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "load_tool was removed in v0.9.0. There is no replacement tool; pass tools to the Agent directly, or use "
+        "Agent(load_tools_from_directory=True) to load them from ./tools/.",
+        name=__name__,
+    )
+
 import logging
 import os
 import traceback
@@ -59,20 +69,12 @@ from typing_extensions import deprecated
 
 from strands_tools.utils.user_input import get_user_input
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "load_tool was removed in v0.9.0. There is no replacement tool; pass tools to the Agent directly, or "
-    "use Agent(load_tools_from_directory=True) to load them from ./tools/.",
-    name=__name__,
-)
-
-
 # Set up logging
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
+    "load_tool was removed in v0.9.0. There is no replacement tool; pass tools to the Agent directly, or use "
+    "Agent(load_tools_from_directory=True) to load them from ./tools/."
 )
 
 
@@ -83,8 +85,8 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "load_tool is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "pass tools to the Agent directly, or use Agent(load_tools_from_directory=True) to load them from ./tools/."
+    "load_tool was removed in v0.9.0. There is no replacement tool; pass tools to the Agent directly, or use "
+    "Agent(load_tools_from_directory=True) to load them from ./tools/."
 )
 def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
     """

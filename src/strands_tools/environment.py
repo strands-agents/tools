@@ -68,6 +68,19 @@ Configuration:
 See the environment function docstring for more details on available actions and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "environment was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by "
+        "strands-agents (from strands.vended_tools import shell). This does change the security boundary: environment "
+        "masked sensitive values and guarded PROTECTED_VARS as an operator-controlled policy, while shell executes "
+        "arbitrary commands, so review it against your threat model before switching. Note also that a child shell "
+        "cannot mutate the agent's own environment, so set variables in the process that launches the agent.",
+        name=__name__,
+    )
+
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -82,27 +95,14 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util, user_input
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "environment was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by "
-    "strands-agents (from strands.vended_tools import shell). This does change the security boundary: "
-    "environment masked sensitive values and guarded PROTECTED_VARS as an operator-controlled policy, "
-    "while shell executes arbitrary commands, so review it against your threat model before switching. "
-    "Note also that a child shell cannot mutate the agent's own environment, so set variables in the "
-    "process that launches the agent.",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "environment is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use "
-    "the shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
-    "boundary: environment masked sensitive values and guarded PROTECTED_VARS as an operator-controlled policy, "
-    "while shell executes arbitrary commands, so review it against your threat model before switching. Note also "
-    "that a child shell cannot mutate the agent's own environment, so set variables in the process that launches "
-    "the agent."
+    "environment was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-agents "
+    "(from strands.vended_tools import shell). This does change the security boundary: environment masked sensitive "
+    "values and guarded PROTECTED_VARS as an operator-controlled policy, while shell executes arbitrary commands, so "
+    "review it against your threat model before switching. Note also that a child shell cannot mutate the agent's own "
+    "environment, so set variables in the process that launches the agent."
 )
 
 
@@ -419,12 +419,11 @@ def show_operation_result(console: Console, success: bool, message: str) -> None
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "environment is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use "
-    "the shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
-    "boundary: environment masked sensitive values and guarded PROTECTED_VARS as an operator-controlled policy, "
-    "while shell executes arbitrary commands, so review it against your threat model before switching. Note also "
-    "that a child shell cannot mutate the agent's own environment, so set variables in the process that launches "
-    "the agent."
+    "environment was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-agents "
+    "(from strands.vended_tools import shell). This does change the security boundary: environment masked sensitive "
+    "values and guarded PROTECTED_VARS as an operator-controlled policy, while shell executes arbitrary commands, so "
+    "review it against your threat model before switching. Note also that a child shell cannot mutate the agent's own "
+    "environment, so set variables in the process that launches the agent."
 )
 def environment(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

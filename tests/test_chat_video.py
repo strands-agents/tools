@@ -334,7 +334,7 @@ def test_chat_video_logs_deprecation_warning(caplog):
         chat_video.chat_video(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "docs.twelvelabs.io" in caplog.text
 
 

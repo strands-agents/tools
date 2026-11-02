@@ -90,6 +90,17 @@ export OPENSEARCH_HOST="..."           # Use OpenSearch
 ```
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package with "
+        "MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete and history have "
+        "no store equivalent. See https://docs.mem0.ai/integrations/strands",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -107,22 +118,13 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package"
-    " with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete "
-    "and history have no store equivalent. See https://docs.mem0.ai/integrations/strands",
-    name=__name__,
-)
-
-
 # Set up logging
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
-    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
-    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
+    "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package with "
+    "MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete and history have no "
+    "store equivalent. See https://docs.mem0.ai/integrations/strands"
 )
 
 # Initialize Rich console
@@ -729,9 +731,9 @@ def format_store_graph_response(memories: List[Dict]) -> Panel:
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
-    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
-    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands",
+    "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package with "
+    "MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete and history have no "
+    "store equivalent. See https://docs.mem0.ai/integrations/strands",
     category=None,
 )
 class Mem0MemoryTool:
@@ -811,9 +813,9 @@ class Mem0MemoryTool:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "mem0_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Mem0MemoryStore "
-    "from the mem0-strands package with MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). "
-    "Note get, list, delete and history have no store equivalent. See https://docs.mem0.ai/integrations/strands"
+    "mem0_memory was removed in v0.9.0. Migration path: use Mem0MemoryStore from the mem0-strands package with "
+    "MemoryManager (Agent(memory_manager=MemoryManager(stores=[store]))). Note get, list, delete and history have no "
+    "store equivalent. See https://docs.mem0.ai/integrations/strands"
 )
 def mem0_memory(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """Standalone agent-facing tool (single-tenant).

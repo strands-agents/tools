@@ -20,6 +20,16 @@ For OCR functionality, the module uses Tesseract OCR via the pytesseract library
 with image preprocessing optimizations to improve text recognition accuracy.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "use_computer was removed in v0.9.0. There is no replacement tool; drive pyautogui and pytesseract directly "
+        "from a custom tool.",
+        name=__name__,
+    )
+
 import inspect
 import logging
 import os
@@ -53,19 +63,12 @@ if platform.system().lower() == "darwin":
         kCGMouseEventClickState,
     )
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "use_computer was removed in v0.9.0. There is no replacement tool; drive pyautogui and pytesseract "
-    "directly from a custom tool.",
-    name=__name__,
-)
-
 
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "drive pyautogui and pytesseract directly from a custom tool."
+    "use_computer was removed in v0.9.0. There is no replacement tool; drive pyautogui and pytesseract directly from a "
+    "custom tool."
 )
 
 
@@ -924,8 +927,8 @@ def handle_analyze_screenshot_pytesseract(
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "use_computer is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "drive pyautogui and pytesseract directly from a custom tool."
+    "use_computer was removed in v0.9.0. There is no replacement tool; drive pyautogui and pytesseract directly from a "
+    "custom tool."
 )
 def use_computer(
     action: str,

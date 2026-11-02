@@ -44,6 +44,16 @@ specific_entry = agent.tool.journal(
 See the journal function docstring for more details on available actions and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "journal was removed in v0.9.0. Migration path: use `from strands.vended_tools import notebook` for "
+        "session-scoped notes and tasks.",
+        name=__name__,
+    )
+
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -60,19 +70,11 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "journal was removed in v0.9.0. Migration path: use `from strands.vended_tools import notebook` for "
-    "session-scoped notes and tasks.",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "journal is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
-    "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
+    "journal was removed in v0.9.0. Migration path: use `from strands.vended_tools import notebook` for session-scoped "
+    "notes and tasks."
 )
 
 TOOL_SPEC = {
@@ -222,8 +224,8 @@ def create_rich_response(console: Console, action: str, result: Dict[str, Any]) 
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "journal is deprecated. This warning becomes an import error in v0.9.0. Migration path: use "
-    "`from strands.vended_tools import notebook` for session-scoped notes and tasks."
+    "journal was removed in v0.9.0. Migration path: use `from strands.vended_tools import notebook` for session-scoped "
+    "notes and tasks."
 )
 def journal(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

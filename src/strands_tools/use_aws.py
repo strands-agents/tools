@@ -64,6 +64,16 @@ Security Recommendations:
 See the use_aws function docstring for more details on parameters and usage.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "use_aws was removed in v0.9.0. Migration path: use the AWS MCP Server "
+        "(https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html).",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -84,19 +94,11 @@ from strands_tools.utils.data_util import convert_datetime_to_str
 from strands_tools.utils.generate_schema_util import generate_input_schema
 from strands_tools.utils.user_input import get_user_input
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "use_aws was removed in v0.9.0. Migration path: use the AWS MCP Server "
-    "(https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html).",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "AWS MCP Server (https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
+    "use_aws was removed in v0.9.0. Migration path: use the AWS MCP Server "
+    "(https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
 )
 
 MUTATIVE_OPERATIONS = [
@@ -371,8 +373,8 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "use_aws is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "AWS MCP Server (https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
+    "use_aws was removed in v0.9.0. Migration path: use the AWS MCP Server "
+    "(https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html)."
 )
 def use_aws(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

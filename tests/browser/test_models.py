@@ -2,6 +2,10 @@
 Tests for browser models with actual logic methods.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.browser", reason="browser was removed in v0.9.0", exc_type=ImportError)
+
 from strands_tools.browser.models import BrowserSession
 
 

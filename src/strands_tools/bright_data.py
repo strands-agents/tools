@@ -69,6 +69,16 @@ agent.tool.bright_data(
 ```
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "bright_data was removed in v0.9.0. Migration path: use Bright Data's official MCP server, documented at "
+        "https://docs.brightdata.com/ai/mcp-server/overview.",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -84,19 +94,11 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "bright_data was removed in v0.9.0. Migration path: use Bright Data's official MCP server, documented"
-    " at https://docs.brightdata.com/ai/mcp-server/overview.",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "bright_data is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Bright Data's "
-    "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
+    "bright_data was removed in v0.9.0. Migration path: use Bright Data's official MCP server, documented at "
+    "https://docs.brightdata.com/ai/mcp-server/overview."
 )
 
 console = console_util.create()
@@ -411,8 +413,8 @@ class BrightDataClient:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "bright_data is deprecated. This warning becomes an import error in v0.9.0. Migration path: use Bright Data's "
-    "official MCP server, documented at https://docs.brightdata.com/ai/mcp-server/overview."
+    "bright_data was removed in v0.9.0. Migration path: use Bright Data's official MCP server, documented at "
+    "https://docs.brightdata.com/ai/mcp-server/overview."
 )
 def bright_data(
     action: str,

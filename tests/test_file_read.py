@@ -374,7 +374,7 @@ def test_file_read_logs_deprecation_warning(temp_test_file, caplog):
         file_read.file_read(tool={"toolUseId": "deprecation", "input": {"path": temp_test_file, "mode": "view"}})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_read, read" in caplog.text
 
 

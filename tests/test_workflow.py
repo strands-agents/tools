@@ -788,7 +788,7 @@ def test_workflow_logs_deprecation_warning(mock_parent_agent, caplog):
         workflow_module.workflow(action="invalid_action", agent=mock_parent_agent)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import graph, make_graph" in caplog.text
 
 

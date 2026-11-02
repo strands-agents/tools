@@ -47,6 +47,18 @@ Configuration:
 
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "shell was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-agents "
+        "(from strands.vended_tools import shell). This does change the security boundary, in the tightening "
+        "direction: shell routes through the agent's configured sandbox rather than running directly on the host, so "
+        "commands that reached the host directly may no longer work.",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -72,24 +84,14 @@ from typing_extensions import deprecated
 from strands_tools.utils import console_util
 from strands_tools.utils.user_input import get_user_input
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "shell was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-"
-    "agents (from strands.vended_tools import shell). This does change the security boundary, in the "
-    "tightening direction: shell routes through the agent's configured sandbox rather than running "
-    "directly on the host, so commands that reached the host directly may no longer work.",
-    name=__name__,
-)
-
-
 # Initialize logging
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "shell is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use the "
-    "shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
-    "boundary, in the tightening direction: shell routes through the agent's configured sandbox rather than running "
-    "directly on the host, so commands that reached the host directly may no longer work."
+    "shell was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-agents (from "
+    "strands.vended_tools import shell). This does change the security boundary, in the tightening direction: shell "
+    "routes through the agent's configured sandbox rather than running directly on the host, so commands that reached "
+    "the host directly may no longer work."
 )
 
 
@@ -434,10 +436,10 @@ def format_summary(results: List[Dict[str, Any]], parallel: bool) -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "shell is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use the "
-    "shell tool vended by strands-agents (from strands.vended_tools import shell). This does change the security "
-    "boundary, in the tightening direction: shell routes through the agent's configured sandbox rather than running "
-    "directly on the host, so commands that reached the host directly may no longer work."
+    "shell was removed in v0.9.0. To achieve similar functionality, use the shell tool vended by strands-agents (from "
+    "strands.vended_tools import shell). This does change the security boundary, in the tightening direction: shell "
+    "routes through the agent's configured sandbox rather than running directly on the host, so commands that reached "
+    "the host directly may no longer work."
 )
 def shell(
     command: Union[str, List[Union[str, Dict[str, Any]]]],

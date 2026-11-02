@@ -6,10 +6,8 @@ TYPE_CHECKING re-export in __init__ stay in place so type checkers and IDEs keep
 
 import ast
 import importlib
-import os
 import pathlib
 import re
-import sys
 import warnings
 
 import pytest
@@ -90,30 +88,46 @@ REMOVED_MESSAGE = re.compile(r"^\w+ was removed in v0\.9\.0\. ")
 # ``from strands.vended_tools import http_request, web_fetch`` inside migration messages.
 MIGRATION_IMPORT = re.compile(r"from ([\w.]+) import ([\w., ]+)")
 
-# shell and python_repl pull in termios/pty, which do not exist on Windows. Same stance
-# as test_shell.py: skipped there until issue #17 is resolved.
-WINDOWS_UNSUPPORTED = {"python_repl", "shell"}
-
-# use_computer imports cv2 and pyautogui, which need a display on Linux.
-DISPLAY_REQUIRED = {"use_computer"}
-
-
-def _unimportable_reason(module_name):
-    """Why a tool module fails to import for a reason other than its removal, or None."""
-    if os.name == "nt" and module_name in WINDOWS_UNSUPPORTED:
-        return f"{module_name} does not import on windows (issue #17)"
-    if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and module_name in DISPLAY_REQUIRED:
-        return f"{module_name} does not import without a display"
-    return None
-
 
 def _removal_error(module_name):
-    """The ImportError a removed tool raises, skipping names that cannot import on this platform."""
-    if reason := _unimportable_reason(module_name):
-        pytest.skip(reason)
+    """The ImportError a removed tool raises."""
     with pytest.raises(ImportError, match=REMOVED_MESSAGE) as exc_info:
         importlib.import_module(f"strands_tools.{module_name}")
     return exc_info.value
+
+
+def _module_of(path):
+    return ".".join(path.relative_to(SRC).with_suffix("").parts)
+
+
+def _tree(module_name):
+    return ast.parse((SRC / f"{module_name.replace('.', '/')}.py").read_text(encoding="utf-8"))
+
+
+def _is_removal_guard(node):
+    """``if not TYPE_CHECKING: raise ImportError(...)``."""
+    return (
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.UnaryOp)
+        and isinstance(node.test.op, ast.Not)
+        and getattr(node.test.operand, "id", None) == "TYPE_CHECKING"
+        and isinstance(node.body[0], ast.Raise)
+    )
+
+
+def _message_literals(module_name):
+    """Every _DEPRECATION_MESSAGE value and @deprecated message in the module's source."""
+    literals = []
+    for node in ast.walk(_tree(module_name)):
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "_DEPRECATION_MESSAGE" for t in node.targets):
+            literals.append(node.value.value)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            literals += [
+                d.args[0].value
+                for d in node.decorator_list
+                if isinstance(d, ast.Call) and getattr(d.func, "id", None) == "deprecated"
+            ]
+    return literals
 
 
 @pytest.mark.parametrize("module_name", TOOL_MODULES)
@@ -159,8 +173,6 @@ def test_reexports_raise_the_removal_error_at_runtime():
     would fail with a bare "cannot import name" instead of the migration path.
     """
     for _, attr in _reexports():
-        if _unimportable_reason(attr):
-            continue
         with pytest.raises(ImportError, match=REMOVED_MESSAGE):
             exec(f"from strands_tools import {attr}", {})
 
@@ -180,11 +192,9 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
     Passing the shared _DEPRECATION_MESSAGE constant instead silently disables the
     check, so pin the literal in place.
     """
-    tree = ast.parse((SRC / f"{module_name.replace('.', '/')}.py").read_text(encoding="utf-8"))
-
     decorators = [
         decorator
-        for node in ast.walk(tree)
+        for node in ast.walk(_tree(module_name))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == attr
         for decorator in node.decorator_list
         if isinstance(decorator, ast.Call) and getattr(decorator.func, "id", None) == "deprecated"
@@ -192,6 +202,42 @@ def test_deprecation_message_is_a_literal_in_the_decorator(module_name, attr):
 
     assert len(decorators) == 1
     assert isinstance(decorators[0].args[0], ast.Constant)
+
+
+def test_every_removed_module_is_covered():
+    """A module that raises the removal error but is missing from DEPRECATED_TOOLS goes untested."""
+    guarded = {
+        _module_of(path)
+        for path in SRC.rglob("*.py")
+        if any(map(_is_removal_guard, ast.parse(path.read_text(encoding="utf-8")).body))
+    }
+    assert guarded == set(TOOL_MODULES)
+
+
+@pytest.mark.parametrize("module_name", TOOL_MODULES)
+def test_removal_guard_precedes_every_import(module_name):
+    """Raising before the tool's own imports shows the message even when its extra is not installed."""
+    body = [node for node in _tree(module_name).body if not isinstance(node, ast.Expr)]  # skip the docstring
+
+    assert isinstance(body[0], ast.ImportFrom) and [alias.name for alias in body[0].names] == ["TYPE_CHECKING"]
+    assert _is_removal_guard(body[1])
+
+
+MESSAGE_MODULES = sorted(
+    _module_of(path) for path in SRC.rglob("*.py") if "@deprecated(" in path.read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize("module_name", MESSAGE_MODULES)
+def test_static_messages_match_the_removal_error(module_name):
+    """Type checkers show the @deprecated text, so it must be the exact message the import raises.
+
+    Comparing against the module's own literals pins both the tool name and its migration path.
+    """
+    literals = _message_literals(module_name)
+
+    assert literals
+    assert set(literals) == {str(_removal_error(module_name))}
 
 
 @pytest.mark.parametrize("module_name", TOOL_MODULES)

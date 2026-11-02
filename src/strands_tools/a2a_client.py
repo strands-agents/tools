@@ -26,6 +26,16 @@ Usage Examples:
         ... )
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "A2AClientToolProvider was removed in v0.9.0. Migration path: use the a2a_client tool vended by strands-agents "
+        "(from strands.vended_tools import make_a2a_client).",
+        name=__name__,
+    )
+
 import asyncio
 import logging
 from typing import Any
@@ -38,21 +48,13 @@ from strands import tool
 from strands.types.tools import AgentTool
 from typing_extensions import deprecated
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "A2AClientToolProvider was removed in v0.9.0. Migration path: use the a2a_client tool vended by "
-    "strands-agents (from strands.vended_tools import make_a2a_client).",
-    name=__name__,
-)
-
-
 DEFAULT_TIMEOUT = 300  # set request timeout to 5 minutes
 
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "A2AClientToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "a2a_client tool vended by strands-agents (from strands.vended_tools import make_a2a_client)."
+    "A2AClientToolProvider was removed in v0.9.0. Migration path: use the a2a_client tool vended by strands-agents "
+    "(from strands.vended_tools import make_a2a_client)."
 )
 
 
@@ -62,8 +64,8 @@ _DEPRECATION_MESSAGE = (
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "A2AClientToolProvider is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "a2a_client tool vended by strands-agents (from strands.vended_tools import make_a2a_client).",
+    "A2AClientToolProvider was removed in v0.9.0. Migration path: use the a2a_client tool vended by strands-agents "
+    "(from strands.vended_tools import make_a2a_client).",
     category=None,
 )
 class A2AClientToolProvider:

@@ -64,7 +64,7 @@ def test_http_request_logs_deprecation_warning(caplog):
 
     assert result["status"] == "success"
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import http_request, web_fetch" in caplog.text
 
 

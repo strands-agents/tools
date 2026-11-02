@@ -501,7 +501,7 @@ def test_exa_logs_deprecation_warning(call, caplog):
         asyncio.run(call())
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "exa.ai/docs/reference/exa-mcp" in caplog.text
 
 

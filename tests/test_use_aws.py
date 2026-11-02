@@ -978,7 +978,7 @@ def test_use_aws_logs_deprecation_warning(mock_available_services, mock_availabl
         )
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html" in caplog.text
 
 

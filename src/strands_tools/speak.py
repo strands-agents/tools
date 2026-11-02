@@ -1,3 +1,13 @@
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "speak was removed in v0.9.0. There is no replacement tool; call Amazon Polly's synthesize_speech directly "
+        "from a custom tool.",
+        name=__name__,
+    )
+
 import logging
 import os
 import subprocess
@@ -14,19 +24,11 @@ from typing_extensions import deprecated
 
 from strands_tools.utils import console_util
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "speak was removed in v0.9.0. There is no replacement tool; call Amazon Polly's synthesize_speech "
-    "directly from a custom tool.",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "call Amazon Polly's synthesize_speech directly from a custom tool."
+    "speak was removed in v0.9.0. There is no replacement tool; call Amazon Polly's synthesize_speech directly from a "
+    "custom tool."
 )
 
 TOOL_SPEC = {
@@ -111,8 +113,8 @@ def display_speech_status(console: Console, status: str, message: str, style: st
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "speak is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "call Amazon Polly's synthesize_speech directly from a custom tool."
+    "speak was removed in v0.9.0. There is no replacement tool; call Amazon Polly's synthesize_speech directly from a "
+    "custom tool."
 )
 def speak(tool: ToolUse, **kwargs: Any) -> ToolResult:
     speak_default_style = os.getenv("SPEAK_DEFAULT_STYLE", "green")

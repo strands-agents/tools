@@ -400,7 +400,7 @@ def test_environment_logs_deprecation_warning(caplog):
         _mod.environment({"toolUseId": "t", "input": {"action": "list"}})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import shell" in caplog.text
 
 

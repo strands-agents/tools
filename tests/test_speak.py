@@ -247,7 +247,7 @@ def test_speak_logs_deprecation_warning(caplog):
         speak.speak(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "synthesize_speech" in caplog.text
 
 

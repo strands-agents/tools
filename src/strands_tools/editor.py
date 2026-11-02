@@ -68,6 +68,16 @@ agent.tool.editor(command="undo_edit", path="/path/to/file.py")
 See the editor function docstring for more details on available commands and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "editor was removed in v0.9.0. Migration path: use the read, write, and edit tools vended by strands-agents "
+        "(from strands.vended_tools import edit, read, write).",
+        name=__name__,
+    )
+
 import logging
 import os
 import re
@@ -87,19 +97,11 @@ from strands_tools.utils import console_util
 from strands_tools.utils.detect_language import detect_language
 from strands_tools.utils.user_input import get_user_input
 
-# Removed in v0.9.0; the implementation below is kept but no longer importable.
-raise ImportError(
-    "editor was removed in v0.9.0. Migration path: use the read, write, and edit tools vended by strands-"
-    "agents (from strands.vended_tools import edit, read, write).",
-    name=__name__,
-)
-
-
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "editor is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "read, write, and edit tools vended by strands-agents (from strands.vended_tools import edit, read, write)."
+    "editor was removed in v0.9.0. Migration path: use the read, write, and edit tools vended by strands-agents (from "
+    "strands.vended_tools import edit, read, write)."
 )
 
 # Global content history cache
@@ -204,8 +206,8 @@ def format_output(title: str, content: Any, style: str = "default") -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "editor is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "read, write, and edit tools vended by strands-agents (from strands.vended_tools import edit, read, write)."
+    "editor was removed in v0.9.0. Migration path: use the read, write, and edit tools vended by strands-agents (from "
+    "strands.vended_tools import edit, read, write)."
 )
 def editor(
     command: str,
