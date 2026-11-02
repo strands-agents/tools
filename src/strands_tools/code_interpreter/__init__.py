@@ -28,7 +28,8 @@ Example:
     ... )
 """
 
+# code_interpreter first: its removal guard must run before agent_core_code_interpreter imports bedrock_agentcore.
+from .code_interpreter import CodeInterpreter  # isort: skip
 from .agent_core_code_interpreter import AgentCoreCodeInterpreter
-from .code_interpreter import CodeInterpreter
 
 __all__ = ["CodeInterpreter", "AgentCoreCodeInterpreter"]

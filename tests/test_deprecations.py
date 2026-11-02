@@ -8,6 +8,7 @@ import ast
 import importlib
 import pathlib
 import re
+import sys
 import warnings
 
 import pytest
@@ -134,6 +135,15 @@ def _message_literals(module_name):
 def test_tool_module_raises_import_error(module_name):
     """Importing a removed tool raises ImportError naming the module and the removal release."""
     assert _removal_error(module_name).name == f"strands_tools.{module_name}"
+
+
+@pytest.mark.parametrize("package, extra_dep", [("browser", "playwright"), ("code_interpreter", "bedrock_agentcore")])
+def test_package_raises_the_removal_error_without_its_extra(monkeypatch, package, extra_dep):
+    """The package __init__ must import the guarded module before any submodule needing the extra."""
+    for name in [name for name in sys.modules if name == extra_dep or name.startswith(f"{extra_dep}.")] + [extra_dep]:
+        monkeypatch.setitem(sys.modules, name, None)  # None makes the import fail as if not installed
+
+    _removal_error(package)
 
 
 def _reexports():
