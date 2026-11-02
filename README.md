@@ -41,6 +41,11 @@
   </p>
 </div>
 
+> [!WARNING]
+> All tools in this package are deprecated and will raise an import error in **v0.9.0**. See
+> [DEPRECATION.md](DEPRECATION.md) for the suggested alternative to each tool, the deprecation timeline, and
+> behavior differences to check before migrating.
+
 Strands Agents Tools is a community-driven project that provides a powerful set of tools for your agents to use. It bridges the gap between large language models and practical applications by offering ready-to-use tools for file operations, system execution, API interactions, mathematical operations, and more.
 
 ## ✨ Features
@@ -107,11 +112,6 @@ pre-commit install
 ```
 
 ### Tools Overview
-
-> [!WARNING]
-> All tools in this package are deprecated and will raise an import error in **v0.9.0**. See
-> [DEPRECATION.md](DEPRECATION.md) for the suggested alternative to each tool, the deprecation timeline, and
-> behavior differences to check before migrating.
 
 Below is a comprehensive table of all available tools, how to use them with an agent, and typical use cases:
 
