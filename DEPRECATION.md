@@ -1,5 +1,8 @@
 # Deprecations
 
+> [!IMPORTANT]
+> See the [migration guide](https://strandsagents.com/docs/user-guide/migrate/strands-agents-tools/) for more details.
+
 The tools below are deprecated, and each row points to where that capability now lives.
 
 When this package started, the SDK had no built-in way to do most of these things, so we shipped
