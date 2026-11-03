@@ -2,7 +2,7 @@
 
 ### :warning: This repository has been archived
 
-**Strands Agents Tools (`strands-agents-tools`) is deprecated and no longer actively developed.**
+**Strands Agents Tools (`strands-agents-tools`) is deprecated in favor of the [vended SDK tools](https://strandsagents.com/docs/user-guide/sdk/tools/vended-tools/).**
 
 See the [migration guide](https://strandsagents.com/docs/user-guide/migrate/strands-agents-tools/) for how to move off this package.
 
