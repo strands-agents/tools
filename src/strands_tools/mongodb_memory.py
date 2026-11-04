@@ -80,6 +80,17 @@ export AWS_REGION="us-east-1"                          # Default: "us-west-2"
 ```
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "mongodb_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over pymongo "
+        "(https://pymongo.readthedocs.io/) for MemoryManager (from strands.memory import MemoryManager). See "
+        "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -103,9 +114,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
-    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
-    "(from strands.memory import MemoryManager). See "
+    "mongodb_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over pymongo "
+    "(https://pymongo.readthedocs.io/) for MemoryManager (from strands.memory import MemoryManager). See "
     "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
 )
 
@@ -115,6 +125,7 @@ try:
     _VERSION = _get_version("strands-agents-tools")
 except Exception:
     _VERSION = None
+
 
 _DRIVER_INFO = DriverInfo(name="Strands", version=_VERSION)
 
@@ -750,9 +761,8 @@ def _delete_memory(collection: Collection, namespace: str, memory_id: str) -> Di
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
-    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
-    "(from strands.memory import MemoryManager). See "
+    "mongodb_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over pymongo "
+    "(https://pymongo.readthedocs.io/) for MemoryManager (from strands.memory import MemoryManager). See "
     "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores",
     category=None,
 )
@@ -1009,9 +1019,8 @@ class MongoDBMemoryTool:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "mongodb_memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: "
-    "implement a custom MemoryStore over pymongo (https://pymongo.readthedocs.io/) for MemoryManager "
-    "(from strands.memory import MemoryManager). See "
+    "mongodb_memory was removed in v0.9.0. Migration path: implement a custom MemoryStore over pymongo "
+    "(https://pymongo.readthedocs.io/) for MemoryManager (from strands.memory import MemoryManager). See "
     "https://strandsagents.com/docs/user-guide/sdk/memory/managing-memory/#custom-stores"
 )
 def mongodb_memory(

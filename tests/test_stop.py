@@ -3,6 +3,9 @@ Tests for the stop tool using the Agent interface.
 """
 
 import pytest
+
+pytest.importorskip("strands_tools.stop", reason="stop was removed in v0.9.0", exc_type=ImportError)
+
 from strands import Agent
 
 from strands_tools import stop
@@ -93,7 +96,7 @@ def test_stop_logs_deprecation_warning(caplog):
         stop.stop(tool={"toolUseId": "deprecation", "input": {}}, request_state={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_stop, stop" in caplog.text
 
 

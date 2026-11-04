@@ -1,3 +1,9 @@
+# flake8: noqa: E402
+
+import pytest
+
+pytest.importorskip("strands_tools.nova_reels", reason="nova_reels was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import re
 import time
@@ -5,7 +11,6 @@ import uuid
 from unittest.mock import patch
 
 import boto3
-import pytest
 from strands import Agent
 from strands_tools import nova_reels
 

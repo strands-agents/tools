@@ -2,10 +2,13 @@
 Tests for the chat_video tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.chat_video", reason="chat_video was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import chat_video
@@ -331,7 +334,7 @@ def test_chat_video_logs_deprecation_warning(caplog):
         chat_video.chat_video(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "docs.twelvelabs.io" in caplog.text
 
 

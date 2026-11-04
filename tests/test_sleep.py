@@ -2,10 +2,13 @@
 Tests for the sleep tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.sleep", reason="sleep was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest import mock
 
-import pytest
 from strands import Agent
 
 from strands_tools import sleep
@@ -92,7 +95,7 @@ def test_sleep_logs_deprecation_warning(caplog):
         sleep.sleep(0.01)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import sleep" in caplog.text
 
 

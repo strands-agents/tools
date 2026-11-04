@@ -1,4 +1,9 @@
+# flake8: noqa: E402
+
 import pytest
+
+pytest.importorskip("strands_tools.load_tool", reason="load_tool was removed in v0.9.0", exc_type=ImportError)
+
 from strands import Agent
 from strands_tools import load_tool
 

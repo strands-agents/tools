@@ -2,11 +2,14 @@
 Tests for the editor tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.editor", reason="editor was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import shutil
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import editor
@@ -490,7 +493,7 @@ def test_editor_logs_deprecation_warning(caplog, temp_dir):
         editor.editor(command="create", path=test_file, file_text="content")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import edit, read, write" in caplog.text
 
 

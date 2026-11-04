@@ -1,3 +1,13 @@
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "agent_graph was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+        "strands.vended_tools import graph, make_graph).",
+        name=__name__,
+    )
+
 import logging
 import time
 import traceback
@@ -15,14 +25,13 @@ from rich.tree import Tree
 from strands.types.tools import ToolResult, ToolUse
 from typing_extensions import deprecated
 
-from strands_tools.use_llm import use_llm
 from strands_tools.utils import console_util
 
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "agent_graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+    "agent_graph was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+    "strands.vended_tools import graph, make_graph)."
 )
 
 
@@ -243,6 +252,9 @@ class AgentNode:
                 self.neighbors.append(neighbor)
 
     def process_messages(self, tool_context: Dict[str, Any], channel: str):
+        # Imported lazily so importing agent_graph raises its own removal error, not use_llm's.
+        from strands_tools.use_llm import use_llm
+
         while self.is_running:
             try:
                 # Rate limiting
@@ -512,8 +524,8 @@ def get_manager(tool_context: Dict[str, Any]) -> AgentGraphManager:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "agent_graph is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+    "agent_graph was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+    "strands.vended_tools import graph, make_graph)."
 )
 def agent_graph(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

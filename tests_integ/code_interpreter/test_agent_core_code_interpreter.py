@@ -1,3 +1,4 @@
+# flake8: noqa: E402
 """
 Integration tests for the Bedrock AgentCore code interpreter platform.
 
@@ -5,9 +6,12 @@ These tests use the actual Bedrock AgentCore client to make real requests to the
 testing the complete end-to-end flow through the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.code_interpreter", reason="code_interpreter was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 
-import pytest
 from strands import Agent
 from strands.agent import AgentResult
 from strands_tools.code_interpreter import AgentCoreCodeInterpreter

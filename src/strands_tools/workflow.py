@@ -97,6 +97,16 @@ result = agent.tool.workflow(action="status", workflow_id="research_pipeline")
 See the workflow function docstring for complete configuration options and advanced usage patterns.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "workflow was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+        "strands.vended_tools import graph, make_graph).",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -127,8 +137,8 @@ from strands_tools.utils.models.model import create_model
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "workflow is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+    "workflow was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+    "strands.vended_tools import graph, make_graph)."
 )
 
 # Constants
@@ -927,8 +937,8 @@ _manager = None
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "workflow is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "graph tool vended by strands-agents (from strands.vended_tools import graph, make_graph)."
+    "workflow was removed in v0.9.0. Migration path: use the graph tool vended by strands-agents (from "
+    "strands.vended_tools import graph, make_graph)."
 )
 def workflow(
     action: str,

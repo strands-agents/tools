@@ -24,6 +24,17 @@ Environment Variable Token Config:
   domain matches one of the allowed domains for that variable.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "http_request was removed in v0.9.0. Migration path: use the http_request and web_fetch tools vended by "
+        "strands-agents (from strands.vended_tools import http_request, web_fetch). http_request handles API calls; "
+        "web_fetch retrieves and reads web pages.",
+        name=__name__,
+    )
+
 import base64
 import collections
 import datetime
@@ -57,9 +68,9 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "http_request is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "http_request and web_fetch tools vended by strands-agents (from strands.vended_tools import http_request, "
-    "web_fetch). http_request handles API calls; web_fetch retrieves and reads web pages."
+    "http_request was removed in v0.9.0. Migration path: use the http_request and web_fetch tools vended by "
+    "strands-agents (from strands.vended_tools import http_request, web_fetch). http_request handles API calls; "
+    "web_fetch retrieves and reads web pages."
 )
 
 _SAFE_REDIRECT_HEADERS: frozenset = frozenset(
@@ -617,9 +628,9 @@ def format_response_preview(
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "http_request is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "http_request and web_fetch tools vended by strands-agents (from strands.vended_tools import http_request, "
-    "web_fetch). http_request handles API calls; web_fetch retrieves and reads web pages."
+    "http_request was removed in v0.9.0. Migration path: use the http_request and web_fetch tools vended by "
+    "strands-agents (from strands.vended_tools import http_request, web_fetch). http_request handles API calls; "
+    "web_fetch retrieves and reads web pages."
 )
 def http_request(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

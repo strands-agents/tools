@@ -2,10 +2,13 @@
 Tests for the use_aws tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.use_aws", reason="use_aws was removed in v0.9.0", exc_type=ImportError)
+
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 
@@ -975,7 +978,7 @@ def test_use_aws_logs_deprecation_warning(mock_available_services, mock_availabl
         )
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html" in caplog.text
 
 

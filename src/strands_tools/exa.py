@@ -43,6 +43,16 @@ You can get your Exa API key at https://dashboard.exa.ai/api-keys
 See the function docstrings for complete parameter documentation.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "exa was removed in v0.9.0. Migration path: use the official Exa MCP server, documented at "
+        "https://exa.ai/docs/reference/exa-mcp.",
+        name=__name__,
+    )
+
 import asyncio
 import logging
 import os
@@ -58,8 +68,8 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
-    "server, documented at https://exa.ai/docs/reference/exa-mcp."
+    "exa was removed in v0.9.0. Migration path: use the official Exa MCP server, documented at "
+    "https://exa.ai/docs/reference/exa-mcp."
 )
 
 # Exa API configuration
@@ -216,8 +226,8 @@ def format_contents_response(data: Dict[str, Any]) -> Panel:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
-    "server, documented at https://exa.ai/docs/reference/exa-mcp.",
+    "exa was removed in v0.9.0. Migration path: use the official Exa MCP server, documented at "
+    "https://exa.ai/docs/reference/exa-mcp.",
     category=None,
 )
 async def exa_search(
@@ -490,8 +500,8 @@ async def exa_search(
 
 @tool
 @deprecated(
-    "exa is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official Exa MCP "
-    "server, documented at https://exa.ai/docs/reference/exa-mcp.",
+    "exa was removed in v0.9.0. Migration path: use the official Exa MCP server, documented at "
+    "https://exa.ai/docs/reference/exa-mcp.",
     category=None,
 )
 async def exa_get_contents(

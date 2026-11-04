@@ -7,6 +7,10 @@ construction). Also includes IDOR regression guards ensuring the tenant
 identity is never an LLM-controllable tool parameter.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.mem0_memory", reason="mem0_memory was removed in v0.9.0", exc_type=ImportError)
+
 import builtins
 import json
 import os
@@ -16,7 +20,6 @@ import textwrap
 import warnings
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands.types.tools import ToolUse
 
 from strands_tools import mem0_memory
@@ -48,7 +51,7 @@ def test_standalone_logs_deprecation_warning(mock_tool, caplog):
         mem0_memory.mem0_memory(tool=mock_tool)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "Mem0MemoryStore from the mem0-strands package" in caplog.text
 
 

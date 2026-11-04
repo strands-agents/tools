@@ -2,10 +2,13 @@
 Tests for the swarm tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.swarm", reason="swarm was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import swarm as swarm_module
@@ -667,7 +670,7 @@ def test_swarm_logs_deprecation_warning(mock_parent_agent, caplog):
         swarm_module.swarm(task="Test task", agents=[], agent=mock_parent_agent)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_swarm, swarm" in caplog.text
 
 

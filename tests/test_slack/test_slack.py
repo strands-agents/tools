@@ -1,9 +1,11 @@
+import pytest
+
+pytest.importorskip("strands_tools.slack", reason="slack was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # Import the slack tool module
 from strands_tools.slack import (
@@ -385,7 +387,7 @@ def test_slack_logs_deprecation_warning(caplog):
         _mod.slack(action="auth_test", parameters={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "docs.slack.dev" in caplog.text
 
 
@@ -408,7 +410,7 @@ def test_slack_send_message_logs_deprecation_warning(caplog):
         _mod.slack_send_message(channel="C1", text="hi")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "docs.slack.dev" in caplog.text
 
 

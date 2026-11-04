@@ -2,12 +2,14 @@
 Tests for the Tavily tools.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.tavily", reason="tavily was removed in v0.9.0", exc_type=ImportError)
+
 import asyncio
 import logging
 import os
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from strands_tools import tavily
 
@@ -364,7 +366,7 @@ def test_tavily_logs_deprecation_warning(call, caplog):
         asyncio.run(call())
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "docs.tavily.com/documentation/mcp" in caplog.text
 
 

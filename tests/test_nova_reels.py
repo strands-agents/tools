@@ -1,10 +1,13 @@
 """Tests for the nova_reels tool."""
 
+import pytest
+
+pytest.importorskip("strands_tools.nova_reels", reason="nova_reels was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import os
 from unittest.mock import MagicMock, mock_open, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 
@@ -320,7 +323,7 @@ def test_nova_reels_logs_deprecation_warning(mock_bedrock_client, caplog):
         nova_reels.nova_reels(action="list")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "end-of-life" in caplog.text
 
 

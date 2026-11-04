@@ -2,10 +2,12 @@
 Unit tests for the LocalChromiumBrowser implementation.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.browser", reason="browser was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import AsyncMock, Mock, patch
-
-import pytest
 
 from strands_tools.browser import Browser, LocalChromiumBrowser
 

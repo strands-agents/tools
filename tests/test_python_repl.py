@@ -1,5 +1,9 @@
 """Tests for the python_repl tool using the Agent interface."""
 
+import pytest
+
+pytest.importorskip("strands_tools.python_repl", reason="python_repl was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import stat
 import sys
@@ -10,7 +14,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import dill
-import pytest
 from strands import Agent
 
 if os.name == "nt":
@@ -265,7 +268,7 @@ class TestPythonRepl:
 
         assert result["status"] == "success"
         assert "DEPRECATION WARNING" in caplog.text
-        assert "becomes an import error in v0.9.0" in caplog.text
+        assert "was removed in v0.9.0" in caplog.text
         assert "strands.vended_tools import python_repl" in caplog.text
 
     def test_is_marked_deprecated_for_static_analysis(self):

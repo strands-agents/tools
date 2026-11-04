@@ -78,6 +78,18 @@ Knowledge base IDs must contain only alphanumeric characters (no hyphens or spec
 ENV variable STRANDS_KNOWLEDGE_BASE_ID can be used instead of passing the ID to each call.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "memory was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore "
+        "(Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have no store equivalent and "
+        "need a MemoryStore subclass. See "
+        "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -100,10 +112,9 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
-    "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
-    "no store equivalent and need a MemoryStore subclass. See "
-    "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
+    "memory was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore "
+    "(Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have no store equivalent and "
+    "need a MemoryStore subclass. See https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
 )
 
 
@@ -648,10 +659,9 @@ def get_memory_formatter() -> MemoryFormatter:
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "memory is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
-    "BedrockKnowledgeBaseStore (Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have "
-    "no store equivalent and need a MemoryStore subclass. See "
-    "https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
+    "memory was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore "
+    "(Agent(memory_manager=MemoryManager(stores=[store]))). Note list, get and delete have no store equivalent and "
+    "need a MemoryStore subclass. See https://strandsagents.com/docs/user-guide/concepts/memory/bedrock-knowledge-base/"
 )
 def memory(
     action: str,

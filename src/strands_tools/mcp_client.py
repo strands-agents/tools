@@ -20,6 +20,16 @@ It leverages the Strands SDK's MCPClient for robust connection management
 and implements a per-operation connection pattern for stability.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "mcp_client was removed in v0.9.0. Migration path: use the mcp_router tool vended by strands-agents (from "
+        "strands.vended_tools import make_mcp_router).",
+        name=__name__,
+    )
+
 import logging
 import os
 import time
@@ -39,8 +49,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "mcp_client is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
+    "mcp_client was removed in v0.9.0. Migration path: use the mcp_router tool vended by strands-agents (from "
+    "strands.vended_tools import make_mcp_router)."
 )
 
 # Default timeout for MCP operations - can be overridden via environment variable
@@ -250,8 +260,8 @@ def _create_transport_callable(transport: str, **params):
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "mcp_client is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "mcp_router tool vended by strands-agents (from strands.vended_tools import make_mcp_router)."
+    "mcp_client was removed in v0.9.0. Migration path: use the mcp_router tool vended by strands-agents (from "
+    "strands.vended_tools import make_mcp_router)."
 )
 def mcp_client(
     action: str,

@@ -2,13 +2,16 @@
 Tests for the journal tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.journal", reason="journal was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import journal
@@ -321,7 +324,7 @@ def test_journal_logs_deprecation_warning(caplog):
         journal.journal(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools" in caplog.text
 
 

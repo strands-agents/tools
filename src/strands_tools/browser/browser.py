@@ -6,6 +6,16 @@ Playwright implementation that can be used directly or extended by specific
 platform implementations.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "browser was removed in v0.9.0. There is no replacement tool; drive Playwright directly from a custom tool, "
+        "using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+        name=__name__,
+    )
+
 import asyncio
 import json
 import logging
@@ -51,8 +61,8 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions."
+    "browser was removed in v0.9.0. There is no replacement tool; drive Playwright directly from a custom tool, using "
+    "bedrock-agentcore's BrowserClient for AgentCore sessions."
 )
 
 
@@ -62,8 +72,8 @@ _DEPRECATION_MESSAGE = (
 # rather than passed as _DEPRECATION_MESSAGE because mypy only reports @deprecated when the
 # argument is a string literal.
 @deprecated(
-    "browser is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "drive Playwright directly from a custom tool, using bedrock-agentcore's BrowserClient for AgentCore sessions.",
+    "browser was removed in v0.9.0. There is no replacement tool; drive Playwright directly from a custom tool, using "
+    "bedrock-agentcore's BrowserClient for AgentCore sessions.",
     category=None,
 )
 class Browser(ABC):

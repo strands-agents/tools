@@ -1,6 +1,8 @@
-from unittest.mock import MagicMock
-
 import pytest
+
+pytest.importorskip("strands_tools.batch", reason="batch was removed in v0.9.0", exc_type=ImportError)
+
+from unittest.mock import MagicMock
 
 from strands_tools import batch
 
@@ -194,7 +196,7 @@ def test_batch_logs_deprecation_warning(caplog):
         _mod.batch({"toolUseId": "t", "input": {"invocations": []}}, agent=None)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "ConcurrentToolExecutor" in caplog.text
 
 

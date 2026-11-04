@@ -42,6 +42,16 @@ print(result["content"][0]["text"])  # Prints the response text
 See the use_llm function docstring for more details on configuration options and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "use_llm was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+        "strands.vended_tools import subagent).",
+        name=__name__,
+    )
+
 import logging
 from typing import Any
 
@@ -53,8 +63,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "use_llm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "subagent tool vended by strands-agents (from strands.vended_tools import subagent)."
+    "use_llm was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+    "strands.vended_tools import subagent)."
 )
 
 TOOL_SPEC = {
@@ -92,8 +102,8 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "use_llm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "subagent tool vended by strands-agents (from strands.vended_tools import subagent)."
+    "use_llm was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+    "strands.vended_tools import subagent)."
 )
 def use_llm(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

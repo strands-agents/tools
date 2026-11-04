@@ -2,9 +2,12 @@
 Tests for the calculator tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.calculator", reason="calculator was removed in v0.9.0", exc_type=ImportError)
+
 import unittest.mock as mock
 
-import pytest
 import sympy as sp
 from strands import Agent
 from sympy import Integer, Symbol, exp, log
@@ -846,7 +849,7 @@ def test_calculator_logs_deprecation_warning(caplog):
         _mod.calculator(expression="2+2")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import shell" in caplog.text
 
 

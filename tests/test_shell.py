@@ -2,12 +2,15 @@
 Tests for the shell tool including execution, formatting, and various modes.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.shell", reason="shell was removed in v0.9.0", exc_type=ImportError)
+
 import os
 import signal
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 from rich.panel import Panel
 from strands import Agent
 
@@ -987,7 +990,7 @@ def test_shell_logs_deprecation_warning(caplog):
         shell.shell("echo test")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import shell" in caplog.text
 
 

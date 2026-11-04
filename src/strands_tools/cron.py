@@ -4,6 +4,18 @@ Crontab manager for scheduling tasks, with special support for Strands agent job
 Simple, direct interface to the system's crontab with helpful guidance in documentation.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "cron was removed in v0.9.0. To achieve similar functionality, use a hosted scheduler such as Amazon "
+        "EventBridge Scheduler, or the shell tool vended by strands-agents (from strands.vended_tools import shell). "
+        "The shell route does change the security boundary: cron exposed structured schedule actions, while shell "
+        "executes arbitrary commands, so review it against your threat model before switching.",
+        name=__name__,
+    )
+
 import logging
 import os
 import re
@@ -19,11 +31,10 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "cron is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use a "
-    "hosted scheduler such as Amazon EventBridge Scheduler, or the shell tool vended by strands-agents "
-    "(from strands.vended_tools import shell). The shell route does change the security boundary: cron exposed "
-    "structured schedule actions, while shell executes arbitrary commands, so review it against your threat model "
-    "before switching."
+    "cron was removed in v0.9.0. To achieve similar functionality, use a hosted scheduler such as Amazon EventBridge "
+    "Scheduler, or the shell tool vended by strands-agents (from strands.vended_tools import shell). The shell route "
+    "does change the security boundary: cron exposed structured schedule actions, while shell executes arbitrary "
+    "commands, so review it against your threat model before switching."
 )
 
 
@@ -79,11 +90,10 @@ def _write_crontab(new_content: str, description: str) -> Optional[Dict[str, Any
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "cron is deprecated. This warning becomes an import error in v0.9.0. To achieve similar functionality, use a "
-    "hosted scheduler such as Amazon EventBridge Scheduler, or the shell tool vended by strands-agents "
-    "(from strands.vended_tools import shell). The shell route does change the security boundary: cron exposed "
-    "structured schedule actions, while shell executes arbitrary commands, so review it against your threat model "
-    "before switching."
+    "cron was removed in v0.9.0. To achieve similar functionality, use a hosted scheduler such as Amazon EventBridge "
+    "Scheduler, or the shell tool vended by strands-agents (from strands.vended_tools import shell). The shell route "
+    "does change the security boundary: cron exposed structured schedule actions, while shell executes arbitrary "
+    "commands, so review it against your threat model before switching."
 )
 def cron(
     action: str,

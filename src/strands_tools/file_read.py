@@ -96,6 +96,16 @@ agent.tool.file_read(
 See the file_read function docstring for more details on modes and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "file_read was removed in v0.9.0. Migration path: use the read tool vended by strands-agents (from "
+        "strands.vended_tools import make_read, read).",
+        name=__name__,
+    )
+
 import glob
 import json
 import logging
@@ -127,8 +137,8 @@ from strands_tools.utils.detect_language import detect_language
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "file_read is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "read tool vended by strands-agents (from strands.vended_tools import make_read, read)."
+    "file_read was removed in v0.9.0. Migration path: use the read tool vended by strands-agents (from "
+    "strands.vended_tools import make_read, read)."
 )
 
 # Document format mapping
@@ -949,8 +959,8 @@ def time_machine_view(file_path: str, use_git: bool = True, num_revisions: int =
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "file_read is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "read tool vended by strands-agents (from strands.vended_tools import make_read, read)."
+    "file_read was removed in v0.9.0. Migration path: use the read tool vended by strands-agents (from "
+    "strands.vended_tools import make_read, read)."
 )
 def file_read(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

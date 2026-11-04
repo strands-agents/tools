@@ -34,6 +34,16 @@ The handoff tool can either pause for user input or completely stop the event lo
 depending on the breakout_of_loop parameter.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "handoff_to_user was removed in v0.9.0. Migration path: use the handoff_to_user tool vended by strands-agents "
+        "(from strands.vended_tools import handoff_to_user), which pauses the agent with an interrupt.",
+        name=__name__,
+    )
+
 import logging
 from typing import Any
 
@@ -48,9 +58,8 @@ from strands_tools.utils.user_input import get_user_input
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "handoff_to_user is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "handoff_to_user tool vended by strands-agents (from strands.vended_tools import handoff_to_user), which "
-    "pauses the agent with an interrupt."
+    "handoff_to_user was removed in v0.9.0. Migration path: use the handoff_to_user tool vended by strands-agents "
+    "(from strands.vended_tools import handoff_to_user), which pauses the agent with an interrupt."
 )
 
 TOOL_SPEC = {
@@ -82,9 +91,8 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "handoff_to_user is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "handoff_to_user tool vended by strands-agents (from strands.vended_tools import handoff_to_user), which "
-    "pauses the agent with an interrupt."
+    "handoff_to_user was removed in v0.9.0. Migration path: use the handoff_to_user tool vended by strands-agents "
+    "(from strands.vended_tools import handoff_to_user), which pauses the agent with an interrupt."
 )
 def handoff_to_user(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

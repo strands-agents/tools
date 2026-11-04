@@ -4,6 +4,10 @@ Regression tests for calculator precision handling.
 Precision must affect ONLY formatting, not numeric value.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.calculator", reason="calculator was removed in v0.9.0", exc_type=ImportError)
+
 from strands_tools.calculator import calculator
 
 

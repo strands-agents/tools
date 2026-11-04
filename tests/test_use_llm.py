@@ -2,9 +2,12 @@
 Tests for the use_llm tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.use_llm", reason="use_llm was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands.agent import AgentResult
 
 from strands_tools import use_llm
@@ -476,7 +479,7 @@ def test_use_llm_logs_deprecation_warning(mock_agent_response, caplog):
         use_llm.use_llm(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import subagent" in caplog.text
 
 

@@ -28,6 +28,16 @@ The stop tool sets the 'stop_event_loop' flag in the request state,
 which signals the Strands runtime to terminate the current cycle cleanly.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "stop was removed in v0.9.0. Migration path: use the stop tool vended by strands-agents (from "
+        "strands.vended_tools import make_stop, stop).",
+        name=__name__,
+    )
+
 import logging
 from typing import Any
 
@@ -38,8 +48,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "stop is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "stop tool vended by strands-agents (from strands.vended_tools import make_stop, stop)."
+    "stop was removed in v0.9.0. Migration path: use the stop tool vended by strands-agents (from strands.vended_tools "
+    "import make_stop, stop)."
 )
 
 TOOL_SPEC = {
@@ -65,8 +75,8 @@ TOOL_SPEC = {
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "stop is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "stop tool vended by strands-agents (from strands.vended_tools import make_stop, stop)."
+    "stop was removed in v0.9.0. Migration path: use the stop tool vended by strands-agents (from strands.vended_tools "
+    "import make_stop, stop)."
 )
 def stop(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

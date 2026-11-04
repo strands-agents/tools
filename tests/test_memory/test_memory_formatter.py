@@ -2,9 +2,11 @@
 Tests for the MemoryFormatter class in memory.py.
 """
 
-import json
-
 import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
+import json
 
 from strands_tools.memory import MemoryFormatter
 

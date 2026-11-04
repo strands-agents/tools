@@ -1,9 +1,14 @@
 """Tests for the handoff_to_user tool."""
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.handoff_to_user", reason="handoff_to_user was removed in v0.9.0", exc_type=ImportError
+)
+
 import logging
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import handoff_to_user
@@ -200,7 +205,7 @@ def test_handoff_logs_deprecation_warning(caplog):
         handoff_to_user.handoff_to_user(tool=tool_use, request_state={})
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import handoff_to_user" in caplog.text
 
 

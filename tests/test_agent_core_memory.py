@@ -2,11 +2,16 @@
 Simplified tests for the agent_core_memory tool.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.agent_core_memory", reason="agent_core_memory was removed in v0.9.0", exc_type=ImportError
+)
+
 import os
 import warnings
 from unittest import mock
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 
@@ -60,7 +65,7 @@ def test_tool_logs_deprecation_warning(mock_boto3_client, caplog):
         provider.agent_core_memory(action="list")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "import AgentCoreMemoryStore" in caplog.text
 
 

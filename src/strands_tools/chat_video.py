@@ -47,6 +47,16 @@ result = agent.tool.chat_video(
 See the chat_video function docstring for more details on available parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "chat_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+        "https://docs.twelvelabs.io/docs/advanced/model-context-protocol.",
+        name=__name__,
+    )
+
 import hashlib
 import logging
 import os
@@ -59,8 +69,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "chat_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
-    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+    "chat_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+    "https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 
 TOOL_SPEC = {
@@ -234,8 +244,8 @@ def upload_and_index_video(video_path: str, index_id: str, api_key: str) -> str:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "chat_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
-    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+    "chat_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+    "https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 def chat_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

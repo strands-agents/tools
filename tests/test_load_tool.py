@@ -2,12 +2,15 @@
 Tests for the load_tool tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.load_tool", reason="load_tool was removed in v0.9.0", exc_type=ImportError)
+
 import logging
 import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import load_tool
@@ -207,7 +210,7 @@ def test_load_tool_logs_deprecation_warning(caplog):
         load_tool.load_tool(path="/nonexistent/tool.py", name="missing", agent=MagicMock())
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "load_tools_from_directory" in caplog.text
 
 

@@ -79,6 +79,16 @@ The swarm tool provides maximum flexibility for creating specialized agent teams
 together autonomously to solve complex, multi-faceted problems.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "swarm was removed in v0.9.0. Migration path: use the swarm tool vended by strands-agents (from "
+        "strands.vended_tools import make_swarm, swarm).",
+        name=__name__,
+    )
+
 import logging
 import traceback
 from typing import Any, Dict, List, Optional
@@ -95,8 +105,8 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "swarm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "swarm tool vended by strands-agents (from strands.vended_tools import make_swarm, swarm)."
+    "swarm was removed in v0.9.0. Migration path: use the swarm tool vended by strands-agents (from "
+    "strands.vended_tools import make_swarm, swarm)."
 )
 
 
@@ -242,8 +252,8 @@ def _create_custom_agents(
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "swarm is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "swarm tool vended by strands-agents (from strands.vended_tools import make_swarm, swarm)."
+    "swarm was removed in v0.9.0. Migration path: use the swarm tool vended by strands-agents (from "
+    "strands.vended_tools import make_swarm, swarm)."
 )
 def swarm(
     task: str,

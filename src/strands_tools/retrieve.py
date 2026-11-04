@@ -60,6 +60,17 @@ results = agent.tool.retrieve(
 See the retrieve function docstring for more details on available parameters and options.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "retrieve was removed in v0.9.0. Migration path: use MemoryManager with "
+        "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
+        "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/",
+        name=__name__,
+    )
+
 import logging
 import os
 from typing import Any, Dict, List
@@ -72,9 +83,9 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "retrieve is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
-    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
-    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+    "retrieve was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore(writable=False). "
+    "Note the store applies no relevance-score floor, so filter results yourself. See "
+    "https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
 )
 
 
@@ -282,9 +293,9 @@ def format_results_for_display(results: List[Dict[str, Any]], enable_metadata: b
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "retrieve is deprecated. This warning becomes an import error in v0.9.0. Migration path: use MemoryManager with "
-    "BedrockKnowledgeBaseStore(writable=False). Note the store applies no relevance-score floor, so filter results "
-    "yourself. See https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
+    "retrieve was removed in v0.9.0. Migration path: use MemoryManager with BedrockKnowledgeBaseStore(writable=False). "
+    "Note the store applies no relevance-score floor, so filter results yourself. See "
+    "https://strandsagents.com/docs/user-guide/concepts/memory/overview/"
 )
 def retrieve(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

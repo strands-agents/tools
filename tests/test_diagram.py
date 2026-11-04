@@ -1,9 +1,11 @@
 """Tests for the diagram module."""
 
+import pytest
+
+pytest.importorskip("strands_tools.diagram", reason="diagram was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from strands_tools.diagram import (
     DiagramBuilder,
@@ -782,7 +784,7 @@ def test_diagram_logs_deprecation_warning(caplog):
         _mod.diagram(diagram_type="graph", nodes=[], edges=[])
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "graphviz" in caplog.text
 
 

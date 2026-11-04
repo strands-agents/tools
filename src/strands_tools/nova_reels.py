@@ -65,6 +65,16 @@ The videos are generated asynchronously, and completion typically takes 5-10 min
 Results are stored in the specified S3 bucket and can be accessed once the job completes.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "nova_reels was removed in v0.9.0. There is no replacement tool; Amazon Nova Reel reached end-of-life on "
+        "Amazon Bedrock on September 30, 2026, so this tool no longer works.",
+        name=__name__,
+    )
+
 import base64
 import json
 import logging
@@ -82,8 +92,8 @@ from strands_tools.utils import console_util
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
+    "nova_reels was removed in v0.9.0. There is no replacement tool; Amazon Nova Reel reached end-of-life on Amazon "
+    "Bedrock on September 30, 2026, so this tool no longer works."
 )
 
 # Environment variables for configurable default parameters
@@ -96,8 +106,8 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "nova_reels is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; "
-    "Amazon Nova Reel reached end-of-life on Amazon Bedrock on September 30, 2026, so this tool no longer works."
+    "nova_reels was removed in v0.9.0. There is no replacement tool; Amazon Nova Reel reached end-of-life on Amazon "
+    "Bedrock on September 30, 2026, so this tool no longer works."
 )
 def nova_reels(
     action: str,

@@ -2,12 +2,15 @@
 Tests for the generate_image tool.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.generate_image", reason="generate_image was removed in v0.9.0", exc_type=ImportError)
+
 import base64
 import json
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 from strands import Agent
 
@@ -239,7 +242,7 @@ def test_generate_image_logs_deprecation_warning(
         generate_image.generate_image(tool=tool_use)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "invoke_model" in caplog.text
 
 

@@ -1,3 +1,4 @@
+# flake8: noqa: E402
 """
 Integration tests for the Dynamic MCP Client tool.
 
@@ -5,10 +6,13 @@ These tests use a MockMCP server (FastMCP) to validate end-to-end functionality
 of the mcp_client tool with Strands agents.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.mcp_client", reason="mcp_client was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import patch
 
-import pytest
 from strands import Agent
 from strands_tools import mcp_client
 

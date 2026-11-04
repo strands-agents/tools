@@ -2,10 +2,13 @@
 Tests for the use_agent tool using the Agent interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.use_agent", reason="use_agent was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import use_agent as use_agent_module
@@ -567,7 +570,7 @@ def test_use_agent_logs_deprecation_warning(caplog):
         use_agent_module.use_agent(prompt="Test", system_prompt="You are a test assistant.", agent=None)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import make_subagent, subagent" in caplog.text
 
 

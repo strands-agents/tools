@@ -2,11 +2,14 @@
 Tests for the Bright Data tool using the tool decorator interface.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.bright_data", reason="bright_data was removed in v0.9.0", exc_type=ImportError)
+
 import json
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import bright_data
@@ -33,7 +36,7 @@ def test_bright_data_logs_deprecation_warning(caplog):
             bright_data.bright_data(action="")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "Bright Data's official MCP server" in caplog.text
 
 

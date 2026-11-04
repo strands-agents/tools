@@ -56,6 +56,16 @@ result = agent.tool.use_agent(
 See the use_agent function docstring for more details on configuration options and parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "use_agent was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+        "strands.vended_tools import make_subagent, subagent).",
+        name=__name__,
+    )
+
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -69,8 +79,8 @@ from strands_tools.utils.models.model import create_model
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "use_agent is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "subagent tool vended by strands-agents (from strands.vended_tools import make_subagent, subagent)."
+    "use_agent was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+    "strands.vended_tools import make_subagent, subagent)."
 )
 
 
@@ -81,8 +91,8 @@ _DEPRECATION_MESSAGE = (
 # reports @deprecated when the argument is a string literal.
 @tool
 @deprecated(
-    "use_agent is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the "
-    "subagent tool vended by strands-agents (from strands.vended_tools import make_subagent, subagent)."
+    "use_agent was removed in v0.9.0. Migration path: use the subagent tool vended by strands-agents (from "
+    "strands.vended_tools import make_subagent, subagent)."
 )
 def use_agent(
     prompt: str,

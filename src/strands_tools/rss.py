@@ -1,3 +1,12 @@
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "rss was removed in v0.9.0. There is no replacement tool; fetch and parse feeds directly with feedparser.",
+        name=__name__,
+    )
+
 import json
 import logging
 import os
@@ -17,8 +26,7 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "rss is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; fetch and parse "
-    "feeds directly with feedparser."
+    "rss was removed in v0.9.0. There is no replacement tool; fetch and parse feeds directly with feedparser."
 )
 
 # Always use temporary directory for storage
@@ -210,10 +218,7 @@ rss_manager = RSSManager()
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @tool
-@deprecated(
-    "rss is deprecated. This warning becomes an import error in v0.9.0. There is no replacement tool; fetch and parse "
-    "feeds directly with feedparser."
-)
+@deprecated("rss was removed in v0.9.0. There is no replacement tool; fetch and parse feeds directly with feedparser.")
 def rss(
     action: str,
     url: Optional[str] = None,

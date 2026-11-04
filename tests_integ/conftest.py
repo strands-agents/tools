@@ -3,12 +3,19 @@ import logging
 import os
 
 import boto3
+import pytest
 
 logger = logging.getLogger(__name__)
 
 
 def pytest_sessionstart(session):
     _load_api_keys_from_secrets_manager()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # Every integ module skips since all tools were removed in v0.9.0; don't fail on exit 5 (no tests collected).
+    if exitstatus == pytest.ExitCode.NO_TESTS_COLLECTED:
+        session.exitstatus = pytest.ExitCode.OK
 
 ## API Keys
 

@@ -8,10 +8,13 @@ This test file specifically targets areas with lower test coverage identified in
 4. Complex query handling (lines 938-959)
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.memory", reason="memory was removed in v0.9.0", exc_type=ImportError)
+
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.config import Config as BotocoreConfig
 
 from strands_tools import memory

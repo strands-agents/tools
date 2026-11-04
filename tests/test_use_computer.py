@@ -1,5 +1,9 @@
 # flake8: noqa: E402
 
+import pytest
+
+pytest.importorskip("strands_tools.use_computer", reason="use_computer was removed in v0.9.0", exc_type=ImportError)
+
 import sys
 from unittest import mock
 from unittest.mock import MagicMock, mock_open, patch
@@ -13,7 +17,6 @@ import platform
 import unittest
 
 import numpy as np
-import pytest
 
 from src.strands_tools import use_computer as use_computer_module
 from src.strands_tools.use_computer import (
@@ -1229,7 +1232,7 @@ def test_use_computer_logs_deprecation_warning(monkeypatch, caplog):
         use_computer(action="invalid_unknown_action")
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "pyautogui" in caplog.text
 
 

@@ -47,6 +47,16 @@ results = agent.tool.search_video(
 See the search_video function docstring for more details on available parameters.
 """
 
+from typing import TYPE_CHECKING
+
+# Removed in v0.9.0. The guard keeps the body visible to type checkers, which flag @deprecated.
+if not TYPE_CHECKING:
+    raise ImportError(
+        "search_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+        "https://docs.twelvelabs.io/docs/advanced/model-context-protocol.",
+        name=__name__,
+    )
+
 import logging
 import os
 from typing import Any, List
@@ -59,8 +69,8 @@ from typing_extensions import deprecated
 logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
-    "search_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
-    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+    "search_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+    "https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 
 TOOL_SPEC = {
@@ -216,8 +226,8 @@ def format_search_results(results: List[SearchData], group_by: str, total_count:
 # spelled out here rather than passed as _DEPRECATION_MESSAGE because mypy only
 # reports @deprecated when the argument is a string literal.
 @deprecated(
-    "search_video is deprecated. This warning becomes an import error in v0.9.0. Migration path: use the official "
-    "TwelveLabs MCP server, documented at https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
+    "search_video was removed in v0.9.0. Migration path: use the official TwelveLabs MCP server, documented at "
+    "https://docs.twelvelabs.io/docs/advanced/model-context-protocol."
 )
 def search_video(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """

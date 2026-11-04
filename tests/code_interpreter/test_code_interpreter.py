@@ -2,12 +2,18 @@
 Tests for the base CodeInterpreter class.
 """
 
+import pytest
+
+pytest.importorskip(
+    "strands_tools.code_interpreter.code_interpreter",
+    reason="code_interpreter was removed in v0.9.0",
+    exc_type=ImportError,
+)
+
 import logging
 import warnings
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from strands_tools.code_interpreter.code_interpreter import CodeInterpreter
 from strands_tools.code_interpreter.models import (
@@ -294,7 +300,7 @@ def test_code_interpreter_logs_deprecation_warning(mock_interpreter, caplog):
         mock_interpreter.code_interpreter(action_input)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import python_repl" in caplog.text
 
 

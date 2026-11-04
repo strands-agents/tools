@@ -1,6 +1,11 @@
-import os
+# flake8: noqa: E402
 
 import pytest
+
+pytest.importorskip("strands_tools.generate_image", reason="generate_image was removed in v0.9.0", exc_type=ImportError)
+
+import os
+
 from strands import Agent
 from strands_tools import generate_image, image_reader
 

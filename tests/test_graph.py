@@ -2,9 +2,12 @@
 Tests for the graph tool using the Strands SDK Graph implementation.
 """
 
+import pytest
+
+pytest.importorskip("strands_tools.graph", reason="graph was removed in v0.9.0", exc_type=ImportError)
+
 from unittest.mock import MagicMock, patch
 
-import pytest
 from strands import Agent
 
 from strands_tools import graph as graph_module
@@ -711,7 +714,7 @@ def test_graph_logs_deprecation_warning(mock_parent_agent, caplog):
         graph_module.graph(action="list", agent=mock_parent_agent)
 
     assert "DEPRECATION WARNING" in caplog.text
-    assert "becomes an import error in v0.9.0" in caplog.text
+    assert "was removed in v0.9.0" in caplog.text
     assert "strands.vended_tools import graph, make_graph" in caplog.text
 
 
